@@ -1,0 +1,22 @@
+# Xcode
+Build/
+DerivedData/
+*.xcuserdata/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# OS
+.DS_Store
+*.swp
+*~
+
+# Python
+__pycache__/
+*.pyc
+default.profraw

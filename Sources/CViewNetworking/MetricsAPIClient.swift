@@ -1,0 +1,218 @@
+// MARK: - MetricsAPIClient.swift
+// 메트릭 서버(cv.dododo.app) API 클라이언트 — Actor 기반
+
+import Foundation
+import CViewCore
+
+/// 메트릭 서버 API 클라이언트
+/// - ChzzkResponse 래퍼 없이 직접 JSON 디코딩
+/// - 인증 불필요 (public API)
+/// - 서버 다운 시 non-blocking (옵셔널 리턴)
+public actor MetricsAPIClient {
+    
+    private let session: URLSession
+    private var baseURL: URL
+    private let cache: ResponseCache
+    private var maxRetries: Int = 2
+    
+    public init(
+        baseURL: URL = URL(string: "https://cv.dododo.app")!,
+        cache: ResponseCache = ResponseCache()
+    ) {
+        let config = URLSessionConfiguration.default
+        config.httpAdditionalHeaders = [
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        ]
+        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForResource = 20
+        config.waitsForConnectivity = false
+        config.httpMaximumConnectionsPerHost = 4
+        
+        self.session = URLSession(configuration: config)
+        self.baseURL = baseURL
+        self.cache = cache
+    }
+    
+    /// 섛버 URL 동적 변경
+    public func updateBaseURL(_ url: URL) {
+        self.baseURL = url
+    }
+
+    /// 연결 테스트 (헬스체크 엔드포인트)
+    /// - Returns: (success: Bool, latencyMs: Double, message: String)
+    public func testConnection() async -> (success: Bool, latencyMs: Double, message: String) {
+        let start = Date()
+        do {
+            let health = try await fetchHealth()
+            let ms = Date().timeIntervalSince(start) * 1000
+            let uptime = health.uptime.map { String(format: "%.0f시간", $0 / 3600) } ?? ""
+            return (true, ms, "\(health.status) \(uptime)")
+        } catch {
+            let ms = Date().timeIntervalSince(start) * 1000
+            return (false, ms, error.localizedDescription)
+        }
+    }
+
+    // MARK: - Generic Request
+    
+    /// 메트릭 서버에 요청 (직접 JSON 디코딩, ChzzkResponse 래퍼 없음)
+    public func request<T: Decodable & Sendable>(
+        _ endpoint: MetricsEndpoint,
+        as type: T.Type
+    ) async throws -> T {
+        // 캐시 확인
+        let cacheKey = "metrics:" + endpoint.path + (endpoint.queryItems?.description ?? "")
+        if case .returnCacheElseLoad(let ttl) = endpoint.cachePolicy {
+            if let cached: T = await cache.get(key: cacheKey, ttl: ttl) {
+                return cached
+            }
+        }
+        
+        // URL 구성
+        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = endpoint.queryItems
+        
+        guard let url = urlComponents.url else {
+            throw APIError.networkError("Invalid URL: \(endpoint.path)")
+        }
+        
+        // 요청 구성
+        var request = URLRequest(url: url)
+        request.httpMethod = endpoint.method.rawValue
+        request.httpBody = endpoint.body
+        
+        // 재시도 루프
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                let (data, response) = try await session.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    if httpResponse.statusCode >= 500 && attempt < maxRetries - 1 {
+                        try await Task.sleep(for: .seconds(Double(attempt + 1)))
+                        continue
+                    }
+                    throw APIError.httpError(statusCode: httpResponse.statusCode)
+                }
+                
+                let decoded = try JSONDecoder().decode(T.self, from: data)
+                
+                // 캐시 저장
+                if case .returnCacheElseLoad = endpoint.cachePolicy {
+                    await cache.set(key: cacheKey, value: decoded)
+                }
+                
+                return decoded
+                
+            } catch let error as URLError where error.code == .timedOut || error.code == .networkConnectionLost {
+                lastError = error
+                if attempt < maxRetries - 1 {
+                    try? await Task.sleep(for: .seconds(Double(attempt + 1)))
+                    continue
+                }
+            } catch {
+                throw error
+            }
+        }
+        
+        throw lastError ?? APIError.networkError("Request failed after retries")
+    }
+    
+    /// POST 요청 (응답 디코딩 포함)
+    public func post<Req: Encodable & Sendable, Res: Decodable & Sendable>(
+        _ endpoint: MetricsEndpoint,
+        body: Req,
+        as type: Res.Type
+    ) async throws -> Res {
+        try await request(endpoint, as: type)
+    }
+    
+    /// POST 요청 (응답 무시)
+    public func postIgnoringResponse(_ endpoint: MetricsEndpoint) async throws {
+        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = endpoint.queryItems
+        
+        guard let url = urlComponents.url else {
+            throw APIError.networkError("Invalid URL: \(endpoint.path)")
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = endpoint.method.rawValue
+        request.httpBody = endpoint.body
+        
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+    }
+    
+    // MARK: - Convenience Methods (GET)
+    
+    /// 서버 전체 통계
+    public func fetchStats() async throws -> MetricsServerStats {
+        try await request(.stats, as: MetricsServerStats.self)
+    }
+    
+    /// 서버 헬스체크
+    public func fetchHealth() async throws -> MetricsHealthResponse {
+        try await request(.health, as: MetricsHealthResponse.self)
+    }
+    
+    /// 채널별 통계
+    public func fetchChannelStats(channelId: String) async throws -> ChannelMetricsDetail {
+        try await request(.channelStats(channelId: channelId), as: ChannelMetricsDetail.self)
+    }
+    
+    /// 채널 실시간 레이턴시
+    public func fetchRealLatency(channelId: String) async throws -> RealLatencyResponse {
+        try await request(.channelRealLatency(channelId: channelId), as: RealLatencyResponse.self)
+    }
+    
+    /// 채널 동기화 추천
+    public func fetchSyncRecommendation(channelId: String, appLatency: Double? = nil) async throws -> SyncRecommendationResponse {
+        try await request(.channelSyncRecommendation(channelId: channelId, appLatency: appLatency), as: SyncRecommendationResponse.self)
+    }
+    
+    /// 채널 PDT 동기화 정보
+    public func fetchPDTSync(channelId: String) async throws -> PDTSyncResponse {
+        try await request(.channelPDTSync(channelId: channelId), as: PDTSyncResponse.self)
+    }
+    
+    /// 활성 앱 채널 목록
+    public func fetchActiveAppChannels() async throws -> ActiveAppChannelsResponse {
+        try await request(.activeAppChannels, as: ActiveAppChannelsResponse.self)
+    }
+    
+    // MARK: - Convenience Methods (POST)
+    
+    /// 앱 레이턴시 전송
+    public func sendAppLatency(_ payload: AppLatencyPayload) async throws -> AppLatencyPostResponse {
+        try await request(.postAppLatency(payload), as: AppLatencyPostResponse.self)
+    }
+    
+    /// PDT 동기화 데이터 전송
+    public func sendPDTSync(_ payload: PDTSyncPayload) async throws -> PDTSyncResponse {
+        try await request(.postPDTSync(payload), as: PDTSyncResponse.self)
+    }
+    
+    /// 채널 활성화
+    public func activateChannel(_ payload: ChannelActivatePayload) async throws -> ChannelActivateResponse {
+        try await request(.activateChannel(payload), as: ChannelActivateResponse.self)
+    }
+    
+    /// 채널 비활성화
+    public func deactivateChannel(channelId: String) async throws {
+        try await postIgnoringResponse(.deactivateChannel(channelId: channelId))
+    }
+    
+    /// 채널 핑 (활성 유지)
+    public func pingChannel(channelId: String) async throws {
+        try await postIgnoringResponse(.pingChannel(channelId: channelId))
+    }
+}
