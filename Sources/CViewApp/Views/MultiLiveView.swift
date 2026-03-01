@@ -1,10 +1,11 @@
 // MARK: - MultiLiveView.swift
 // CViewApp — 멀티라이브 메인 뷰
-// AVPlayer 기반 최대 4채널 동시 시청
+// AVPlayer 기반 최대 4채널 동시 시청 + 오른쪽 채팅 패널
 
 import SwiftUI
 import CViewCore
 import CViewPlayer
+import CViewChat
 
 struct MultiLiveView: View {
 
@@ -21,23 +22,32 @@ struct MultiLiveView: View {
                 emptyStateView
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
-                VStack(spacing: 0) {
-                    // 메인 플레이어 영역
-                    ZStack {
-                        if manager.isGridLayout {
-                            gridLayout
-                                .transition(.opacity)
-                        } else {
-                            tabLayout
-                                .transition(.opacity)
+                HStack(spacing: 0) {
+                    // 왼쪽: 비디오 영역 + 탭바
+                    VStack(spacing: 0) {
+                        ZStack {
+                            if manager.isGridLayout {
+                                gridLayout
+                                    .transition(.opacity)
+                            } else {
+                                tabLayout
+                                    .transition(.opacity)
+                            }
                         }
-                    }
-                    .animation(DesignTokens.Animation.contentTransition, value: manager.isGridLayout)
+                        .animation(DesignTokens.Animation.contentTransition, value: manager.isGridLayout)
 
-                    // 하단 탭바
-                    MultiLiveTabBar(manager: manager)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        MultiLiveTabBar(manager: manager)
+                    }
+
+                    // 오른쪽: 채팅 패널
+                    if manager.showChat, let selected = manager.selectedSession {
+                        multiLiveChatPanel(session: selected)
+                            .frame(width: 320)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
+                .animation(DesignTokens.Animation.spring, value: manager.showChat)
+                .animation(DesignTokens.Animation.spring, value: manager.selectedSessionId)
                 .transition(.opacity)
             }
         }
@@ -73,7 +83,6 @@ struct MultiLiveView: View {
             let cols = count <= 2 ? count : 2
             let rows = count <= 2 ? 1 : 2
             let gap: CGFloat = 2
-            let cellWidth = (geo.size.width - gap * CGFloat(cols - 1)) / CGFloat(max(cols, 1))
             let cellHeight = (geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(max(rows, 1))
 
             LazyVGrid(
@@ -106,7 +115,6 @@ struct MultiLiveView: View {
 
     private var emptyStateView: some View {
         VStack(spacing: DesignTokens.Spacing.xl) {
-            // 아이콘 그리드 애니메이션
             multiLiveIcon
                 .padding(.bottom, DesignTokens.Spacing.sm)
 
@@ -165,12 +173,61 @@ struct MultiLiveView: View {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.3), lineWidth: 1)
             }
-            .frame(width: 40, height: 28)
             .overlay {
                 Image(systemName: "play.fill")
-                    .font(.caption2)
+                    .font(.system(size: 14))
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.6))
             }
+            .frame(width: 48, height: 36)
+    }
+
+    // MARK: - 채팅 패널
+
+    private func multiLiveChatPanel(session: MultiLiveSession) -> some View {
+        VStack(spacing: 0) {
+            // 채팅 헤더
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                Circle()
+                    .fill(DesignTokens.Colors.chzzkGreen)
+                    .frame(width: 6, height: 6)
+                Text(session.channelName)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button {
+                    withAnimation(DesignTokens.Animation.spring) {
+                        manager.showChat = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
+                    .frame(height: 0.5)
+            }
+
+            // 채팅 콘텐츠
+            ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {})
+        }
+        .background(DesignTokens.Colors.backgroundElevated)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
+                .frame(width: 0.5)
+        }
     }
 
     // MARK: - 툴바
@@ -179,6 +236,16 @@ struct MultiLiveView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .automatic) {
             if !manager.sessions.isEmpty {
+                // 채팅 토글
+                Button {
+                    withAnimation(DesignTokens.Animation.spring) {
+                        manager.showChat.toggle()
+                    }
+                } label: {
+                    Image(systemName: manager.showChat ? "message.fill" : "message")
+                }
+                .help(manager.showChat ? "채팅 숨기기" : "채팅 보기")
+
                 // 그리드/탭 토글
                 Button {
                     withAnimation(DesignTokens.Animation.contentTransition) {

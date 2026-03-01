@@ -1,11 +1,10 @@
 // MARK: - MultiLivePlayerPane.swift
 // CViewApp — 멀티라이브 개별 플레이어 패널
-// 비디오 + 오버레이 컨트롤 + 옵셔널 채팅
+// 비디오 + 오버레이 컨트롤
 
 import SwiftUI
 import CViewCore
 import CViewPlayer
-import CViewChat
 
 struct MultiLivePlayerPane: View {
 
@@ -13,7 +12,7 @@ struct MultiLivePlayerPane: View {
     let isSelected: Bool
     let isCompact: Bool
 
-    @State private var showChat = false
+    @Environment(AppState.self) private var appState
     @State private var isHovering = false
     @State private var hideControlsTask: Task<Void, Never>?
 
@@ -23,19 +22,14 @@ struct MultiLivePlayerPane: View {
 
     var body: some View {
         ZStack {
-            // 비디오 영역
             videoLayer
-
-            // 오버레이 (상태별)
             stateOverlay
 
-            // 호버 컨트롤 오버레이
             if showControls {
                 controlOverlay
                     .transition(.opacity)
             }
 
-            // 컴팩트 모드: 항상 보이는 채널명 배지
             if isCompact && !showControls {
                 compactBadge
                     .transition(.opacity)
@@ -55,10 +49,6 @@ struct MultiLivePlayerPane: View {
             scheduleHideControls()
         }
         .animation(DesignTokens.Animation.fast, value: showControls)
-        .inspector(isPresented: $showChat) {
-            chatPanel
-                .inspectorColumnWidth(min: 240, ideal: 300, max: 400)
-        }
     }
 
     // MARK: - 비디오 레이어
@@ -68,7 +58,7 @@ struct MultiLivePlayerPane: View {
             .background(Color.black)
     }
 
-    // MARK: - 컴팩트 배지 (그리드 모드에서 항상 보이는 채널명)
+    // MARK: - 컴팩트 배지
 
     private var compactBadge: some View {
         VStack {
@@ -90,7 +80,6 @@ struct MultiLivePlayerPane: View {
 
                 Spacer()
 
-                // 음소거 표시
                 if session.playerViewModel.isMuted {
                     Image(systemName: "speaker.slash.fill")
                         .font(.system(size: 9))
@@ -100,12 +89,11 @@ struct MultiLivePlayerPane: View {
                 }
             }
             .padding(6)
-
             Spacer()
         }
     }
 
-    // MARK: - 컨트롤 오버레이 (호버 시)
+    // MARK: - 컨트롤 오버레이
 
     private var controlOverlay: some View {
         VStack(spacing: 0) {
@@ -136,7 +124,6 @@ struct MultiLivePlayerPane: View {
 
                 Spacer()
 
-                // 라이브 배지 + 시청자 수
                 if session.loadState == .playing {
                     HStack(spacing: 6) {
                         Text("LIVE")
@@ -161,9 +148,8 @@ struct MultiLivePlayerPane: View {
 
             Spacer()
 
-            // 하단: 재생 컨트롤
+            // 하단: 컨트롤
             HStack(spacing: DesignTokens.Spacing.md) {
-                // 음소거 토글
                 Button {
                     session.playerViewModel.toggleMute()
                 } label: {
@@ -177,31 +163,14 @@ struct MultiLivePlayerPane: View {
 
                 Spacer()
 
-                if !isCompact {
-                    // 채팅 토글
-                    Button {
-                        withAnimation(DesignTokens.Animation.spring) {
-                            showChat.toggle()
-                        }
-                    } label: {
-                        Image(systemName: showChat ? "message.fill" : "message")
-                            .font(.body)
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Circle().fill(.white.opacity(showChat ? 0.25 : 0.15)))
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // 제거 버튼
                 if isCompact {
                     Button {
                         Task {
-                            await appState_manager_removeSession(id: session.id)
+                            await appState.multiLiveManager.removeSession(id: session.id)
                         }
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.caption.weight(.bold))
                             .foregroundStyle(.white)
                             .frame(width: 24, height: 24)
                             .background(Circle().fill(.white.opacity(0.15)))
@@ -225,12 +194,6 @@ struct MultiLivePlayerPane: View {
             )
             .allowsHitTesting(false)
         )
-    }
-
-    // 세션 제거 helper (compact모드에서만 사용)
-    @Environment(AppState.self) private var appState
-    private func appState_manager_removeSession(id: UUID) async {
-        await appState.multiLiveManager.removeSession(id: id)
     }
 
     // MARK: - 상태 오버레이
@@ -293,44 +256,6 @@ struct MultiLivePlayerPane: View {
 
         case .playing:
             EmptyView()
-        }
-    }
-
-    // MARK: - 채팅 패널
-
-    private var chatPanel: some View {
-        VStack(spacing: 0) {
-            HStack {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(DesignTokens.Colors.chzzkGreen)
-                        .frame(width: 6, height: 6)
-                    Text("\(session.channelName)")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                }
-                Spacer()
-                Button {
-                    withAnimation(DesignTokens.Animation.spring) {
-                        showChat = false
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
-                    .frame(height: 0.5)
-            }
-
-            ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {})
         }
     }
 

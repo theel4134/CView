@@ -24,6 +24,7 @@ public final class MultiLiveManager {
     var selectedSessionId: UUID?
     var isGridLayout: Bool = false
     var showAddSheet: Bool = false
+    var showChat: Bool = true
 
     /// 현재 추가 중인 채널 ID 세트 (중복 추가 방지)
     private var addingChannelIds: Set<String> = []
