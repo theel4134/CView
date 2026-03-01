@@ -9,6 +9,7 @@ import CViewPlayer
 struct MultiLiveView: View {
 
     @Environment(AppState.self) private var appState
+    @Namespace private var layoutNamespace
 
     private var manager: MultiLiveManager {
         appState.multiLiveManager
@@ -18,21 +19,30 @@ struct MultiLiveView: View {
         ZStack {
             if manager.sessions.isEmpty {
                 emptyStateView
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
                 VStack(spacing: 0) {
                     // 메인 플레이어 영역
-                    if manager.isGridLayout {
-                        gridLayout
-                    } else {
-                        tabLayout
+                    ZStack {
+                        if manager.isGridLayout {
+                            gridLayout
+                                .transition(.opacity)
+                        } else {
+                            tabLayout
+                                .transition(.opacity)
+                        }
                     }
+                    .animation(DesignTokens.Animation.contentTransition, value: manager.isGridLayout)
 
                     // 하단 탭바
                     MultiLiveTabBar(manager: manager)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                .transition(.opacity)
             }
         }
-        .background(DesignTokens.Colors.background)
+        .background(Color.black)
+        .animation(DesignTokens.Animation.smooth, value: manager.sessions.isEmpty)
         .sheet(isPresented: Binding(
             get: { manager.showAddSheet },
             set: { manager.showAddSheet = $0 }
@@ -41,9 +51,6 @@ struct MultiLiveView: View {
         }
         .toolbar {
             toolbarContent
-        }
-        .onDisappear {
-            // 멀티라이브 뷰를 떠날 때 세션은 유지 (백그라운드 재생)
         }
     }
 
@@ -54,21 +61,24 @@ struct MultiLiveView: View {
         if let selected = manager.selectedSession {
             MultiLivePlayerPane(session: selected, isSelected: true, isCompact: false)
                 .id(selected.id)
+                .transition(.opacity)
         }
     }
 
-    // MARK: - 그리드 레이아웃 (2x2)
+    // MARK: - 그리드 레이아웃 (동적 배치)
 
     private var gridLayout: some View {
         GeometryReader { geo in
-            let cols = manager.sessions.count <= 2 ? manager.sessions.count : 2
-            let rows = manager.sessions.count <= 2 ? 1 : 2
-            let cellWidth = geo.size.width / CGFloat(cols)
-            let cellHeight = geo.size.height / CGFloat(rows)
+            let count = manager.sessions.count
+            let cols = count <= 2 ? count : 2
+            let rows = count <= 2 ? 1 : 2
+            let gap: CGFloat = 2
+            let cellWidth = (geo.size.width - gap * CGFloat(cols - 1)) / CGFloat(max(cols, 1))
+            let cellHeight = (geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(max(rows, 1))
 
             LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: cols),
-                spacing: 2
+                columns: Array(repeating: GridItem(.flexible(), spacing: gap), count: max(cols, 1)),
+                spacing: gap
             ) {
                 ForEach(manager.sessions) { session in
                     MultiLivePlayerPane(
@@ -76,43 +86,91 @@ struct MultiLiveView: View {
                         isSelected: session.id == manager.selectedSessionId,
                         isCompact: true
                     )
-                    .frame(height: cellHeight - 1)
+                    .frame(height: cellHeight)
                     .onTapGesture {
-                        withAnimation(DesignTokens.Animation.normal) {
+                        withAnimation(DesignTokens.Animation.snappy) {
                             manager.selectSession(id: session.id)
                         }
                     }
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.9).combined(with: .opacity),
+                        removal: .scale(scale: 0.9).combined(with: .opacity)
+                    ))
                 }
             }
+            .animation(DesignTokens.Animation.spring, value: manager.sessions.map(\.id))
         }
     }
 
     // MARK: - 빈 상태
 
     private var emptyStateView: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            Image(systemName: "rectangle.split.2x2")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
+        VStack(spacing: DesignTokens.Spacing.xl) {
+            // 아이콘 그리드 애니메이션
+            multiLiveIcon
+                .padding(.bottom, DesignTokens.Spacing.sm)
 
-            Text("멀티라이브")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            VStack(spacing: DesignTokens.Spacing.sm) {
+                Text("멀티라이브")
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
 
-            Text("최대 4개 채널을 동시에 시청할 수 있습니다")
-                .font(.subheadline)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Text("최대 4개 채널을 동시에 시청하세요")
+                    .font(.body)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
 
             Button {
-                manager.showAddSheet = true
+                withAnimation(DesignTokens.Animation.spring) {
+                    manager.showAddSheet = true
+                }
             } label: {
-                Label("채널 추가", systemImage: "plus.circle.fill")
-                    .font(.body.weight(.medium))
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("채널 추가")
+                }
+                .font(.body.weight(.semibold))
+                .padding(.horizontal, DesignTokens.Spacing.xl)
+                .padding(.vertical, DesignTokens.Spacing.sm)
             }
             .buttonStyle(.borderedProminent)
             .tint(DesignTokens.Colors.chzzkGreen)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var multiLiveIcon: some View {
+        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+            GridRow {
+                iconCell(delay: 0)
+                iconCell(delay: 0.15)
+            }
+            GridRow {
+                iconCell(delay: 0.3)
+                iconCell(delay: 0.45)
+            }
+        }
+    }
+
+    private func iconCell(delay: Double) -> some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(
+                LinearGradient(
+                    colors: [DesignTokens.Colors.chzzkGreen.opacity(0.3), DesignTokens.Colors.chzzkGreen.opacity(0.1)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.3), lineWidth: 1)
+            }
+            .frame(width: 40, height: 28)
+            .overlay {
+                Image(systemName: "play.fill")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.6))
+            }
     }
 
     // MARK: - 툴바
@@ -121,14 +179,25 @@ struct MultiLiveView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .automatic) {
             if !manager.sessions.isEmpty {
+                // 그리드/탭 토글
                 Button {
-                    withAnimation(DesignTokens.Animation.normal) {
+                    withAnimation(DesignTokens.Animation.contentTransition) {
                         manager.isGridLayout.toggle()
                     }
                 } label: {
                     Image(systemName: manager.isGridLayout ? "rectangle.split.1x2" : "rectangle.split.2x2")
                 }
                 .help(manager.isGridLayout ? "탭 모드" : "그리드 모드")
+
+                // 전체 종료
+                Button {
+                    Task {
+                        await manager.removeAllSessions()
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .help("모든 세션 종료")
             }
 
             Button {

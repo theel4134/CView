@@ -7,11 +7,17 @@ import CViewCore
 struct MultiLiveTabBar: View {
 
     @Bindable var manager: MultiLiveManager
+    @Namespace private var tabSelection
+    @State private var hoveredSessionId: UUID?
 
     var body: some View {
-        HStack(spacing: DesignTokens.Spacing.xs) {
+        HStack(spacing: 6) {
             ForEach(manager.sessions) { session in
                 tabItem(session: session)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.8).combined(with: .opacity),
+                        removal: .scale(scale: 0.8).combined(with: .opacity)
+                    ))
             }
 
             if manager.canAddSession {
@@ -19,30 +25,39 @@ struct MultiLiveTabBar: View {
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.sm)
+        .padding(.vertical, 8)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
                 .frame(height: 0.5)
         }
+        .animation(DesignTokens.Animation.spring, value: manager.sessions.map(\.id))
     }
 
     // MARK: - 탭 아이템
 
     private func tabItem(session: MultiLiveSession) -> some View {
         let isSelected = session.id == manager.selectedSessionId
+        let isHovered = hoveredSessionId == session.id
 
-        return HStack(spacing: DesignTokens.Spacing.xs) {
+        return HStack(spacing: 8) {
             // 프로필 이미지
             AsyncImage(url: session.profileImageURL) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.circle.fill")
+                    .font(.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
-            .frame(width: 24, height: 24)
+            .frame(width: 22, height: 22)
             .clipShape(Circle())
+            .overlay {
+                if session.loadState == .playing {
+                    Circle()
+                        .strokeBorder(DesignTokens.Colors.chzzkGreen, lineWidth: 1.5)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.channelName)
@@ -50,12 +65,11 @@ struct MultiLiveTabBar: View {
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
 
-                // 상태 표시
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     statusIndicator(for: session)
                     if session.loadState == .playing {
                         Text("\(session.viewerCount)")
-                            .font(.caption2)
+                            .font(.system(size: 9).monospacedDigit())
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                 }
@@ -63,35 +77,49 @@ struct MultiLiveTabBar: View {
 
             Spacer(minLength: 0)
 
-            // 닫기 버튼
-            Button {
-                Task {
-                    await manager.removeSession(id: session.id)
+            // 닫기 버튼 (호버 시에만 표시)
+            if isHovered || isSelected {
+                Button {
+                    Task {
+                        await manager.removeSession(id: session.id)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(.white.opacity(0.08)))
                 }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption2)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .buttonStyle(.plain)
+                .transition(.scale.combined(with: .opacity))
             }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, DesignTokens.Spacing.sm)
-        .padding(.vertical, DesignTokens.Spacing.xs)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
         .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.white.opacity(0.08))
+                    .fill(.white.opacity(0.1))
                     .overlay {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
                     }
+                    .matchedGeometryEffect(id: "tabBG", in: tabSelection)
+            } else if isHovered {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .fill(.white.opacity(0.05))
             }
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(DesignTokens.Animation.normal) {
+            withAnimation(DesignTokens.Animation.snappy) {
                 manager.selectSession(id: session.id)
+            }
+        }
+        .onHover { hover in
+            withAnimation(DesignTokens.Animation.fast) {
+                hoveredSessionId = hover ? session.id : nil
             }
         }
     }
@@ -104,18 +132,18 @@ struct MultiLiveTabBar: View {
         case .playing:
             Circle()
                 .fill(DesignTokens.Colors.chzzkGreen)
-                .frame(width: 6, height: 6)
+                .frame(width: 5, height: 5)
         case .loading:
             ProgressView()
                 .controlSize(.mini)
         case .error:
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.caption2)
+                .font(.system(size: 8))
                 .foregroundStyle(.orange)
         case .idle:
             Circle()
-                .fill(DesignTokens.Colors.textTertiary)
-                .frame(width: 6, height: 6)
+                .fill(DesignTokens.Colors.textTertiary.opacity(0.5))
+                .frame(width: 5, height: 5)
         }
     }
 
@@ -125,12 +153,16 @@ struct MultiLiveTabBar: View {
         Button {
             manager.showAddSheet = true
         } label: {
-            Image(systemName: "plus.circle")
-                .font(.title3)
+            Image(systemName: "plus")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                )
         }
         .buttonStyle(.plain)
-        .frame(width: 36, height: 36)
         .help("채널 추가 (\(manager.sessions.count)/\(MultiLiveManager.maxSessions))")
     }
 }
