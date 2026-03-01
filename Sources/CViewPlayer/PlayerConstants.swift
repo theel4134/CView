@@ -30,14 +30,7 @@ public enum VLCDefaults {
     public static let normalNetworkCaching = 1500
     /// 저지연 프로필 네트워크 캐싱 (ms)
     public static let lowLatencyNetworkCaching = 400
-    /// 멀티라이브 배경 네트워크 캐싱 (ms)
-    public static let multiLiveBGNetworkCaching = 800
-    /// Normal 프로필 라이브 캐싱 (ms)
-    public static let normalLiveCaching = 1000
-    /// 저지연 프로필 라이브 캐싱 (ms)
-    public static let lowLatencyLiveCaching = 200
-    /// 멀티라이브 배경 라이브 캐싱 (ms)
-    public static let multiLiveBGLiveCaching = 500
+
     /// 스톨 감지 임계값 (초)
     public static let stallThresholdSecs: TimeInterval = 45
     /// 스톨 워치독 첫 체크 대기 (초)
@@ -109,8 +102,6 @@ public enum PollingDefaults {
     public static let liveStatusIntervalSecs: TimeInterval = 30
     /// 앱 배경 상태 폴링 주기 (초)
     public static let backgroundPollIntervalSecs: TimeInterval = 120
-    /// 멀티라이브 배경 탭 폴링 주기 (초)
-    public static let backgroundMLPollIntervalSecs: TimeInterval = 60
 }
 
 // MARK: - Stream Defaults
@@ -131,10 +122,8 @@ public enum StreamDefaults {
 // MARK: - UI Defaults
 
 public enum UIDefaults {
-    /// 단일 라이브 채팅 패널 너비
+    /// 채팅 패널 너비
     public static let chatPaneWidth: CGFloat = 340
-    /// 멀티라이브 채팅 패널 너비
-    public static let multiLiveChatPaneWidth: CGFloat = 300
     /// 볼륨 증감 스텝
     public static let volumeStep: Float = 0.05
     /// 재생 속도 옵션

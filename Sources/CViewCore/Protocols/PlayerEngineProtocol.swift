@@ -57,7 +57,7 @@ public protocol PlayerEngineProtocol: AnyObject, Sendable {
 
     // MARK: - Health Check
 
-    /// 엔진이 에러 상태인지 여부 (멀티라이브 헬스체크 등에 사용)
+    /// 엔진이 에러 상태인지 여부 (헬스체크 등에 사용)
     var isInErrorState: Bool { get }
 
     /// 재시도 카운터를 초기화합니다.

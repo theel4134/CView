@@ -122,9 +122,6 @@ struct CommandPaletteView: View {
             CommandItem(id: "nav-settings", title: "설정", subtitle: "앱 설정", icon: "gearshape.fill", category: .navigation, shortcut: "⌘,") { [router] in
                 router.selectSidebar(.settings)
             },
-            CommandItem(id: "nav-multilive", title: "멀티라이브", subtitle: "여러 방송 동시 시청", icon: "rectangle.split.3x1.fill", category: .navigation) { [router] in
-                router.selectSidebar(.multiLive)
-            },
             CommandItem(id: "nav-multichat", title: "멀티채팅", subtitle: "여러 채팅방 동시 보기", icon: "bubble.left.and.bubble.right.fill", category: .navigation) { [router] in
                 router.selectSidebar(.multiChat)
             },

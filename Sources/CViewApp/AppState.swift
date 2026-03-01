@@ -45,9 +45,6 @@ final class AppState {
     var playerViewModel: PlayerViewModel?
     var settingsStore: SettingsStore = SettingsStore()
 
-    /// 멀티라이브 세션 매니저 — 네비게이션 전환 시에도 채널 목록 유지
-    var multiLiveManager = MultiLiveSessionManager()
-
     /// 공유 성능 모니터 (LiveStreamView → MetricsForwarder 모두 같은 인스턴스 사용)
     let performanceMonitor = PerformanceMonitor()
 

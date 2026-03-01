@@ -104,6 +104,12 @@ public actor StreamCoordinator {
     private var _manifestRefreshTask: Task<Void, Never>?
     private var _currentVariantURL: URL?  // VLC에 전달한 현재 variant URL
     
+    // 재생 감시 (Watchdog) — currentTime 정체 감지 → 자동 재연결
+    private var _watchdogTask: Task<Void, Never>?
+    private var _lastWatchdogTime: TimeInterval = -1
+    private var _stallCount: Int = 0
+    private let _stallThreshold: Int = 3  // 연속 3회(15초) 정체 시 재연결
+    
     // PDT-based latency provider (Method A)
     private var pdtProvider: PDTLatencyProvider?
     
@@ -111,7 +117,7 @@ public actor StreamCoordinator {
     private var playerEngine: (any PlayerEngineProtocol)?
     
     // Reconnection handler
-    private var reconnectionHandler = PlaybackReconnectionHandler(config: .balanced)
+    private var reconnectionHandler = PlaybackReconnectionHandler(config: .aggressive)
     
     // Event stream
     private var eventContinuation: AsyncStream<StreamEvent>.Continuation?
@@ -386,6 +392,9 @@ public actor StreamCoordinator {
                 startManifestRefreshTimer()
             }
             
+            // 재생 감시(Watchdog) 시작 — currentTime 정체 감지
+            startPlaybackWatchdog()
+            
             // 저지연 싱크: 백그라운드에서 비동기 실행 (play() 직후 바로 반환, 화면 출력 차단 안 함)
             // PDT 안정화 루프(최대 6초)가 startStream을 블로킹하던 문제 해결
             if config.enableLowLatency {
@@ -500,6 +509,11 @@ public actor StreamCoordinator {
     /// 토큰 리프레시 + variant 목록 업데이트 + VLC 엔진 URL 동기화.
     private func refreshMasterManifest() async {
         guard let streamURL = _streamURL else { return }
+        // 에러/재연결 중에는 주기적 갱신 사이클 스킵 (호출자가 triggerReconnect인 경우는 예외)
+        // triggerReconnect에서 직접 호출 시에는 .reconnecting 상태이므로 phase 체크는 .error만
+        if case .error = _phase {
+            return
+        }
         
         do {
             var request = URLRequest(url: streamURL)
@@ -627,6 +641,10 @@ public actor StreamCoordinator {
         _manifestRefreshTask?.cancel()
         _manifestRefreshTask = nil
         _currentVariantURL = nil
+        _watchdogTask?.cancel()
+        _watchdogTask = nil
+        _stallCount = 0
+        _lastWatchdogTime = -1
         
         updatePhase(.idle)
         emitEvent(.stopped)
@@ -837,11 +855,18 @@ public actor StreamCoordinator {
         updatePhase(.reconnecting)
         logger.info("StreamCoordinator: 재연결 시작 (\(reason))")
 
-        // 프록시 활성 시 프록시 경유 URL로 재연결
-        let url = _isProxyActive ? streamProxy.proxyURL(from: rawURL) : rawURL
-
         Task { [weak self] in
-            await self?.reconnectionHandler.startReconnecting(
+            guard let self else { return }
+
+            // 재연결 전 매니페스트 갱신 — 만료된 CDN 토큰으로 재연결 시도 방지
+            await self.refreshMasterManifest()
+
+            // 갱신된 URL 사용, 없으면 원본 URL fallback
+            let reconnectBase = await self._currentVariantURL ?? rawURL
+            let isProxyActive = await self._isProxyActive
+            let url = isProxyActive ? await self.streamProxy.proxyURL(from: reconnectBase) : reconnectBase
+
+            await self.reconnectionHandler.startReconnecting(
                 onAttempt: { [weak self] attempt, delay in
                     guard let self else { return }
                     await self.logger.info("StreamCoordinator: 재시도 \(attempt) — \(String(format: "%.1f", delay))초 대기")
@@ -878,6 +903,67 @@ public actor StreamCoordinator {
         logger.error("StreamCoordinator: 재연결 소진")
     }
     
+    // MARK: - Playback Watchdog
+
+    /// 5초마다 `currentTime`을 확인하여 재생이 멈췄는지 감시합니다.
+    /// 15초(3연속 체크) 동안 시간이 진행되지 않으면 자동 재연결을 시도합니다.
+    private func startPlaybackWatchdog() {
+        _watchdogTask?.cancel()
+        _stallCount = 0
+        _lastWatchdogTime = -1
+        
+        _watchdogTask = Task { [weak self] in
+            // 초기 안정화 대기
+            try? await Task.sleep(for: .seconds(10))
+            
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled, let self else { break }
+                
+                let phase = await self._phase
+                guard phase == .playing else {
+                    // playing이 아닐 때는 stall 카운터 리셋
+                    await self.resetStallCounter()
+                    continue
+                }
+                
+                guard let engine = await self.playerEngine else { continue }
+                let currentTime = engine.currentTime
+                let lastTime = await self._lastWatchdogTime
+                
+                if lastTime >= 0 && abs(currentTime - lastTime) < 0.1 {
+                    // 시간이 진행되지 않음
+                    let count = await self.incrementStallCount()
+                    let threshold = await self._stallThreshold
+                    if count >= threshold {
+                        await self.logger.warning("Watchdog: \(count * 5)초간 재생 정체 감지 — 재연결 시도")
+                        await self.resetStallCounter()
+                        await self.triggerReconnect(reason: "watchdog: currentTime 정체")
+                        // 재연결 후 안정화 대기
+                        try? await Task.sleep(for: .seconds(10))
+                    }
+                } else {
+                    await self.resetStallCounter()
+                }
+                
+                await self.setLastWatchdogTime(currentTime)
+            }
+        }
+    }
+    
+    private func resetStallCounter() {
+        _stallCount = 0
+    }
+    
+    private func incrementStallCount() -> Int {
+        _stallCount += 1
+        return _stallCount
+    }
+    
+    private func setLastWatchdogTime(_ time: TimeInterval) {
+        _lastWatchdogTime = time
+    }
+
     private func updatePhase(_ newPhase: StreamPhase) {
         _phase = newPhase
         emitEvent(.phaseChanged(newPhase))

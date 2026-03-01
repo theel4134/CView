@@ -67,7 +67,6 @@ public final class AppRouter {
         case search = "검색"
         case clips = "클립"
         case multiChat = "멀티채팅"
-        case multiLive = "멀티라이브"
         case recentFavorites = "최근/즐겨찾기"
         case settings = "설정"
         
@@ -81,7 +80,6 @@ public final class AppRouter {
             case .search: "magnifyingglass"
             case .clips: "film.stack"
             case .multiChat: "bubble.left.and.bubble.right.fill"
-            case .multiLive: "rectangle.split.3x1.fill"
             case .recentFavorites: "clock.arrow.circlepath"
             case .settings: "gearshape.fill"
             }

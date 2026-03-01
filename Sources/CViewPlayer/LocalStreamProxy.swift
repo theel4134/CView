@@ -91,7 +91,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
         
         // CheckedContinuation으로 cooperative thread 블로킹 방지
         // 기존 DispatchSemaphore.wait(3초)는 actor의 cooperative thread를 차단하여
-        // 다른 actor 작업을 지연시키고 멀티라이브 시 thread starvation을 유발했음
+        // actor 작업을 지연시키고 thread starvation을 유발했음
         let assignedPort: UInt16 = try await withCheckedThrowingContinuation { continuation in
             // Swift 6 strict concurrency: var를 concurrent 클로저에서 캡처 불가
             // Sendable 호환 atomicFlag 래퍼로 guard

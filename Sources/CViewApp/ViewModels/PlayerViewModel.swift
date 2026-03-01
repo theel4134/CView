@@ -106,15 +106,6 @@ public final class PlayerViewModel {
         self.isPreallocated = false
     }
 
-    /// 멀티라이브 전용: VLCPlayerEngine 주입
-    public init(preallocatedEngine: VLCPlayerEngine) {
-        preallocatedEngine.streamingProfile = .multiLiveForeground
-        self.preferredEngineType = .vlc
-        self.currentEngineType = .vlc
-        self.isPreallocated = true
-        self.playerEngine = preallocatedEngine
-    }
-
     /// 엔진 팩토리
     private static func makeEngine(type: PlayerEngineType) -> any PlayerEngineProtocol {
         switch type {
@@ -155,28 +146,6 @@ public final class PlayerViewModel {
         if lowLatency {
             (playerEngine as? VLCPlayerEngine)?.streamingProfile = .lowLatency
         }
-    }
-
-    /// 멀티라이브 세션 수에 따라 플레이어 리소스 제한
-    public func applyMultiLiveConstraints(paneCount: Int) {
-        if let vlc = playerEngine as? VLCPlayerEngine {
-            vlc.streamingProfile = (paneCount <= 1) ? .lowLatency : .multiLiveForeground
-            return
-        }
-        guard let avEngine = playerEngine as? AVPlayerEngine,
-              let item = avEngine.player.currentItem else { return }
-        if paneCount <= 1 {
-            item.preferredMaximumResolution = .zero
-            item.preferredPeakBitRate = 0
-            return
-        }
-        let screen = NSScreen.main ?? NSScreen.screens.first
-        let screenH = screen?.frame.height ?? 1080
-        let scale = screen?.backingScaleFactor ?? 2.0
-        let targetH: CGFloat = paneCount >= 3 ? screenH / 2.5 : screenH / 2.0
-        let heightPx = targetH * scale
-        item.preferredMaximumResolution = CGSize(width: heightPx * 16 / 9, height: heightPx)
-        item.preferredPeakBitRate = 8_000_000.0 / Double(paneCount)
     }
 
     // MARK: - 스트림 제어
@@ -224,6 +193,11 @@ public final class PlayerViewModel {
                     }
                 }
             }
+            // 재생 정체 감지 → StreamCoordinator 재연결 트리거
+            vlc.onPlaybackStalled = { [weak coordinator] in
+                guard let coordinator else { return }
+                Task { await coordinator.triggerReconnect(reason: "VLC decoded frames stall") }
+            }
         }
 
         startEventListening(coordinator)
@@ -232,6 +206,12 @@ public final class PlayerViewModel {
             try await coordinator.startStream(url: streamUrl)
             startUptimeTimer()
         } catch {
+            // 스트림 시작 실패 시 VLC 콜백 정리 — zombie callback 방지
+            if let vlc = engine as? VLCPlayerEngine {
+                vlc.onStateChange = nil
+                vlc.onVLCMetrics = nil
+                vlc.onPlaybackStalled = nil
+            }
             errorMessage = "스트림 시작 실패: \(error.localizedDescription)"
             logger.error("스트림 시작 실패: \(error.localizedDescription, privacy: .public)")
         }
@@ -240,6 +220,13 @@ public final class PlayerViewModel {
     public func stopStream() async {
         if isRecording { await stopRecording() }
 
+        // VLC 콜백 정리 — 엔진 재사용(풀 반납) 시 이전 세션의 dangling callback 방지
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.onStateChange = nil
+            vlc.onVLCMetrics = nil
+            vlc.onPlaybackStalled = nil
+        }
+        
         uptimeTask?.cancel(); uptimeTask = nil
         eventTask?.cancel(); eventTask = nil
         controlHideTask?.cancel(); controlHideTask = nil
@@ -295,35 +282,6 @@ public final class PlayerViewModel {
     public func toggleFullscreen() {
         isFullscreen.toggle()
         NSApp.mainWindow?.toggleFullScreen(nil)
-    }
-
-    /// 배경/포그라운드 모드 전환 (멀티라이브 탭 전환)
-    /// [개선] 비활성 탭도 별도 프로세스로 계속 재생됨.
-    /// - 비디오 트랙: 항상 활성 유지 (ForEach + opacity 패턴으로 뷰가 살아 있으므로)
-    /// - 오디오: select()/setMuted()에서 별도 관리 (여기서는 건드리지 않음)
-    /// - 프로파일: 배경 세션은 저사양 프로파일로 CPU/대역폭 절약
-    /// - 통계 수집: 배경에서도 유지 (폴링 간격은 MultiLiveSession에서 조절)
-    public func setBackgroundMode(_ isBackground: Bool) {
-        if let vlc = playerEngine as? VLCPlayerEngine {
-            vlc.streamingProfile = isBackground ? .multiLiveBackground : .multiLiveForeground
-            // [비활성 탭 계속 재생] 비디오 트랙/통계 수집 비활성화하지 않음.
-            // 비활성 탭도 독립 프로세스로 스트리밍을 유지하여
-            // 탭 전환 시 즉시 화면이 보이도록 한다.
-            if !isBackground {
-                // 포그라운드 전환 시: drawable 재바인딩 + 재생 상태 복원
-                vlc.refreshDrawable()
-                // VLC가 정지/에러 상태이면 StreamCoordinator를 통해 복구 시도
-                if vlc.isInErrorState {
-                    if let coord = streamCoordinator {
-                        Task { await coord.triggerReconnect(reason: "foreground switch - VLC error") }
-                    }
-                }
-            }
-        }
-        if let av = playerEngine as? AVPlayerEngine {
-            av.setVideoLayerVisible(!isBackground)
-            // AVPlayer도 비활성 탭에서 계속 재생 (볼륨은 setMuted에서 관리)
-        }
     }
 
     public func toggleAudioOnly() {

@@ -252,7 +252,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
     /// 비디오 레이어 출력 표시/숨김.
     /// `isHidden = true` 시 GPU 합성 패스를 완전히 건너뜀 (디코딩·오디오는 유지).
-    /// 멀티라이브 백그라운드 탭 전환 또는 오디오 전용 모드에서 호출한다.
+    /// 백그라운드 전환 또는 오디오 전용 모드에서 호출한다.
     public func setVideoLayerVisible(_ visible: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)

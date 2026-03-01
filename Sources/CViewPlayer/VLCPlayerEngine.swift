@@ -56,29 +56,21 @@ public enum QualityAdaptationAction: Sendable {
 
 /// VLC 스트리밍 시나리오별 캐싱 프로파일.
 public enum VLCStreamingProfile: Sendable {
-    case lowLatency           // 단일 라이브 (저지연 우선)
-    case multiLiveForeground  // 멀티라이브 포그라운드 (균형)
-    case multiLiveBackground  // 멀티라이브 백그라운드 (절전)
+    case lowLatency           // 라이브 (저지연 우선)
 
     var networkCaching: Int {
         switch self {
         case .lowLatency: return 1200
-        case .multiLiveForeground: return 1800
-        case .multiLiveBackground: return 2500
         }
     }
     var liveCaching: Int {
         switch self {
         case .lowLatency: return 1200
-        case .multiLiveForeground: return 1800
-        case .multiLiveBackground: return 2500
         }
     }
     var manifestRefreshInterval: Int {
         switch self {
         case .lowLatency: return 15
-        case .multiLiveForeground: return 20
-        case .multiLiveBackground: return 30
         }
     }
 }
@@ -115,6 +107,9 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
     /// 복구 시 신선한 variant URL 제공 콜백
     public var onRecoveryURLRefresh: (@Sendable () async -> URL?)?
+
+    /// 재생 정체 감지 콜백 — 디코딩 프레임 0이 연속 발생할 때 호출
+    public var onPlaybackStalled: (@Sendable () -> Void)?
 
     // MARK: - PlayerEngineProtocol
 
@@ -154,6 +149,10 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
     // 복구 URL (매니페스트 갱신 시 StreamCoordinator가 동기화)
     private var _recoveryURL: URL?
+
+    // 재생 정체 감지 (0-프레임 연속 횟수)
+    private var _zeroFrameCount: Int = 0
+    private let _zeroFrameStallThreshold: Int = 3  // 3회 연속(6초) 0프레임 시 정체 판단
 
     // MARK: - Init / Deinit
 
@@ -229,7 +228,7 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
         // 뷰가 윈도우에 붙을 때까지 대기 (최대 5초, 50회 × 0.1초)
         // SwiftUI가 NSViewRepresentable을 window hierarchy에 마운트할 시간 확보
-        // 기존 2초(20회)는 멀티라이브에서 여러 세션이 동시에 시작될 때 부족했음
+        // 기존 2초(20회)는 여러 세션이 동시에 시작될 때 부족했음
         if playerView.window == nil {
             for i in 0..<50 {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1초
@@ -241,6 +240,7 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
             if playerView.window == nil {
                 // window가 nil이어도 VLC play()를 호출하여 버퍼링 시작
                 // layout() 시점에 drawable이 재바인딩되므로 나중에 화면 출력 가능
+                Log.player.warning("VLCPlayerEngine: 5초 대기 후에도 playerView.window == nil — play() 계속 진행")
             }
         }
 
@@ -259,25 +259,16 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         media.addOption(":cr-average=40")
         media.addOption(":avcodec-threads=2")
         media.addOption(":avcodec-fast=1")
+        // HTTP 재연결: 네트워크 일시 끊김 시 VLC 내부에서 자동 재연결
+        media.addOption(":http-reconnect")
         // adaptive 모듈 최적화: VLC 내부 버퍼링 안정성 개선
         media.addOption(":adaptive-maxwidth=1920")
         media.addOption(":adaptive-maxheight=1080")
-        switch profile {
-        case .lowLatency:
-            media.addOption(":clock-jitter=20000")
-            media.addOption(":codec=videotoolbox,avcodec,all")
-            media.addOption(":avcodec-hw=any")
-            media.addOption(":videotoolbox-zero-copy=1")
-        case .multiLiveForeground:
-            media.addOption(":clock-jitter=30000")
-            media.addOption(":codec=videotoolbox,avcodec,all")
-            media.addOption(":avcodec-hw=any")
-            media.addOption(":videotoolbox-zero-copy=0")
-        case .multiLiveBackground:
-            media.addOption(":clock-jitter=40000")
-            media.addOption(":codec=avcodec,all")
-            media.addOption(":avcodec-hw=none")
-        }
+        // 저지연 HW 가속 재생
+        media.addOption(":clock-jitter=20000")
+        media.addOption(":codec=videotoolbox,avcodec,all")
+        media.addOption(":avcodec-hw=any")
+        media.addOption(":videotoolbox-zero-copy=1")
 
         player.media = media
         player.play()
@@ -414,10 +405,12 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         onTrackEvent = nil
         onQualityAdaptationRequest = nil
         onRecoveryURLRefresh = nil
+        onPlaybackStalled = nil
+        _zeroFrameCount = 0
         streamingProfile = .lowLatency
     }
 
-    /// 비디오 트랙 활성화/비활성화 (멀티라이브 백그라운드 절전용)
+    /// 비디오 트랙 활성화/비활성화
     public func setVideoTrackEnabled(_ enabled: Bool) {
         if enabled {
             if !player.videoTracks.isEmpty {
@@ -747,6 +740,22 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
             demuxDiscontinuityDelta: max(0, demuxDiscDelta)
         )
         onVLCMetrics?(metrics)
+
+        // 재생 정체 감지: playing 상태에서 디코딩 프레임이 0이면 카운터 증가
+        let currentPhase = stateLock.withLock { _currentPhase }
+        if case .playing = currentPhase, prev != nil {
+            if decodedDelta <= 0 {
+                _zeroFrameCount += 1
+                if _zeroFrameCount >= _zeroFrameStallThreshold {
+                    _zeroFrameCount = 0
+                    onPlaybackStalled?()
+                }
+            } else {
+                _zeroFrameCount = 0
+            }
+        } else {
+            _zeroFrameCount = 0
+        }
     }
 }
 

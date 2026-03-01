@@ -37,11 +37,7 @@
 		A1B2C3D4E5F60004BB440003 /* Sources/CViewApp/AppLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60004AA440003 /* Sources/CViewApp/AppLifecycle.swift */; };
 		A1B2C3D4E5F60004BB440004 /* Sources/CViewApp/AppTheme+ColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60004AA440004 /* Sources/CViewApp/AppTheme+ColorScheme.swift */; };
 		A1B2C3D4E5F60005BB550001 /* Sources/CViewApp/Views/CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550001 /* Sources/CViewApp/Views/CommandPaletteView.swift */; };
-		A1B2C3D4E5F60005BB550002 /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550002 /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */; };
-		A1B2C3D4E5F60005BB550003 /* Sources/CViewApp/Views/MultiLiveOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550003 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */; };
 		A1B2C3D4E5F60005BB550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift */; };
-		A1B2C3D4E5F60005BB550005 /* Sources/CViewApp/Views/MultiLiveControlViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550005 /* Sources/CViewApp/Views/MultiLiveControlViews.swift */; };
-		A1B2C3D4E5F60005BB550006 /* Sources/CViewApp/Views/MultiLiveStateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550006 /* Sources/CViewApp/Views/MultiLiveStateViews.swift */; };
 		AA11223344556677AABB0001 /* Sources/CViewApp/ViewModels/SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11223344556677CCDD0001 /* Sources/CViewApp/ViewModels/SearchViewModel.swift */; };
 		AA11223344556677AABB0002 /* Sources/CViewApp/Views/PerformanceOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11223344556677CCDD0002 /* Sources/CViewApp/Views/PerformanceOverlayView.swift */; };
 		AA11223344556677AABB0003 /* Sources/CViewApp/Views/RecentFavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11223344556677CCDD0003 /* Sources/CViewApp/Views/RecentFavoritesView.swift */; };
@@ -83,11 +79,6 @@
 		EE11223344556677AABB0019 /* Sources/CViewApp/Views/MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* Sources/CViewApp/Views/PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* Sources/CViewApp/Views/ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */; };
-		EE22334455667788AABB0080 /* Sources/CViewApp/Views/MultiLiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22334455667788CCDD0080 /* Sources/CViewApp/Views/MultiLiveView.swift */; };
-		EE22334455667788AABB0081 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22334455667788CCDD0081 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */; };
-		EE22334455667788AABB0082 /* Sources/CViewApp/Views/MultiLiveTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22334455667788CCDD0082 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */; };
-		EE22334455667788AABB0083 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22334455667788CCDD0083 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */; };
-		EE22334455667788AABB0084 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22334455667788CCDD0084 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */; };
 		EE6D96E875945AE62F7DC3E6 /* CViewAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 14CD73D506FE4B4592AF3E0A /* CViewAuth */; };
 		F2D063FE109ED88FD428F817 /* Sources/CViewApp/Views/LiveStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDCB3FCE46E4EDBF596E295 /* Sources/CViewApp/Views/LiveStreamView.swift */; };
 		FDF40C1A2D801D341C3EFED2 /* Sources/CViewApp/Views/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B08923024BC3E319ABAF23 /* Sources/CViewApp/Views/MainContentView.swift */; };
@@ -129,11 +120,7 @@
 		A1B2C3D4E5F60004AA440003 /* Sources/CViewApp/AppLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/AppLifecycle.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60004AA440004 /* Sources/CViewApp/AppTheme+ColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/AppTheme+ColorScheme.swift"; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60005AA550001 /* Sources/CViewApp/Views/CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/CommandPaletteView.swift; sourceTree = SOURCE_ROOT; };
-		A1B2C3D4E5F60005AA550002 /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveGridLayouts.swift; sourceTree = SOURCE_ROOT; };
-		A1B2C3D4E5F60005AA550003 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveOverlays.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60005AA550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StatisticsDetailViews.swift; sourceTree = SOURCE_ROOT; };
-		A1B2C3D4E5F60005AA550005 /* Sources/CViewApp/Views/MultiLiveControlViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveControlViews.swift; sourceTree = SOURCE_ROOT; };
-		A1B2C3D4E5F60005AA550006 /* Sources/CViewApp/Views/MultiLiveStateViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveStateViews.swift; sourceTree = SOURCE_ROOT; };
 		AA11223344556677CCDD0001 /* Sources/CViewApp/ViewModels/SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/SearchViewModel.swift; sourceTree = SOURCE_ROOT; };
 		AA11223344556677CCDD0002 /* Sources/CViewApp/Views/PerformanceOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PerformanceOverlayView.swift; sourceTree = SOURCE_ROOT; };
 		AA11223344556677CCDD0003 /* Sources/CViewApp/Views/RecentFavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/RecentFavoritesView.swift; sourceTree = SOURCE_ROOT; };
@@ -171,11 +158,6 @@
 		EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerControlsView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatPanelView.swift; sourceTree = SOURCE_ROOT; };
-		EE22334455667788CCDD0080 /* Sources/CViewApp/Views/MultiLiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveView.swift; sourceTree = SOURCE_ROOT; };
-		EE22334455667788CCDD0081 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/MultiLiveSession.swift; sourceTree = SOURCE_ROOT; };
-		EE22334455667788CCDD0082 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveTabBar.swift; sourceTree = SOURCE_ROOT; };
-		EE22334455667788CCDD0083 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLivePlayerPane.swift; sourceTree = SOURCE_ROOT; };
-		EE22334455667788CCDD0084 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveAddSheet.swift; sourceTree = SOURCE_ROOT; };
 		EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/HomeViewModel.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0030 /* Sources/CViewApp/Views/MultiChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiChatView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatUserProfileSheet.swift; sourceTree = SOURCE_ROOT; };
@@ -291,10 +273,6 @@
 				AA22334455667788CCDD0040 /* Sources/CViewApp/Views/CategoryBrowseView.swift */,
 				AA22334455667788CCDD0041 /* Sources/CViewApp/Views/ChatOnlyView.swift */,
 				AA22334455667788CCDD0042 /* Sources/CViewApp/Views/BlockedUsersView.swift */,
-				EE22334455667788CCDD0080 /* Sources/CViewApp/Views/MultiLiveView.swift */,
-				EE22334455667788CCDD0082 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */,
-				EE22334455667788CCDD0083 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */,
-				EE22334455667788CCDD0084 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */,
 				A1B2C3D4E5F60001AA110001 /* Sources/CViewApp/Views/SettingsSharedComponents.swift */,
 				A1B2C3D4E5F60001AA110002 /* Sources/CViewApp/Views/GeneralSettingsTab.swift */,
 				A1B2C3D4E5F60001AA110003 /* Sources/CViewApp/Views/PlayerSettingsTab.swift */,
@@ -312,11 +290,7 @@
 				A1B2C3D4E5F60003AA330004 /* Sources/CViewApp/Views/ChannelMediaCards.swift */,
 				A1B2C3D4E5F60003AA330005 /* Sources/CViewApp/Views/ChannelMemoSheet.swift */,
 				A1B2C3D4E5F60005AA550001 /* Sources/CViewApp/Views/CommandPaletteView.swift */,
-				A1B2C3D4E5F60005AA550002 /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */,
-				A1B2C3D4E5F60005AA550003 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */,
 				A1B2C3D4E5F60005AA550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift */,
-				A1B2C3D4E5F60005AA550005 /* Sources/CViewApp/Views/MultiLiveControlViews.swift */,
-				A1B2C3D4E5F60005AA550006 /* Sources/CViewApp/Views/MultiLiveStateViews.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -355,7 +329,6 @@
 				AA11223344556677CCDD0001 /* Sources/CViewApp/ViewModels/SearchViewModel.swift */,
 				BB11223344556677CCDD0004 /* Sources/CViewApp/ViewModels/VODPlayerViewModel.swift */,
 				BB11223344556677CCDD0005 /* Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift */,
-				EE22334455667788CCDD0081 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */,
 			);
 			name = ViewModels;
 			sourceTree = "<group>";
@@ -519,11 +492,6 @@
 				CC44556677889900AABB0060 /* Sources/CViewApp/Views/Components/LiveThumbnailView.swift in Sources */,
 				DD11223344556677AABB0070 /* Sources/CViewApp/Views/Components/AppIconView.swift in Sources */,
 				DD11223344556677AABB0071 /* Sources/CViewApp/Views/SplashView.swift in Sources */,
-				EE22334455667788AABB0080 /* Sources/CViewApp/Views/MultiLiveView.swift in Sources */,
-				EE22334455667788AABB0081 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift in Sources */,
-				EE22334455667788AABB0082 /* Sources/CViewApp/Views/MultiLiveTabBar.swift in Sources */,
-				EE22334455667788AABB0083 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift in Sources */,
-				EE22334455667788AABB0084 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift in Sources */,
 				A1B2C3D4E5F60001BB110001 /* Sources/CViewApp/Views/SettingsSharedComponents.swift in Sources */,
 				A1B2C3D4E5F60001BB110002 /* Sources/CViewApp/Views/GeneralSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110003 /* Sources/CViewApp/Views/PlayerSettingsTab.swift in Sources */,
@@ -545,11 +513,7 @@
 				A1B2C3D4E5F60004BB440003 /* Sources/CViewApp/AppLifecycle.swift in Sources */,
 				A1B2C3D4E5F60004BB440004 /* Sources/CViewApp/AppTheme+ColorScheme.swift in Sources */,
 				A1B2C3D4E5F60005BB550001 /* Sources/CViewApp/Views/CommandPaletteView.swift in Sources */,
-				A1B2C3D4E5F60005BB550002 /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift in Sources */,
-				A1B2C3D4E5F60005BB550003 /* Sources/CViewApp/Views/MultiLiveOverlays.swift in Sources */,
 				A1B2C3D4E5F60005BB550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift in Sources */,
-				A1B2C3D4E5F60005BB550005 /* Sources/CViewApp/Views/MultiLiveControlViews.swift in Sources */,
-				A1B2C3D4E5F60005BB550006 /* Sources/CViewApp/Views/MultiLiveStateViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

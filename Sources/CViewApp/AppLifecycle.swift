@@ -87,18 +87,11 @@ extension AppState {
 
     // MARK: - App Nap Prevention
 
-    /// 활성 스트림(싱글 또는 멀티라이브)이 재생 중인지 확인
+    /// 활성 스트림이 재생 중인지 확인
     func isAnyStreamPlaying() -> Bool {
-        // 싱글 라이브 체크
         if let phase = playerViewModel?.streamPhase,
            case .playing = phase {
             return true
-        }
-        // 멀티 라이브 체크
-        for session in multiLiveManager.sessions {
-            if case .playing = session.playerViewModel.streamPhase {
-                return true
-            }
         }
         return false
     }
@@ -124,7 +117,7 @@ extension AppState {
     }
 
     /// 재생 상태 변경 시 App Nap 방지를 동적으로 관리
-    /// PlayerViewModel/MultiLiveSession에서 재생 시작/종료 시 호출
+    /// PlayerViewModel에서 재생 시작/종료 시 호출
     func updatePlaybackActivity() {
         let shouldPrevent = settingsStore.player.continuePlaybackInBackground && isAnyStreamPlaying()
         if shouldPrevent {
@@ -137,18 +130,10 @@ extension AppState {
     /// 창 최소화에서 복원 시 VLC drawable 컨텍스트를 재설정
     /// VLC 렌더링 서피스는 창 최소화 중 무효화될 수 있다.
     func handleWindowRestored() {
-        // 싱글 라이브: VLC 엔진의 drawable 재설정
         if let vlcEngine = playerViewModel?.mediaPlayer,
            case .playing = playerViewModel?.streamPhase {
             vlcEngine.refreshDrawable()
-            logger.info("Window restored — VLC drawable refreshed (single)")
-        }
-        // 멀티 라이브: 모든 활성 세션의 VLC drawable 재설정
-        for session in multiLiveManager.sessions {
-            if let vlcEngine = session.playerViewModel.mediaPlayer,
-               case .playing = session.playerViewModel.streamPhase {
-                vlcEngine.refreshDrawable()
-            }
+            logger.info("Window restored — VLC drawable refreshed")
         }
     }
 }

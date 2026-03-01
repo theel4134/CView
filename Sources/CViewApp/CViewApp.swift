@@ -41,8 +41,7 @@ struct CViewApplication: App {
         metricsClient = MetricsAPIClient()
         metricsWebSocket = MetricsWebSocketClient()
 
-        // Force dark mode app-wide for Glass Morphism design
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+        // NSApp은 SwiftUI App.init()에서 아직 nil — onAppear에서 설정
     }
 
     // MARK: - Body
@@ -60,6 +59,9 @@ struct CViewApplication: App {
                     }
                 }
                 .onAppear {
+                    // Force dark mode app-wide for Glass Morphism design
+                    NSApp.appearance = NSAppearance(named: .darkAqua)
+
                     // 알림 콜백 설정 (동기, MainActor)
                     NotificationService.shared.onWatchChannel = { [router] channelId in
                         router.navigate(to: .live(channelId: channelId))
