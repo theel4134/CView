@@ -239,11 +239,6 @@ public final class ChatViewModel {
     @ObservationIgnored private var batchFlushTask: Task<Void, Never>?
     /// Batch flush interval in nanoseconds (default 100 ms).
     @ObservationIgnored private let batchFlushIntervalNs: UInt64 = 100_000_000
-
-    // MARK: - Scroll Position Debouncing
-
-    /// 리플레이 모드 진입 디바운스 태스크 — 0.3초 지연으로 깜빡임 방지
-    @ObservationIgnored private var replayModeDebounceTask: Task<Void, Never>?
     
     // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
     
@@ -360,8 +355,6 @@ public final class ChatViewModel {
         statsTask = nil
         batchFlushTask?.cancel()
         batchFlushTask = nil
-        replayModeDebounceTask?.cancel()
-        replayModeDebounceTask = nil
         pendingMessages.removeAll(keepingCapacity: true)
         ttsService.stop()
         
@@ -512,27 +505,19 @@ public final class ChatViewModel {
 
     // MARK: - Scroll Position
 
-    /// 스크롤 위치 변경 시 호출 — 디바운싱을 통해 안정적인 리플레이 모드 전환
-    /// - Parameter isNearBottom: 스크롤이 하단 근처(50px 이내)인지 여부
+    /// 스크롤 위치 변경 시 호출 — 치지직 방식: 즉시 리플레이 모드 전환
+    /// - Parameter isNearBottom: 스크롤이 하단 근처(80px 이내)인지 여부
     public func onScrollPositionChanged(isNearBottom: Bool) {
         if isNearBottom {
-            // 하단에 도달하면 즉시 디바운스 취소 + 리플레이 모드 해제
-            replayModeDebounceTask?.cancel()
-            replayModeDebounceTask = nil
+            // 하단에 도달하면 즉시 리플레이 모드 해제
             if isReplayMode {
                 exitReplayMode()
             }
         } else {
-            // 하단에서 벗어나면 0.3초 디바운싱 후 리플레이 모드 진입
-            guard !isReplayMode, replayModeDebounceTask == nil else { return }
+            // 하단에서 벗어나면 즉시 리플레이 모드 진입
+            guard !isReplayMode else { return }
             guard messages.count > 3 else { return }
-            replayModeDebounceTask = Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(300))
-                guard !Task.isCancelled, let self else { return }
-                guard self.messages.count > 3 else { return }
-                self.enterReplayMode()
-                self.replayModeDebounceTask = nil
-            }
+            enterReplayMode()
         }
     }
 
@@ -548,8 +533,6 @@ public final class ChatViewModel {
 
     /// Exit replay mode and jump back to the latest messages.
     public func exitReplayMode() {
-        replayModeDebounceTask?.cancel()
-        replayModeDebounceTask = nil
         isReplayMode = false
         unreadCount = 0
         isAutoScrollEnabled = true

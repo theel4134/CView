@@ -49,13 +49,30 @@ public final class MultiLiveManager {
     private weak var apiClient: ChzzkAPIClient?
     private let logger = AppLogger.player
 
+    /// 로그인 사용자 정보 (세션 채팅 전송용)
+    private var userUid: String?
+    private var userNickname: String?
+
     // MARK: - Init
 
     init() {}
 
-    /// API 클라이언트 설정 (AppState에서 지연 주입)
-    func configure(apiClient: ChzzkAPIClient?) {
+    /// API 클라이언트 + 사용자 정보 설정 (AppState에서 지연 주입)
+    func configure(apiClient: ChzzkAPIClient?, userUid: String? = nil, userNickname: String? = nil) {
         self.apiClient = apiClient
+        self.userUid = userUid
+        self.userNickname = userNickname
+    }
+
+    /// 사용자 정보 업데이트 (로그인/로그아웃 시)
+    func updateUserInfo(uid: String?, nickname: String?) {
+        self.userUid = uid
+        self.userNickname = nickname
+        // 기존 세션의 chatViewModel에도 반영
+        for session in sessions {
+            session.chatViewModel.currentUserUid = uid
+            session.chatViewModel.currentUserNickname = nickname
+        }
     }
 
     // MARK: - 세션 관리
@@ -89,7 +106,9 @@ public final class MultiLiveManager {
                 channelName: channelName,
                 profileImageURL: profileImageURL,
                 liveInfo: liveInfo,
-                apiClient: apiClient
+                apiClient: apiClient,
+                userUid: userUid,
+                userNickname: userNickname
             )
             sessions.append(session)
 

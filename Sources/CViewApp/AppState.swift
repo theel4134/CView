@@ -137,6 +137,7 @@ final class AppState {
         userNickname = nil
         userChannelId = nil
         userProfileURL = nil
+        multiLiveManager.updateUserInfo(uid: nil, nickname: nil)
         backgroundUpdateService.stop()
         logger.info("Logged out")
     }
@@ -189,6 +190,8 @@ final class AppState {
             if let imageURL = userInfo.profileImageURL, userProfileURL == nil {
                 userProfileURL = URL(string: imageURL)
             }
+            // 멀티라이브 채팅 전송용 사용자 정보 동기화
+            multiLiveManager.updateUserInfo(uid: userChannelId, nickname: userNickname)
             logger.info("프로필 로드 완료: \(userInfo.nickname ?? "unknown"), channelId: \(self.userChannelId ?? "none")")
         } catch {
             logger.error("프로필 로드 실패: \(String(describing: error), privacy: .public)")
@@ -204,6 +207,8 @@ final class AppState {
             if let imageURL = profile.profileImageUrl {
                 userProfileURL = URL(string: imageURL)
             }
+            // 멀티라이브 채팅 전송용 사용자 정보 동기화
+            multiLiveManager.updateUserInfo(uid: userChannelId, nickname: userNickname)
             logger.info("OAuth 프로필: \(profile.nickname ?? "unknown"), 채널ID: \(profile.channelId ?? "none")")
         } catch {
             logger.error("OAuth 프로필 로드 실패: \(error.localizedDescription)")

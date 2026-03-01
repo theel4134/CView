@@ -38,45 +38,54 @@ struct ChatMessageRow: View {
         let showBadge       = chatVM?.showBadge ?? true
         let emojiEnabled    = chatVM?.emoticonEnabled ?? appState.settingsStore.chat.emoticonEnabled
         let spacing         = chatVM?.lineSpacing ?? 2.0
-        // 멘션 강조: 현재 사용자 닉네임이 메시지에 포함되면 행 배경 강조
         let myNickname      = chatVM?.currentUserNickname ?? ""
         let isMentioned     = chatVM?.highlightMentions == true
             && !myNickname.isEmpty
             && message.content.localizedCaseInsensitiveContains(myNickname)
 
-        return HStack(alignment: .top, spacing: 6) {
+        return HStack(alignment: .firstTextBaseline, spacing: 0) {
+            // 타임스탬프
             if showTS {
                 Text(message.formattedTime)
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .padding(.top, DesignTokens.Spacing.xxs)
+                    .font(DesignTokens.Typography.custom(size: max(messageFontSize - 3, 9), weight: .regular, design: .monospaced))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                    .padding(.trailing, 6)
             }
 
+            // 뱃지
             if showBadge, let badgeURL = message.badgeImageURL {
                 CachedAsyncImage(url: badgeURL) {
                     EmptyView()
                 }
-                .frame(width: 14, height: 14)
-                .padding(.top, DesignTokens.Spacing.xxs)
+                .frame(width: 16, height: 16)
+                .padding(.trailing, 4)
             }
 
+            // 닉네임 + 메시지 (치지직 스타일: 닉네임: 메시지)
             let useEmoji = emojiEnabled && !message.emojis.isEmpty
             if !useEmoji {
-                (Text(message.nickname + " ")
-                    .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .bold))
+                (Text(message.nickname)
+                    .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .semibold))
                     .foregroundStyle(nicknameColor)
+                + Text(": ")
+                    .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
                 + Text(message.content)
                     .font(DesignTokens.Typography.custom(size: messageFontSize))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.9)))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.88)))
                     .lineSpacing(spacing)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .onTapGesture { showProfile = true }
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(message.nickname + " ")
-                        .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .bold))
+                    Text(message.nickname)
+                        .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .semibold))
                         .foregroundStyle(nicknameColor)
+                        .fixedSize()
+                    Text(": ")
+                        .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .regular))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
                         .fixedSize()
                     ChatContentRenderer(
                         content: message.content,
@@ -88,21 +97,26 @@ struct ChatMessageRow: View {
                 }
                 .onTapGesture { showProfile = true }
             }
+
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, DesignTokens.Spacing.xxs)
-        .padding(.horizontal, DesignTokens.Spacing.xs)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
         .background(
-            isMentioned
-                ? DesignTokens.Colors.accentOrange.opacity(0.10)
-                : (isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.5) : .clear)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                .fill(
+                    isMentioned
+                        ? DesignTokens.Colors.accentOrange.opacity(0.10)
+                        : (isHovered ? Color.primary.opacity(0.04) : .clear)
+                )
         )
         .overlay(
             isMentioned
-                ? RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                    .strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.45), lineWidth: 1)
+                ? RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                    .strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.35), lineWidth: 1)
                 : nil
         )
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+        .contentShape(Rectangle())
         .onHover { hovering in isHovered = hovering }
         .popover(isPresented: $showProfile) {
             ChatUserProfileSheet(message: message, chatVM: chatVM)
@@ -148,22 +162,21 @@ struct ChatMessageRow: View {
                       : tierLabel
 
         return HStack(spacing: 0) {
-            // ── 좌측 티어 액센트 바 (glass glow) ──────────────────
+            // 좌측 티어 액센트 바
             tierColor
                 .frame(width: 3)
-                .shadow(color: tierColor.opacity(0.4), radius: 4, x: 2)
 
-            // ── 카드 본문 ────────────────────────────────────────
+            // 카드 본문
             VStack(alignment: .leading, spacing: 8) {
 
                 // 헤더: 아이콘 뱃지 · 닉네임 · 금액 필
                 HStack(alignment: .center, spacing: 8) {
                     ZStack {
                         Circle()
-                            .fill(tierColor.opacity(0.2))
-                            .frame(width: 28, height: 28)
+                            .fill(tierColor.opacity(0.15))
+                            .frame(width: 26, height: 26)
                         Image(systemName: typeIcon)
-                            .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
+                            .font(DesignTokens.Typography.custom(size: 12, weight: .bold))
                             .foregroundStyle(tierColor)
                     }
 
@@ -177,21 +190,20 @@ struct ChatMessageRow: View {
                     if let amount = message.donationAmount {
                         Text("₩\(amount.formatted())")
                             .font(DesignTokens.Typography.custom(size: 12, weight: .bold, design: .rounded))
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                            .padding(.horizontal, DesignTokens.Spacing.sm)
-                            .padding(.vertical, DesignTokens.Spacing.xxs)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 3)
                             .background(tierColor, in: Capsule())
-                            .shadow(color: tierColor.opacity(0.3), radius: 4)
                     }
                 }
 
-                // 후원 타입 레이블 필
+                // 후원 타입 레이블
                 Label(typeLabel, systemImage: typeIcon)
                     .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    .foregroundStyle(tierColor)
-                    .padding(.horizontal, DesignTokens.Spacing.xs)
-                    .padding(.vertical, DesignTokens.Spacing.xxs)
-                    .background(tierColor.opacity(0.12), in: Capsule())
+                    .foregroundStyle(tierColor.opacity(0.9))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(tierColor.opacity(0.1), in: Capsule())
 
                 // 메시지 본문
                 if !message.content.isEmpty {
@@ -201,29 +213,29 @@ struct ChatMessageRow: View {
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [tierColor.opacity(0.10), tierColor.opacity(0.03)],
+                                colors: [tierColor.opacity(0.08), tierColor.opacity(0.02)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(tierColor.opacity(0.35), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .strokeBorder(tierColor.opacity(0.25), lineWidth: 0.5)
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .shadow(color: tierColor.opacity(0.12), radius: 6, x: 0, y: 3)
-        .padding(.vertical, DesignTokens.Spacing.xxs)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
+        .shadow(color: tierColor.opacity(0.08), radius: 6, x: 0, y: 2)
+        .padding(.vertical, 2)
         .contextMenu {
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.nickname, forType: .string) } label: { Label("닉네임 복사", systemImage: "person.text.rectangle") }
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.content, forType: .string) } label: { Label("메시지 복사", systemImage: "doc.on.doc") }
@@ -276,22 +288,21 @@ struct ChatMessageRow: View {
         let milestone = subscriptionMilestone(months: months)
 
         return HStack(spacing: 0) {
-            // ── 좌측 구독 티어 액센트 바 (glass glow) ────────────
+            // 좌측 구독 티어 액센트 바
             subColor
                 .frame(width: 3)
-                .shadow(color: subColor.opacity(0.4), radius: 4, x: 2)
 
-            // ── 카드 본문 ────────────────────────────────────────
+            // 카드 본문
             VStack(alignment: .leading, spacing: 8) {
 
                 // 헤더: 아이콘 뱃지 · 닉네임 + 구독 문구 · 개월 수 필
                 HStack(alignment: .center, spacing: 8) {
                     ZStack {
                         Circle()
-                            .fill(subColor.opacity(0.2))
-                            .frame(width: 28, height: 28)
+                            .fill(subColor.opacity(0.15))
+                            .frame(width: 26, height: 26)
                         Image(systemName: subIcon)
-                            .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
+                            .font(DesignTokens.Typography.custom(size: 12, weight: .bold))
                             .foregroundStyle(subColor)
                     }
 
@@ -307,15 +318,14 @@ struct ChatMessageRow: View {
 
                     Spacer(minLength: 4)
 
-                    // 개월 수 뱃지 (2개월 이상) — pill glow
+                    // 개월 수 뱃지 (2개월 이상)
                     if months > 1 {
                         Text("\(months)개월")
                             .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                            .padding(.horizontal, DesignTokens.Spacing.sm)
-                            .padding(.vertical, DesignTokens.Spacing.xxs)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 3)
                             .background(subColor, in: Capsule())
-                            .shadow(color: subColor.opacity(0.3), radius: 4)
                     }
                 }
 
@@ -324,9 +334,9 @@ struct ChatMessageRow: View {
                     Text(milestone)
                         .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
                         .foregroundStyle(subColor)
-                        .padding(.horizontal, DesignTokens.Spacing.sm)
-                        .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(subColor.opacity(0.12), in: Capsule())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(subColor.opacity(0.1), in: Capsule())
                 } else if months > 1 {
                     Label("\(months)개월 연속 구독 중", systemImage: "repeat")
                         .font(DesignTokens.Typography.footnoteMedium)
@@ -342,29 +352,29 @@ struct ChatMessageRow: View {
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [subColor.opacity(0.10), subColor.opacity(0.03)],
+                                colors: [subColor.opacity(0.08), subColor.opacity(0.02)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(subColor.opacity(0.30), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .strokeBorder(subColor.opacity(0.20), lineWidth: 0.5)
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .shadow(color: subColor.opacity(0.10), radius: 6, x: 0, y: 3)
-        .padding(.vertical, DesignTokens.Spacing.xxs)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
+        .shadow(color: subColor.opacity(0.08), radius: 6, x: 0, y: 2)
+        .padding(.vertical, 2)
         .contextMenu {
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.nickname, forType: .string) } label: { Label("닉네임 복사", systemImage: "person.text.rectangle") }
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.content, forType: .string) } label: { Label("메시지 복사", systemImage: "doc.on.doc") }
@@ -376,16 +386,16 @@ struct ChatMessageRow: View {
     private var systemMessageView: some View {
         HStack(spacing: 6) {
             Image(systemName: systemMessageIcon)
-                .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
                 .foregroundStyle(systemMessageColor)
             
             Text(message.content)
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.7))
                 .italic()
         }
-        .padding(.vertical, DesignTokens.Spacing.xxs)
-        .padding(.horizontal, DesignTokens.Spacing.xs)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
     }
 
     private var systemMessageIcon: String {
@@ -409,28 +419,36 @@ struct ChatMessageRow: View {
     }
 
     private var noticeMessageView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "pin.fill")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.accentOrange)
+        HStack(spacing: 0) {
+            // 좌측 액센트 바
+            DesignTokens.Colors.accentOrange
+                .frame(width: 3)
 
-            Text(message.content)
-                .font(DesignTokens.Typography.captionSemibold)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .textSelection(.enabled)
+            HStack(spacing: 8) {
+                Image(systemName: "megaphone.fill")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.accentOrange)
+
+                Text(message.content)
+                    .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.9))
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.sm)
         }
-        .padding(.horizontal, DesignTokens.Spacing.sm)
-        .padding(.vertical, DesignTokens.Spacing.xs + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .fill(DesignTokens.Colors.accentOrange.opacity(0.1))
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                .fill(DesignTokens.Colors.accentOrange.opacity(0.06))
                 .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.3), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.2), lineWidth: 0.5)
                 }
         }
-        .padding(.vertical, DesignTokens.Spacing.xxs)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
+        .padding(.vertical, 2)
         .contextMenu {
             Button { chatVM?.pinMessage(message) } label: { Label("고정", systemImage: "pin") }
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.content, forType: .string) } label: { Label("복사", systemImage: "doc.on.doc") }

@@ -171,5 +171,16 @@ public final class PlayerContainerView: NSView {
             attachVideoView(pending)
         }
     }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // Retina ↔ 일반 디스플레이 전환 시 컨테이너 레이어 스케일 즉시 갱신
+        if let scale = window?.backingScaleFactor {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer?.contentsScale = scale
+            CATransaction.commit()
+        }
+    }
 }
 

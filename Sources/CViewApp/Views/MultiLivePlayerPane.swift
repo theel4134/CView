@@ -15,6 +15,7 @@ struct MultiLivePlayerPane: View {
     @Environment(AppState.self) private var appState
     @State private var isHovering = false
     @State private var hideControlsTask: Task<Void, Never>?
+    @State private var showQualityMenu = false
 
     private var showControls: Bool {
         isHovering && session.loadState == .playing
@@ -149,11 +150,12 @@ struct MultiLivePlayerPane: View {
             Spacer()
 
             // 하단: 컨트롤
-            HStack(spacing: DesignTokens.Spacing.md) {
+            HStack(spacing: isCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.md) {
+                // 음소거/볼륨
                 Button {
                     session.playerViewModel.toggleMute()
                 } label: {
-                    Image(systemName: session.playerViewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    Image(systemName: volumeIcon)
                         .font(isCompact ? .caption : .body)
                         .foregroundStyle(.white)
                         .frame(width: isCompact ? 24 : 32, height: isCompact ? 24 : 32)
@@ -161,22 +163,68 @@ struct MultiLivePlayerPane: View {
                 }
                 .buttonStyle(.plain)
 
+                // 볼륨 슬라이더 (탭 모드에서만)
+                if !isCompact {
+                    Slider(
+                        value: Binding(
+                            get: { Double(session.playerViewModel.volume) },
+                            set: { session.playerViewModel.setVolume(Float($0)) }
+                        ),
+                        in: 0...1
+                    )
+                    .frame(width: 80)
+                    .tint(DesignTokens.Colors.chzzkGreen)
+                    .opacity(session.playerViewModel.isMuted ? 0.4 : 1)
+                }
+
                 Spacer()
 
-                if isCompact {
-                    Button {
-                        Task {
-                            await appState.multiLiveManager.removeSession(id: session.id)
+                // 화질 선택
+                if !session.playerViewModel.availableQualities.isEmpty {
+                    Menu {
+                        ForEach(session.playerViewModel.availableQualities, id: \.bandwidth) { quality in
+                            Button {
+                                Task { await session.playerViewModel.switchQuality(quality) }
+                            } label: {
+                                HStack {
+                                    Text(quality.name)
+                                    if session.playerViewModel.currentQuality?.bandwidth == quality.bandwidth {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
                         }
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Circle().fill(.white.opacity(0.15)))
+                        HStack(spacing: 3) {
+                            Image(systemName: "gearshape.fill")
+                                .font(isCompact ? .system(size: 9) : .caption)
+                            if !isCompact {
+                                Text(session.playerViewModel.currentQuality?.name ?? "자동")
+                                    .font(.caption)
+                            }
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, isCompact ? 6 : 8)
+                        .padding(.vertical, isCompact ? 3 : 4)
+                        .background(Capsule().fill(.white.opacity(0.15)))
                     }
-                    .buttonStyle(.plain)
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
+
+                // 세션 제거
+                Button {
+                    Task {
+                        await appState.multiLiveManager.removeSession(id: session.id)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(isCompact ? .caption.weight(.bold) : .callout.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: isCompact ? 24 : 32, height: isCompact ? 24 : 32)
+                        .background(Circle().fill(.white.opacity(0.15)))
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, isCompact ? 8 : DesignTokens.Spacing.md)
             .padding(.bottom, isCompact ? 8 : DesignTokens.Spacing.md)
@@ -272,6 +320,20 @@ struct MultiLivePlayerPane: View {
                     isHovering = false
                 }
             }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var volumeIcon: String {
+        if session.playerViewModel.isMuted || session.playerViewModel.volume == 0 {
+            return "speaker.slash.fill"
+        } else if session.playerViewModel.volume < 0.33 {
+            return "speaker.fill"
+        } else if session.playerViewModel.volume < 0.66 {
+            return "speaker.wave.1.fill"
+        } else {
+            return "speaker.wave.2.fill"
         }
     }
 }

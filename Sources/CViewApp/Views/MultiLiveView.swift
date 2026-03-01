@@ -11,6 +11,7 @@ struct MultiLiveView: View {
 
     @Environment(AppState.self) private var appState
     @Namespace private var layoutNamespace
+    @State private var showChatSettings = false
 
     private var manager: MultiLiveManager {
         appState.multiLiveManager
@@ -220,9 +221,14 @@ struct MultiLiveView: View {
             }
 
             // 채팅 콘텐츠
-            ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {})
+            ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {
+                showChatSettings = true
+            })
+            .sheet(isPresented: $showChatSettings) {
+                MultiLiveChatSettingsView(chatVM: session.chatViewModel)
+            }
         }
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
@@ -275,5 +281,101 @@ struct MultiLiveView: View {
             .help("채널 추가")
             .disabled(!manager.canAddSession)
         }
+    }
+}
+
+// MARK: - MultiLive 채팅 설정 뷰
+
+private struct MultiLiveChatSettingsView: View {
+    let chatVM: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("채팅 설정", systemImage: "bubble.left.and.bubble.right.fill")
+                    .font(.headline)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(DesignTokens.Typography.subhead)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 14) {
+                    // 글꼴 크기
+                    settingsRow(label: "글꼴 크기", icon: "textformat") {
+                        HStack(spacing: 6) {
+                            Text("가").font(.system(size: 10)).foregroundStyle(DesignTokens.Colors.textTertiary)
+                            Slider(value: Binding(
+                                get: { chatVM.fontSize },
+                                set: { chatVM.fontSize = $0 }
+                            ), in: 10...24, step: 1)
+                            .tint(DesignTokens.Colors.chzzkGreen)
+                            .frame(width: 110)
+                            Text("가").font(.system(size: 17)).foregroundStyle(DesignTokens.Colors.textTertiary)
+                            Text("\(Int(chatVM.fontSize))pt")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                                .frame(width: 34)
+                        }
+                    }
+
+                    // 뱃지 표시
+                    settingsRow(label: "뱃지 표시", icon: "shield.fill") {
+                        Toggle("", isOn: Binding(
+                            get: { chatVM.showBadge },
+                            set: { chatVM.showBadge = $0 }
+                        ))
+                        .toggleStyle(.switch)
+                        .tint(DesignTokens.Colors.chzzkGreen)
+                    }
+
+                    // 후원 메시지만 표시
+                    settingsRow(label: "후원 메시지만", icon: "gift.fill") {
+                        Toggle("", isOn: Binding(
+                            get: { chatVM.showDonationsOnly },
+                            set: { chatVM.showDonationsOnly = $0 }
+                        ))
+                        .toggleStyle(.switch)
+                        .tint(DesignTokens.Colors.chzzkGreen)
+                    }
+
+                    // 타임스탬프 표시
+                    settingsRow(label: "타임스탬프 표시", icon: "clock") {
+                        Toggle("", isOn: Binding(
+                            get: { chatVM.showTimestamp },
+                            set: { chatVM.showTimestamp = $0 }
+                        ))
+                        .toggleStyle(.switch)
+                        .tint(DesignTokens.Colors.chzzkGreen)
+                    }
+                }
+                .padding(DesignTokens.Spacing.md)
+            }
+        }
+        .frame(width: 380, height: 350)
+    }
+
+    @ViewBuilder
+    private func settingsRow<Control: View>(label: String, icon: String, @ViewBuilder control: () -> Control) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .font(DesignTokens.Typography.bodySemibold)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            Spacer()
+            control()
+        }
+        .padding(DesignTokens.Spacing.sm)
+        .background(DesignTokens.Colors.surfaceBase)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
     }
 }

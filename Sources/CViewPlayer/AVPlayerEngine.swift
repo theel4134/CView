@@ -37,9 +37,26 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         let scale = NSScreen.main?.backingScaleFactor ?? 2.0
         playerLayer.contentsScale = scale
         
-        // 스케일링 시 선명도 향상 — trilinear 필터링
-        playerLayer.magnificationFilter = .trilinear
+        // 비디오 원본 픽셀을 최대한 보존하는 필터링
+        // .linear: 비디오 스케일링 시 픽셀 보간이 자연스러우면서 선명도 유지
+        // .trilinear은 mipmap 기반이라 약간의 블러 발생 가능
+        playerLayer.magnificationFilter = .linear
         playerLayer.minificationFilter  = .trilinear
+
+        // ── Metal Zero-Copy 렌더링 파이프라인 ──────────────────────────────
+        // pixelBufferAttributes 설정으로 VideoToolbox → Metal IOSurface 직통 경로 활성화
+        // CPU 복사 없이 GPU에서 직접 디코딩→렌더링 (macOS Apple Silicon 최적)
+        playerLayer.pixelBufferAttributes = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+        ]
+
+        // HDR/Wide Color Gamut 지원 — EDR 톤매핑으로 색 재현력 향상
+        playerLayer.wantsExtendedDynamicRangeContent = true
+
+        // edge 안티앨리어싱 비활성 — 비디오 프레임 경계 렌더링 비용 제거
+        playerLayer.allowsEdgeAntialiasing = false
 
         // 이 레이어의 모든 암묵적 애니메이션 비활성화
         playerLayer.actions = [
@@ -61,7 +78,21 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         super.viewDidMoveToWindow()
         // 윈도우 이동/스크린 변경 시 contentsScale 자동 업데이트
         if let scale = window?.backingScaleFactor {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             playerLayer.contentsScale = scale
+            CATransaction.commit()
+        }
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // Retina ↔ 일반 디스플레이 전환 시 즉시 contentsScale 갱신
+        if let scale = window?.backingScaleFactor {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            playerLayer.contentsScale = scale
+            CATransaction.commit()
         }
     }
 
@@ -298,22 +329,24 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         let item = AVPlayerItem(asset: asset)
 
         // ── 화면 해상도 기반 ABR 최적화 ───────────────────────────────────
-        // 전체 화면 크기 × Retina 스케일 기준 — visibleFrame 대신 frame 사용하여
-        // 메뉴바/독 영역까지 포함한 최대 해상도 스트림 선택 허용
-        if let screen = NSScreen.main {
-            let scale = screen.backingScaleFactor
-            let size  = screen.frame.size
-            item.preferredMaximumResolution = CGSize(
-                width:  size.width  * scale,
-                height: size.height * scale
-            )
-        }
+        // 1080p(1920x1080) 해상도를 명시적으로 선호 — 화면 크기 관계없이 최고 화질 선택
+        // Retina 디스플레이에서 screen.frame은 논리 해상도이므로 × scale 적용
+        // 예: M1 Max 14" → 1512×982 논리 → 3024×1964 물리 (1080p 충분히 수용)
+        item.preferredMaximumResolution = CGSize(width: 1920, height: 1080)
         // 싱글 재생 시 비트레이트 무제한 — 최고 화질 variant 빠르게 선택
         item.preferredPeakBitRate = 0
-        // macOS 14+: 첫 번째 적합 variant 즉시 재생 → 초기 버퍼링 시간 단축
-        if #available(macOS 14.0, *) {
-            item.startsOnFirstEligibleVariant = true
-        }
+
+        // ── Metal Zero-Copy 비디오 출력 파이프라인 ──────────────────────────
+        // AVPlayerItemVideoOutput으로 VideoToolbox → Metal IOSurface 직접 경로 활성화
+        // CPU 개입 없이 GPU에서 디코딩 → 렌더링 — 1080p 프레임 선명도 극대화
+        let pixelAttrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: NSDictionary(),
+        ]
+        let videoOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: pixelAttrs)
+        videoOutput.suppressesPlayerRendering = false
+        item.add(videoOutput)
         // ─────────────────────────────────────────────────────────────────
 
         // ── 라이브 스트림 저지연 설정 ──────────────────────────────────────

@@ -56,6 +56,10 @@ final class MultiLiveSession: Identifiable {
     private weak var apiClient: ChzzkAPIClient?
     private let logger = AppLogger.player
 
+    /// 로그인 사용자 정보 (채팅 전송용)
+    private var userUid: String?
+    private var userNickname: String?
+
     // MARK: - Init
 
     init(
@@ -63,7 +67,9 @@ final class MultiLiveSession: Identifiable {
         channelName: String,
         profileImageURL: URL?,
         liveInfo: LiveInfo?,
-        apiClient: ChzzkAPIClient
+        apiClient: ChzzkAPIClient,
+        userUid: String? = nil,
+        userNickname: String? = nil
     ) {
         self.id = UUID()
         self.channelId = channelId
@@ -75,10 +81,18 @@ final class MultiLiveSession: Identifiable {
         self.categoryName = liveInfo?.liveCategoryValue
         self.thumbnailURL = liveInfo?.liveImageURL
         self.apiClient = apiClient
+        self.userUid = userUid
+        self.userNickname = userNickname
 
         // AVPlayer 전용 PlayerViewModel 생성
         self.playerViewModel = PlayerViewModel(engineType: .avPlayer)
         self.chatViewModel = ChatViewModel()
+
+        // 사용자 정보 설정 (채팅 전송 권한)
+        if let userUid {
+            self.chatViewModel.currentUserUid = userUid
+        }
+        self.chatViewModel.currentUserNickname = userNickname
     }
 
     // MARK: - Lifecycle
@@ -171,10 +185,24 @@ final class MultiLiveSession: Identifiable {
         guard let chatChannelId = info.chatChannelId else { return }
 
         do {
-            let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
+            // 병렬: 토큰 + 이모티콘 팩 로드
+            let tokenTask = Task { try await apiClient.chatAccessToken(chatChannelId: chatChannelId) }
+            let packsTask = Task { await apiClient.basicEmoticonPacks(channelId: channelId) }
+
+            let tokenInfo = try await tokenTask.value
+            let packs = await packsTask.value
+            let (emoMap, loadedPacks) = await apiClient.resolveEmoticonPacks(packs)
+
+            // 이모티콘 설정
+            chatViewModel.channelEmoticons = emoMap
+            chatViewModel.emoticonPacks = loadedPacks
+
+            // 채팅 연결 (extraToken + uid 전달 → SEND 권한)
             await chatViewModel.connect(
                 chatChannelId: chatChannelId,
                 accessToken: tokenInfo.accessToken,
+                extraToken: tokenInfo.extraToken,
+                uid: userUid,
                 channelId: channelId
             )
         } catch {

@@ -59,8 +59,33 @@ public struct AVVideoView: NSViewRepresentable {
             // Retina 디스플레이 대응 — 선명한 렌더링
             let scale = NSScreen.main?.backingScaleFactor ?? 2.0
             playerLayer.contentsScale = scale
-            playerLayer.magnificationFilter = .trilinear
+            
+            // .linear: 비디오 스케일링 시 픽셀 보간이 자연스러우면서 선명도 유지
+            playerLayer.magnificationFilter = .linear
             playerLayer.minificationFilter  = .trilinear
+            
+            // Metal Zero-Copy 렌더링 파이프라인
+            playerLayer.pixelBufferAttributes = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                kCVPixelBufferMetalCompatibilityKey as String: true,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
+            
+            // GPU 최적화
+            playerLayer.drawsAsynchronously = true
+            playerLayer.isOpaque = true
+            playerLayer.allowsGroupOpacity = false
+            playerLayer.shouldRasterize = false
+            playerLayer.allowsEdgeAntialiasing = false
+            
+            // HDR/Wide Color 지원
+            playerLayer.wantsExtendedDynamicRangeContent = true
+            
+            // 암묵적 애니메이션 비활성화
+            playerLayer.actions = [
+                "position": NSNull(), "bounds": NSNull(),
+                "frame": NSNull(), "contents": NSNull(),
+            ]
             
             layer?.addSublayer(playerLayer)
         }
@@ -86,9 +111,22 @@ public struct AVVideoView: NSViewRepresentable {
         
         override public func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            // 윈도우/스크린 변경 시 contentsScale 자동 업데이트
             if let scale = window?.backingScaleFactor {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
                 playerLayer.contentsScale = scale
+                CATransaction.commit()
+            }
+        }
+
+        override public func viewDidChangeBackingProperties() {
+            super.viewDidChangeBackingProperties()
+            // Retina ↔ 일반 디스플레이 전환 시 즉시 반영
+            if let scale = window?.backingScaleFactor {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                playerLayer.contentsScale = scale
+                CATransaction.commit()
             }
         }
     }

@@ -141,97 +141,86 @@ struct ChatMessagesView: View {
         VStack(spacing: 0) {
             // Pinned message banner
             if let pinned = viewModel?.pinnedMessage {
-                HStack(spacing: 8) {
-                    Image(systemName: "pin.fill")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.accentOrange)
-                        .rotationEffect(.degrees(-45))
-
-                    Text(pinned.nickname)
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
-                        .foregroundStyle(DesignTokens.Colors.accentOrange)
-
-                    Text(pinned.content)
-                        .font(DesignTokens.Typography.captionMedium)
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Button {
-                        viewModel?.unpinMessage()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, DesignTokens.Spacing.sm)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            DesignTokens.Colors.accentOrange.opacity(0.12),
-                            DesignTokens.Colors.accentOrange.opacity(0.04)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(DesignTokens.Colors.accentOrange)
+                HStack(spacing: 0) {
+                    DesignTokens.Colors.accentOrange
                         .frame(width: 3)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "pin.fill")
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.accentOrange)
+                            .rotationEffect(.degrees(-45))
+
+                        Text(pinned.nickname)
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
+                            .foregroundStyle(DesignTokens.Colors.accentOrange)
+
+                        Text(pinned.content)
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                            .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.85))
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Button {
+                            viewModel?.unpinMessage()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
+                                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, DesignTokens.Spacing.sm)
+                    .padding(.vertical, DesignTokens.Spacing.xs + 2)
                 }
+                .background(DesignTokens.Colors.accentOrange.opacity(0.06))
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 1) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         if let viewModel {
-                            ForEach(viewModel.messages) { message in
-                                EquatableChatMessageRow(message: message, chatVM: viewModel)
-                                    .id(message.id)
+                            if viewModel.messages.isEmpty {
+                                chatEmptyState
+                            } else {
+                                ForEach(viewModel.messages) { message in
+                                    EquatableChatMessageRow(message: message, chatVM: viewModel)
+                                        .id(message.id)
+                                }
                             }
                         }
                     }
-                    .padding(.horizontal, DesignTokens.Spacing.sm)
+                    .padding(.horizontal, DesignTokens.Spacing.xxs)
                     .padding(.vertical, DesignTokens.Spacing.xs)
                 }
-                // onScrollGeometryChange: sentinel 대신 실제 스크롤 위치 기반 감지
+                .defaultScrollAnchor(.bottom)
+                // onScrollGeometryChange: 실제 스크롤 위치 기반 감지
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     let maxScrollY = geometry.contentSize.height - geometry.containerSize.height
-                    guard maxScrollY > 0 else { return true } // 콘텐츠가 컨테이너보다 작으면 항상 하단
+                    guard maxScrollY > 0 else { return true }
                     let distanceFromBottom = maxScrollY - geometry.contentOffset.y
-                    return distanceFromBottom <= 50 // 하단 50px 이내면 "near bottom"
+                    return distanceFromBottom <= 80
                 } action: { _, isNearBottom in
                     guard isScrollViewVisible else { return }
                     viewModel?.onScrollPositionChanged(isNearBottom: isNearBottom)
                 }
                 .onAppear {
                     isScrollViewVisible = true
-                    // 뷰가 다시 보일 때 자동 스크롤이 활성화되어 있으면 맨 아래로 이동
-                    if viewModel?.isAutoScrollEnabled == true {
-                        if let lastId = viewModel?.messages.last?.id {
-                            withAnimation(DesignTokens.Animation.chatScroll) {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
+                    if viewModel?.isAutoScrollEnabled == true,
+                       let lastId = viewModel?.messages.last?.id {
+                        proxy.scrollTo(lastId, anchor: .bottom)
                     }
                 }
                 .onDisappear {
                     isScrollViewVisible = false
                 }
-                // messages.count는 링 버퍼가 가득 차면 200으로 고정 → onChange 미발동
-                // last?.id를 관찰해야 새 메시지가 도착할 때마다 항상 트리거됨
+                // 새 메시지 도착 시 자동 스크롤 (애니메이션 없이 즉시 이동 — 치지직 방식)
                 .onChange(of: viewModel?.messages.last?.id) { _, _ in
                     if viewModel?.isAutoScrollEnabled == true && viewModel?.isReplayMode != true {
                         if let lastId = viewModel?.messages.last?.id {
-                            withAnimation(DesignTokens.Animation.chatScroll) {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
+                            proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
                 }
@@ -241,12 +230,10 @@ struct ChatMessagesView: View {
                           viewModel?.isReplayMode != true,
                           let lastId = viewModel?.messages.last?.id else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation(DesignTokens.Animation.chatScroll) {
-                            proxy.scrollTo(lastId, anchor: .bottom)
-                        }
+                        proxy.scrollTo(lastId, anchor: .bottom)
                     }
                 }
-                // Floating scroll-to-bottom button — 리플레이 모드(스크롤 위로 이동) 시 항상 표시
+                // Floating scroll-to-bottom button
                 .overlay(alignment: .bottom) {
                     if let vm = viewModel, vm.isReplayMode {
                         Button {
@@ -257,29 +244,73 @@ struct ChatMessagesView: View {
                                 }
                             }
                         } label: {
-                            HStack(spacing: 4) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "chevron.down")
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
                                 if vm.unreadCount > 0 {
                                     Text("새 메시지 \(vm.unreadCount)개")
+                                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
                                 } else {
                                     Text("맨 아래로")
+                                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
                                 }
-                                Image(systemName: "arrow.down")
                             }
-                            .font(DesignTokens.Typography.captionSemibold)
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                            .foregroundStyle(vm.unreadCount > 0 ? Color.black : DesignTokens.Colors.textPrimary)
                             .padding(.horizontal, DesignTokens.Spacing.sm)
-                            .padding(.vertical, DesignTokens.Spacing.xs)
-                            .background(vm.unreadCount > 0 ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceOverlay.opacity(0.95))
-                            .clipShape(Capsule())
-                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                            .padding(.vertical, 6)
+                            .background {
+                                if vm.unreadCount > 0 {
+                                    Capsule()
+                                        .fill(DesignTokens.Colors.chzzkGreen)
+                                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                                } else {
+                                    Capsule()
+                                        .fill(.ultraThinMaterial)
+                                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                                }
+                            }
+                            .overlay {
+                                if vm.unreadCount == 0 {
+                                    Capsule()
+                                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                                }
+                            }
                         }
                         .buttonStyle(.plain)
-                        .padding(.bottom, DesignTokens.Spacing.xs)
+                        .padding(.bottom, DesignTokens.Spacing.sm)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .animation(DesignTokens.Animation.snappy, value: viewModel?.isReplayMode)
             }
         } // VStack
+    }
+
+    // MARK: - Empty State
+
+    private var chatEmptyState: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.08))
+                    .frame(width: 72, height: 72)
+
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(DesignTokens.Typography.custom(size: 28, weight: .light))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.5))
+            }
+
+            VStack(spacing: 6) {
+                Text("채팅에 연결 중...")
+                    .font(DesignTokens.Typography.custom(size: 13, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                Text("메시지가 도착하면 여기에 표시됩니다")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 60)
     }
 }
