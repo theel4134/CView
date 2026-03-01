@@ -93,6 +93,10 @@ extension AppState {
            case .playing = phase {
             return true
         }
+        // 멀티라이브 세션 확인
+        if multiLiveManager.hasActiveStreams() {
+            return true
+        }
         return false
     }
 

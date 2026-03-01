@@ -36,6 +36,9 @@ extension AppState {
         chatViewModel = ChatViewModel()
         playerViewModel = PlayerViewModel(engineType: settingsStore.player.preferredEngine)
 
+        // 멀티라이브 매니저 API 클라이언트 주입
+        multiLiveManager.configure(apiClient: apiClient)
+
         // 재생 상태 변경 시 App Nap 방지 관리 콜백 연결
         playerViewModel?.onPlaybackStateChanged = { [weak self] in
             self?.updatePlaybackActivity()

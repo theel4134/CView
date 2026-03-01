@@ -120,6 +120,9 @@ struct MainContentView: View {
         case .multiChat:
             MultiChatView()
             
+        case .multiLive:
+            MultiLiveView()
+            
         case .settings:
             SettingsView()
         }
@@ -162,6 +165,8 @@ struct MainContentView: View {
             PopularClipsView()
         case .multiChat:
             MultiChatView()
+        case .multiLive:
+            MultiLiveView()
         case .settings:
             SettingsView()
         }
@@ -198,7 +203,7 @@ struct SidebarView: View {
     // 섹션 그룹 정의
     private let primaryItems: [AppRouter.SidebarItem] = [.home, .following, .category]
     private let discoverItems: [AppRouter.SidebarItem] = [.search, .clips, .recentFavorites]
-    private let toolItems: [AppRouter.SidebarItem] = [.multiChat]
+    private let toolItems: [AppRouter.SidebarItem] = [.multiChat, .multiLive]
 
     var body: some View {
         @Bindable var router = router

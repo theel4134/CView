@@ -20,6 +20,7 @@ public enum AppRoute: Hashable, Identifiable {
     case clip(clipUID: String)
     case popularClips
     case multiChat
+    case multiLive
     
     public var id: String {
         switch self {
@@ -34,6 +35,7 @@ public enum AppRoute: Hashable, Identifiable {
         case .clip(let uid): "clip-\(uid)"
         case .popularClips: "popularClips"
         case .multiChat: "multiChat"
+        case .multiLive: "multiLive"
         }
     }
 }
@@ -67,6 +69,7 @@ public final class AppRouter {
         case search = "검색"
         case clips = "클립"
         case multiChat = "멀티채팅"
+        case multiLive = "멀티라이브"
         case recentFavorites = "최근/즐겨찾기"
         case settings = "설정"
         
@@ -80,6 +83,7 @@ public final class AppRouter {
             case .search: "magnifyingglass"
             case .clips: "film.stack"
             case .multiChat: "bubble.left.and.bubble.right.fill"
+            case .multiLive: "rectangle.split.2x2.fill"
             case .recentFavorites: "clock.arrow.circlepath"
             case .settings: "gearshape.fill"
             }
@@ -146,6 +150,7 @@ public final class AppRouter {
         case .search:       selectSidebar(.search)
         case .popularClips: selectSidebar(.clips)
         case .multiChat:    selectSidebar(.multiChat)
+        case .multiLive:    selectSidebar(.multiLive)
         case .settings:     selectSidebar(.settings)
         default:            path.append(route)
         }

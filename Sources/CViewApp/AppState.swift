@@ -44,6 +44,7 @@ final class AppState {
     var chatViewModel: ChatViewModel?
     var playerViewModel: PlayerViewModel?
     var settingsStore: SettingsStore = SettingsStore()
+    let multiLiveManager = MultiLiveManager()
 
     /// 공유 성능 모니터 (LiveStreamView → MetricsForwarder 모두 같은 인스턴스 사용)
     let performanceMonitor = PerformanceMonitor()
