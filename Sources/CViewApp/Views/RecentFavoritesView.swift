@@ -48,7 +48,7 @@ struct RecentFavoritesView: View {
         VStack(spacing: 0) {
             // 탭 바 + 요약 배지
             tabHeaderBar
-            Divider().overlay(DesignTokens.Colors.border.opacity(0.5))
+            Divider().overlay(.white.opacity(DesignTokens.Glass.borderOpacityLight))
 
             ScrollView {
                 LazyVStack(spacing: DesignTokens.Spacing.xs) {
@@ -61,7 +61,7 @@ struct RecentFavoritesView: View {
                                 .frame(width: 7, height: 7)
                                 .shadow(color: DesignTokens.Colors.live.opacity(0.6), radius: 3)
                             Text("\(liveCount)개 채널 방송 중")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(DesignTokens.Typography.captionSemibold)
                                 .foregroundStyle(DesignTokens.Colors.live)
                             Spacer()
                             if isCheckingLive {
@@ -97,7 +97,7 @@ struct RecentFavoritesView: View {
                 .padding(.vertical, DesignTokens.Spacing.sm)
             }
         }
-        .background(DesignTokens.Colors.backgroundDark)
+        .background(DesignTokens.Colors.background)
         .task { await loadData() }
         .refreshable { await loadData() }
         .overlay {
@@ -107,7 +107,7 @@ struct RecentFavoritesView: View {
                         .controlSize(.large)
                         .tint(DesignTokens.Colors.chzzkGreen)
                     Text("로딩 중...")
-                        .font(.system(size: 13))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
             }
@@ -129,27 +129,33 @@ struct RecentFavoritesView: View {
             ForEach(FavTab.allCases) { tab in
                 let isSelected = selectedTab == tab
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) { selectedTab = tab }
+                    withAnimation(DesignTokens.Animation.fast) { selectedTab = tab }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 12))
+                            .font(DesignTokens.Typography.caption)
                         Text(tab.rawValue)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
                         let count = tab == .favorites ? favoriteChannels.count : recentChannels.count
                         if count > 0 {
                             Text("\(count)")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(DesignTokens.Typography.micro)
                                 .foregroundStyle(isSelected ? .black : DesignTokens.Colors.textTertiary)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(isSelected ? tab.color : DesignTokens.Colors.surface)
+                                .padding(.horizontal, DesignTokens.Spacing.xs)
+                                .padding(.vertical, DesignTokens.Spacing.xxs)
+                                .background {
+                                    if isSelected {
+                                        tab.color
+                                    } else {
+                                        Rectangle().fill(.ultraThinMaterial)
+                                    }
+                                }
                                 .clipShape(Capsule())
                         }
                     }
                     .foregroundStyle(isSelected ? tab.color : DesignTokens.Colors.textSecondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.md)
                     .overlay(alignment: .bottom) {
                         if isSelected {
                             Rectangle()
@@ -165,7 +171,7 @@ struct RecentFavoritesView: View {
                 Task { await loadData() }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .padding(.horizontal, DesignTokens.Spacing.md)
             }
@@ -228,10 +234,10 @@ private extension RecentFavoritesView {
             Spacer()
             VStack(spacing: DesignTokens.Spacing.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 28))
+                    .font(DesignTokens.Typography.display)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text(message)
-                    .font(.system(size: 13))
+                    .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
             .padding(.vertical, DesignTokens.Spacing.xl)
@@ -299,35 +305,35 @@ struct PremiumChannelRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(item.channelName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(DesignTokens.Typography.bodySemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
                     if isLive {
                         Text("LIVE")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .black))
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                            .padding(.horizontal, DesignTokens.Spacing.xs)
+                            .padding(.vertical, DesignTokens.Spacing.xxs)
                             .background(DesignTokens.Colors.live)
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     }
                 }
                 HStack(spacing: 4) {
                     if isLive, let vc = viewerCount, vc > 0 {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                         Text(formatViewerCount(vc))
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                     } else if let lastWatched = item.lastWatched {
                         Image(systemName: "clock")
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                         Text(lastWatched, style: .relative)
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                     } else {
                         Text("최근 시청 없음")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                     }
                 }
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
@@ -340,27 +346,32 @@ struct PremiumChannelRow: View {
                 Task { await onToggleFavorite() }
             } label: {
                 Image(systemName: item.isFavorite ? "star.fill" : "star")
-                    .font(.system(size: 14))
+                    .font(DesignTokens.Typography.body)
                     .foregroundStyle(item.isFavorite ? .yellow : DesignTokens.Colors.textTertiary)
             }
             .buttonStyle(.plain)
-            .padding(.leading, 4)
+            .padding(.leading, DesignTokens.Spacing.xxs)
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .fill(isHovered
-                      ? (isLive ? DesignTokens.Colors.live.opacity(0.07) : DesignTokens.Colors.surfaceHover)
-                      : DesignTokens.Colors.surface.opacity(0.4))
-                .shadow(
-                    color: isLive ? DesignTokens.Colors.live.opacity(isHovered ? 0.18 : 0) : .clear,
-                    radius: 6
-                )
-        )
+        .background {
+            ZStack {
+                if isHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                        .fill(isLive ? DesignTokens.Colors.live.opacity(0.07) : DesignTokens.Colors.surfaceOverlay)
+                } else {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                        .fill(.ultraThinMaterial)
+                }
+            }
+            .shadow(
+                color: isLive ? DesignTokens.Colors.live.opacity(isHovered ? 0.18 : 0) : .clear,
+                radius: 6
+            )
+        }
         .contentShape(Rectangle())
         // Metal 3: hover scaleEffect 제거 — GPU texture scale 연산 방지
-        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .animation(DesignTokens.Animation.fast, value: isHovered)
         .onTapGesture { onTap() }
         .onHover { hovering in
             isHovered = hovering
@@ -370,10 +381,10 @@ struct PremiumChannelRow: View {
 
     private var avatarPlaceholder: some View {
         Circle()
-            .fill(DesignTokens.Colors.surface)
+            .fill(DesignTokens.Colors.surfaceBase)
             .overlay {
                 Image(systemName: "person.fill")
-                    .font(.system(size: 18))
+                    .font(DesignTokens.Typography.title3)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
     }
@@ -418,16 +429,16 @@ struct SimpleChannelRow: View {
             // 채널 정보
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.channelName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(DesignTokens.Typography.bodySemibold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                     .lineLimit(1)
                 
                 if let lastWatched = item.lastWatched {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                         Text(lastWatched, style: .relative)
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                     }
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
@@ -440,7 +451,7 @@ struct SimpleChannelRow: View {
                 Task { await onToggleFavorite() }
             } label: {
                 Image(systemName: item.isFavorite ? "star.fill" : "star")
-                    .font(.system(size: 13))
+                    .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(item.isFavorite ? .yellow : DesignTokens.Colors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -449,22 +460,22 @@ struct SimpleChannelRow: View {
         .padding(.vertical, DesignTokens.Spacing.xs)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .fill(isHovered ? DesignTokens.Colors.surfaceHover : .clear)
+                .fill(isHovered ? DesignTokens.Colors.surfaceOverlay : .clear)
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
         }
     }
     
     private var channelPlaceholder: some View {
         Circle()
-            .fill(DesignTokens.Colors.surface)
+            .fill(DesignTokens.Colors.surfaceBase)
             .frame(width: 42, height: 42)
             .overlay {
                 Image(systemName: "person.fill")
-                    .font(.system(size: 16))
+                    .font(DesignTokens.Typography.custom(size: 16))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
     }

@@ -53,6 +53,17 @@ public struct VLCLiveMetrics: Sendable {
     /// 해당 구간에서 손실된 오디오 버퍼 수
     public let lostAudioBuffersDelta: Int
 
+    // MARK: - 스트림 품질 (VLCKit 4.0)
+
+    /// 해당 구간에서 지연 렌더링된 프레임 수 (디코딩은 됐으나 표시 시점 초과)
+    public let latePicturesDelta: Int
+
+    /// 해당 구간에서 손상된 demux 패킷 수 (CDN/네트워크 오류 지표)
+    public let demuxCorruptedDelta: Int
+
+    /// 해당 구간에서 발생한 demux 불연속 수 (타임스탬프 점프 / 세그먼트 누락)
+    public let demuxDiscontinuityDelta: Int
+
     // MARK: - 기타
 
     /// 스냅샷 생성 시각
@@ -68,13 +79,19 @@ public struct VLCLiveMetrics: Sendable {
     }
 
     /// 종합 건강 점수 0.0~1.0
-    /// fps, bufferHealth, dropRatio, audioLost를 가중 평균
+    /// fps, bufferHealth, dropRatio, audioLost, lateFrames, demuxErrors를 가중 평균
+    /// 60fps 스트림 정규화: fps를 targetFps (추정값) 기준으로 정규화
     public var healthScore: Double {
-        let fpsScore:    Double = min(fps / 30.0, 1.0)         // 30fps 기준 정규화
+        // 60fps 스트림 대응: fps 30 이상이면 60fps 기준, 그 이하는 30fps 기준
+        let targetFps = fps > 35 ? 60.0 : 30.0
+        let fpsScore:    Double = min(fps / targetFps, 1.0)
         let bufScore:    Double = bufferHealth
-        let dropScore:   Double = max(0.0, 1.0 - dropRatio * 10.0)   // 10% drop → 0
+        let dropScore:   Double = max(0.0, 1.0 - dropRatio * 10.0)
         let audioScore:  Double = lostAudioBuffersDelta == 0 ? 1.0 : 0.7
-        return (fpsScore * 0.35 + bufScore * 0.30 + dropScore * 0.25 + audioScore * 0.10)
+        let lateScore:   Double = latePicturesDelta == 0 ? 1.0 : max(0.5, 1.0 - Double(latePicturesDelta) * 0.05)
+        let demuxScore:  Double = (demuxCorruptedDelta + demuxDiscontinuityDelta) == 0 ? 1.0 : 0.6
+        return (fpsScore * 0.30 + bufScore * 0.25 + dropScore * 0.20 + audioScore * 0.10
+                + lateScore * 0.10 + demuxScore * 0.05)
     }
 
     // MARK: - Init
@@ -92,6 +109,9 @@ public struct VLCLiveMetrics: Sendable {
         playbackRate: Float,
         bufferHealth: Double,
         lostAudioBuffersDelta: Int,
+        latePicturesDelta: Int = 0,
+        demuxCorruptedDelta: Int = 0,
+        demuxDiscontinuityDelta: Int = 0,
         timestamp: Date = Date()
     ) {
         self.fps = fps
@@ -106,6 +126,9 @@ public struct VLCLiveMetrics: Sendable {
         self.playbackRate = playbackRate
         self.bufferHealth = bufferHealth
         self.lostAudioBuffersDelta = lostAudioBuffersDelta
+        self.latePicturesDelta = latePicturesDelta
+        self.demuxCorruptedDelta = demuxCorruptedDelta
+        self.demuxDiscontinuityDelta = demuxDiscontinuityDelta
         self.timestamp = timestamp
     }
 }

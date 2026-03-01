@@ -55,6 +55,13 @@ public struct AVVideoView: NSViewRepresentable {
             
             playerLayer.videoGravity = .resizeAspect
             playerLayer.backgroundColor = NSColor.black.cgColor
+            
+            // Retina 디스플레이 대응 — 선명한 렌더링
+            let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+            playerLayer.contentsScale = scale
+            playerLayer.magnificationFilter = .trilinear
+            playerLayer.minificationFilter  = .trilinear
+            
             layer?.addSublayer(playerLayer)
         }
         
@@ -63,6 +70,11 @@ public struct AVVideoView: NSViewRepresentable {
                 playerLayer.player = player
             }
         }
+
+        /// 비디오 화면 채움 모드 변경 (true: aspect-fill, false: aspect-fit 레터박스)
+        func setFillMode(_ fill: Bool) {
+            playerLayer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+        }
         
         override public func layout() {
             super.layout()
@@ -70,6 +82,14 @@ public struct AVVideoView: NSViewRepresentable {
             CATransaction.setDisableActions(true)
             playerLayer.frame = bounds
             CATransaction.commit()
+        }
+        
+        override public func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // 윈도우/스크린 변경 시 contentsScale 자동 업데이트
+            if let scale = window?.backingScaleFactor {
+                playerLayer.contentsScale = scale
+            }
         }
     }
 }

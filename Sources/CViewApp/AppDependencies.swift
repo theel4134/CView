@@ -1,0 +1,146 @@
+// MARK: - AppDependencies.swift
+// AppState extension - Service initialization and dependency injection
+
+import Foundation
+import CViewCore
+import CViewNetworking
+import CViewAuth
+import CViewPersistence
+import CViewMonitoring
+import CViewPlayer
+
+// MARK: - Initialization & Dependency Setup
+
+extension AppState {
+
+    /// 앱 초기화 — ViewModel 생성, 서비스 연결, 비동기 로딩 시작
+    func initialize(
+        apiClient: ChzzkAPIClient,
+        authManager: AuthManager,
+        metricsClient: MetricsAPIClient? = nil,
+        metricsWebSocket: MetricsWebSocketClient? = nil
+    ) async {
+        guard !isInitialized else { return }
+
+        self.apiClient = apiClient
+        self.authManager = authManager
+
+        // HLS 프리페치 서비스 초기화 (채널 카드 호버 시 매니페스트 사전 로드)
+        self.hlsPrefetchService = HLSPrefetchService(apiClient: apiClient)
+
+        // 세션 만료 알림 구독 등록
+        observeSessionExpiry()
+
+        // 1. ViewModel을 먼저 생성 — UI 즉시 렌더링 가능
+        homeViewModel = HomeViewModel(apiClient: apiClient)
+        chatViewModel = ChatViewModel()
+        playerViewModel = PlayerViewModel(engineType: settingsStore.player.preferredEngine)
+
+        // 재생 상태 변경 시 App Nap 방지 관리 콜백 연결
+        playerViewModel?.onPlaybackStateChanged = { [weak self] in
+            self?.updatePlaybackActivity()
+        }
+
+        // 2. UI 사용 가능 상태로 즉시 전환 (ProgressView 해제)
+        isInitialized = true
+
+        // 3. SwiftUI에 첫 프레임을 렌더링할 시간을 줌
+        await Task.yield()
+
+        // 4. 라이브 채널 로딩 (공개 API, 비차단)
+        Task { await homeViewModel?.loadLiveChannels() }
+
+        // 4.5 메트릭 서버 연결 (비차단)
+        if let metricsClient, let metricsWebSocket {
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                await self.homeViewModel?.configureMetrics(client: metricsClient, wsClient: metricsWebSocket)
+            }
+
+            // MetricsForwarder 설정 (settingsStore에서 isEnabled 읽기)
+            // settingsStore는 이 시점에서 아직 로드 전일 수 있으므로 기본값 false 사용
+            // initializeDataStore() 완료 후 applyMetricsSettings()에서 업데이트됨
+            self.metricsClient = metricsClient
+            self.metricsForwarder = MetricsForwarder(
+                apiClient: metricsClient,
+                monitor: performanceMonitor,
+                isEnabled: false
+            )
+        }
+
+        // 5. DataStore/Settings 초기화 (디스크 I/O, 비차단) — 살짝 지연
+        Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            await self.initializeDataStore()
+        }
+
+        // 6. 인증 초기화 (네트워크 타임아웃 가능, 비차단) — 살짝 지연
+        Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            await self.initializeAuth(authManager: authManager, apiClient: apiClient)
+        }
+
+        // 7. 알림 설정 (비차단)
+        Task {
+            await NotificationService.shared.requestAuthorization()
+            NotificationService.shared.registerCategories()
+        }
+
+        // 8. 앱 활성/비활성 생명주기 옵저버 등록
+        setupLifecycleObservers()
+    }
+
+    /// DataStore 및 SettingsStore 초기화 (별도 Task에서 호출)
+    func initializeDataStore() async {
+        do {
+            let container = try await Task.detached(priority: .userInitiated) {
+                try CViewPersistence.DataStore.createContainer()
+            }.value
+            let store = CViewPersistence.DataStore(modelContainer: container)
+            self.dataStore = store
+            await settingsStore.configure(dataStore: store)
+            logger.info("DataStore and SettingsStore initialized")
+
+            // 디스크에서 로드된 설정으로 PlayerViewModel 엔진 타입 동기화
+            // initialize() 시점에는 settingsStore가 기본값이므로 여기서 반드시 갱신해야 함
+            playerViewModel?.preferredEngineType = settingsStore.player.preferredEngine
+
+            // HomeViewModel에 캐시 저장소 연결 (didSet → loadFromCache() 자동 호출)
+            homeViewModel?.dataStore = store
+
+            // 저장된 설정을 ChatViewModel에 일괄 적용
+            chatViewModel?.applySettings(settingsStore.chat)
+            chatViewModel?.onBlockedUsersChanged = { [weak self] users in
+                Task { @MainActor in
+                    self?.settingsStore.chat.blockedUsers = users
+                    await self?.settingsStore.save()
+                }
+            }
+
+            // 메트릭 설정 적용 (DataStore 로드 완료 후)
+            await applyMetricsSettings()
+        } catch {
+            logger.error("Failed to create DataStore: \(error.localizedDescription)")
+        }
+    }
+
+    /// 인증 초기화 및 후속 작업 (별도 Task에서 호출)
+    func initializeAuth(authManager: AuthManager, apiClient: ChzzkAPIClient) async {
+        await authManager.initialize()
+
+        isLoggedIn = await authManager.isAuthenticated
+        logger.info("Auth initialized, logged in: \(self.isLoggedIn)")
+
+        guard isLoggedIn else { return }
+
+        // 프로필/팔로잉 병렬 로드
+        async let profileLoad: Void = loadOAuthUserProfile(authManager: authManager)
+        async let userLoad: Void = loadUserProfile(apiClient: apiClient)
+        async let followingLoad: Void = { await self.homeViewModel?.loadFollowingChannels() }()
+        await profileLoad
+        await userLoad
+        await followingLoad
+
+        startBackgroundUpdates()
+    }
+}

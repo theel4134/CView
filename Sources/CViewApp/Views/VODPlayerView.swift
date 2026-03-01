@@ -39,11 +39,11 @@ struct VODPlayerView: View {
             if case .error(let msg) = viewModel.playbackState {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 40))
+                        .font(DesignTokens.Typography.custom(size: 40))
                         .foregroundStyle(.yellow)
                     Text(msg)
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     Button("다시 시도") {
                         Task { await viewModel.startVOD(videoNo: videoNo) }
                     }
@@ -55,11 +55,11 @@ struct VODPlayerView: View {
             if viewModel.playbackState == .ended {
                 VStack(spacing: 12) {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
-                        .font(.system(size: 50))
+                        .font(DesignTokens.Typography.custom(size: 50))
                         .foregroundStyle(.white.opacity(0.8))
                     Text("재생 완료")
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     Button("다시 재생") {
                         viewModel.togglePlayPause()
                     }
@@ -164,7 +164,7 @@ struct VODPlayerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(viewModel.videoTitle)
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .lineLimit(1)
                     if !viewModel.channelName.isEmpty {
                         Text(viewModel.channelName)
@@ -186,8 +186,8 @@ struct VODPlayerView: View {
                 viewModel.togglePlayPause()
             } label: {
                 Image(systemName: playPauseIcon)
-                    .font(.system(size: 50))
-                    .foregroundStyle(.white)
+                    .font(DesignTokens.Typography.custom(size: 50))
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     .shadow(radius: 4)
             }
             .buttonStyle(.plain)
@@ -212,7 +212,7 @@ struct VODPlayerView: View {
                         viewModel.togglePlayPause()
                     } label: {
                         Image(systemName: playPauseIcon)
-                            .font(.system(size: 16))
+                            .font(DesignTokens.Typography.custom(size: 16))
                     }
                     .buttonStyle(.plain)
                     
@@ -222,7 +222,7 @@ struct VODPlayerView: View {
                             viewModel.toggleMute()
                         } label: {
                             Image(systemName: volumeIcon)
-                                .font(.system(size: 14))
+                                .font(DesignTokens.Typography.body)
                         }
                         .buttonStyle(.plain)
                         
@@ -235,7 +235,7 @@ struct VODPlayerView: View {
                     
                     // Time
                     Text("\(VODPlayerViewModel.formatTime(viewModel.currentTime)) / \(VODPlayerViewModel.formatTime(viewModel.duration))")
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 12, design: .monospaced))
                     
                     Spacer()
                     
@@ -248,11 +248,11 @@ struct VODPlayerView: View {
                         }
                     } label: {
                         Text(viewModel.playbackSpeed.displayName)
-                            .font(.system(size: 12, weight: .medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.white.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .font(DesignTokens.Typography.captionMedium)
+                            .padding(.horizontal, DesignTokens.Spacing.xs)
+                            .padding(.vertical, DesignTokens.Spacing.xxs)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
                     }
                     .menuStyle(.borderlessButton)
                     
@@ -261,18 +261,18 @@ struct VODPlayerView: View {
                         viewModel.toggleFullscreen()
                     } label: {
                         Image(systemName: viewModel.isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14))
+                            .font(DesignTokens.Typography.body)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal)
-            .padding(.bottom, 12)
+            .padding(.bottom, DesignTokens.Spacing.sm)
             .background(
                 LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
             )
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
     }
     
     // MARK: - Helpers

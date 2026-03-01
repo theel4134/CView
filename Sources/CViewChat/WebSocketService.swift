@@ -46,8 +46,8 @@ public actor WebSocketService {
         
         public init(
             url: URL,
-            pingInterval: TimeInterval = 20,
-            maxMessageSize: Int = 1_048_576,
+            pingInterval: TimeInterval = WSDefaults.pingInterval,
+            maxMessageSize: Int = WSDefaults.maxMessageSize,
             httpHeaders: [String: String] = [:]
         ) {
             self.url = url
@@ -82,6 +82,13 @@ public actor WebSocketService {
     
     public init(configuration: Configuration) {
         self.configuration = configuration
+        // stream을 즉시 생성하여 connect() 전 구독 여부와 무관하게 메시지 수신 보장
+        let (msgStream, msgCont) = AsyncStream<WebSocketMessage>.makeStream()
+        self._messageStream = msgStream
+        self.messageContinuation = msgCont
+        let (stateStream, stateCont) = AsyncStream<State>.makeStream()
+        self._stateStream = stateStream
+        self.stateContinuation = stateCont
     }
     
     deinit {
@@ -107,23 +114,23 @@ public actor WebSocketService {
         
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.waitsForConnectivity = true
-        sessionConfig.timeoutIntervalForRequest = 90
-        sessionConfig.timeoutIntervalForResource = 900
+        sessionConfig.timeoutIntervalForRequest = WSDefaults.requestTimeout
+        sessionConfig.timeoutIntervalForResource = WSDefaults.resourceTimeout
         sessionConfig.httpShouldSetCookies = true
         sessionConfig.httpCookieAcceptPolicy = .always
         sessionConfig.httpAdditionalHeaders = [
             "Connection": "keep-alive",
-            "Keep-Alive": "timeout=120, max=200"
+            "Keep-Alive": WSDefaults.keepAliveHeader
         ]
         
         let delegate = WebSocketDelegate()
         session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
         
         var request = URLRequest(url: configuration.url)
-        request.setValue("https://chzzk.naver.com", forHTTPHeaderField: "Origin")
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue(CommonHeaders.chzzkOrigin, forHTTPHeaderField: "Origin")
+        request.setValue(CommonHeaders.chromeUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("permessage-deflate; client_max_window_bits", forHTTPHeaderField: "Sec-WebSocket-Extensions")
-        request.setValue("13", forHTTPHeaderField: "Sec-WebSocket-Version")
+        request.setValue(WSDefaults.protocolVersion, forHTTPHeaderField: "Sec-WebSocket-Version")
         if let host = configuration.url.host {
             request.setValue(host, forHTTPHeaderField: "Host")
         }
@@ -142,7 +149,7 @@ public actor WebSocketService {
         startReceiving()
         startPingTimer()
         
-        logger.info("WebSocket connected to \(self.configuration.url.absoluteString)")
+        logger.info("WebSocket connected to \(LogMask.url(self.configuration.url), privacy: .private)")
     }
     
     /// Disconnect from WebSocket server
@@ -172,7 +179,7 @@ public actor WebSocketService {
         }
         
         try await ws.send(.string(text))
-        logger.debug("Sent: \(text.prefix(100))")
+        logger.debug("Sent: [\(text.count) chars]")
     }
     
     /// Send binary data
@@ -184,30 +191,14 @@ public actor WebSocketService {
         try await ws.send(.data(data))
     }
     
-    /// Get the message stream
+    /// Get the message stream (init에서 즉시 생성됨)
     public func messages() -> AsyncStream<WebSocketMessage> {
-        if let existing = _messageStream {
-            return existing
-        }
-        
-        let stream = AsyncStream<WebSocketMessage> { continuation in
-            self.messageContinuation = continuation
-        }
-        _messageStream = stream
-        return stream
+        _messageStream!
     }
     
-    /// Get the state change stream
+    /// Get the state change stream (init에서 즉시 생성됨)
     public func stateChanges() -> AsyncStream<State> {
-        if let existing = _stateStream {
-            return existing
-        }
-        
-        let stream = AsyncStream<State> { continuation in
-            self.stateContinuation = continuation
-        }
-        _stateStream = stream
-        return stream
+        _stateStream!
     }
     
     // MARK: - Private Methods
@@ -226,7 +217,7 @@ public actor WebSocketService {
                     switch message {
                     case .string(let text):
                         wsMessage = .text(text)
-                        await self.logger.debug("WS recv: \(text.prefix(80), privacy: .public)")
+                        await self.logger.debug("WS recv: [\(text.count) chars]")
                     case .data(let data):
                         wsMessage = .data(data)
                         await self.logger.debug("WS recv data: \(data.count) bytes")
@@ -260,8 +251,17 @@ public actor WebSocketService {
                 do {
                     try await sendPing()
                 } catch {
-                    await handleDisconnection(error: error)
-                    break
+                    // Ping 실패 시 1회 재시도 후 연결 해제 (일시적 네트워크 지터 대응)
+                    await self.logger.warning("Ping failed, retrying once...")
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2초 대기
+                    do {
+                        try await sendPing()
+                        await self.logger.info("Ping retry succeeded")
+                        continue
+                    } catch {
+                        await handleDisconnection(error: error)
+                        break
+                    }
                 }
             }
         }
@@ -289,7 +289,11 @@ public actor WebSocketService {
         pingTask = nil
         receiveTask?.cancel()
         receiveTask = nil
+        webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
+        // URLSession 무효화하여 메모리 누수 방지 (장시간 재생 시 세션 축적 방지)
+        session?.invalidateAndCancel()
+        session = nil
     }
     
     private func updateState(_ newState: State) {

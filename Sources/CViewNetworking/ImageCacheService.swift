@@ -3,6 +3,7 @@
 
 import Foundation
 import AppKit   // NSImage
+import CryptoKit
 import CViewCore
 
 /// 이미지 캐싱 서비스 (actor 기반)
@@ -15,18 +16,23 @@ public actor ImageCacheService {
     /// 3단: 디코딩 완료된 NSImage NSCache — body 평가 시 재디코딩 방지
     private let decodedImageCache = NSCache<NSString, NSImageWrapper>()
     private let diskCacheURL: URL
-    private let maxDiskCacheSize: Int = 100 * 1024 * 1024 // 100MB
-    private let maxDiskCacheAge: TimeInterval = 7 * 24 * 3600 // 7일
+    private let maxDiskCacheSize: Int = ImageCacheDefaults.diskCacheMaxSize
+    private let maxDiskCacheAge: TimeInterval = ImageCacheDefaults.diskCacheMaxAge
 
     /// 진행 중인 다운로드 태스크 — 동일 URL 중복 요청 방지 (thundering herd)
     private var inFlightDownloads: [String: Task<Data?, Never>] = [:]
+
+    /// 주기적 디스크 캐시 정리 타이머 — 장시간 재생 시 만료 파일 자동 제거
+    private var pruneTask: Task<Void, Never>?
+    /// 캐시 정리 주기 (초) — 30분마다 만료 엔트리 삭제
+    private let pruneInterval: TimeInterval = 1800
 
     /// 이미지 전용 URLSession — API 세션과 연결 풀 분리하여 경합 방지
     /// HTTP/2 멀티플렉싱 활성화, 쿠키 비활성화(이미지에 불필요)
     private static let imageSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.httpMaximumConnectionsPerHost = 4
-        config.timeoutIntervalForRequest = 12
+        config.timeoutIntervalForRequest = ImageCacheDefaults.requestTimeout
         config.timeoutIntervalForResource = 30
         config.requestCachePolicy = .reloadIgnoringLocalCacheData  // 자체 캐시 사용
         config.urlCache = nil                                       // URLCache 비활성화
@@ -53,15 +59,35 @@ public actor ImageCacheService {
 
     private init() {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        diskCacheURL = cacheDir.appending(path: "ImageCache", directoryHint: .isDirectory)
+        diskCacheURL = cacheDir.appending(path: "com.cview.images", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
 
-        memoryCache.countLimit = 200
-        memoryCache.totalCostLimit = 50 * 1024 * 1024 // 50MB
+        memoryCache.countLimit = ImageCacheDefaults.memoryCacheCountLimit
+        memoryCache.totalCostLimit = ImageCacheDefaults.memoryCacheSizeLimit
 
         // 디코딩된 NSImage 캐시 — 렌더 패스에서 변환 비용 제거
-        decodedImageCache.countLimit = 150
-        decodedImageCache.totalCostLimit = 80 * 1024 * 1024 // 80MB (디코딩 후 크기 기준)
+        decodedImageCache.countLimit = ImageCacheDefaults.decodedCacheCountLimit
+        decodedImageCache.totalCostLimit = ImageCacheDefaults.decodedCacheSizeLimit
+        
+        // 자동 캐시 정리 타이머 시작 — 장시간 재생 시 디스크 캐시 무한 증가 방지
+        // init()은 nonisolated이므로 Task로 감싸서 actor context에서 실행
+        Task { [weak self] in
+            await self?.startAutoPruneTimer()
+        }
+    }
+    
+    // MARK: - Auto Prune Timer
+    
+    /// 주기적으로 만료된 디스크 캐시 엔트리를 정리
+    private func startAutoPruneTimer() {
+        pruneTask?.cancel()
+        pruneTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64((self?.pruneInterval ?? 1800) * 1_000_000_000))
+                guard let self, !Task.isCancelled else { break }
+                await self.pruneExpiredEntries()
+            }
+        }
     }
 
     // MARK: - Public API
@@ -200,6 +226,12 @@ public actor ImageCacheService {
         try? FileManager.default.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
     }
 
+    /// 디스크 캐시만 삭제 (메모리 캐시 유지)
+    public func clearDiskCache() {
+        try? FileManager.default.removeItem(at: diskCacheURL)
+        try? FileManager.default.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
+    }
+
     /// 만료된 디스크 캐시 정리
     public func pruneExpiredEntries() {
         let fm = FileManager.default
@@ -238,13 +270,9 @@ public actor ImageCacheService {
     // MARK: - Private
 
     private func cacheKey(for url: URL) -> String {
-        // SHA256-like hash via simple deterministic hash
-        let input = url.absoluteString
-        var hash: UInt64 = 5381
-        for byte in input.utf8 {
-            hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
-        }
-        return String(hash, radix: 16)
+        let input = Data(url.absoluteString.utf8)
+        let digest = SHA256.hash(data: input)
+        return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
 
     private func diskPath(for key: String) -> URL {
@@ -295,7 +323,7 @@ public actor ImageCacheService {
             do {
                 var request = URLRequest(url: url)
                 request.cachePolicy = .reloadIgnoringLocalCacheData  // 자체 캐시 사용
-                request.timeoutInterval = 12
+                request.timeoutInterval = ImageCacheDefaults.requestTimeout
 
                 let (data, response) = try await ImageCacheService.imageSession.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse,

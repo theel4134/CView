@@ -49,7 +49,7 @@ struct LiveStreamView: View {
                 .overlay(alignment: .topTrailing) {
                     if showDebugOverlay {
                         PerformanceOverlayView(monitor: performanceMonitor)
-                            .padding(8)
+                            .padding(DesignTokens.Spacing.xs)
                     }
                 }
 
@@ -89,38 +89,66 @@ struct LiveStreamView: View {
                 await performanceMonitor.stop()
             }
         }
-        .onKeyPress(.space) {
-            Task { await playerVM?.togglePlayPause() }
+        .onKeyPress(phases: .down) { press in
+            handleShortcutKeyPress(press)
+        }
+    }
+
+    // MARK: - Keyboard Shortcut Handling
+
+    /// 설정에서 키 바인딩을 읽어 동적으로 매칭
+    private func handleShortcutKeyPress(_ press: KeyPress) -> KeyPress.Result {
+        let shortcuts = appState.settingsStore.keyboard
+
+        for action in ShortcutAction.allCases {
+            let binding = shortcuts.binding(for: action)
+            guard matchesBinding(press, binding) else { continue }
+
+            switch action {
+            case .togglePlay:
+                Task { await playerVM?.togglePlayPause() }
+            case .toggleMute:
+                playerVM?.toggleMute()
+            case .toggleFullscreen:
+                playerVM?.toggleFullscreen()
+            case .toggleChat:
+                withAnimation(DesignTokens.Animation.normal) { isChatVisible.toggle() }
+            case .togglePiP:
+                togglePiP()
+            case .screenshot:
+                playerVM?.takeScreenshot()
+            case .volumeUp:
+                playerVM?.setVolume(min(1.0, (playerVM?.volume ?? 0.5) + 0.05))
+            case .volumeDown:
+                playerVM?.setVolume(max(0.0, (playerVM?.volume ?? 0.5) - 0.05))
+            }
             return .handled
         }
-        .onKeyPress(characters: .init(charactersIn: "m")) { _ in
-            playerVM?.toggleMute()
-            return .handled
-        }
-        .onKeyPress(characters: .init(charactersIn: "f")) { _ in
-            playerVM?.toggleFullscreen()
-            return .handled
-        }
-        .onKeyPress(characters: .init(charactersIn: "c")) { _ in
-            withAnimation(.easeInOut(duration: 0.2)) { isChatVisible.toggle() }
-            return .handled
-        }
-        .onKeyPress(characters: .init(charactersIn: "p")) { _ in
-            togglePiP()
-            return .handled
-        }
-        .onKeyPress(characters: .init(charactersIn: "s")) { press in
-            guard press.modifiers.contains(.command) else { return .ignored }
-            playerVM?.takeScreenshot()
-            return .handled
-        }
-        .onKeyPress(.upArrow) {
-            playerVM?.setVolume(min(1.0, (playerVM?.volume ?? 0.5) + 0.05))
-            return .handled
-        }
-        .onKeyPress(.downArrow) {
-            playerVM?.setVolume(max(0.0, (playerVM?.volume ?? 0.5) - 0.05))
-            return .handled
+        return .ignored
+    }
+
+    /// KeyPress가 KeyBinding과 일치하는지 확인
+    private func matchesBinding(_ press: KeyPress, _ binding: KeyBinding) -> Bool {
+        // 수식키 확인
+        let mods = binding.modifiers
+        if mods.contains(.command)  != press.modifiers.contains(.command)  { return false }
+        if mods.contains(.shift)    != press.modifiers.contains(.shift)    { return false }
+        if mods.contains(.option)   != press.modifiers.contains(.option)   { return false }
+        if mods.contains(.control)  != press.modifiers.contains(.control)  { return false }
+
+        // 키 확인
+        switch binding.key {
+        case "space":      return press.key == .space
+        case "upArrow":    return press.key == .upArrow
+        case "downArrow":  return press.key == .downArrow
+        case "leftArrow":  return press.key == .leftArrow
+        case "rightArrow": return press.key == .rightArrow
+        case "return":     return press.key == .return
+        case "escape":     return press.key == .escape
+        case "tab":        return press.key == .tab
+        case "delete":     return press.key == .delete
+        default:
+            return press.characters.lowercased() == binding.key.lowercased()
         }
     }
 
@@ -137,20 +165,20 @@ struct LiveStreamView: View {
             if playerVM?.isAudioOnly == true {
                 VStack(spacing: DesignTokens.Spacing.md) {
                     Image(systemName: "waveform")
-                        .font(.system(size: 48))
+                        .font(DesignTokens.Typography.custom(size: 48))
                         .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                         // .variableColor.iterative는 매 프레임 GPU 드로우 → 오디오 절약 모드와 역행.
                         // .pulse는 간헐적 불투명도 변화만 발생하므로 GPU 부담 최소화.
                         .symbolEffect(.pulse)
                     Text("오디오 전용 모드")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(DesignTokens.Typography.custom(size: 16, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     Text("영상 비활성화로 데이터 절약 중")
-                        .font(.system(size: 12))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(DesignTokens.Colors.backgroundDark)
+                .background(DesignTokens.Colors.background)
             }
 
             // Player overlay (extracted to PlayerControlsView)
@@ -159,25 +187,37 @@ struct LiveStreamView: View {
                     playerVM: playerVM,
                     onTogglePiP: togglePiP,
                     onOpenNewWindow: { openWindow(id: "player-window", value: channelId) },
-                    onScreenshot: { playerVM?.takeScreenshot() }
+                    onScreenshot: { playerVM?.takeScreenshot() },
+                    onToggleRecording: { Task { await playerVM?.toggleRecording() } },
+                    settingsStore: appState.settingsStore
                 )
             }
 
-            // Buffering
-            if isLoadingStream || playerVM?.streamPhase == .buffering || playerVM?.streamPhase == .connecting {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
+            // Buffering / Connecting / Reconnecting overlay
+            if isLoadingStream || playerVM?.streamPhase == .buffering
+                || playerVM?.streamPhase == .connecting
+                || playerVM?.streamPhase == .reconnecting {
+                StreamLoadingOverlay(
+                    channelId: channelId,
+                    channelName: playerVM?.channelName ?? "",
+                    liveTitle: playerVM?.liveTitle ?? "",
+                    thumbnailURL: playerVM?.thumbnailURL,
+                    streamPhase: playerVM?.streamPhase,
+                    bufferLevel: playerVM?.bufferHealth.map { Double($0.currentLevel) },
+                    isApiLoading: isLoadingStream
+                )
+                .transition(.opacity)
+                .animation(DesignTokens.Animation.normal, value: isLoadingStream)
             }
 
             // Load error
             if let loadErr = loadError {
                 VStack(spacing: DesignTokens.Spacing.md) {
                     Image(systemName: "wifi.exclamationmark")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.orange)
+                        .font(DesignTokens.Typography.custom(size: 36))
+                        .foregroundStyle(DesignTokens.Colors.warning)
                     Text(loadErr)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .multilineTextAlignment(.center)
                     Button("다시 시도") {
                         Task { await startStreamAndChat() }
@@ -191,45 +231,78 @@ struct LiveStreamView: View {
             if case .error(let msg) = playerVM?.streamPhase {
                 VStack(spacing: DesignTokens.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.orange)
+                        .font(DesignTokens.Typography.custom(size: 36))
+                        .foregroundStyle(DesignTokens.Colors.warning)
                     Text(msg)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .multilineTextAlignment(.center)
                 }
             }
 
             // Stream offline
             if isStreamOffline {
-                VStack(spacing: DesignTokens.Spacing.md) {
-                    Image(systemName: "tv.slash")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.secondary)
-                    Text("방송이 종료되었습니다")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text("스트리머가 방송을 종료했습니다.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                ZStack {
+                    Rectangle().fill(.thinMaterial)
+                    RadialGradient(
+                        colors: [Color.white.opacity(0.03), Color.clear],
+                        center: .center, startRadius: 20, endRadius: 260
+                    )
+                    VStack(spacing: 22) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.04))
+                                .frame(width: 100, height: 100)
+                            Circle()
+                                .stroke(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 1)
+                                .frame(width: 100, height: 100)
+                            Image(systemName: "tv.slash")
+                                .font(DesignTokens.Typography.custom(size: 38, weight: .light))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                        VStack(spacing: 8) {
+                            Text("방송이 종료되었습니다")
+                                .font(DesignTokens.Typography.title3)
+                                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                            Text("스트리머가 방송을 종료했습니다.")
+                                .font(DesignTokens.Typography.bodyMedium)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+                        Button {
+                            Task { await startStreamAndChat() }
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(DesignTokens.Typography.captionSemibold)
+                                Text("다시 확인")
+                                    .font(DesignTokens.Typography.bodySemibold)
+                            }
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                            .padding(.horizontal, DesignTokens.Spacing.xl)
+                            .padding(.vertical, DesignTokens.Spacing.md)
+                            .background(
+                                Capsule().fill(.ultraThinMaterial)
+                                    .overlay(Capsule().stroke(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 1))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .padding()
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .overlay(alignment: .topLeading) {
             if let vm = playerVM {
                 PlayerEngineBadge(engineType: vm.currentEngineType)
-                    .padding(10)
+                    .padding(DesignTokens.Spacing.md)
                     .transition(.opacity)
             }
         }
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) { showOverlay = hovering }
+            withAnimation(DesignTokens.Animation.fast) { showOverlay = hovering }
             if hovering { playerVM?.showControlsTemporarily() }
         }
         .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.15)) { showOverlay.toggle() }
+            withAnimation(DesignTokens.Animation.fast) { showOverlay.toggle() }
         }
     }
 
@@ -254,7 +327,7 @@ struct LiveStreamView: View {
             }
 
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { isChatVisible.toggle() }
+                withAnimation(DesignTokens.Animation.normal) { isChatVisible.toggle() }
             } label: {
                 Image(systemName: isChatVisible ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                     .foregroundStyle(isChatVisible ? Color.accentColor : .secondary)
@@ -270,7 +343,7 @@ struct LiveStreamView: View {
             if viewerCount > 0 {
                 HStack(spacing: 3) {
                     Image(systemName: "person.2.fill")
-                        .font(.system(size: 10))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                     Text(formattedViewerCount)
                         .font(.caption)
@@ -326,28 +399,45 @@ struct LiveStreamView: View {
                 return
             }
 
-            let liveInfo = try await apiClient.liveDetail(channelId: channelId)
+            // ─── P2: 프리페치 캐시 확인 — 호버 시 미리 가져온 결과 사용 ───
+            let liveInfo: LiveInfo
+            let streamURL: URL
+            let channelName: String
+            let liveTitle: String
 
-            guard let playbackJSON = liveInfo.livePlaybackJSON,
-                  let jsonData = playbackJSON.data(using: .utf8) else {
-                loadError = "재생 정보를 찾을 수 없습니다."
-                isLoadingStream = false
-                return
+            if let prefetched = await appState.hlsPrefetchService?.consumePrefetchedStream(channelId: channelId) {
+                // 캐시 히트: API 호출 생략 (~400ms 절약)
+                liveInfo = prefetched.liveInfo
+                streamURL = prefetched.streamURL
+                channelName = prefetched.channelName
+                liveTitle = prefetched.liveTitle
+            } else {
+                // 캐시 미스: 기존 경로로 liveDetail API 호출
+                let info = try await apiClient.liveDetail(channelId: channelId)
+
+                guard let playbackJSON = info.livePlaybackJSON,
+                      let jsonData = playbackJSON.data(using: .utf8) else {
+                    loadError = "재생 정보를 찾을 수 없습니다."
+                    isLoadingStream = false
+                    return
+                }
+
+                let playback = try JSONDecoder().decode(LivePlayback.self, from: jsonData)
+                let media = playback.media.first { $0.mediaProtocol?.uppercased() == "HLS" }
+                    ?? playback.media.first
+
+                guard let mediaPath = media?.path,
+                      let url = URL(string: mediaPath) else {
+                    loadError = "HLS 스트림 URL을 찾을 수 없습니다."
+                    isLoadingStream = false
+                    return
+                }
+
+                liveInfo = info
+                streamURL = url
+                channelName = info.channel?.channelName ?? ""
+                liveTitle = info.liveTitle
             }
-
-            let playback = try JSONDecoder().decode(LivePlayback.self, from: jsonData)
-            let media = playback.media.first { $0.mediaProtocol?.uppercased() == "HLS" }
-                ?? playback.media.first
-
-            guard let mediaPath = media?.path,
-                  let streamURL = URL(string: mediaPath) else {
-                loadError = "HLS 스트림 URL을 찾을 수 없습니다."
-                isLoadingStream = false
-                return
-            }
-
-            let channelName = liveInfo.channel?.channelName ?? ""
-            let liveTitle = liveInfo.liveTitle
 
             let ps = appState.settingsStore.player
 
@@ -359,7 +449,8 @@ struct LiveStreamView: View {
                     channelId: channelId,
                     streamUrl: streamURL,
                     channelName: channelName,
-                    liveTitle: liveTitle
+                    liveTitle: liveTitle,
+                    thumbnailURL: liveInfo.liveImageURL
                 )
                 playerVM?.applySettings(volume: ps.volumeLevel, lowLatency: ps.lowLatencyMode, catchupRate: ps.catchupRate)
             }
@@ -483,6 +574,7 @@ struct LiveStreamView: View {
     // MARK: - Live Status Polling
 
     private func startLiveStatusPolling() {
+        liveStatusTask?.cancel()
         liveStatusTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -513,6 +605,7 @@ struct LiveStreamView: View {
     }
     
     private func startMetricsFeed() {
+        metricsFeedTask?.cancel()
         metricsFeedTask = Task { @MainActor in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -554,11 +647,11 @@ struct PlayerEngineBadge: View {
                 .fill(accentColor)
                 .frame(width: 6, height: 6)
             Text(badgeLabel)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.white)
+                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, DesignTokens.Spacing.xs)
+        .padding(.vertical, DesignTokens.Spacing.xxs)
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 1)

@@ -130,7 +130,7 @@ public struct EmoticonImageView: View {
         } else {
             CachedAsyncImage(url: url) {
                 // placeholder
-                RoundedRectangle(cornerRadius: 3)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                     .fill(Color.secondary.opacity(0.12))
             }
             .aspectRatio(contentMode: .fit)
@@ -164,7 +164,7 @@ public struct ChatContentRenderer: View {
         if segments.count == 1, case .text(let text) = segments.first {
             // 단순 텍스트 — 최적화 경로 (이모티콘 뷰/레이아웃 비용 없음)
             Text(text)
-                .font(.system(size: fontSize))
+                .font(DesignTokens.Typography.custom(size: fontSize))
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             // 텍스트+이모티콘 혼합 — FlowLayout 줄바꿈
@@ -220,11 +220,11 @@ private struct FlowContentView: View {
                 switch token.kind {
                 case .word(let text):
                     Text(text)
-                        .font(.system(size: fontSize))
+                        .font(DesignTokens.Typography.custom(size: fontSize))
                         .fixedSize()
                 case .emoticon(let url):
                     EmoticonImageView(url: url, size: floor(fontSize * 1.8))
-                        .padding(.horizontal, 1)
+                        .padding(.horizontal, DesignTokens.Spacing.xxs)
                 }
             }
         }

@@ -92,7 +92,7 @@ struct ErrorRecoveryView: View {
         VStack(spacing: DesignTokens.Spacing.lg) {
             // Icon
             Image(systemName: category.icon)
-                .font(.system(size: 48))
+                .font(DesignTokens.Typography.custom(size: 48))
                 .foregroundStyle(category.color)
                 .symbolEffect(.bounce, value: retryCount)
             
@@ -196,7 +196,7 @@ struct ErrorBanner: View {
                     .foregroundStyle(category.color)
                 
                 Text(message)
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                     .lineLimit(2)
                 
                 Spacer()
@@ -205,7 +205,7 @@ struct ErrorBanner: View {
                     Button("재시도") {
                         retryAction()
                     }
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DesignTokens.Typography.captionMedium)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
@@ -216,14 +216,14 @@ struct ErrorBanner: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 10))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(category.color.opacity(0.1))
+            .background(.thinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.sm))
             .transition(.move(edge: .top).combined(with: .opacity))
         }
@@ -242,7 +242,7 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: DesignTokens.Spacing.lg) {
             Image(systemName: icon)
-                .font(.system(size: 48))
+                .font(DesignTokens.Typography.custom(size: 48))
                 .foregroundStyle(.tertiary)
             
             Text(title)
@@ -286,7 +286,7 @@ extension View {
             )
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.top, DesignTokens.Spacing.sm)
-            .animation(.spring(duration: 0.3), value: isVisible.wrappedValue)
+            .animation(DesignTokens.Animation.indicator, value: isVisible.wrappedValue)
         }
     }
 }

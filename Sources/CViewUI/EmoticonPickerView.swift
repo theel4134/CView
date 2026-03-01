@@ -41,23 +41,23 @@ public struct EmoticonPickerView: View {
             // ── 검색바 ─────────────────────────────────────────────
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 TextField("이모티콘 검색", text: $searchText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(DesignTokens.Colors.surface.opacity(0.5))
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+            .background(DesignTokens.Colors.surfaceBase.opacity(0.5))
 
             Divider().background(DesignTokens.Colors.border.opacity(0.4))
 
@@ -71,7 +71,7 @@ public struct EmoticonPickerView: View {
             emoticonGrid
         }
         .frame(width: 380, height: 340)
-        .background(DesignTokens.Colors.backgroundDark)
+        .background(DesignTokens.Colors.background)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
     }
 
@@ -84,18 +84,18 @@ public struct EmoticonPickerView: View {
                     packTab(pack: pack, index: idx)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.xs)
         }
         .frame(height: 50)
-        .background(DesignTokens.Colors.surface.opacity(0.6))
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.6))
     }
 
     @ViewBuilder
     private func packTab(pack: EmoticonPack, index: Int) -> some View {
         let isSelected = selectedPackIndex == index
         Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(DesignTokens.Animation.fast) {
                 selectedPackIndex = index
             }
         } label: {
@@ -110,16 +110,16 @@ public struct EmoticonPickerView: View {
                 }
             }
             .frame(width: 36, height: 36)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .strokeBorder(
                         isSelected ? DesignTokens.Colors.chzzkGreen : Color.clear,
                         lineWidth: 2
                     )
             )
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .fill(isSelected
                         ? DesignTokens.Colors.chzzkGreen.opacity(0.12)
                         : Color.clear)
@@ -132,10 +132,10 @@ public struct EmoticonPickerView: View {
     @ViewBuilder
     private func packTabPlaceholder(_ pack: EmoticonPack) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(DesignTokens.Colors.surface)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .fill(DesignTokens.Colors.surfaceBase)
             Text(String(pack.emoticonPackName.prefix(1)))
-                .font(.system(size: 14, weight: .bold))
+                .font(DesignTokens.Typography.bodyBold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
     }
@@ -155,7 +155,7 @@ public struct EmoticonPickerView: View {
                         emoticonCell(item)
                     }
                 }
-                .padding(10)
+                .padding(DesignTokens.Spacing.md)
             }
         }
     }
@@ -176,12 +176,12 @@ public struct EmoticonPickerView: View {
                 }
             }
             .frame(width: 52, height: 52)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .fill(Color.clear)
         )
         .hoverEffect()
@@ -189,8 +189,8 @@ public struct EmoticonPickerView: View {
     }
 
     private var cellPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 6)
-            .fill(DesignTokens.Colors.surface.opacity(0.6))
+        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            .fill(DesignTokens.Colors.surfaceBase.opacity(0.6))
             .overlay {
                 ProgressView()
                     .scaleEffect(0.6)
@@ -201,13 +201,13 @@ public struct EmoticonPickerView: View {
     private func emptyState(text: String, sub: String) -> some View {
         VStack(spacing: 6) {
             Image(systemName: "face.smiling")
-                .font(.system(size: 28))
+                .font(DesignTokens.Typography.display)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             Text(text)
-                .font(.system(size: 13, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
             Text(sub)
-                .font(.system(size: 11))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -228,12 +228,12 @@ private struct HoverHighlightModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .fill(isHovered
-                        ? DesignTokens.Colors.surface.opacity(0.8)
+                        ? DesignTokens.Colors.surfaceBase.opacity(0.8)
                         : Color.clear)
             )
             .onHover { isHovered = $0 }
-            .animation(.easeInOut(duration: 0.1), value: isHovered)
+            .animation(DesignTokens.Animation.micro, value: isHovered)
     }
 }

@@ -34,10 +34,10 @@ public struct LiveThumbnailView: View {
                     .transition(.opacity)
             } else {
                 Rectangle()
-                    .fill(DesignTokens.Colors.surfaceLight)
+                    .fill(DesignTokens.Colors.surfaceElevated)
                     .overlay {
                         Image(systemName: "play.tv")
-                            .font(.system(size: 16))
+                            .font(DesignTokens.Typography.custom(size: 16))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
             }

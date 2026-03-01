@@ -105,6 +105,12 @@ public actor ABRController {
     public func setLevels(_ variants: [MasterPlaylist.Variant]) {
         // Sort ascending by bandwidth
         availableLevels = variants.sorted { $0.bandwidth < $1.bandwidth }
+        // 레벨 변경 시 currentLevelIndex 범위 초과 방지
+        if !availableLevels.isEmpty {
+            currentLevelIndex = min(currentLevelIndex, availableLevels.count - 1)
+        } else {
+            currentLevelIndex = 0
+        }
         let levelCount = self.availableLevels.count
         logger.info("ABR: Set \(levelCount) levels")
     }

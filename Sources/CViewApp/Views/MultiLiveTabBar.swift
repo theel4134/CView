@@ -9,6 +9,14 @@ struct MLTabBar: View {
     let onAdd: () -> Void
     var isAddPanelOpen: Bool = false
 
+    private var layoutModeIcon: String {
+        switch manager.gridLayoutMode {
+        case .preset:    return "rectangle.grid.2x2"
+        case .custom:    return "rectangle.split.3x1.fill"
+        case .focusLeft: return "rectangle.leadinghalf.inset.filled"
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             // ── 채널 탭 스크롤 영역 ──
@@ -22,7 +30,7 @@ struct MLTabBar: View {
                             isAudioActive: (manager.audioSessionId ?? manager.selectedSessionId) == session.id,
                             isGridMode: isGridLayout,
                             onSelect: {
-                                withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                                withAnimation(DesignTokens.Animation.micro) {
                                     manager.select(session)
                                 }
                             },
@@ -32,53 +40,157 @@ struct MLTabBar: View {
                         )
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.vertical, DesignTokens.Spacing.xs)
             }
 
             Spacer(minLength: 0)
 
             // ── 그리드/탭 전환 토글 ──
             if manager.sessions.count >= 2 {
+                // 커스텀/프리셋 토글 (그리드 모드일 때만)
+                if isGridLayout {
+                    // 레이아웃 모드 메뉴
+                    Menu {
+                        Button {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                manager.gridLayoutMode = .preset
+                            }
+                            manager.saveState()
+                        } label: {
+                            Label("프리셋 그리드", systemImage: "rectangle.grid.2x2")
+                            if manager.gridLayoutMode == .preset { Image(systemName: "checkmark") }
+                        }
+                        Button {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                manager.gridLayoutMode = .custom
+                                manager.resetLayoutRatios()
+                            }
+                            manager.saveState()
+                        } label: {
+                            Label("커스텀 리사이즈", systemImage: "rectangle.split.3x1")
+                            if manager.gridLayoutMode == .custom { Image(systemName: "checkmark") }
+                        }
+                        Button {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                manager.gridLayoutMode = .focusLeft
+                            }
+                            manager.saveState()
+                        } label: {
+                            Label("포커스 레이아웃 (1+N)", systemImage: "rectangle.leadinghalf.inset.filled")
+                            if manager.gridLayoutMode == .focusLeft { Image(systemName: "checkmark") }
+                        }
+                    } label: {
+                        MLToolButton(
+                            icon: layoutModeIcon,
+                            isActive: manager.gridLayoutMode != .preset,
+                            help: "레이아웃 모드 변경"
+                        ) {}
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .padding(.trailing, DesignTokens.Spacing.xxs)
+
+                    // 비율 리셋 (커스텀 또는 포커스 모드일 때)
+                    if manager.gridLayoutMode == .custom || manager.gridLayoutMode == .focusLeft {
+                        MLToolButton(
+                            icon: "arrow.counterclockwise",
+                            isActive: false,
+                            help: "레이아웃 비율 초기화"
+                        ) {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                manager.resetLayoutRatios()
+                            }
+                        }
+                        .padding(.trailing, DesignTokens.Spacing.xxs)
+                    }
+
+                    // 멀티 오디오 토글
+                    MLToolButton(
+                        icon: manager.isMultiAudioMode
+                            ? "speaker.wave.3.fill"
+                            : "speaker.wave.1.fill",
+                        isActive: manager.isMultiAudioMode,
+                        help: manager.isMultiAudioMode
+                            ? "단일 오디오 모드로 전환"
+                            : "멀티 오디오 모드 (여러 채널 동시 청취)"
+                    ) {
+                        withAnimation(DesignTokens.Animation.snappy) {
+                            manager.toggleMultiAudioMode()
+                        }
+                    }
+                    .padding(.trailing, DesignTokens.Spacing.xxs)
+                }
+
                 MLToolButton(
                     icon: isGridLayout ? "rectangle.split.3x1" : "rectangle.grid.2x2",
                     isActive: isGridLayout,
                     help: isGridLayout ? "탭 모드로 전환" : "그리드 모드로 전환"
                 ) {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                    withAnimation(DesignTokens.Animation.snappy) {
                         isGridLayout.toggle()
                         if isGridLayout {
-                            if let sel = manager.selectedSession {
-                                for s in manager.sessions { s.setMuted(s.id != sel.id) }
-                                manager.audioSessionId = sel.id
+                            // 그리드 모드: 모든 세션 포그라운드 (모두 화면 표시)
+                            for s in manager.sessions { s.setBackgroundMode(false) }
+                            let count = manager.sessions.count
+                            for s in manager.sessions {
+                                s.playerViewModel.applyMultiLiveConstraints(paneCount: count)
+                            }
+                            if !manager.isMultiAudioMode {
+                                if let sel = manager.selectedSession {
+                                    for s in manager.sessions { s.setMuted(s.id != sel.id) }
+                                    manager.audioSessionId = sel.id
+                                }
                             }
                         } else {
-                            manager.audioSessionId = nil
-                            for s in manager.sessions { s.setMuted(s.id != manager.selectedSessionId) }
+                            // 탭 모드: 선택된 세션만 포그라운드, 나머지 배경
+                            for s in manager.sessions {
+                                s.setBackgroundMode(s.id != manager.selectedSessionId)
+                            }
+                            manager.isMultiAudioMode = false
+                            manager.audioEnabledSessionIds.removeAll()
+                            if !manager.isMultiAudioMode {
+                                manager.audioSessionId = nil
+                                for s in manager.sessions { s.setMuted(s.id != manager.selectedSessionId) }
+                            }
+                        }
+                    }
+                    manager.saveState()
+                    // [VLC 안정 컨테이너 패턴] 그리드↔탭 모드 전환 시
+                    // SwiftUI 뷰 컨테이너가 변경되어 NSView가 재마운트됨.
+                    // 레이아웃 완료 후 모든 VLC 엔진의 drawable을 재바인딩하여
+                    // 화면 출력이 끊기지 않도록 보장한다.
+                    Task { @MainActor in
+                        // RunLoop 1프레임 대기 → SwiftUI 레이아웃 완료 직후 실행
+                        await MainActor.run {}
+                        try? await Task.sleep(nanoseconds: 16_000_000) // 1프레임 (16ms)
+                        for s in manager.sessions {
+                            s.playerViewModel.mediaPlayer?.refreshDrawable()
                         }
                     }
                 }
-                .padding(.trailing, 4)
+                .padding(.trailing, DesignTokens.Spacing.xxs)
             }
 
             // ── 채널 추가 버튼 ──
             if manager.sessions.count < MultiLiveSessionManager.maxSessions {
                 if !manager.sessions.isEmpty {
-                    Divider()
-                        .frame(height: 16)
-                        .overlay(DesignTokens.Colors.border.opacity(0.5))
-                        .padding(.horizontal, 4)
+                    Rectangle()
+                        .fill(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+                        .frame(width: 0.5, height: 16)
+                        .padding(.horizontal, DesignTokens.Spacing.xxs)
                 }
                 Button(action: onAdd) {
                     HStack(spacing: 5) {
                         Image(systemName: isAddPanelOpen ? "xmark" : "plus")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(DesignTokens.Typography.micro)
                         Text(isAddPanelOpen ? "닫기" : "채널 추가")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(DesignTokens.Typography.captionSemibold)
                     }
                     .foregroundStyle(isAddPanelOpen ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.chzzkGreen)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, DesignTokens.Spacing.sm)
+                    .padding(.vertical, DesignTokens.Spacing.xs)
                     .background(
                         Capsule()
                             .fill(isAddPanelOpen
@@ -94,15 +206,16 @@ struct MLTabBar: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .padding(.trailing, 12)
-                .animation(.easeInOut(duration: 0.15), value: isAddPanelOpen)
+                .padding(.trailing, DesignTokens.Spacing.sm)
+                .animation(DesignTokens.Animation.fast, value: isAddPanelOpen)
             }
         }
         .frame(height: 52)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(.thinMaterial)
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.5))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(DesignTokens.Colors.border.opacity(0.35))
+                .fill(.white.opacity(DesignTokens.Glass.borderOpacityLight))
                 .frame(height: 0.5)
         }
     }
@@ -120,19 +233,24 @@ private struct MLToolButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(
                     isActive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary
                 )
                 .frame(width: 32, height: 32)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(
-                            isActive
-                                ? DesignTokens.Colors.chzzkGreen.opacity(0.13)
-                                : (isHovered ? DesignTokens.Colors.surfaceHover : Color.clear)
-                        )
-                )
+                .background {
+                    if isActive {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                            .fill(.ultraThinMaterial)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.25), lineWidth: 0.5)
+                            }
+                    } else if isHovered {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                            .fill(.ultraThinMaterial)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .help(help)
@@ -166,7 +284,7 @@ struct MLTabChip: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(tabTitle)
-                            .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                            .font(DesignTokens.Typography.custom(size: 12, weight: isSelected ? .semibold : .regular))
                             .foregroundStyle(
                                 isSelected
                                     ? DesignTokens.Colors.textPrimary
@@ -176,10 +294,16 @@ struct MLTabChip: View {
                             .frame(maxWidth: 86, alignment: .leading)
 
                         // 그리드 모드 오디오 아이콘
-                        if isGridMode && isAudioActive {
-                            Image(systemName: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        if isGridMode {
+                            if manager.isMultiAudioMode {
+                                Image(systemName: manager.isAudioEnabled(for: session) ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                                    .font(DesignTokens.Typography.micro)
+                                    .foregroundStyle(manager.isAudioEnabled(for: session) ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                            } else if isAudioActive {
+                                Image(systemName: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                    .font(DesignTokens.Typography.micro)
+                                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            }
                         }
                     }
                     statusSubtext
@@ -197,38 +321,39 @@ struct MLTabChip: View {
                 // ── 닫기 버튼 ──
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(DesignTokens.Typography.micro)
                         .foregroundStyle(
                             isCloseHovered
                                 ? DesignTokens.Colors.textPrimary
                                 : DesignTokens.Colors.textTertiary
                         )
                         .frame(width: 17, height: 17)
-                        .background(
-                            Circle().fill(
-                                isCloseHovered
-                                    ? DesignTokens.Colors.surfaceLight
-                                    : (isHovered ? DesignTokens.Colors.surfaceHover : Color.clear)
-                            )
-                        )
+                        .background {
+                            if isCloseHovered {
+                                Circle().fill(.regularMaterial)
+                            } else if isHovered {
+                                Circle().fill(.ultraThinMaterial)
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
                 .onHover { isCloseHovered = $0 }
             }
-            .padding(.leading, 9)
-            .padding(.trailing, 7)
-            .padding(.vertical, 6)
+            .padding(.leading, DesignTokens.Spacing.sm)
+            .padding(.trailing, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.xs)
             .background(chipBackground)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             .overlay(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .stroke(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                    .strokeBorder(
                         isSelected
-                            ? DesignTokens.Colors.chzzkGreen.opacity(0.22)
-                            : (isHovered ? DesignTokens.Colors.borderLight.opacity(0.5) : Color.clear),
-                        lineWidth: 1
+                            ? DesignTokens.Colors.chzzkGreen.opacity(0.30)
+                            : (isHovered ? .white.opacity(DesignTokens.Glass.borderOpacityLight) : Color.clear),
+                        lineWidth: isSelected ? 1 : 0.5
                     )
             )
+            .shadow(color: isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.08) : .clear, radius: 4)
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
@@ -252,8 +377,8 @@ struct MLTabChip: View {
                         )
                     )
                 Text(String(tabTitle.prefix(1)).uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
             }
             statusDot
         }
@@ -299,37 +424,35 @@ struct MLTabChip: View {
         switch session.loadState {
         case .playing:
             if session.viewerCount > 0 {
-                Text(formattedViewers)
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                MLViewerCountText(session: session)
             } else {
                 liveBadge
             }
         case .loading:
             Text("연결 중")
-                .font(.system(size: 9))
+                .font(DesignTokens.Typography.micro)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         case .error:
             Text("오류")
-                .font(.system(size: 9, weight: .medium))
+                .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.error)
         case .offline:
             Text("종료")
-                .font(.system(size: 9))
+                .font(DesignTokens.Typography.micro)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         case .idle:
             Text("대기")
-                .font(.system(size: 9))
+                .font(DesignTokens.Typography.micro)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         }
     }
 
     private var liveBadge: some View {
         Text("LIVE")
-            .font(.system(size: 8.5, weight: .black))
+            .font(DesignTokens.Typography.custom(size: 8.5, weight: .black))
             .kerning(0.4)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5).padding(.vertical, 1.5)
+            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+            .padding(.horizontal, DesignTokens.Spacing.xs).padding(.vertical, 1.5)
             .background(Capsule().fill(DesignTokens.Colors.live))
     }
 
@@ -338,18 +461,13 @@ struct MLTabChip: View {
     @ViewBuilder
     private var chipBackground: some View {
         if isSelected {
-            // sidebarActive와 동일한 그라디언트 패턴으로 통일감
-            LinearGradient(
-                colors: [
-                    DesignTokens.Colors.chzzkGreen.opacity(0.13),
-                    DesignTokens.Colors.chzzkGreen.opacity(0.04)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Glass selected — material blur + green tint
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                DesignTokens.Colors.chzzkGreen.opacity(0.08)
+            }
         } else if isHovered {
-            // 사이드바 hover와 동일
-            DesignTokens.Colors.surfaceHover.opacity(0.6)
+            Rectangle().fill(.ultraThinMaterial)
         } else {
             Color.clear
         }
@@ -360,12 +478,12 @@ struct MLTabChip: View {
     private func reorderButton(icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 7.5, weight: .bold))
+                .font(DesignTokens.Typography.custom(size: 7.5, weight: .bold))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .frame(width: 14, height: 14)
                 .background(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(DesignTokens.Colors.surfaceHover)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                        .fill(.ultraThinMaterial)
                 )
         }
         .buttonStyle(.plain)
@@ -376,8 +494,17 @@ struct MLTabChip: View {
     @ViewBuilder
     private var contextMenuItems: some View {
         if isGridMode {
-            Button { manager.routeAudio(to: session) } label: {
-                Label("이 채널로 오디오 전환", systemImage: "speaker.wave.2.fill")
+            if manager.isMultiAudioMode {
+                Button { manager.toggleSessionAudio(session) } label: {
+                    Label(
+                        manager.isAudioEnabled(for: session) ? "오디오 끄기" : "오디오 켜기",
+                        systemImage: manager.isAudioEnabled(for: session) ? "speaker.slash.fill" : "speaker.wave.2.fill"
+                    )
+                }
+            } else {
+                Button { manager.routeAudio(to: session) } label: {
+                    Label("이 채널로 오디오 전환", systemImage: "speaker.wave.2.fill")
+                }
             }
             Divider()
         }
@@ -413,10 +540,18 @@ struct MLTabChip: View {
         return palette[abs(session.channelId.hashValue) % palette.count]
     }
 
-    private var formattedViewers: String {
-        let n = session.viewerCount
-        if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000) }
-        if n >= 1_000  { return String(format: "%.1fk", Double(n) / 1_000) }
-        return "\(n) 명"
+}
+
+// MARK: - Viewer Count Subview (리렌더링 최적화)
+/// viewerCount 변경 시 이 서브뷰만 갱신되어 부모 뷰 전체 리렌더링 방지
+private struct MLViewerCountText: View {
+    let session: MultiLiveSession
+    
+    var body: some View {
+        if session.viewerCount > 0 {
+            Text(session.formattedViewerCount)
+                .font(DesignTokens.Typography.custom(size: 10, design: .rounded))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+        }
     }
 }

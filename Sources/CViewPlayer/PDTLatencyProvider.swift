@@ -9,6 +9,7 @@
 
 import Foundation
 import os.log
+import CViewCore
 
 // MARK: - PDTLatencyProvider
 
@@ -84,10 +85,10 @@ public actor PDTLatencyProvider {
     private func poll() async {
         var request = URLRequest(url: playlistURL)
         request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            CommonHeaders.safariUserAgent,
             forHTTPHeaderField: "User-Agent"
         )
-        request.setValue("https://chzzk.naver.com/", forHTTPHeaderField: "Referer")
+        request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
         // 캐시 무효화 - 매번 최신 플레이리스트를 가져와야 함
         request.cachePolicy = .reloadIgnoringLocalCacheData
         
@@ -110,17 +111,23 @@ public actor PDTLatencyProvider {
             let liveEdge = pdt.addingTimeInterval(lastSegment.duration)
             let rawLatency = Date().timeIntervalSince(liveEdge)
             
-            // 비현실적인 값 필터링 (음수 or 60초 초과)
-            guard rawLatency >= 0, rawLatency < 60 else {
+            // 비현실적인 값 필터링 (60초 초과)
+            // 시계 편차(clock skew)로 인한 소폭 음수(-2s 이내)는 0으로 클램핑
+            guard rawLatency < 60 else {
                 logger.warning("PDT latency out of range: \(rawLatency, format: .fixed(precision: 2))s – skipped")
                 return
             }
+            guard rawLatency >= -2.0 else {
+                logger.warning("PDT latency too negative: \(rawLatency, format: .fixed(precision: 2))s – skipped")
+                return
+            }
+            let clampedLatency = max(0, rawLatency)
             
-            // EWMA로 노이즈 제거
+            // EWMA로 노이즈 제거 (클램핑된 값 사용)
             if let prev = ewmaLatency {
-                ewmaLatency = ewmaAlpha * rawLatency + (1 - ewmaAlpha) * prev
+                ewmaLatency = ewmaAlpha * clampedLatency + (1 - ewmaAlpha) * prev
             } else {
-                ewmaLatency = rawLatency  // 첫 샘플은 그대로
+                ewmaLatency = clampedLatency  // 첫 샘플은 그대로
             }
             
             _latency = ewmaLatency

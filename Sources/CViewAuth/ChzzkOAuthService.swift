@@ -71,7 +71,7 @@ public actor ChzzkOAuthService {
             return nil
         }
         
-        Log.auth.info("Authorization code extracted: \(code.prefix(10))...")
+        Log.auth.info("Authorization code extracted: \(LogMask.token(code), privacy: .private)")
         return code
     }
     
@@ -222,7 +222,7 @@ public actor ChzzkOAuthService {
         
         guard httpResponse.statusCode == 200 else {
             let errorBody = String(data: data, encoding: .utf8) ?? "Unknown"
-            Log.auth.error("Token request failed: HTTP \(httpResponse.statusCode) - \(errorBody)")
+            Log.auth.error("Token request failed: HTTP \(httpResponse.statusCode) - \(LogMask.body(errorBody), privacy: .private)")
             throw AuthError.oauthFailed("HTTP \(httpResponse.statusCode)")
         }
         

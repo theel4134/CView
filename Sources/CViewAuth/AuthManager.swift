@@ -16,6 +16,13 @@ public actor AuthManager: AuthTokenProvider {
     
     /// OAuth 토큰 (메모리 캐시)
     private var _oauthTokens: OAuthTokens?
+    
+    // MARK: - Token Auto-Rotation
+    
+    /// 자동 토큰 갱신 백그라운드 태스크
+    private var tokenRefreshTask: Task<Void, Never>?
+    /// 동시 갱신 방지 플래그
+    private var isRefreshing: Bool = false
 
     public init(
         cookieManager: CookieManager = CookieManager(),
@@ -110,6 +117,7 @@ public actor AuthManager: AuthTokenProvider {
             if !storedTokens.isExpired {
                 _oauthTokens = storedTokens
                 updateState(.loggedIn(userId: "oauth"))
+                scheduleTokenAutoRefresh()
                 Log.auth.info("Auth restored from OAuth tokens (cookies: \(cookieRestored))")
                 return
             }
@@ -120,6 +128,7 @@ public actor AuthManager: AuthTokenProvider {
                     let newTokens = try await oauthService.refreshTokens(refreshToken: refreshToken)
                     _oauthTokens = newTokens
                     updateState(.loggedIn(userId: "oauth"))
+                    scheduleTokenAutoRefresh()
                     Log.auth.info("Auth restored via token refresh (cookies: \(cookieRestored))")
                     return
                 } catch {
@@ -173,6 +182,7 @@ public actor AuthManager: AuthTokenProvider {
             }
             
             updateState(.loggedIn(userId: "oauth"))
+            scheduleTokenAutoRefresh()
             Log.auth.info("OAuth login success (cookies: \(hasCookies))")
         } catch {
             updateState(.error(error.localizedDescription))
@@ -197,6 +207,7 @@ public actor AuthManager: AuthTokenProvider {
             let newTokens = try await oauthService.refreshTokens(refreshToken: refreshToken)
             _oauthTokens = newTokens
             updateState(.loggedIn(userId: "oauth"))
+            scheduleTokenAutoRefresh()
             return true
         } catch {
             Log.auth.error("Token refresh failed: \(error.localizedDescription)")
@@ -207,6 +218,7 @@ public actor AuthManager: AuthTokenProvider {
 
     /// 로그아웃 (쿠키 + OAuth 모두)
     public func logout() async {
+        cancelTokenAutoRefresh()
         await cookieManager.clearCookies()
         await oauthService.clearStoredTokens()
         _oauthTokens = nil
@@ -235,5 +247,105 @@ public actor AuthManager: AuthTokenProvider {
         
         // 쿠키 검증
         return await cookieManager.hasCookies
+    }
+    
+    // MARK: - Token Auto-Rotation (S1)
+    
+    /// 토큰 자동 갱신 스케줄링
+    /// - ContinuousClock 사용: 시스템 슬립 중에도 wall-clock 시간이 흘러
+    ///   슬립 후 깨어났을 때 즉시 갱신 실행
+    /// - 만료 15분 전에 갱신 시도, 이미 갱신 윈도우 안이면 즉시 실행
+    private func scheduleTokenAutoRefresh() {
+        // 기존 스케줄 취소
+        tokenRefreshTask?.cancel()
+        tokenRefreshTask = nil
+        
+        guard let tokens = _oauthTokens, !tokens.isExpired else { return }
+        guard tokens.refreshToken != nil else {
+            Log.auth.info("No refresh token — auto-rotation disabled")
+            return
+        }
+        
+        let expiresAt = tokens.expiresAt
+        // 만료 15분 전
+        let refreshAt = expiresAt.addingTimeInterval(-15 * 60)
+        let delay = refreshAt.timeIntervalSinceNow
+        
+        if delay <= 0 {
+            // 이미 갱신 윈도우 안 — 즉시 갱신
+            Log.auth.info("Token within refresh window — refreshing now")
+            tokenRefreshTask = Task {
+                await self.performAutoRefresh()
+            }
+            return
+        }
+        
+        Log.auth.info("Token auto-refresh scheduled in \(Int(delay))s (expires at \(expiresAt))")
+        
+        tokenRefreshTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(delay), clock: .continuous)
+            } catch {
+                return // Task cancelled
+            }
+            guard !Task.isCancelled else { return }
+            await self.performAutoRefresh()
+        }
+    }
+    
+    /// 자동 토큰 갱신 실행 (최대 2회 시도)
+    /// - 1차 실패 시 30초 후 재시도
+    /// - 2차 실패 시 세션 만료 상태로 전환
+    private func performAutoRefresh() async {
+        guard !isRefreshing else {
+            Log.auth.info("Token refresh already in progress — skipping")
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        
+        guard let tokens = _oauthTokens, let refreshToken = tokens.refreshToken else {
+            Log.auth.warning("No refresh token available for auto-refresh")
+            updateState(.expired)
+            return
+        }
+        
+        // 1차 시도
+        do {
+            let newTokens = try await oauthService.refreshTokens(refreshToken: refreshToken)
+            _oauthTokens = newTokens
+            updateState(.loggedIn(userId: "oauth"))
+            Log.auth.info("Token auto-refresh succeeded")
+            scheduleTokenAutoRefresh()
+            return
+        } catch {
+            Log.auth.warning("Token auto-refresh attempt 1 failed: \(error.localizedDescription)")
+        }
+        
+        // 30초 대기 후 재시도
+        do {
+            try await Task.sleep(for: .seconds(30), clock: .continuous)
+        } catch {
+            return // Task cancelled
+        }
+        guard !Task.isCancelled else { return }
+        
+        // 2차 시도
+        do {
+            let newTokens = try await oauthService.refreshTokens(refreshToken: refreshToken)
+            _oauthTokens = newTokens
+            updateState(.loggedIn(userId: "oauth"))
+            Log.auth.info("Token auto-refresh succeeded (attempt 2)")
+            scheduleTokenAutoRefresh()
+        } catch {
+            Log.auth.error("Token auto-refresh failed permanently: \(error.localizedDescription)")
+            updateState(.expired)
+        }
+    }
+    
+    /// 토큰 자동 갱신 취소 (로그아웃 시 호출)
+    private func cancelTokenAutoRefresh() {
+        tokenRefreshTask?.cancel()
+        tokenRefreshTask = nil
     }
 }

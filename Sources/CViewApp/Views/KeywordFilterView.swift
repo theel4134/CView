@@ -84,14 +84,14 @@ struct KeywordFilterView: View {
             HStack(spacing: 8) {
                 TextField("차단할 키워드 입력", text: $newKeyword)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                     .onSubmit { addKeyword() }
                 
                 Button {
                     addKeyword()
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 16))
+                        .font(DesignTokens.Typography.custom(size: 16))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
@@ -105,13 +105,13 @@ struct KeywordFilterView: View {
             if keywords.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "text.badge.xmark")
-                        .font(.system(size: 28))
+                        .font(DesignTokens.Typography.display)
                         .foregroundStyle(.tertiary)
                     Text("등록된 키워드가 없습니다")
-                        .font(.system(size: 12))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(.secondary)
                     Text("차단할 키워드를 추가하면\n해당 키워드가 포함된 메시지가 숨겨집니다")
-                        .font(.system(size: 11))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -121,11 +121,11 @@ struct KeywordFilterView: View {
                     ForEach(keywords, id: \.self) { keyword in
                         HStack {
                             Image(systemName: "text.word.spacing")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.orange)
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.warning)
                             
                             Text(keyword)
-                                .font(.system(size: 12))
+                                .font(DesignTokens.Typography.caption)
                             
                             Spacer()
                             
@@ -133,14 +133,15 @@ struct KeywordFilterView: View {
                                 removeKeyword(keyword)
                             } label: {
                                 Image(systemName: "trash")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.red)
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.error)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
             
             // Footer
@@ -168,17 +169,17 @@ struct KeywordFilterView: View {
             HStack(spacing: 8) {
                 TextField("차단할 사용자 ID", text: $newBlockUserId)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                     .onSubmit { addBlockedUser() }
                 
                 Button {
                     addBlockedUser()
                 } label: {
                     Image(systemName: "person.fill.badge.minus")
-                        .font(.system(size: 14))
+                        .font(DesignTokens.Typography.body)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.red)
+                .foregroundStyle(DesignTokens.Colors.error)
                 .disabled(newBlockUserId.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(DesignTokens.Spacing.md)
@@ -189,10 +190,10 @@ struct KeywordFilterView: View {
             if blockedUserIds.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "person.slash")
-                        .font(.system(size: 28))
+                        .font(DesignTokens.Typography.display)
                         .foregroundStyle(.tertiary)
                     Text("차단된 사용자가 없습니다")
-                        .font(.system(size: 12))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -201,11 +202,11 @@ struct KeywordFilterView: View {
                     ForEach(blockedUserIds, id: \.self) { userId in
                         HStack {
                             Image(systemName: "person.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.red)
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.error)
                             
                             Text(userId)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(DesignTokens.Typography.custom(size: 12, design: .monospaced))
                             
                             Spacer()
                             
@@ -219,6 +220,7 @@ struct KeywordFilterView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
             
             // Footer
@@ -319,9 +321,9 @@ struct ChatExportView: View {
             
             // Stats
             HStack(spacing: DesignTokens.Spacing.lg) {
-                statBox("총 메시지", value: "\(chatVM?.messages.count ?? 0)")
-                statBox("일반", value: "\(chatVM?.messages.filter { !$0.isSystem && !$0.isNotice }.count ?? 0)")
-                statBox("후원", value: "\(chatVM?.messages.filter { $0.donationAmount != nil }.count ?? 0)")
+                statBox("총 메시지", value: "\(exportSourceMessages.count)")
+                statBox("일반", value: "\(exportSourceMessages.filter { !$0.isSystem && !$0.isNotice }.count)")
+                statBox("후원", value: "\(exportSourceMessages.filter { $0.donationAmount != nil }.count)")
             }
             
             Divider()
@@ -369,10 +371,10 @@ struct ChatExportView: View {
             if let result = exportResult {
                 Text(result)
                     .font(.caption)
-                    .foregroundStyle(.green)
-                    .padding(8)
-                    .background(.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(DesignTokens.Colors.success)
+                    .padding(DesignTokens.Spacing.xs)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             }
             
             // Actions
@@ -397,7 +399,7 @@ struct ChatExportView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(DesignTokens.Colors.chzzkGreen)
-                .disabled(isExporting || (chatVM?.messages.isEmpty ?? true))
+                .disabled(isExporting || exportSourceMessages.isEmpty)
             }
         }
         .padding(DesignTokens.Spacing.lg)
@@ -409,21 +411,29 @@ struct ChatExportView: View {
     private func statBox(_ title: String, value: String) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .font(DesignTokens.Typography.custom(size: 18, weight: .bold, design: .monospaced))
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(8)
-        .background(Color.secondary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(DesignTokens.Spacing.xs)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
     }
     
     // MARK: - Export
     
+    /// All messages available for export — prefer full history if populated.
+    private var exportSourceMessages: [ChatMessageItem] {
+        if let history = chatVM?.chatHistory, !history.isEmpty {
+            return history
+        }
+        return chatVM?.messages.toArray() ?? []
+    }
+
     private var filteredMessages: [ChatMessageItem] {
-        (chatVM?.messages ?? []).filter { msg in
+        return exportSourceMessages.filter { msg in
             if msg.isSystem { return includeSystem }
             if msg.type == MessageType.donation { return includeDonation }
             if msg.type == MessageType.subscription { return includeSubscription }

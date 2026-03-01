@@ -105,8 +105,9 @@ public actor CookieManager {
 
     /// WKWebView 영구 저장소에서 인증 쿠키 추출 (OAuth 로그인 후 키체인 쿠키 부재 시 폴백)
     public func syncFromWebKitStore() async -> Bool {
+        // GCD 대신 MainActor.run 사용 — Swift Concurrency와 GCD 혼합 제거, 우선순위 역전 방지
         let cookies: [HTTPCookie] = await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
                     continuation.resume(returning: cookies)
                 }

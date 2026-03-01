@@ -16,35 +16,40 @@ public actor ChzzkAPIClient: APIClientProtocol {
     private let authProvider: (any AuthTokenProvider)?
     private let cache: ResponseCache
     private var maxRetries: Int = 3
+    /// SSL 핀닝 델리게이트 — URLSession이 약한 참조하므로 강한 참조 유지 필요
+    private let pinningDelegate: CertificatePinningDelegate
 
     public init(
         authProvider: (any AuthTokenProvider)? = nil,
         cache: ResponseCache = ResponseCache(),
-        baseURL: URL = URL(string: "https://api.chzzk.naver.com")!
+        baseURL: URL = URL(string: "https://api.chzzk.naver.com")!,
+        pinningConfiguration: CertificatePinningConfiguration = CertificatePinningConfiguration()
     ) {
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+            "User-Agent": CommonHeaders.chromeUserAgent,
             "Accept": "application/json",
             "Accept-Language": "ko-KR,ko;q=0.9",
             "Accept-Encoding": "gzip, deflate, br",
             "Referer": "https://chzzk.naver.com",
             "Origin": "https://chzzk.naver.com",
         ]
-        config.timeoutIntervalForRequest = 15
-        config.timeoutIntervalForResource = 30
+        config.timeoutIntervalForRequest = APIDefaults.requestTimeout
+        config.timeoutIntervalForResource = APIDefaults.resourceTimeout
         config.waitsForConnectivity = true
         config.httpMaximumConnectionsPerHost = 6
 
-        self.session = URLSession(configuration: config)
+        let delegate = CertificatePinningDelegate(configuration: pinningConfiguration)
+        self.pinningDelegate = delegate
+        self.session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
         self.baseURL = baseURL
         self.authProvider = authProvider
         self.cache = cache
 
         // 5분 간격으로 만료된 응답 캐시 정리 (메모리 누수 방지)
         Task { [cache] in
-            for await _ in AsyncTimerSequence(interval: 300, tolerance: 30) {
-                await cache.purgeExpired(defaultTTL: 300)
+            for await _ in AsyncTimerSequence(interval: APIDefaults.cachePurgeInterval, tolerance: 30) {
+                await cache.purgeExpired(defaultTTL: APIDefaults.defaultCacheTTL)
             }
         }
     }
@@ -60,8 +65,12 @@ public actor ChzzkAPIClient: APIClientProtocol {
         _ endpoint: any EndpointProtocol,
         as type: T.Type
     ) async throws -> T {
-        // 캐시 확인
-        let cacheKey = endpoint.path + (endpoint.queryItems?.description ?? "")
+        // 캐시 확인 — queryItems를 결정적 형식으로 직렬화 (.description은 비결정적)
+        let queryString = endpoint.queryItems?
+            .sorted { $0.name < $1.name }
+            .map { "\($0.name)=\($0.value ?? "")" }
+            .joined(separator: "&") ?? ""
+        let cacheKey = endpoint.path + "?" + queryString
         if case .returnCacheElseLoad(let ttl) = endpoint.cachePolicy {
             if let cached: T = await cache.get(key: cacheKey, ttl: ttl) {
                 Log.network.debug("Cache hit: \(endpoint.path)")
@@ -150,7 +159,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
                         .flatMap(TimeInterval.init) ?? 5
                     if attempt < maxRetries - 1 {
                         Log.network.info("Rate limited, retrying after \(retryAfter)s")
-                        try await Task.sleep(for: .seconds(min(retryAfter, 30)))
+                        try await Task.sleep(for: .seconds(min(retryAfter, APIDefaults.maxRateLimitRetrySecs)))
                         continue
                     }
                     throw APIError.rateLimited(retryAfter: retryAfter)
@@ -164,12 +173,24 @@ public actor ChzzkAPIClient: APIClientProtocol {
                     throw APIError.httpError(statusCode: httpResponse.statusCode)
                 default:
                     let body = String(data: data, encoding: .utf8) ?? "N/A"
-                    Log.network.error("HTTP \(httpResponse.statusCode, privacy: .public) \(endpoint.path, privacy: .public): \(body.prefix(200), privacy: .public)")
+                    Log.network.error("HTTP \(httpResponse.statusCode, privacy: .public) \(endpoint.path, privacy: .public): \(LogMask.body(body), privacy: .private)")
                     throw APIError.httpError(statusCode: httpResponse.statusCode)
                 }
 
-                // JSON 디코딩
-                let apiResponse = try JSONDecoder.chzzk.decode(ChzzkResponse<T>.self, from: data)
+                // JSON 구조 사전 검증
+                let validation = ResponseValidator.validateJSONStructure(data)
+                if !validation.warnings.isEmpty {
+                    for warning in validation.warnings {
+                        Log.network.warning("Response validation: \(warning, privacy: .public) — \(endpoint.path, privacy: .public)")
+                    }
+                }
+
+                // JSON 디코딩 (ResponseValidator 경유)
+                let apiResponse = try ResponseValidator.validateAndDecode(
+                    ChzzkResponse<T>.self,
+                    from: data,
+                    decoder: JSONDecoder.chzzk
+                )
                 guard let content = apiResponse.content else {
                     throw APIError.emptyContent
                 }
@@ -185,7 +206,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
                 lastError = error
                 // 재시도 불가능한 에러는 즉시 throw
                 switch error {
-                case .unauthorized, .invalidResponse, .emptyContent, .decodingFailed:
+                case .unauthorized, .invalidResponse, .emptyContent, .decodingFailed, .malformedResponse:
                     throw error
                 case .httpError(let code) where (400...499).contains(code):
                     throw error  // 4xx 클라이언트 에러는 재시도 불필요
@@ -286,7 +307,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue(CommonHeaders.chromeUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("https://chzzk.naver.com", forHTTPHeaderField: "Origin")
         request.setValue("https://chzzk.naver.com/", forHTTPHeaderField: "Referer")
         
@@ -298,7 +319,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
             }
         }
         
-        Log.network.debug("Chat token request: \(url.absoluteString, privacy: .public)")
+        Log.network.debug("Chat token request: \(LogMask.urlString(url.absoluteString), privacy: .private)")
         
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -312,7 +333,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
         
         // 디버그: raw 응답 확인
         if let rawStr = String(data: data, encoding: .utf8) {
-            Log.network.debug("Chat token response: \(rawStr.prefix(300), privacy: .public)")
+            Log.network.debug("Chat token response: \(LogMask.body(rawStr), privacy: .private)")
         }
         
         do {
@@ -337,7 +358,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
     public func allLiveChannels(batchSize: Int = 50) async throws -> [CViewCore.LiveInfo] {
         var all: [CViewCore.LiveInfo] = []
         var cursor: LivePageCursor? = nil
-        let maxPages = 200  // 안전 상한 (200 * 50 = 10,000 채널)
+        let maxPages = APIDefaults.allLivesMaxPages  // 안전 상한 (200 * 50 = 10,000 채널)
         var page = 0
 
         repeat {
@@ -420,12 +441,12 @@ public actor ChzzkAPIClient: APIClientProtocol {
         var inkeyRequest = URLRequest(url: inkeyURL)
         inkeyRequest.httpMethod = "POST"
         inkeyRequest.httpBody = "{}".data(using: .utf8)
-        inkeyRequest.timeoutInterval = 10
+        inkeyRequest.timeoutInterval = APIDefaults.clipInkeyTimeout
         inkeyRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         inkeyRequest.setValue("https://chzzk.naver.com", forHTTPHeaderField: "Referer")
         inkeyRequest.setValue("https://chzzk.naver.com", forHTTPHeaderField: "Origin")
         inkeyRequest.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+            CommonHeaders.chromeUserAgent,
             forHTTPHeaderField: "User-Agent"
         )
 
@@ -451,7 +472,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
         guard let inkeyHttp = inkeyResponse as? HTTPURLResponse, inkeyHttp.statusCode == 200 else {
             let code = (inkeyResponse as? HTTPURLResponse)?.statusCode ?? -1
             if let rawStr = String(data: inkeyData, encoding: .utf8) {
-                Log.network.error("Clip inkey HTTP \(code): \(rawStr.prefix(200), privacy: .public)")
+                Log.network.error("Clip inkey HTTP \(code): \(LogMask.body(rawStr), privacy: .private)")
             }
             throw APIError.httpError(statusCode: code)
         }
@@ -461,7 +482,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
             Log.network.error("Clip inkey: content nil or empty (code=\(inkeyResult.code))")
             throw APIError.emptyContent
         }
-        Log.network.info("Clip inkey OK (key prefix: \(inKey.prefix(8), privacy: .public))")
+        Log.network.info("Clip inkey OK (key prefix: \(LogMask.token(inKey), privacy: .private))")
 
         // Step 2: Naver rmcnmv VOD play API 호출 (외부 API)
         let vodURLString = "https://apis.naver.com/rmcnmv/rmcnmv/vod/play/v2.0/\(videoId)?key=\(inKey)&serviceId=nng_chzzk_clip&cc=kr"
@@ -486,11 +507,11 @@ public actor ChzzkAPIClient: APIClientProtocol {
         }
         guard let hlsURLString = vodPlay.bestHLSURL, let hlsURL = URL(string: hlsURLString) else {
             if let raw = String(data: vodData, encoding: .utf8) {
-                Log.network.error("VOD no HLS URL. Raw: \(raw.prefix(300), privacy: .public)")
+                Log.network.error("VOD no HLS URL. Raw: \(LogMask.body(raw), privacy: .private)")
             }
             throw APIError.emptyContent
         }
-        Log.network.info("Clip HLS URL: \(hlsURLString.prefix(80), privacy: .public)")
+        Log.network.info("Clip HLS URL: \(LogMask.urlString(hlsURLString), privacy: .private)")
         return hlsURL
     }
     
@@ -582,5 +603,88 @@ public actor ChzzkAPIClient: APIClientProtocol {
     /// 라이브 상태 폴링 조회
     public func liveStatus(channelId: String) async throws -> CViewCore.LiveInfo {
         try await request(ChzzkEndpoint.liveStatus(channelId: channelId), as: CViewCore.LiveInfo.self)
+    }
+
+    // MARK: - 팔로우 채널 전체 조회 (페이지네이션 + 라이브 상세 병렬 요청)
+
+    /// 모든 팔로잉 채널을 수집하고, 라이브 중인 채널의 상세 정보를 병렬로 조회합니다.
+    public func fetchFollowingChannels() async throws -> [LiveChannelItem] {
+        var allItems: [(LiveChannelItem, Bool)] = []
+        var seenIds: Set<String> = []
+        var currentPage = 0
+        let batchSize = 50
+        let maxPages = 50
+
+        // 페이지네이션: 모든 팔로잉 채널 수집
+        while currentPage < maxPages {
+            let response = try await following(size: batchSize, page: currentPage)
+            let items = response.followingList ?? []
+            let pageItems: [(LiveChannelItem, Bool)] = items.compactMap { item in
+                guard let channel = item.channel,
+                      let channelId = channel.channelId,
+                      !seenIds.contains(channelId) else { return nil }
+                seenIds.insert(channelId)
+                let isLive = item.streamer?.openLive ?? false
+                let baseItem = LiveChannelItem(
+                    id: channelId,
+                    channelName: channel.channelName ?? "Unknown",
+                    channelImageUrl: channel.channelImageUrl,
+                    liveTitle: "",
+                    viewerCount: 0,
+                    categoryName: nil,
+                    thumbnailUrl: nil,
+                    channelId: channelId,
+                    isLive: isLive
+                )
+                return (baseItem, isLive)
+            }
+            allItems.append(contentsOf: pageItems)
+
+            if let total = response.totalCount, seenIds.count >= total { break }
+            if items.count < batchSize { break }
+            currentPage += 1
+        }
+
+        // 라이브 중인 채널의 상세 정보를 최대 8개씩 병렬 요청 (API rate limit 보호)
+        let liveItems = allItems.filter { $0.1 }
+        let offlineItems = allItems.filter { !$0.1 }.map(\.0)
+        let concurrencyLimit = 8
+
+        var liveResults: [LiveChannelItem] = []
+        var offset = 0
+        while offset < liveItems.count {
+            let chunk = Array(liveItems[offset..<min(offset + concurrencyLimit, liveItems.count)])
+            offset += concurrencyLimit
+
+            let chunkResults = await withTaskGroup(of: LiveChannelItem.self) { group in
+                for (baseItem, _) in chunk {
+                    group.addTask {
+                        do {
+                            let liveInfo = try await self.liveDetail(channelId: baseItem.channelId)
+                            return LiveChannelItem(
+                                id: baseItem.id,
+                                channelName: baseItem.channelName,
+                                channelImageUrl: baseItem.channelImageUrl,
+                                liveTitle: liveInfo.liveTitle,
+                                viewerCount: liveInfo.concurrentUserCount,
+                                categoryName: liveInfo.liveCategoryValue,
+                                thumbnailUrl: liveInfo.resolvedLiveImageURL?.absoluteString,
+                                channelId: baseItem.channelId,
+                                isLive: true
+                            )
+                        } catch {
+                            Log.api.warning("라이브 상세 조회 실패: \(baseItem.channelId) — \(error)")
+                            return baseItem
+                        }
+                    }
+                }
+                var collected: [LiveChannelItem] = []
+                for await item in group { collected.append(item) }
+                return collected
+            }
+            liveResults.append(contentsOf: chunkResults)
+        }
+
+        return liveResults + offlineItems
     }
 }

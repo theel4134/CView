@@ -33,7 +33,7 @@ public actor KeychainService {
     public func save(key: String, data: Data) throws {
         let fileURL = fileURL(for: key)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
-        Log.auth.debug("Auth store saved: \(key)")
+        Log.auth.debug("Auth store saved: \(key, privacy: .private)")
     }
 
     /// 데이터 읽기

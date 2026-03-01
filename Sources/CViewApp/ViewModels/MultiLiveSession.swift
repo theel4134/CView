@@ -7,7 +7,7 @@ import CViewCore
 import CViewPlayer
 import CViewNetworking
 
-// MARK: - Session State
+// MARK: - 세션 로딩 상태
 
 enum MultiLiveLoadState: Equatable {
     case idle
@@ -26,7 +26,8 @@ final class MultiLiveSession: Identifiable {
 
     let id: UUID
 
-    // MARK: Channel Info
+    // MARK: - 채널 정보
+
     var channelId: String
     var channelName: String = ""
     var liveTitle: String = ""
@@ -34,42 +35,58 @@ final class MultiLiveSession: Identifiable {
     var viewerCount: Int = 0
     var isOffline: Bool = false
 
-    // MARK: ViewModels (독립 인스턴스)
+    // MARK: - ViewModel
+
     let playerViewModel: PlayerViewModel
     let chatViewModel: ChatViewModel
 
-    // MARK: UI State
+    // MARK: - UI 상태
+
     var loadState: MultiLiveLoadState = .idle
     var isChatVisible: Bool = true
-    var showDebug: Bool = false
-    /// playerViewModel.isMuted를 단일 소스로 사용하는 computed property
+    var latestMetrics: VLCLiveMetrics?
+    var showStats: Bool = false
     var isMuted: Bool { playerViewModel.isMuted }
 
-    // MARK: Tasks
+    /// 시청자 수 포맷 (3곳에서 중복 사용하던 로직 통합)
+    var formattedViewerCount: String {
+        let n = viewerCount
+        if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000) }
+        if n >= 1_000  { return String(format: "%.1fk", Double(n) / 1_000) }
+        return "\(n) 명"
+    }
+
+    // MARK: - 태스크
+
     var pollTask: Task<Void, Never>?
-    /// CDN 세션 토큰 만료 대비 주기적 스트림 URL 갱신 태스크 (55분 주기)
+    var startTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var offlineRetryTask: Task<Void, Never>?
+    private var chatConnectionTask: Task<Void, Never>?
     private(set) var isBackground: Bool = false
 
     // MARK: - Init
 
-    public init(channelId: String) {
+    init(channelId: String, preallocatedEngine: VLCPlayerEngine? = nil, engineType: PlayerEngineType = .vlc) {
         self.id = UUID()
         self.channelId = channelId
-        // 엔진 타입은 start() 시점에 settingsStore에서 주입.
-        // 싱글라이브와 동일하게 startStream() 직전에 엔진을 결정하므로
-        // 설정 변경이 항상 올바르게 반영됨.
-        self.playerViewModel = PlayerViewModel(engineType: .vlc)
+        if let engine = preallocatedEngine {
+            self.playerViewModel = PlayerViewModel(preallocatedEngine: engine)
+        } else {
+            self.playerViewModel = PlayerViewModel(engineType: engineType)
+        }
         self.chatViewModel = ChatViewModel()
     }
 
-    // MARK: - Stream Start
+    // MARK: - 스트림 시작
 
-    /// 스트림 + 채팅 연결
-    /// - Parameter paneCount: 현재 활성 세션 수. AVPlayer의 해상도·비트레이트 상한을 세션 수에 맞게 조정한다.
     func start(using apiClient: ChzzkAPIClient, appState: AppState, paneCount: Int = 1) async {
         guard loadState != .loading else { return }
         loadState = .loading
+
+        playerViewModel.onPlaybackStateChanged = { [weak appState] in
+            appState?.updatePlaybackActivity()
+        }
 
         do {
             let liveInfo = try await apiClient.liveDetail(channelId: channelId)
@@ -84,8 +101,7 @@ final class MultiLiveSession: Identifiable {
             let media = playback.media.first { $0.mediaProtocol?.uppercased() == "HLS" }
                 ?? playback.media.first
 
-            guard let mediaPath = media?.path,
-                  let streamURL = URL(string: mediaPath) else {
+            guard let mediaPath = media?.path, let streamURL = URL(string: mediaPath) else {
                 loadState = .error("HLS 스트림 URL을 찾을 수 없습니다.")
                 return
             }
@@ -95,8 +111,14 @@ final class MultiLiveSession: Identifiable {
             thumbnailURL = liveInfo.liveImageURL
 
             let ps = appState.settingsStore.player
-            // 최신 설정 엔진 타입 적용 (싱글라이브와 동일한 패턴)
             playerViewModel.preferredEngineType = ps.preferredEngine
+
+            // [로딩 상태 조기 전환] API 데이터 확보 후 즉시 .playing으로 전환하여
+            // VLC 버퍼링 중에도 비디오 레이어가 노출되도록 한다.
+            // 기존: startStream() 완료 후 전환 → 버퍼링 중 전체 화면 StreamLoadingOverlay 표시
+            // 개선: API 응답 확보 시점에 전환 → 버퍼링은 소형 스피너로만 표시, 비디오 보임
+            loadState = .playing(channelName: channelName, liveTitle: liveTitle)
+
             await playerViewModel.startStream(
                 channelId: channelId,
                 streamUrl: streamURL,
@@ -108,40 +130,49 @@ final class MultiLiveSession: Identifiable {
                 lowLatency: ps.lowLatencyMode,
                 catchupRate: ps.catchupRate
             )
-            // 세션 수에 따라 AVPlayer 디코딩 해상도·비트레이트를 제한해 GPU 부하 분산
             playerViewModel.applyMultiLiveConstraints(paneCount: paneCount)
 
-            // ─── 영상 즉시 표시: 채팅 준비와 관계없이 로딩 오버레이 제거 ───
-            loadState = .playing(channelName: channelName, liveTitle: liveTitle)
+            // VLC 메트릭 콜백 — showStats가 true일 때만 업데이트
+            playerViewModel.setVLCMetricsCallback { [weak self] metrics in
+                Task { @MainActor [weak self] in
+                    guard let self, self.showStats else { return }
+                    self.latestMetrics = metrics
+                }
+            }
+
+            // VLC 엔진일 때만 drawable 재바인딩 추가 시도
+            // play() 후 vout 초기화 시점에 재바인딩으로 화면 출력 복구 보장
+            if let vlc = playerViewModel.mediaPlayer {
+                Task { @MainActor [weak vlc] in
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5초
+                    vlc?.refreshDrawable()
+                }
+            }
+
             startPolling(apiClient: apiClient, appState: appState)
 
-            // ─── 채팅 준비: 백그라운드에서 병렬 로드 (영상과 동시 진행) ───
+            // 채팅 연결 (백그라운드 병렬)
             if let chatChannelId = liveInfo.chatChannelId {
                 let _channelId = channelId
                 let chatVM = chatViewModel
-                Task { [isLoggedIn = appState.isLoggedIn, fallbackUid = appState.userChannelId] in
+                chatConnectionTask = Task { [isLoggedIn = appState.isLoggedIn, fallbackUid = appState.userChannelId] in
                     do {
-                        let tokenTask = Task { try await apiClient.chatAccessToken(chatChannelId: chatChannelId) }
-                        let userTask  = Task<UserStatusInfo?, Never> {
-                            guard isLoggedIn else { return nil }
-                            return try? await apiClient.userStatus()
-                        }
-                        let packsTask = Task { await apiClient.basicEmoticonPacks(channelId: _channelId) }
+                        async let tokenTask = apiClient.chatAccessToken(chatChannelId: chatChannelId)
+                        async let userTask: UserStatusInfo? = isLoggedIn ? (try? await apiClient.userStatus()) : nil
+                        async let packsTask = apiClient.basicEmoticonPacks(channelId: _channelId)
 
-                        let tokenInfo = try await tokenTask.value
-                        let userInfo  = await userTask.value
-                        let packs     = await packsTask.value
+                        let tokenInfo = try await tokenTask
+                        let userInfo  = await userTask
+                        let packs     = await packsTask
                         let (emoMap, loadedPacks) = await apiClient.resolveEmoticonPacks(packs)
 
+                        let uid: String? = userInfo?.userIdHash ?? (isLoggedIn ? fallbackUid : nil)
                         await MainActor.run {
                             chatVM.channelEmoticons = emoMap
                             chatVM.emoticonPacks = loadedPacks
+                            if let uid { chatVM.currentUserUid = uid }
+                            chatVM.currentUserNickname = userInfo?.nickname
                         }
-
-                        let uid: String? = userInfo?.userIdHash ?? (isLoggedIn ? fallbackUid : nil)
-                        if let uid { await MainActor.run { chatVM.currentUserUid = uid } }
-                        await MainActor.run { chatVM.currentUserNickname = userInfo?.nickname }
-
                         await chatVM.connect(
                             chatChannelId: chatChannelId,
                             accessToken: tokenInfo.accessToken,
@@ -160,125 +191,195 @@ final class MultiLiveSession: Identifiable {
         }
     }
 
-    /// 스트림 + 채팅 종료
+    // MARK: - 종료
+
     func stop() async {
-        pollTask?.cancel()
-        pollTask = nil
-        refreshTask?.cancel()
-        refreshTask = nil
+        startTask?.cancel(); startTask = nil
+        pollTask?.cancel(); pollTask = nil
+        refreshTask?.cancel(); refreshTask = nil
+        offlineRetryTask?.cancel(); offlineRetryTask = nil
+        chatConnectionTask?.cancel(); chatConnectionTask = nil
         await playerViewModel.stopStream()
         await chatViewModel.disconnect()
         loadState = .idle
+        latestMetrics = nil
     }
 
-    /// 오프라인 이후 다시 연결 시도
     func retry(using apiClient: ChzzkAPIClient, appState: AppState) async {
         loadState = .idle
         isOffline = false
         await start(using: apiClient, appState: appState)
     }
 
-    /// 배경/포그라운드 모드 전환 (VLC 프로파일 + 볼륨)
+    func refreshStream(using apiClient: ChzzkAPIClient, appState: AppState) async {
+        await stop()
+        await start(using: apiClient, appState: appState)
+    }
+
+    // MARK: - 배경 모드
+
     func setBackgroundMode(_ background: Bool) {
         guard isBackground != background else { return }
         isBackground = background
         playerViewModel.setBackgroundMode(background)
     }
 
-    /// 음소거 토글 (배경 탭 자동 관리)
     func setMuted(_ muted: Bool) {
         playerViewModel.isMuted = muted
         playerViewModel.setVolume(muted ? 0 : playerViewModel.volume)
     }
 
-    // MARK: - Polling
+    // MARK: - 폴링
 
     private func startPolling(apiClient: ChzzkAPIClient, appState: AppState) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             guard let self else { return }
-            var consecutiveVLCErrors = 0
+            var consecutiveErrors = 0
+            do {
+                while !Task.isCancelled {
+                    let interval: Duration = self.isBackground ? .seconds(60) : .seconds(30)
+                    try await Task.sleep(for: interval)
+                    guard !Task.isCancelled else { break }
 
-            while !Task.isCancelled {
-                // 배경 탭은 60초, 포그라운드는 30초 폴링
-                let interval: Duration = self.isBackground ? .seconds(60) : .seconds(30)
-                try? await Task.sleep(for: interval)
-                guard !Task.isCancelled else { break }
-
-                // ── 1. 방송 상태 폴링 ───────────────────────────────────────
-                do {
-                    let status = try await apiClient.liveStatus(channelId: self.channelId)
-                    await MainActor.run {
-                        self.viewerCount = status.concurrentUserCount
-                        if status.status == .close {
-                            if !self.isOffline {
-                                self.isOffline = true
-                                self.loadState = .offline
-                                // 오프라인 감지 시 2분 후 자동 재시도
-                                Task { [weak self] in
-                                    guard let self else { return }
-                                    try? await Task.sleep(for: .seconds(120))
-                                    guard !Task.isCancelled, self.isOffline else { return }
-                                    await self.retry(using: apiClient, appState: appState)
+                    // 방송 상태 폴링
+                    do {
+                        let status = try await apiClient.liveStatus(channelId: self.channelId)
+                        await MainActor.run {
+                            self.viewerCount = status.concurrentUserCount
+                            if status.status == .close {
+                                if !self.isOffline {
+                                    self.isOffline = true
+                                    self.loadState = .offline
+                                    // 오프라인 감지 → 2분 후 자동 재시도
+                                    self.offlineRetryTask?.cancel()
+                                    self.offlineRetryTask = Task { [weak self] in
+                                        guard let self else { return }
+                                        try? await Task.sleep(for: .seconds(120))
+                                        guard !Task.isCancelled, self.isOffline else { return }
+                                        await self.retry(using: apiClient, appState: appState)
+                                    }
                                 }
+                            } else {
+                                self.isOffline = false
                             }
-                        } else {
-                            self.isOffline = false
                         }
-                    }
-                } catch {}
+                    } catch {}
 
-                // ── 2. VLC 엔진 헬스 체크 (오프라인 아닐 때만) ─────────────
-                // VLC가 ERROR 상태를 2회 연속 유지하면 스트림 URL을 재취득하여 수정재시도
-                let isCurrentlyOffline = self.isOffline
-                guard !isCurrentlyOffline else { consecutiveVLCErrors = 0; continue }
-
-                let vlcState = await MainActor.run {
-                    self.playerViewModel.mediaPlayer?.mediaPlayer.state
-                }
-                if vlcState == .some(.error) {
-                    consecutiveVLCErrors += 1
-                    Log.player.warning("멀티라이브 VLC ERROR 감지 (\(consecutiveVLCErrors)연속) channelId=\(self.channelId, privacy: .public)")
-                    if consecutiveVLCErrors >= 2 {
-                        consecutiveVLCErrors = 0
-                        Log.player.warning("⚠️ VLC ERROR 지속 → URL 재취득 후 재시작")
-                        await self.retry(using: apiClient, appState: appState)
+                    // VLC 엔진 헬스 체크 (오프라인 아닐 때)
+                    guard !self.isOffline else { consecutiveErrors = 0; continue }
+                    let inError = await MainActor.run {
+                        self.playerViewModel.playerEngine?.isInErrorState ?? false
                     }
-                } else {
-                    consecutiveVLCErrors = 0
+                    if inError {
+                        consecutiveErrors += 1
+                        Log.player.warning("멀티라이브 엔진 ERROR (\(consecutiveErrors)연속) channelId=\(self.channelId, privacy: .public)")
+                        if consecutiveErrors >= 2 {
+                            consecutiveErrors = 0
+                            await self.retry(using: apiClient, appState: appState)
+                        }
+                    } else {
+                        consecutiveErrors = 0
+                    }
                 }
+            } catch {
+                // CancellationError → 폴링 종료
             }
         }
 
-        // ── 3. 주기적 스트림 URL 갱신 (CDN 토큰 만료 대비) ────────────
         scheduleProactiveRefresh(apiClient: apiClient, appState: appState)
     }
 
-    /// CDN 세션 토큰 만료에 대비해 55분마다 스트림 URL을 강제 재취득합니다.
-    /// Chzzk HLS URL에는 90~120분에 만료되는 세션 토큰이 포함되어 있습니다.
+    /// CDN 토큰 만료 대비 55분마다 스트림 URL 재취득
     private func scheduleProactiveRefresh(apiClient: ChzzkAPIClient, appState: AppState) {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             guard let self else { return }
-            // 55분 대기 후 최초 갱신 (실제 토큰 만료(90-120분)보다 원시 예방적 갱신)
             try? await Task.sleep(for: .seconds(55 * 60))
             while !Task.isCancelled {
-                // 오프라인 중에는 대기야 함 (방송 재개를 기다려야 하는데 재실행해서는 안 됨)
                 if self.isOffline {
                     try? await Task.sleep(for: .seconds(60))
                     continue
                 }
-                Log.player.info("플레이어 주기적 URL 재취득 — CDN 토큰 만료 예방 channelId=\(self.channelId, privacy: .public)")
-                // engineRetries 리셋: URL 재취득 후에는 새 기회를 주어야 함
-                await MainActor.run {
-                    self.playerViewModel.mediaPlayer?.resetRetries()
-                }
-                // retry()는 liveDetail을 재취득하고 VLC를 새 URL로 재시작
+                Log.player.info("멀티라이브 주기적 URL 재취득 — CDN 토큰 만료 예방 channelId=\(self.channelId, privacy: .public)")
+                await MainActor.run { self.playerViewModel.playerEngine?.resetRetries() }
                 await self.retry(using: apiClient, appState: appState)
-                // 다음 갱신은 55분 후
                 try? await Task.sleep(for: .seconds(55 * 60))
             }
         }
+    }
+}
+
+// MARK: - 그리드 레이아웃 모드
+
+enum MultiLiveGridLayoutMode: Equatable, Sendable {
+    case preset
+    case custom
+    case focusLeft   // 포커스 레이아웃: 왼쪽 메인(70%) + 오른쪽 서브(30%)
+}
+
+// MARK: - 커스텀 레이아웃 비율
+
+struct MultiLiveLayoutRatios: Equatable, Sendable {
+    var horizontalRatio: CGFloat = 0.5
+    var verticalRatio: CGFloat = 0.5
+
+    static let minRatio: CGFloat = 0.2
+    static let maxRatio: CGFloat = 0.8
+
+    mutating func clampHorizontal() {
+        horizontalRatio = min(Self.maxRatio, max(Self.minRatio, horizontalRatio))
+    }
+    mutating func clampVertical() {
+        verticalRatio = min(Self.maxRatio, max(Self.minRatio, verticalRatio))
+    }
+}
+
+// MARK: - 세션 지속성 (UserDefaults)
+
+/// 멀티라이브 세션 상태를 UserDefaults에 저장하기 위한 Codable 모델
+struct MultiLivePersistedState: Codable, Equatable {
+    var channelIds: [String]
+    var isGridLayout: Bool
+    var gridLayoutMode: String   // "preset" | "custom" | "focusLeft"
+    var horizontalRatio: Double
+    var verticalRatio: Double
+
+    static let userDefaultsKey = "multiLivePersistedState"
+
+    @MainActor
+    init(from manager: MultiLiveSessionManager) {
+        self.channelIds = manager.sessions.map { $0.channelId }
+        self.isGridLayout = manager.isGridLayout
+        switch manager.gridLayoutMode {
+        case .preset:    self.gridLayoutMode = "preset"
+        case .custom:    self.gridLayoutMode = "custom"
+        case .focusLeft: self.gridLayoutMode = "focusLeft"
+        }
+        self.horizontalRatio = Double(manager.layoutRatios.horizontalRatio)
+        self.verticalRatio = Double(manager.layoutRatios.verticalRatio)
+    }
+
+    var parsedGridLayoutMode: MultiLiveGridLayoutMode {
+        switch gridLayoutMode {
+        case "custom":    return .custom
+        case "focusLeft": return .focusLeft
+        default:          return .preset
+        }
+    }
+
+    func save() {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        UserDefaults.standard.set(data, forKey: Self.userDefaultsKey)
+    }
+
+    static func load() -> MultiLivePersistedState? {
+        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else { return nil }
+        return try? JSONDecoder().decode(MultiLivePersistedState.self, from: data)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
     }
 }
 
@@ -289,17 +390,23 @@ final class MultiLiveSession: Identifiable {
 @MainActor
 final class MultiLiveSessionManager {
 
-    public static let maxSessions = 4
+    static let maxSessions = 4
 
     var sessions: [MultiLiveSession] = []
     var selectedSessionId: UUID?
-
-    /// 그리드 레이아웃 활성화 여부 (뷰 재생성 시 초기화 방지를 위해 Manager에서 관리)
     var isGridLayout: Bool = false
-
-    /// 그리드 모드에서 오디오가 활성화된 세션 ID
-    /// nil이면 selectedSession의 오디오가 활성 (탭 모드 기본 동작)
+    var gridLayoutMode: MultiLiveGridLayoutMode = .preset
+    var layoutRatios: MultiLiveLayoutRatios = MultiLiveLayoutRatios()
+    var draggingSessionIndex: Int? = nil
     var audioSessionId: UUID?
+
+    /// 멀티 오디오 모드 — 여러 세션 동시 오디오 재생
+    var isMultiAudioMode: Bool = false
+    /// 멀티 오디오 모드에서 오디오가 활성화된 세션 ID 집합
+    var audioEnabledSessionIds: Set<UUID> = []
+
+    /// VLC 인스턴스 풀 — 멀티라이브 세션 간 엔진 재사용
+    let enginePool = VLCInstancePool(maxPoolSize: maxSessions)
 
     var selectedSession: MultiLiveSession? {
         sessions.first { $0.id == selectedSessionId }
@@ -312,74 +419,147 @@ final class MultiLiveSessionManager {
 
     // MARK: - CRUD
 
-    func addSession(channelId: String) -> MultiLiveSession? {
+    func addSession(channelId: String, preferredEngine: PlayerEngineType = .vlc) async -> MultiLiveSession? {
         guard sessions.count < Self.maxSessions else { return nil }
-        // 중복 채널 방지
-        if sessions.contains(where: { $0.channelId == channelId }) { return nil }
-        let session = MultiLiveSession(channelId: channelId)
+        guard !sessions.contains(where: { $0.channelId == channelId }) else { return nil }
+
+        let session: MultiLiveSession
+        switch preferredEngine {
+        case .vlc:
+            if sessions.isEmpty { await enginePool.warmup(count: 2) }
+            let engine = await enginePool.acquire()
+            session = MultiLiveSession(channelId: channelId, preallocatedEngine: engine)
+        case .avPlayer:
+            session = MultiLiveSession(channelId: channelId, engineType: .avPlayer)
+        }
+
+        // 기존 선택 탭을 배경 모드로 전환 (탭 모드)
+        if !isGridLayout, let current = selectedSession {
+            current.setBackgroundMode(true)
+        }
+
         sessions.append(session)
         selectedSessionId = session.id
+
+        let totalCount = sessions.count
+        for s in sessions { s.playerViewModel.applyMultiLiveConstraints(paneCount: totalCount) }
+        saveState()
         return session
     }
 
     func removeSession(_ session: MultiLiveSession) async {
+        // ⚠️ 세션을 먼저 정지한 후 엔진 반납 (순서 중요)
+        // release 먼저 하면 resetForReuse 후 session.stop()이 같은 엔진을 이중 정리하여 충돌
         await session.stop()
-        sessions.removeAll { $0.id == session.id }
-        if selectedSessionId == session.id {
-            selectedSessionId = sessions.last?.id
+        if let vlcEngine = session.playerViewModel.mediaPlayer {
+            await enginePool.release(vlcEngine)
         }
-        // 오디오 활성 세션이 제거된 경우: 남은 첫 세션으로 자동 라우팅
+        sessions.removeAll { $0.id == session.id }
+
+        if selectedSessionId == session.id { selectedSessionId = sessions.last?.id }
+
         if audioSessionId == session.id {
             audioSessionId = sessions.first?.id
-            // 새 오디오 세션 언뮤트, 나머지 뮤트
-            if let newAudioId = audioSessionId {
-                for s in sessions { s.setMuted(s.id != newAudioId) }
+            if let newId = audioSessionId {
+                for s in sessions { s.setMuted(s.id != newId) }
             }
         }
-        // 1개 이하 남으면 그리드 모드 자동 해제
-        if sessions.count <= 1 {
-            isGridLayout = false
-        }
-        // 세션 제거 후 남은 세션들의 AVPlayer 품질 제한을 새 pane 수에 맞게 갱신
+        audioEnabledSessionIds.remove(session.id)
+
+        if sessions.count <= 1 { isGridLayout = false }
+
         let remaining = sessions.count
-        for s in sessions {
-            s.playerViewModel.applyMultiLiveConstraints(paneCount: remaining)
-        }
+        for s in sessions { s.playerViewModel.applyMultiLiveConstraints(paneCount: remaining) }
+        saveState()
     }
 
     func select(_ session: MultiLiveSession) {
         guard selectedSessionId != session.id else { return }
-
-        // 현재 선택된 탭 배경으로
-        if let current = selectedSession, current.id != session.id {
-            current.setBackgroundMode(true)
+        if !isGridLayout {
+            if let current = selectedSession, current.id != session.id {
+                current.setBackgroundMode(true)
+            }
+            session.setBackgroundMode(false)
         }
-
         selectedSessionId = session.id
-
-        // 새 탭 포그라운드로
-        session.setBackgroundMode(false)
-
-        // 탭 모드에서는 audioSessionId를 nil로 리셋 (선택된 탭이 오디오)
-        audioSessionId = nil
+        if !isGridLayout && !isMultiAudioMode {
+            audioSessionId = nil
+            for s in sessions { s.setMuted(s.id != session.id) }
+        }
+        // [VLC 안정 컨테이너 패턴] 뷰가 더이상 파괴→재생성되지 않으므로
+        // ForEach + opacity/zIndex로 가시성만 전환 → drawable 연결이 유지됨.
+        // 기존 0.3초 지연 refreshDrawable() 불필요 → 즉시 refreshDrawable()만 호출.
+        // setBackgroundMode(false) 내부에서도 refreshDrawable()이 호출되므로 이중 보호.
+        if let vlc = session.playerViewModel.mediaPlayer {
+            vlc.refreshDrawable()
+        }
+        saveState()
     }
 
-    /// 그리드 모드에서 특정 세션으로 오디오 라우팅
-    /// - 지정 세션만 언뮤트, 나머지 모두 뮤트
     func routeAudio(to session: MultiLiveSession) {
         guard audioSessionId != session.id else { return }
         audioSessionId = session.id
-        for s in sessions {
-            s.setMuted(s.id != session.id)
+        for s in sessions { s.setMuted(s.id != session.id) }
+    }
+
+    /// 멀티 오디오 모드 토글
+    func toggleMultiAudioMode() {
+        isMultiAudioMode.toggle()
+        if isMultiAudioMode {
+            // 현재 오디오 세션을 멀티 오디오 초기 세션으로 설정
+            audioEnabledSessionIds.removeAll()
+            if let currentAudioId = audioSessionId ?? selectedSessionId {
+                audioEnabledSessionIds.insert(currentAudioId)
+            }
+            // 활성화된 세션만 음소거 해제
+            for s in sessions {
+                s.setMuted(!audioEnabledSessionIds.contains(s.id))
+            }
+        } else {
+            // 단일 오디오 모드로 복귀 — 선택된 세션만 오디오
+            audioEnabledSessionIds.removeAll()
+            let activeId = audioSessionId ?? selectedSessionId
+            for s in sessions {
+                s.setMuted(s.id != activeId)
+            }
         }
     }
 
-    /// 탭 순서 변경 (드래그-리오더)
+    /// 멀티 오디오 모드에서 개별 세션 오디오 토글
+    func toggleSessionAudio(_ session: MultiLiveSession) {
+        guard isMultiAudioMode else {
+            routeAudio(to: session)
+            return
+        }
+        if audioEnabledSessionIds.contains(session.id) {
+            audioEnabledSessionIds.remove(session.id)
+            session.setMuted(true)
+        } else {
+            audioEnabledSessionIds.insert(session.id)
+            session.setMuted(false)
+        }
+    }
+
+    /// 멀티 오디오 모드에서 세션의 오디오 활성 여부
+    func isAudioEnabled(for session: MultiLiveSession) -> Bool {
+        if isMultiAudioMode {
+            return audioEnabledSessionIds.contains(session.id)
+        } else {
+            return (audioSessionId ?? selectedSessionId) == session.id
+        }
+    }
+
     func moveSession(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
     }
 
-    /// 세션을 앞/뒤로 한 칸씩 이동
+    func swapSessions(_ i: Int, _ j: Int) {
+        guard i != j, sessions.indices.contains(i), sessions.indices.contains(j) else { return }
+        sessions.swapAt(i, j)
+    }
+
+    func resetLayoutRatios() { layoutRatios = MultiLiveLayoutRatios() }
+
     func moveSessionLeft(_ session: MultiLiveSession) {
         guard let idx = sessions.firstIndex(where: { $0.id == session.id }), idx > 0 else { return }
         sessions.swapAt(idx, idx - 1)
@@ -390,12 +570,68 @@ final class MultiLiveSessionManager {
         sessions.swapAt(idx, idx + 1)
     }
 
-    /// 모든 세션 종료
     func stopAll() async {
         for s in sessions { await s.stop() }
         sessions.removeAll()
         selectedSessionId = nil
         audioSessionId = nil
+        isMultiAudioMode = false
+        audioEnabledSessionIds.removeAll()
         isGridLayout = false
+        gridLayoutMode = .preset
+        layoutRatios = MultiLiveLayoutRatios()
+        draggingSessionIndex = nil
+        await enginePool.drain()
+        MultiLivePersistedState.clear()
+    }
+
+    // MARK: - 세션 지속성
+
+    /// 현재 세션 구성을 UserDefaults에 저장
+    func saveState() {
+        guard !sessions.isEmpty else {
+            MultiLivePersistedState.clear()
+            return
+        }
+        let state = MultiLivePersistedState(from: self)
+        state.save()
+    }
+
+    /// 레이아웃 변경 시 자동 저장
+    func saveLayoutChange() {
+        saveState()
+    }
+
+    /// 저장된 세션 구성 복원 (비동기 — 채널 추가 + 스트림 시작 포함)
+    /// - Returns: 복원된 세션 수 (0이면 저장된 상태 없음)
+    @discardableResult
+    func restoreState(appState: AppState) async -> Int {
+        guard sessions.isEmpty else { return 0 }  // 이미 세션이 있으면 스킵
+        guard let state = MultiLivePersistedState.load() else { return 0 }
+        guard !state.channelIds.isEmpty else { return 0 }
+
+        // 레이아웃 설정 먼저 복원
+        isGridLayout = state.isGridLayout
+        gridLayoutMode = state.parsedGridLayoutMode
+        layoutRatios.horizontalRatio = CGFloat(state.horizontalRatio)
+        layoutRatios.verticalRatio = CGFloat(state.verticalRatio)
+        layoutRatios.clampHorizontal()
+        layoutRatios.clampVertical()
+
+        // 채널 순서대로 세션 추가 + 스트림 시작
+        var restored = 0
+        for channelId in state.channelIds {
+            guard let session = await addSession(channelId: channelId) else { continue }
+            let paneCount = sessions.count
+            if let apiClient = appState.apiClient {
+                let apiRef = apiClient
+                let appRef = appState
+                session.startTask = Task {
+                    await session.start(using: apiRef, appState: appRef, paneCount: paneCount)
+                }
+            }
+            restored += 1
+        }
+        return restored
     }
 }

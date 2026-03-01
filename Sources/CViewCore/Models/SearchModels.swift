@@ -271,3 +271,31 @@ public struct ClipInfo: Sendable, Codable, Identifiable, Hashable {
         try container.encodeIfPresent(channel, forKey: .channel)
     }
 }
+
+// MARK: - Search Autocomplete
+
+/// 검색 자동완성 제안 항목
+public struct AutocompleteSuggestion: Identifiable, Sendable {
+    public let id: UUID
+    public let text: String
+    public let kind: Kind
+
+    public enum Kind: Sendable {
+        case recent
+        case following
+    }
+
+    public init(text: String, kind: Kind) {
+        self.id = UUID()
+        self.text = text
+        self.kind = kind
+    }
+}
+
+// MARK: - Live Sort Option
+
+/// 라이브 검색 결과 정렬 옵션
+public enum LiveSortOption: String, Sendable, CaseIterable {
+    case viewerCount = "시청자 많은순"
+    case recent = "최신순"
+}

@@ -23,17 +23,17 @@ public actor ReconnectionPolicy {
         
         public static let `default` = Configuration(
             initialDelay: 1.0,
-            maxDelay: 30.0,
-            maxAttempts: 10,
+            maxDelay: ReconnectDefaults.defaultMaxDelay,
+            maxAttempts: ReconnectDefaults.defaultMaxAttempts,
             backoffMultiplier: 2.0,
-            jitterFactor: 0.25,
-            resetThreshold: 60.0
+            jitterFactor: ReconnectDefaults.defaultJitter,
+            resetThreshold: ReconnectDefaults.resetThreshold
         )
         
         public static let aggressive = Configuration(
             initialDelay: 0.5,
-            maxDelay: 10.0,
-            maxAttempts: 20,
+            maxDelay: ReconnectDefaults.aggressiveMaxDelay,
+            maxAttempts: ReconnectDefaults.aggressiveMaxAttempts,
             backoffMultiplier: 1.5,
             jitterFactor: 0.15,
             resetThreshold: 30.0
@@ -41,11 +41,11 @@ public actor ReconnectionPolicy {
         
         public init(
             initialDelay: TimeInterval = 1.0,
-            maxDelay: TimeInterval = 30.0,
-            maxAttempts: Int = 10,
+            maxDelay: TimeInterval = ReconnectDefaults.defaultMaxDelay,
+            maxAttempts: Int = ReconnectDefaults.defaultMaxAttempts,
             backoffMultiplier: Double = 2.0,
-            jitterFactor: Double = 0.25,
-            resetThreshold: TimeInterval = 60.0
+            jitterFactor: Double = ReconnectDefaults.defaultJitter,
+            resetThreshold: TimeInterval = ReconnectDefaults.resetThreshold
         ) {
             self.initialDelay = initialDelay
             self.maxDelay = maxDelay
@@ -131,6 +131,7 @@ public actor ReconnectionPolicy {
     /// Reset the reconnection state
     public func reset() {
         currentAttempt = 0
+        lastSuccessfulConnection = nil  // nextDelay()에서 무한 reset 루프 방지
         _state = .idle
         reconnectTask?.cancel()
         reconnectTask = nil

@@ -15,24 +15,24 @@ struct MenuBarView: View {
             // Branded header
             HStack(spacing: 8) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                         .fill(DesignTokens.Gradients.primary)
                         .frame(width: 20, height: 20)
                     
                     Text("C")
-                        .font(.system(size: 11, weight: .black))
-                        .foregroundStyle(.black)
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .black))
+                        .foregroundStyle(DesignTokens.Colors.onPrimary)
                 }
                 
                 Text("CView")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(DesignTokens.Typography.bodyBold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                 Spacer()
 
                 if let lastUpdated = appState.backgroundUpdateService.lastUpdated {
                     Text(lastUpdated, style: .relative)
-                        .font(.system(size: 10))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
 
@@ -44,7 +44,7 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(DesignTokens.Colors.backgroundDark)
+            .background(DesignTokens.Colors.background)
 
             // Accent separator
             Rectangle()
@@ -63,13 +63,13 @@ struct MenuBarView: View {
             if onlineChannels.isEmpty {
                 VStack(spacing: DesignTokens.Spacing.sm) {
                     Image(systemName: "tv.slash")
-                        .font(.system(size: 24))
+                        .font(DesignTokens.Typography.title)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
 
                     Text(appState.isLoggedIn
                          ? "현재 방송 중인 팔로잉 채널이 없습니다"
                          : "로그인하면 팔로잉 채널을 확인할 수 있습니다")
-                        .font(.system(size: 12))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
@@ -83,12 +83,12 @@ struct MenuBarView: View {
                         .frame(width: 6, height: 6)
                     
                     Text("\(onlineChannels.count)개 채널 방송 중")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.top, DesignTokens.Spacing.xs)
-                .padding(.bottom, 4)
+                .padding(.bottom, DesignTokens.Spacing.xxs)
                 
                 ScrollView {
                     LazyVStack(spacing: 1) {
@@ -96,7 +96,7 @@ struct MenuBarView: View {
                             MenuBarChannelRow(channel: channel)
                         }
                     }
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, DesignTokens.Spacing.xxs)
                 }
                 .frame(maxHeight: 400)
             }
@@ -118,9 +118,9 @@ struct MenuBarView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                         Text("새로고침")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                     }
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
@@ -136,9 +136,9 @@ struct MenuBarView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "macwindow")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                         Text("앱 열기")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                     }
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 }
@@ -193,12 +193,12 @@ struct MenuBarChannelRow: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(channel.channelName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
 
                     Text(channel.liveTitle)
-                        .font(.system(size: 11))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .lineLimit(1)
                 }
@@ -208,22 +208,24 @@ struct MenuBarChannelRow: View {
                 // Viewer count badge
                 HStack(spacing: 3) {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 8))
+                        .font(DesignTokens.Typography.custom(size: 8))
                     Text(channel.formattedViewerCount)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
                 }
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(DesignTokens.Colors.surface.opacity(0.5))
+                .padding(.horizontal, DesignTokens.Spacing.xs)
+                .padding(.vertical, DesignTokens.Spacing.xxs)
+                .background(.ultraThinMaterial)
                 .clipShape(Capsule())
             }
             .padding(.horizontal, DesignTokens.Spacing.xs)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(isHovered ? DesignTokens.Colors.surfaceHover : .clear)
-            )
+            .padding(.vertical, DesignTokens.Spacing.xs)
+            .background {
+                if isHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .fill(.ultraThinMaterial)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

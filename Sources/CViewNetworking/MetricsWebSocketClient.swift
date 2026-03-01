@@ -25,7 +25,7 @@ public actor MetricsWebSocketClient {
     private var state: ConnectionState = .disconnected
     private var continuation: AsyncStream<MetricsWebSocketMessage>.Continuation?
     private var reconnectTask: Task<Void, Never>?
-    private let maxReconnectAttempts = 5
+    private let maxReconnectAttempts = MetricsNetDefaults.maxReconnectAttempts
     private var isManuallyDisconnected = false
     
     // MARK: - Init
@@ -45,6 +45,10 @@ public actor MetricsWebSocketClient {
     /// WebSocket 메시지 스트림 연결
     public func connect() -> AsyncStream<MetricsWebSocketMessage> {
         isManuallyDisconnected = false
+        
+        // 이전 stream이 있으면 종료하여 소비자 hang 방지
+        continuation?.finish()
+        continuation = nil
         
         let stream = AsyncStream<MetricsWebSocketMessage> { continuation in
             self.continuation = continuation
@@ -123,7 +127,7 @@ public actor MetricsWebSocketClient {
             guard !isManuallyDisconnected else { return }
             
             state = .reconnecting(attempt: attempt)
-            let delay = min(Double(attempt * attempt), 30.0) // 1, 4, 9, 16, 25초
+            let delay = min(Double(attempt * attempt), MetricsNetDefaults.maxBackoffDelay) // 1, 4, 9, 16, 25초
             try? await Task.sleep(for: .seconds(delay))
             
             guard !isManuallyDisconnected else { return }

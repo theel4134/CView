@@ -54,7 +54,7 @@ struct MultiChatView: View {
             // Header
             HStack {
                 Text("멀티채팅")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(DesignTokens.Typography.bodyBold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                 Spacer()
@@ -63,13 +63,13 @@ struct MultiChatView: View {
                     showAddChannel = true
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 16))
+                        .font(DesignTokens.Typography.custom(size: 16))
                         .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 }
                 .buttonStyle(.plain)
             }
             .padding(DesignTokens.Spacing.sm)
-            .background(DesignTokens.Colors.backgroundDark)
+            .background(DesignTokens.Colors.background)
 
             Divider()
 
@@ -77,10 +77,10 @@ struct MultiChatView: View {
             if sessionManager.sessions.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 24))
+                        .font(DesignTokens.Typography.title)
                         .foregroundStyle(.tertiary)
                     Text("채널을 추가하세요")
-                        .font(.system(size: 12))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -99,11 +99,11 @@ struct MultiChatView: View {
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.channelName)
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(DesignTokens.Typography.captionMedium)
                                     .lineLimit(1)
 
                                 Text("\(session.chatViewModel.messageCount)개 메시지")
-                                    .font(.system(size: 10))
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                                     .foregroundStyle(.secondary)
                             }
 
@@ -120,6 +120,7 @@ struct MultiChatView: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
             }
 
             Divider()
@@ -158,24 +159,24 @@ struct MultiChatView: View {
             // 채널 검색
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 TextField("채널명 검색 또는 채널 ID 입력", text: $channelSearchQuery)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(DesignTokens.Typography.captionMedium)
                     .onSubmit { searchChannels() }
                 if isSearchingChannels {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.xs)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(DesignTokens.Colors.surface)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .fill(.ultraThinMaterial)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
                     )
             )
@@ -196,33 +197,33 @@ struct MultiChatView: View {
                                 HStack(spacing: 8) {
                                     if let url = channel.channelImageURL {
                                         CachedAsyncImage(url: url) {
-                                            Circle().fill(DesignTokens.Colors.surfaceLight)
+                                            Circle().fill(DesignTokens.Colors.surfaceElevated)
                                         }
                                         .frame(width: 32, height: 32)
                                         .clipShape(Circle())
                                     } else {
-                                        Circle().fill(DesignTokens.Colors.surfaceLight)
+                                        Circle().fill(DesignTokens.Colors.surfaceElevated)
                                             .frame(width: 32, height: 32)
                                             .overlay {
                                                 Image(systemName: "person.fill")
-                                                    .font(.system(size: 12))
+                                                    .font(DesignTokens.Typography.caption)
                                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                                             }
                                     }
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(channel.channelName)
-                                            .font(.system(size: 13, weight: .medium))
+                                            .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
                                             .foregroundStyle(DesignTokens.Colors.textPrimary)
                                         Text("팔로워 \(channel.followerCount.formatted())")
-                                            .font(.system(size: 11))
+                                            .font(DesignTokens.Typography.caption)
                                             .foregroundStyle(DesignTokens.Colors.textSecondary)
                                     }
                                     Spacer()
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(DesignTokens.Colors.surfaceHover.opacity(0.001))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(.horizontal, DesignTokens.Spacing.xs)
+                                .padding(.vertical, DesignTokens.Spacing.xs)
+                                .background(DesignTokens.Colors.surfaceOverlay.opacity(0.001))
+                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                             }
                             .buttonStyle(.plain)
                         }
@@ -237,7 +238,7 @@ struct MultiChatView: View {
             HStack(spacing: 8) {
                 TextField("채널 ID 직접 입력", text: $newChannelId)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
+                    .font(DesignTokens.Typography.caption)
                 Button("추가") {
                     let channelId = newChannelId.trimmingCharacters(in: .whitespaces)
                     guard !channelId.isEmpty else { return }
@@ -261,7 +262,7 @@ struct MultiChatView: View {
                 Spacer()
             }
         }
-        .padding(20)
+        .padding(DesignTokens.Spacing.xl)
         .frame(width: 360)
     }
 
@@ -285,7 +286,7 @@ struct MultiChatView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 40))
+                .font(DesignTokens.Typography.custom(size: 40))
                 .foregroundStyle(.tertiary)
 
             Text("멀티채팅")

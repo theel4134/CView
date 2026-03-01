@@ -64,6 +64,7 @@ public enum PlayerError: Error, Sendable, Equatable, LocalizedError {
     case invalidManifest
     case connectionLost
     case authRequired
+    case recordingFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -76,6 +77,7 @@ public enum PlayerError: Error, Sendable, Equatable, LocalizedError {
         case .invalidManifest: "잘못된 매니페스트"
         case .connectionLost: "연결이 끊어졌습니다"
         case .authRequired: "인증이 필요합니다"
+        case .recordingFailed(let detail): "녹화 실패: \(detail)"
         }
     }
 }
@@ -134,5 +136,20 @@ public enum PlayerEngineType: String, Sendable, Codable, CaseIterable {
         case .vlc: "VLC (저지연)"
         case .avPlayer: "AVPlayer (안정)"
         }
+    }
+}
+
+// MARK: - Latency Data Point
+
+/// 레이턴시 이력 데이터 포인트
+public struct LatencyDataPoint: Identifiable, Sendable {
+    public let id: UUID
+    public let timestamp: Date
+    public let latency: Double  // seconds
+    
+    public init(timestamp: Date, latency: Double) {
+        self.id = UUID()
+        self.timestamp = timestamp
+        self.latency = latency
     }
 }

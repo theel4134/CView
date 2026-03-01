@@ -14,10 +14,8 @@ struct MultiLiveView: View {
     // isGridLayout은 뷰 재생성 시 초기화 방지를 위해 manager에서 관리
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            Color.black.ignoresSafeArea()
-
-            // ── 메인 콘텐츠 ──────────────────────────────────────
+        HStack(spacing: 0) {
+            // ── 메인 콘텐츠 (push 방식: 패널 열리면 자동 축소) ──
             VStack(spacing: 0) {
                 MLTabBar(
                     manager: manager,
@@ -25,7 +23,7 @@ struct MultiLiveView: View {
                         get: { manager.isGridLayout },
                         set: { manager.isGridLayout = $0 }
                     ),
-                    onAdd: { withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    onAdd: { withAnimation(DesignTokens.Animation.snappy) {
                         showAddChannel.toggle()
                     }},
                     isAddPanelOpen: showAddChannel
@@ -33,45 +31,43 @@ struct MultiLiveView: View {
                 ZStack {
                     if manager.sessions.isEmpty {
                         MLEmptyState(onAdd: {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            withAnimation(DesignTokens.Animation.snappy) {
                                 showAddChannel = true
                             }
                         })
                     } else if manager.isGridLayout && manager.sessions.count >= 2 {
+                        // 그리드 모드: MLGridLayout이 모든 세션의 PlayerVideoView를 이미 렌더링
                         MLGridLayout(manager: manager, appState: appState, onAdd: {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            withAnimation(DesignTokens.Animation.snappy) {
                                 showAddChannel = true
                             }
                         })
                     } else {
-                        // 선택된 세션만 렌더링 — .opacity(0) 방식은 SwiftUI가 모든 숨겨진
-                        // 패널에 대해 오프스크린 GPU 버퍼를 유지하므로 조건부 렌더링으로 교체.
-                        // 언더라이닝 PlayerViewModel·NSView 는 session 객체에 종속되므로
-                        // 탭 전환 후에도 재생이 유지됨.
-                        if let selected = manager.sessions.first(where: { $0.id == manager.selectedSessionId }) {
-                            MLPlayerPane(session: selected, appState: appState)
-                                .id(selected.id)
-                                .transition(.opacity)
+                        // ── [VLC 충돌 방지] 안정 컨테이너 패턴 ──
+                        // 기존: .id(selected.id)로 탭 전환 시 MLPlayerPane 완전 파괴→재생성
+                        //   → VLC drawable 끊김 → 0.3초 refreshDrawable() 불안정
+                        // 개선: ForEach로 모든 세션의 PlayerVideoView를 항상 살려두고
+                        //   opacity/zIndex/allowsHitTesting으로 가시성만 전환
+                        //   → VLC drawable 연결 유지 → 즉시 화면 전환
+                        ForEach(manager.sessions) { session in
+                            let isActive = session.id == manager.selectedSessionId
+                            MLPlayerPane(session: session, appState: appState, isActive: isActive)
+                                .opacity(isActive ? 1 : 0)
+                                .zIndex(isActive ? 1 : 0)
+                                .allowsHitTesting(isActive)
+                                .transaction { $0.animation = nil }
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
 
-            // ── 슬라이드 패널 뒷배경 (탭으로 닫기) ───────────────
-            if showAddChannel {
-                Color.black.opacity(0.45)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                            showAddChannel = false
-                        }
-                    }
-                    .transition(.opacity)
-                    .zIndex(10)
-            }
-
-            // ── 채널 추가 슬라이드 패널 ───────────────────────────
+            // ── 채널 추가 슬라이드 패널 (push 방식) ──────────────
+            // 세션 추가 등 다른 상태 변경에 애니메이션이 전파되지 않도록
+            // 패널 자체에만 애니메이션 콘텍스트 부여
             if showAddChannel {
                 MLAddChannelPanel(
                     manager: manager,
@@ -80,19 +76,26 @@ struct MultiLiveView: View {
                     onError: { addError = $0 }
                 )
                 .environment(appState)
-                .transition(.asymmetric(
-                    insertion:  .move(edge: .trailing).combined(with: .opacity),
-                    removal:    .move(edge: .trailing).combined(with: .opacity)
-                ))
-                .zIndex(11)
+                .transition(.move(edge: .trailing))
+                .animation(DesignTokens.Animation.contentTransition, value: showAddChannel)
             }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: showAddChannel)
+        .background(Color.black)
+        // 전체 HStack에는 애니메이션 제거 — 세션 추가 시 비디오가 확장되는 현상 방지
+        .clipped()
         .frame(minWidth: 740, minHeight: 520)
-        // ESC 키로 패널 닫기
+        .task {
+            // 저장된 세션 복원 (최초 진입 시, 세션이 비어있을 때만)
+            if manager.sessions.isEmpty {
+                await manager.restoreState(appState: appState)
+            }
+        }
+        .onKeyPress(phases: .down) { press in
+            handleMultiLiveShortcut(press)
+        }
         .onKeyPress(.escape) {
             if showAddChannel {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showAddChannel = false }
+                withAnimation(DesignTokens.Animation.contentTransition) { showAddChannel = false }
                 return .handled
             }
             return .ignored
@@ -104,6 +107,77 @@ struct MultiLiveView: View {
             Button("확인", role: .cancel) {}
         } message: {
             Text(addError ?? "")
+        }
+    }
+
+    // MARK: - Keyboard Shortcuts
+
+    /// 활성 세션의 PlayerViewModel에 키보드 단축키를 적용
+    private func handleMultiLiveShortcut(_ press: KeyPress) -> KeyPress.Result {
+        let shortcuts = appState.settingsStore.keyboard
+
+        // 활성 세션 결정: 탭 모드 → 선택된 세션, 그리드 모드 → 오디오 활성 세션
+        let activeSession: MultiLiveSession? = {
+            if !manager.isGridLayout {
+                return manager.selectedSession
+            } else {
+                let audioId = manager.audioSessionId ?? manager.selectedSessionId
+                return manager.sessions.first { $0.id == audioId }
+            }
+        }()
+        guard let session = activeSession else { return .ignored }
+        let vm = session.playerViewModel
+
+        for action in ShortcutAction.allCases {
+            let binding = shortcuts.binding(for: action)
+            guard matchesBinding(press, binding) else { continue }
+
+            switch action {
+            case .togglePlay:
+                Task { await vm.togglePlayPause() }
+            case .toggleMute:
+                session.setMuted(!session.isMuted)
+            case .toggleFullscreen:
+                NSApp.keyWindow?.toggleFullScreen(nil)
+            case .toggleChat:
+                withAnimation(DesignTokens.Animation.snappy) { session.isChatVisible.toggle() }
+            case .togglePiP:
+                if let vlcEngine = vm.playerEngine as? VLCPlayerEngine {
+                    PiPController.shared.startPiP(vlcEngine: vlcEngine)
+                }
+            case .screenshot:
+                vm.takeScreenshot()
+            case .volumeUp:
+                vm.setVolume(min(1.0, vm.volume + 0.05))
+                if session.isMuted { session.setMuted(false) }
+            case .volumeDown:
+                vm.setVolume(max(0.0, vm.volume - 0.05))
+            }
+            return .handled
+        }
+        return .ignored
+    }
+
+    /// KeyPress가 KeyBinding과 일치하는지 확인
+    private func matchesBinding(_ press: KeyPress, _ binding: KeyBinding) -> Bool {
+        let mods = binding.modifiers
+        if mods.contains(.command)  != press.modifiers.contains(.command)  { return false }
+        if mods.contains(.shift)    != press.modifiers.contains(.shift)    { return false }
+        if mods.contains(.option)   != press.modifiers.contains(.option)   { return false }
+        if mods.contains(.control)  != press.modifiers.contains(.control)  { return false }
+
+        switch binding.key {
+        case "space":      return press.key == .space
+        case "upArrow":    return press.key == .upArrow
+        case "downArrow":  return press.key == .downArrow
+        case "leftArrow":  return press.key == .leftArrow
+        case "rightArrow": return press.key == .rightArrow
+        case "return":     return press.key == .return
+        case "escape":     return press.key == .escape
+        case "tab":        return press.key == .tab
+        case "delete":     return press.key == .delete
+        default:
+            return press.characters.lowercased() == binding.key.lowercased()
         }
     }
 }

@@ -22,9 +22,17 @@ public actor NetworkMonitor {
 
     private init() {}
 
+    /// 현재 활성 stream continuation — 다중 start() 시 이전 stream 종료 보장
+    private var activeContinuation: AsyncStream<Bool>.Continuation?
+
     /// 모니터링 시작
     public func start() -> AsyncStream<Bool> {
-        AsyncStream { continuation in
+        // 이전 stream이 있으면 종료하여 고아 stream 방지
+        activeContinuation?.finish()
+        activeContinuation = nil
+
+        return AsyncStream { continuation in
+            self.activeContinuation = continuation
             monitor.pathUpdateHandler = { [weak self] path in
                 Task {
                     await self?.handlePathUpdate(path)
@@ -37,9 +45,13 @@ public actor NetworkMonitor {
                 isMonitoring = true
             }
             continuation.onTermination = { [weak self] _ in
-                Task { await self?.stopIfNeeded() }
+                Task { await self?.clearContinuation() }
             }
         }
+    }
+
+    private func clearContinuation() {
+        activeContinuation = nil
     }
 
     private func handlePathUpdate(_ path: NWPath) {

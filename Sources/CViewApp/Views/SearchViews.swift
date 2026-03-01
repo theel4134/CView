@@ -18,16 +18,26 @@ struct SearchView: View {
         VStack(spacing: 0) {
             if let vm = viewModel {
                 SearchContentView(viewModel: vm)
+                    .task(id: appState.homeViewModel?.followingChannels.count) {
+                        if let homeVM = appState.homeViewModel {
+                            vm.followingChannelNames = homeVM.followingChannels.map(\.channelName)
+                        }
+                    }
             } else {
                 ProgressView()
                     .onAppear {
                         if let apiClient = appState.apiClient {
-                            viewModel = SearchViewModel(apiClient: apiClient)
+                            let vm = SearchViewModel(apiClient: apiClient)
+                            // 팔로잉 채널명 주입 (자동완성 용)
+                            if let homeVM = appState.homeViewModel {
+                                vm.followingChannelNames = homeVM.followingChannels.map(\.channelName)
+                            }
+                            viewModel = vm
                         }
                     }
             }
         }
-        .background(DesignTokens.Colors.backgroundDark)
+        .background(DesignTokens.Colors.background)
     }
 }
 
@@ -42,6 +52,11 @@ struct SearchContentView: View {
             // Premium search bar
             searchBar
             
+            // Autocomplete suggestions dropdown
+            if viewModel.showAutocomplete && !viewModel.autocompleteSuggestions.isEmpty {
+                autocompleteDropdown
+            }
+            
             // Tab picker
             tabPicker
             
@@ -54,7 +69,7 @@ struct SearchContentView: View {
                     ProgressView()
                         .scaleEffect(1.2)
                     Text("검색 중...")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 Spacer()
@@ -77,12 +92,12 @@ struct SearchContentView: View {
     private var searchBar: some View {
         HStack(spacing: DesignTokens.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .medium))
+                .font(DesignTokens.Typography.subhead)
                 .foregroundStyle(isSearchBarFocused ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
             
             TextField("채널, 라이브, 비디오 검색...", text: $viewModel.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15))
+                .font(DesignTokens.Typography.custom(size: 15))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .onSubmit { Task { await viewModel.performSearch() } }
             
@@ -91,7 +106,7 @@ struct SearchContentView: View {
                     viewModel.query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(DesignTokens.Typography.body)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -100,23 +115,91 @@ struct SearchContentView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .fill(DesignTokens.Colors.surface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .strokeBorder(
-                            isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Colors.border,
-                            lineWidth: isSearchBarFocused ? 1.5 : 0.5
-                        )
-                }
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                .strokeBorder(
+                    isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : .white.opacity(DesignTokens.Glass.borderOpacityLight),
+                    lineWidth: isSearchBarFocused ? 1.5 : 0.5
+                )
         }
+        .shadow(color: isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.1) : .clear, radius: 8)
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, DesignTokens.Spacing.md)
         .animation(DesignTokens.Animation.fast, value: isSearchBarFocused)
         .animation(DesignTokens.Animation.fast, value: viewModel.query.isEmpty)
     }
     
+    // MARK: - Autocomplete Dropdown
+
+    private var autocompleteDropdown: some View {
+        VStack(spacing: 0) {
+            ForEach(viewModel.autocompleteSuggestions) { suggestion in
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    Image(systemName: suggestion.kind == .recent ? "clock" : "person.circle")
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(
+                            suggestion.kind == .recent
+                            ? DesignTokens.Colors.textTertiary
+                            : DesignTokens.Colors.chzzkGreen
+                        )
+                        .frame(width: 18)
+
+                    Text(suggestion.text)
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    if suggestion.kind == .following {
+                        Text("팔로잉")
+                            .font(DesignTokens.Typography.microSemibold)
+                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            .padding(.horizontal, DesignTokens.Spacing.xs)
+                            .padding(.vertical, DesignTokens.Spacing.xxs)
+                            .background(DesignTokens.Colors.chzzkGreen.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+
+                    // 검색어에 삽입 버튼
+                    Button {
+                        viewModel.query = suggestion.text
+                    } label: {
+                        Image(systemName: "arrow.up.left")
+                            .font(DesignTokens.Typography.footnoteMedium)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.vertical, DesignTokens.Spacing.xs)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    viewModel.query = suggestion.text
+                    Task { await viewModel.performSearch() }
+                }
+                .background(Color.clear)
+
+                if suggestion.id != viewModel.autocompleteSuggestions.last?.id {
+                    Divider()
+                        .padding(.leading, 44)
+                }
+            }
+        }
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.bottom, DesignTokens.Spacing.xs)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .animation(DesignTokens.Animation.fast, value: viewModel.autocompleteSuggestions.count)
+    }
+
     // MARK: - Tab Picker
     
     private var tabPicker: some View {
@@ -171,11 +254,11 @@ struct SearchContentView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Text("최근 검색어")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(DesignTokens.Typography.captionSemibold)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Spacer()
                         Button("전체 삭제") { viewModel.clearRecentSearches() }
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .buttonStyle(.plain)
                     }
@@ -186,23 +269,23 @@ struct SearchContentView: View {
                     ForEach(viewModel.recentSearches, id: \.self) { term in
                         HStack(spacing: DesignTokens.Spacing.sm) {
                             Image(systemName: "clock")
-                                .font(.system(size: 12))
+                                .font(DesignTokens.Typography.caption)
                                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                             Text(term)
-                                .font(.system(size: 14))
+                                .font(DesignTokens.Typography.body)
                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                             Spacer()
                             Button {
                                 viewModel.removeRecentSearch(term)
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 11))
+                                    .font(DesignTokens.Typography.caption)
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                             .buttonStyle(.plain)
                         }
                         .padding(.horizontal, DesignTokens.Spacing.lg)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, DesignTokens.Spacing.xs)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             viewModel.query = term
@@ -224,17 +307,17 @@ struct SearchContentView: View {
                         .frame(width: 80, height: 80)
                     
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 30))
+                        .font(DesignTokens.Typography.custom(size: 30))
                         .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.6))
                 }
                 
                 VStack(spacing: DesignTokens.Spacing.xs) {
                     Text("검색어를 입력하세요")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(DesignTokens.Typography.custom(size: 16, weight: .semibold))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                     
                     Text("채널명, 라이브 방송, 비디오, 클립을 검색할 수 있습니다")
-                        .font(.system(size: 13))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 
@@ -282,7 +365,7 @@ struct SearchContentView: View {
                             HStack {
                                 Spacer()
                                 Picker("", selection: $viewModel.liveSortOption) {
-                                    ForEach(SearchViewModel.LiveSortOption.allCases, id: \.self) { opt in
+                                    ForEach(LiveSortOption.allCases, id: \.self) { opt in
                                         Text(opt.rawValue).tag(opt)
                                     }
                                 }
@@ -371,21 +454,38 @@ struct SearchContentView: View {
     }
     
     private var tabLoadingView: some View {
-        HStack {
-            Spacer()
-            ProgressView()
-                .padding(.vertical, 60)
-            Spacer()
+        VStack(spacing: DesignTokens.Spacing.sm) {
+            ForEach(0..<4, id: \.self) { _ in
+                HStack(spacing: DesignTokens.Spacing.md) {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .fill(DesignTokens.Colors.surfaceElevated)
+                        .frame(width: 100, height: 56)
+                        .shimmer()
+                    VStack(alignment: .leading, spacing: 6) {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                            .fill(DesignTokens.Colors.surfaceElevated)
+                            .frame(height: 12)
+                            .shimmer()
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                            .fill(DesignTokens.Colors.surfaceElevated)
+                            .frame(width: 80, height: 10)
+                            .shimmer()
+                    }
+                    Spacer()
+                }
+                .padding(DesignTokens.Spacing.sm)
+            }
         }
+        .padding(.vertical, DesignTokens.Spacing.md)
     }
     
     private func searchEmptyState(_ type: String) -> some View {
         VStack(spacing: DesignTokens.Spacing.md) {
             Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 28))
+                .font(DesignTokens.Typography.display)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             Text("\(type) 검색 결과가 없습니다")
-                .font(.system(size: 14, weight: .medium))
+                .font(DesignTokens.Typography.bodyMedium)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity)
@@ -393,306 +493,3 @@ struct SearchContentView: View {
     }
 }
 
-// MARK: - Search Tab Button
-
-struct SearchTabButton: View {
-    let title: String
-    let icon: String
-    let isSelected: Bool
-    let count: Int
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 11))
-                Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(isSelected ? .black : DesignTokens.Colors.textTertiary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surface)
-                        .clipShape(Capsule())
-                }
-            }
-            .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background {
-                if isSelected {
-                    Capsule()
-                        .fill(DesignTokens.Colors.chzzkGreen.opacity(0.12))
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .animation(DesignTokens.Animation.fast, value: isSelected)
-    }
-}
-
-// MARK: - Search Result Rows (Premium)
-
-struct SearchChannelRow: View {
-    let channel: ChannelInfo
-    @State private var isHovered = false
-    
-    var body: some View {
-        HStack(spacing: DesignTokens.Spacing.md) {
-            // Metal 3: 채널 아바타 Circle+stroke → 단일 Metal 텍스처
-            CachedAsyncImage(url: channel.channelImageURL) {
-                Circle().fill(DesignTokens.Colors.surfaceLight)
-                    .overlay { Image(systemName: "person.fill").foregroundStyle(DesignTokens.Colors.textTertiary) }
-            }
-            .frame(width: 48, height: 48)
-            .clipShape(Circle())
-            .overlay {
-                Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-            }
-            .drawingGroup(opaque: false)  // 아바타 클립+stroke 합성 단일 패스
-            
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Text(channel.channelName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        .lineLimit(1)
-                    if channel.verifiedMark {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(DesignTokens.Colors.accentBlue)
-                    }
-                }
-                Text("팔로워 \(formatKoreanCount(channel.followerCount))")
-                    .font(.system(size: 12))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-            }
-            
-            Spacer()
-            
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-        }
-        .padding(DesignTokens.Spacing.sm)
-        .background(isHovered ? DesignTokens.Colors.surfaceHover.opacity(0.3) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .onHover { hovering in isHovered = hovering }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
-    }
-}
-
-struct SearchLiveRow: View {
-    let live: LiveInfo
-    @State private var isHovered = false
-    
-    var body: some View {
-        HStack(spacing: DesignTokens.Spacing.md) {
-            // Thumbnail with live badge
-            // Metal 3: ZStack(thumbnail + LIVE badge) → 단일 Metal 텍스처
-            ZStack(alignment: .topLeading) {
-                CachedAsyncImage(url: live.resolvedLiveImageURL) {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).fill(DesignTokens.Colors.surfaceLight)
-                        .overlay { Image(systemName: "video").foregroundStyle(DesignTokens.Colors.textTertiary) }
-                }
-                .frame(width: 100, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                
-                // Mini LIVE badge
-                Text("LIVE")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(DesignTokens.Colors.live.gradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .padding(4)
-            }
-            .drawingGroup(opaque: false)  // 썸네일+뱃지 합성 단일 패스
-            
-            VStack(alignment: .leading, spacing: 3) {
-                Text(live.liveTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    .lineLimit(2)
-                
-                HStack(spacing: 6) {
-                    Text(live.channel?.channelName ?? "")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    
-                    if let cat = live.liveCategoryValue {
-                        Text(cat)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(DesignTokens.Colors.chzzkGreen.opacity(0.1))
-                            .clipShape(Capsule())
-                    }
-                }
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 8))
-                    Text("\(formatKoreanCount(live.concurrentUserCount))명")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-            
-            Spacer()
-        }
-        .padding(DesignTokens.Spacing.sm)
-        .background(isHovered ? DesignTokens.Colors.surfaceHover.opacity(0.3) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .onHover { hovering in isHovered = hovering }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
-    }
-}
-
-struct SearchVideoRow: View {
-    let video: VODInfo
-    @State private var isHovered = false
-    
-    var body: some View {
-        HStack(spacing: DesignTokens.Spacing.md) {
-            // Metal 3: ZStack(thumbnail + duration badge) → 단일 Metal 텍스처
-            ZStack(alignment: .bottomTrailing) {
-                CachedAsyncImage(url: video.videoImageURL) {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).fill(DesignTokens.Colors.surfaceLight)
-                }
-                .frame(width: 100, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                
-                // Duration badge
-                Text(video.formattedDuration)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(.black.opacity(0.8))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .padding(4)
-            }
-            .drawingGroup(opaque: false)  // 썸네일+길이 뱃지 합성 단일 패스
-            
-            VStack(alignment: .leading, spacing: 3) {
-                Text(video.videoTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    .lineLimit(2)
-                
-                HStack(spacing: 8) {
-                    Text(video.channel?.channelName ?? "")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    
-                    HStack(spacing: 3) {
-                        Image(systemName: "eye")
-                            .font(.system(size: 9))
-                        Text(formatKoreanCount(video.readCount))
-                            .font(.system(size: 11))
-                    }
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-            }
-            
-            Spacer()
-        }
-        .padding(DesignTokens.Spacing.sm)
-        .background(isHovered ? DesignTokens.Colors.surfaceHover.opacity(0.3) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .onHover { hovering in isHovered = hovering }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
-    }
-}
-
-// MARK: - Search Clip Row
-
-struct SearchClipRow: View {
-    let clip: ClipInfo
-    @State private var isHovered = false
-    
-    var body: some View {
-        HStack(spacing: DesignTokens.Spacing.md) {
-            // Metal 3: ZStack(thumbnail + clip badge) → 단일 Metal 텍스처
-            ZStack(alignment: .bottomTrailing) {
-                CachedAsyncImage(url: clip.thumbnailImageURL) {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).fill(DesignTokens.Colors.surfaceLight)
-                        .overlay { Image(systemName: "film.stack").foregroundStyle(DesignTokens.Colors.textTertiary) }
-                }
-                .frame(width: 100, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                
-                HStack(spacing: 2) {
-                    Image(systemName: "scissors")
-                        .font(.system(size: 7))
-                    Text(formattedDuration)
-                        .font(.system(size: 9, weight: .bold))
-                }
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(DesignTokens.Colors.chzzkGreen.opacity(0.85))
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .padding(4)
-            }
-            .drawingGroup(opaque: false)  // 썸네일+클립 뱃지 합성 단일 패스
-            
-            VStack(alignment: .leading, spacing: 3) {
-                Text(clip.clipTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    .lineLimit(2)
-                
-                HStack(spacing: 8) {
-                    Text(clip.channel?.channelName ?? "")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    
-                    HStack(spacing: 3) {
-                        Image(systemName: "eye")
-                            .font(.system(size: 9))
-                        Text(formatKoreanCount(clip.readCount))
-                            .font(.system(size: 11))
-                    }
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-            }
-            
-            Spacer()
-            
-            Image(systemName: "arrow.up.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-        }
-        .padding(DesignTokens.Spacing.sm)
-        .background(isHovered ? DesignTokens.Colors.surfaceHover.opacity(0.3) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .onHover { hovering in isHovered = hovering }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
-    }
-    
-    private var formattedDuration: String {
-        let minutes = clip.duration / 60
-        let seconds = clip.duration % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-}
-
-// MARK: - Korean Count Formatter
-
-private func formatKoreanCount(_ count: Int) -> String {
-    if count >= 100_000_000 {
-        return String(format: "%.1f억", Double(count) / 100_000_000)
-    } else if count >= 10_000 {
-        return String(format: "%.1f만", Double(count) / 10_000)
-    } else if count >= 1_000 {
-        return String(format: "%.1f천", Double(count) / 1_000)
-    }
-    return "\(count)"
-}

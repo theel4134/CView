@@ -66,6 +66,7 @@ public enum APIError: Error, Sendable, LocalizedError, Equatable {
     case decodingFailed(String)
     case networkError(String)
     case rateLimited(retryAfter: TimeInterval)
+    case malformedResponse(String)
 
     public var errorDescription: String? {
         switch self {
@@ -76,6 +77,7 @@ public enum APIError: Error, Sendable, LocalizedError, Equatable {
         case .decodingFailed(let detail): "응답 파싱 실패: \(detail)"
         case .networkError(let msg): "네트워크 오류: \(msg)"
         case .rateLimited(let retryAfter): "요청 제한 (\(Int(retryAfter))초 후 재시도)"
+        case .malformedResponse(let detail): "응답 구조 오류: \(detail)"
         }
     }
 }

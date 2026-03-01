@@ -9,7 +9,7 @@ public actor ResponseCache {
     private var storage: [String: CacheEntry] = [:]
     private let maxEntries: Int
 
-    public init(maxEntries: Int = 200) {
+    public init(maxEntries: Int = ResponseCacheDefaults.maxEntries) {
         self.maxEntries = maxEntries
     }
 
@@ -48,7 +48,7 @@ public actor ResponseCache {
     }
 
     /// 만료된 항목 정리
-    public func purgeExpired(defaultTTL: TimeInterval = 300) {
+    public func purgeExpired(defaultTTL: TimeInterval = ResponseCacheDefaults.defaultTTL) {
         let now = Date.now
         storage = storage.filter { now.timeIntervalSince($0.value.timestamp) < defaultTTL }
     }

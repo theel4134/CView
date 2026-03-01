@@ -25,25 +25,36 @@ struct PerformanceOverlayView: View {
         guard let m = currentMetrics else {
             return [MetricLine(label: "", value: "수집 중...", color: .green.opacity(0.6))]
         }
-        return [
+        var lines: [MetricLine] = [
             MetricLine(label: "FPS",  value: String(format: "%.1f",     m.fps),                  color: fpsColor(m.fps)),
+        ]
+        // 해상도 (VLC 메트릭에서 제공)
+        if let res = m.resolution {
+            lines.append(MetricLine(label: "RES",  value: res,  color: .cyan))
+        }
+        // 비트레이트 (kbps → Mbps)
+        if m.inputBitrateKbps > 0 {
+            lines.append(MetricLine(label: "RATE", value: String(format: "%.1f Mbps", m.inputBitrateKbps / 1_000), color: bitrateColor(m.inputBitrateKbps)))
+        }
+        lines += [
             MetricLine(label: "CPU",  value: String(format: "%.0f%%",   m.cpuUsage),             color: cpuColor(m.cpuUsage)),
             MetricLine(label: "MEM",  value: String(format: "%.0f MB",  m.memoryUsageMB),        color: memColor(m.memoryUsageMB)),
             MetricLine(label: "GPU",  value: String(format: "%.0f%%",   m.gpuUsagePercent),      color: gpuColor(m.gpuUsagePercent)),
             MetricLine(label: "RNDR", value: String(format: "%.0f%%",   m.gpuRendererPercent),   color: gpuColor(m.gpuRendererPercent)),
             MetricLine(label: "GMEM", value: String(format: "%.0f MB",  m.gpuMemoryUsedMB),      color: gpuMemColor(m.gpuMemoryUsedMB)),
-            MetricLine(label: "NET",  value: formatBytes(m.networkBytesReceived),                 color: .cyan),
+            MetricLine(label: "NET",  value: formatSpeed(m.networkSpeedBytesPerSec),              color: .cyan),
             MetricLine(label: "BUF",  value: String(format: "%.0f%%",   m.bufferHealthPercent),  color: bufferColor(m.bufferHealthPercent)),
             MetricLine(label: "LAT",  value: String(format: "%.0f ms",  m.latencyMs),            color: latencyColor(m.latencyMs)),
             MetricLine(label: "DROP", value: "\(m.droppedFrames)",                                color: m.droppedFrames > 0 ? .red : .green),
         ]
+        return lines
     }
 
     // Canvas 고정 레이아웃 상수
     private let rowHeight: CGFloat = 15
     private let headerHeight: CGFloat = 28   // DEBUG 레이블 + 구분선
     private let labelWidth: CGFloat  = 34
-    private let canvasWidth: CGFloat = 124
+    private let canvasWidth: CGFloat = 148
     private let padding: CGFloat     = 8
 
     var body: some View {
@@ -52,7 +63,7 @@ struct PerformanceOverlayView: View {
             // ── DEBUG 헤더 ────────────────────────────────────────
             context.draw(
                 Text("DEBUG")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color.green),
                 at: CGPoint(x: 0, y: 0),
                 anchor: .topLeading
@@ -73,7 +84,7 @@ struct PerformanceOverlayView: View {
                 if !line.label.isEmpty {
                     context.draw(
                         Text(line.label)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .monospaced))
                             .foregroundStyle(Color.green.opacity(0.7)),
                         at: CGPoint(x: 0, y: y),
                         anchor: .topLeading
@@ -83,7 +94,7 @@ struct PerformanceOverlayView: View {
                 // 값 (색상별)
                 context.draw(
                     Text(line.value)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(line.color),
                     at: CGPoint(x: line.label.isEmpty ? 0 : labelWidth + 4, y: y),
                     anchor: .topLeading
@@ -95,11 +106,10 @@ struct PerformanceOverlayView: View {
             height: headerHeight + CGFloat(metricLines.count) * rowHeight
         )
         .padding(padding)
-        .background(.black.opacity(0.78))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.green.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .strokeBorder(.green.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
         }
         .drawingGroup(opaque: false)  // 오버레이 전체 단일 Metal 텍스처
         .onAppear { startListening() }
@@ -154,6 +164,20 @@ struct PerformanceOverlayView: View {
         if bytes < 1024 { return "\(bytes) B" }
         if bytes < 1_048_576 { return String(format: "%.1f KB", Double(bytes) / 1024.0) }
         return String(format: "%.1f MB", Double(bytes) / 1_048_576.0)
+    }
+    
+    private func formatSpeed(_ bytesPerSec: Int) -> String {
+        let mbps = Double(bytesPerSec) * 8.0 / 1_000_000.0
+        if mbps >= 1.0 { return String(format: "%.1f Mbps", mbps) }
+        let kbps = Double(bytesPerSec) * 8.0 / 1_000.0
+        if kbps >= 1.0 { return String(format: "%.0f kbps", kbps) }
+        return "0 kbps"
+    }
+    
+    private func bitrateColor(_ kbps: Double) -> Color {
+        if kbps >= 3_000 { return .green }
+        if kbps >= 1_000 { return .yellow }
+        return .red
     }
     
     // MARK: - Listening

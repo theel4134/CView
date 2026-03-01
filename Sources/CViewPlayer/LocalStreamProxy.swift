@@ -11,6 +11,7 @@
 
 import Foundation
 import Network
+import Synchronization
 import CViewCore
 
 public final class LocalStreamProxy: @unchecked Sendable {
@@ -20,13 +21,19 @@ public final class LocalStreamProxy: @unchecked Sendable {
     // MARK: - Properties
     
     private var listener: NWListener?
-    public private(set) var port: UInt16 = 0
-    public private(set) var targetHost: String = ""
     private let targetScheme = "https"
-    private var isRunning = false
     
-    /// isRunning / port / targetHost 동시 접근 보호용 잠금
-    private let stateLock = NSLock()
+    /// isRunning / port / targetHost 동시 접근 보호 — Swift Concurrency 안전한 Mutex 사용
+    private struct ProxyState: Sendable {
+        var isRunning = false
+        var port: UInt16 = 0
+        var targetHost: String = ""
+    }
+    private let proxyState = Mutex(ProxyState())
+    
+    /// 외부 접근용 computed property
+    public var port: UInt16 { proxyState.withLock { $0.port } }
+    public var targetHost: String { proxyState.withLock { $0.targetHost } }
     
     /// CDN 절대 URL 검출 정규식 — 매 M3U8 요청마다 컴파일하지 않도록 캐시
     private static let cdnRegex: NSRegularExpression = {
@@ -35,36 +42,46 @@ public final class LocalStreamProxy: @unchecked Sendable {
         return try! NSRegularExpression(pattern: pattern) // swiftlint:disable:this force_try
     }()
     
+    /// 활성 NWConnection 수 추적 — 연결 누수 감지 및 제한용
+    private var activeConnectionCount: Int = 0
+    private let connectionCountLock = NSLock()
+    private let maxActiveConnections = ProxyDefaults.maxActiveConnections
+
     private let queue = DispatchQueue(label: "com.cview.streamproxy", qos: .userInteractive, attributes: .concurrent)
     private let logger = AppLogger.player
     
-    private let keepAliveTimeout: TimeInterval = 30.0
+    private let keepAliveTimeout = ProxyDefaults.keepAliveTimeout
     
-    private lazy var proxySession: URLSession = {
+    private var _proxySession: URLSession?
+    
+    private var proxySession: URLSession {
+        if let existing = _proxySession { return existing }
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 15
-        config.timeoutIntervalForResource = 30
-        config.httpMaximumConnectionsPerHost = 12
+        config.timeoutIntervalForRequest = ProxyDefaults.requestTimeout
+        config.timeoutIntervalForResource = ProxyDefaults.resourceTimeout
+        config.httpMaximumConnectionsPerHost = ProxyDefaults.maxConnectionsPerHost
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: config)
-    }()
+        let session = URLSession(configuration: config)
+        _proxySession = session
+        return session
+    }
     
     public init() {}
     
     // MARK: - Lifecycle
     
     @discardableResult
-    public func start(for host: String) throws -> UInt16 {
-        // stateLock으로 읽기/쓰기 경쟁 방지
-        let alreadyRunning = stateLock.withLock { isRunning && targetHost == host && port > 0 }
+    public func start(for host: String) async throws -> UInt16 {
+        // Mutex로 읽기/쓰기 경쟁 방지 (NSLock 대비 cooperative thread 안전)
+        let alreadyRunning = proxyState.withLock { $0.isRunning && $0.targetHost == host && $0.port > 0 }
         if alreadyRunning {
-            let p = stateLock.withLock { port }
+            let p = proxyState.withLock { $0.port }
             logger.info("Proxy already running: localhost:\(p) → \(host)")
             return p
         }
         
         stop()
-        stateLock.withLock { targetHost = host }
+        proxyState.withLock { $0.targetHost = host }
         
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
@@ -72,81 +89,97 @@ public final class LocalStreamProxy: @unchecked Sendable {
         let listener = try NWListener(using: params, on: .any)
         self.listener = listener
         
-        let readySemaphore = DispatchSemaphore(value: 0)
-        nonisolated(unsafe) var startError: Error?
-        
-        listener.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-            switch state {
-            case .ready:
-                self.stateLock.withLock {
-                    self.port = listener.port?.rawValue ?? 0
-                    self.isRunning = true
+        // CheckedContinuation으로 cooperative thread 블로킹 방지
+        // 기존 DispatchSemaphore.wait(3초)는 actor의 cooperative thread를 차단하여
+        // 다른 actor 작업을 지연시키고 멀티라이브 시 thread starvation을 유발했음
+        let assignedPort: UInt16 = try await withCheckedThrowingContinuation { continuation in
+            // Swift 6 strict concurrency: var를 concurrent 클로저에서 캡처 불가
+            // Sendable 호환 atomicFlag 래퍼로 guard
+            let onceGuard = _ProxyContinuationGuard(continuation: continuation)
+            
+            listener.stateUpdateHandler = { [weak self] state in
+                guard let self else { return }
+                switch state {
+                case .ready:
+                    self.proxyState.withLock {
+                        $0.port = listener.port?.rawValue ?? 0
+                        $0.isRunning = true
+                    }
+                    let p = self.proxyState.withLock { $0.port }
+                    self.logger.info("Proxy started: localhost:\(p) → \(host)")
+                    onceGuard.resumeOnce(returning: p)
+                case .failed(let error):
+                    self.logger.error("Proxy start failed: \(error.localizedDescription, privacy: .public)")
+                    self.proxyState.withLock { $0.isRunning = false }
+                    onceGuard.resumeOnce(throwing: error)
+                case .cancelled:
+                    self.proxyState.withLock { $0.isRunning = false }
+                default:
+                    break
                 }
-                self.logger.info("Proxy started: localhost:\(self.port) → \(host)")
-                readySemaphore.signal()
-            case .failed(let error):
-                self.logger.error("Proxy start failed: \(error.localizedDescription, privacy: .public)")
-                startError = error
-                self.stateLock.withLock { self.isRunning = false }
-                readySemaphore.signal()
-            case .cancelled:
-                self.stateLock.withLock { self.isRunning = false }
-            default:
-                break
+            }
+            
+            listener.newConnectionHandler = { [weak self] connection in
+                self?.handleConnection(connection)
+            }
+            
+            listener.start(queue: self.queue)
+            
+            // 3초 타임아웃 — NWListener가 응답하지 않으면 에러 반환
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) {
+                onceGuard.resumeOnce(throwing: ProxyError.startTimeout)
             }
         }
         
-        listener.newConnectionHandler = { [weak self] connection in
-            self?.handleConnection(connection)
-        }
-        
-        listener.start(queue: queue)
-        
-        let result = readySemaphore.wait(timeout: .now() + 3.0)
-        if result == .timedOut {
-            throw ProxyError.startTimeout
-        }
-        if let error = startError { throw error }
-        
-        return port
+        return assignedPort
     }
     
     public func stop() {
         listener?.cancel()
         listener = nil
-        stateLock.withLock {
-            isRunning = false
-            port = 0
-            targetHost = ""
+        // proxySession 무효화 — 장시간 재생 시 URLSession 연결 풀 축적 방지
+        _proxySession?.invalidateAndCancel()
+        _proxySession = nil
+        proxyState.withLock {
+            $0.isRunning = false
+            $0.port = 0
+            $0.targetHost = ""
         }
+        connectionCountLock.withLock { activeConnectionCount = 0 }
+        logger.info("Proxy stopped, session invalidated")
     }
     
     // MARK: - URL Transformation
     
     public func proxyURL(from originalURL: URL) -> URL {
-        guard isRunning, port > 0, !targetHost.isEmpty,
-              let host = originalURL.host, host == targetHost else {
+        let (running, currentPort, currentHost) = proxyState.withLock {
+            ($0.isRunning, $0.port, $0.targetHost)
+        }
+        guard running, currentPort > 0, !currentHost.isEmpty,
+              let host = originalURL.host, host == currentHost else {
             return originalURL
         }
         
         var components = URLComponents(url: originalURL, resolvingAgainstBaseURL: false)
         components?.scheme = "http"
         components?.host = "127.0.0.1"
-        components?.port = Int(port)
+        components?.port = Int(currentPort)
         
         return components?.url ?? originalURL
     }
     
     public func proxyURLString(_ originalURL: String) -> String {
-        guard isRunning, port > 0, !targetHost.isEmpty,
-              originalURL.contains(targetHost) else {
+        let (running, currentPort, currentHost) = proxyState.withLock {
+            ($0.isRunning, $0.port, $0.targetHost)
+        }
+        guard running, currentPort > 0, !currentHost.isEmpty,
+              originalURL.contains(currentHost) else {
             return originalURL
         }
         
         return originalURL.replacingOccurrences(
-            of: "\(targetScheme)://\(targetHost)",
-            with: "http://127.0.0.1:\(port)"
+            of: "\(targetScheme)://\(currentHost)",
+            with: "http://127.0.0.1:\(currentPort)"
         )
     }
     
@@ -160,6 +193,31 @@ public final class LocalStreamProxy: @unchecked Sendable {
     // MARK: - Connection Handling (HTTP/1.1 Keep-Alive)
     
     private func handleConnection(_ connection: NWConnection) {
+        // 활성 연결 수 제한 — 연결 누수 시 시스템 자원 고갈 방지
+        let count = connectionCountLock.withLock {
+            activeConnectionCount += 1
+            return activeConnectionCount
+        }
+        if count > maxActiveConnections {
+            logger.warning("Proxy: max connections (\(self.maxActiveConnections)) exceeded, rejecting")
+            connectionCountLock.withLock { activeConnectionCount -= 1 }
+            connection.cancel()
+            return
+        }
+        
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled:
+                self?.connectionCountLock.withLock { self?.activeConnectionCount -= 1 }
+            case .failed:
+                // cancel() 전에 handler를 nil로 설정하여 .cancelled 재진입 방지 → 이중 decrement 방지
+                connection.stateUpdateHandler = nil
+                self?.connectionCountLock.withLock { self?.activeConnectionCount -= 1 }
+                connection.cancel()
+            default:
+                break
+            }
+        }
         connection.start(queue: queue)
         readHTTPRequest(from: connection, requestCount: 0)
     }
@@ -170,7 +228,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
         }
         queue.asyncAfter(deadline: .now() + keepAliveTimeout, execute: timeoutWorkItem)
         
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: ProxyDefaults.maxReceiveLength) { [weak self] data, _, isComplete, error in
             timeoutWorkItem.cancel()
             
             guard let self else {
@@ -237,16 +295,16 @@ public final class LocalStreamProxy: @unchecked Sendable {
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 15
+        request.timeoutInterval = ProxyDefaults.upstreamRequestTimeout
         
         // [멀티CDN] 실제 업스트림 호스트 헤더 사용 (크로스CDN 요청 포함)
         request.setValue(upstreamHost, forHTTPHeaderField: "Host")
         request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            CommonHeaders.safariUserAgent,
             forHTTPHeaderField: "User-Agent"
         )
-        request.setValue("https://chzzk.naver.com/", forHTTPHeaderField: "Referer")
-        request.setValue("https://chzzk.naver.com", forHTTPHeaderField: "Origin")
+        request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
+        request.setValue(CommonHeaders.chzzkOrigin, forHTTPHeaderField: "Origin")
         
         proxySession.dataTask(with: request) { [weak self] data, response, error in
             guard let self else {
@@ -381,6 +439,35 @@ public enum ProxyError: Error, LocalizedError, Sendable {
         switch self {
         case .startTimeout: "프록시 시작 시간 초과"
         case .invalidRequest: "잘못된 요청"
+        }
+    }
+}
+
+// MARK: - Continuation Guard (Swift 6 Concurrency Safe)
+
+/// CheckedContinuation을 정확히 한 번만 resume하도록 보장하는 스레드 안전 래퍼.
+/// Swift 6 strict concurrency에서 var 캡처가 불가하므로 클래스 기반으로 구현.
+private final class _ProxyContinuationGuard: @unchecked Sendable {
+    private var continuation: CheckedContinuation<UInt16, any Error>?
+    private let lock = NSLock()
+    
+    init(continuation: CheckedContinuation<UInt16, any Error>) {
+        self.continuation = continuation
+    }
+    
+    func resumeOnce(returning value: UInt16) {
+        lock.withLock {
+            guard let cont = continuation else { return }
+            continuation = nil
+            cont.resume(returning: value)
+        }
+    }
+    
+    func resumeOnce(throwing error: any Error) {
+        lock.withLock {
+            guard let cont = continuation else { return }
+            continuation = nil
+            cont.resume(throwing: error)
         }
     }
 }

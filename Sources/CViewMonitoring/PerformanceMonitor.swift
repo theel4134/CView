@@ -24,6 +24,9 @@ public actor PerformanceMonitor {
         public let gpuUsagePercent: Double      // GPU 전체 사용률 (Device Utilization %)
         public let gpuRendererPercent: Double   // 렌더러 사용률 (Renderer Utilization %)
         public let gpuMemoryUsedMB: Double      // GPU 사용 중인 통합 메모리 (MB)
+        public let resolution: String?           // 영상 해상도 (예: "1920x1080")
+        public let inputBitrateKbps: Double      // 입력 비트레이트 (kbps)
+        public let networkSpeedBytesPerSec: Int  // 실시간 네트워크 수신 속도 (bytes/sec)
         public let timestamp: Date
         
         public init(
@@ -37,6 +40,9 @@ public actor PerformanceMonitor {
             gpuUsagePercent: Double = 0,
             gpuRendererPercent: Double = 0,
             gpuMemoryUsedMB: Double = 0,
+            resolution: String? = nil,
+            inputBitrateKbps: Double = 0,
+            networkSpeedBytesPerSec: Int = 0,
             timestamp: Date = Date()
         ) {
             self.fps = fps
@@ -49,6 +55,9 @@ public actor PerformanceMonitor {
             self.gpuUsagePercent = gpuUsagePercent
             self.gpuRendererPercent = gpuRendererPercent
             self.gpuMemoryUsedMB = gpuMemoryUsedMB
+            self.resolution = resolution
+            self.inputBitrateKbps = inputBitrateKbps
+            self.networkSpeedBytesPerSec = networkSpeedBytesPerSec
             self.timestamp = timestamp
         }
     }
@@ -70,6 +79,19 @@ public actor PerformanceMonitor {
     private var _networkBytes: Int = 0
     private var _bufferHealth: Double = 0
     private var _latencyMs: Double = 0
+    private var _resolution: String?
+    private var _inputBitrateKbps: Double = 0
+    private var _networkSpeedBytesPerSec: Int = 0
+    
+    // 메모리 압력 감시 — 장시간 재생 시 메모리 누수 대응
+    private var memoryPressureSource: DispatchSourceMemoryPressure?
+    /// 메모리 압력 감지 시 호출되는 콜백 (캐시 정리 등)
+    public var onMemoryWarning: (@Sendable () -> Void)?
+    /// 메모리 사용량 이력 — 메모리 증가 추세 분석용 (최근 60개, 1분 간격)
+    private var memoryTrend: [Double] = []
+    private let memoryTrendMaxSize = 60
+    /// 메모리 증가 추세 경고 임계치 (MB/분) — 이 이상이면 누수 의심
+    private let memoryGrowthWarningThreshold: Double = 50.0
     
     public var currentMetrics: Metrics? { metricsHistory.last }
     
@@ -86,15 +108,16 @@ public actor PerformanceMonitor {
         guard !isRunning else { return }
         isRunning = true
         
-        collectionTask = Task { [weak self] in
-            guard let self else { return }
-            
+        collectionTask = Task {
             let timer = AsyncTimerSequence(interval: interval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 await self.collectMetrics()
             }
         }
+        
+        // macOS 메모리 압력 이벤트 감시 — 시스템이 메모리 부족 시 자동 대응
+        startMemoryPressureMonitor()
         
         logger.info("Performance monitoring started")
     }
@@ -104,6 +127,12 @@ public actor PerformanceMonitor {
         isRunning = false
         collectionTask?.cancel()
         collectionTask = nil
+        memoryPressureSource?.cancel()
+        memoryPressureSource = nil
+        // stream 소비자가 hang하지 않도록 continuation 종료
+        metricsContinuation?.finish()
+        metricsContinuation = nil
+        _metricsStream = nil
         logger.info("Performance monitoring stopped")
     }
     
@@ -140,14 +169,27 @@ public actor PerformanceMonitor {
         _latencyMs = ms
     }
     
+    public func updateResolution(_ resolution: String?) {
+        _resolution = resolution
+    }
+    
+    public func updateInputBitrate(_ kbps: Double) {
+        _inputBitrateKbps = kbps
+    }
+    
+    public func updateNetworkSpeed(_ bytesPerSec: Int) {
+        _networkSpeedBytesPerSec = bytesPerSec
+    }
+    
     // MARK: - Private
     
     private func collectMetrics() {
         let gpu = readGPUStats()
+        let memUsage = currentMemoryUsage()
         let metrics = Metrics(
             fps: _currentFPS,
             droppedFrames: _droppedFrames,
-            memoryUsageMB: currentMemoryUsage(),
+            memoryUsageMB: memUsage,
             cpuUsage: currentCPUUsage(),
             networkBytesReceived: _networkBytes,
             bufferHealthPercent: _bufferHealth,
@@ -155,6 +197,9 @@ public actor PerformanceMonitor {
             gpuUsagePercent: gpu.usage,
             gpuRendererPercent: gpu.renderer,
             gpuMemoryUsedMB: gpu.memMB,
+            resolution: _resolution,
+            inputBitrateKbps: _inputBitrateKbps,
+            networkSpeedBytesPerSec: _networkSpeedBytesPerSec,
             timestamp: Date()
         )
         
@@ -164,6 +209,59 @@ public actor PerformanceMonitor {
         }
         
         metricsContinuation?.yield(metrics)
+        
+        // 메모리 증가 추세 분석 (60초 간격으로 샘플링 — 매초 호출에서 60초마다 1개)
+        // metricsHistory count를 기준으로 60번째마다 기록
+        if metricsHistory.count % 60 == 0 {
+            memoryTrend.append(memUsage)
+            if memoryTrend.count > memoryTrendMaxSize {
+                memoryTrend.removeFirst()
+            }
+            
+            // 최근 5분(5 샘플) 동안 메모리 증가 추세 확인
+            if memoryTrend.count >= 5 {
+                let recentCount = min(5, memoryTrend.count)
+                let recent = Array(memoryTrend.suffix(recentCount))
+                let growthPerMinute = (recent.last! - recent.first!) / Double(recentCount - 1)
+                
+                if growthPerMinute > memoryGrowthWarningThreshold {
+                    logger.warning("⚠️ 메모리 증가 추세 감지: \(String(format: "%.1f", growthPerMinute))MB/분 (현재 \(String(format: "%.0f", memUsage))MB)")
+                    // 메모리 경고 콜백 트리거
+                    onMemoryWarning?()
+                }
+            }
+        }
+    }
+
+    // MARK: - Memory Pressure Monitor
+    
+    /// macOS 메모리 압력 이벤트 감시 — DispatchSourceMemoryPressure 기반
+    /// 시스템이 메모리 압력을 감지하면 캐시 정리 콜백을 자동 호출
+    private nonisolated func startMemoryPressureMonitor() {
+        let source = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.warning, .critical],
+            queue: .global(qos: .utility)
+        )
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let level: String
+            let flags = source.data
+            if flags.contains(.critical) {
+                level = "CRITICAL"
+            } else {
+                level = "WARNING"
+            }
+            Task {
+                await self.logger.warning("🔴 메모리 압력 감지: \(level) — 캐시 정리 실행")
+                await self.onMemoryWarning?()
+            }
+        }
+        source.resume()
+        Task { await self.setMemoryPressureSource(source) }
+    }
+    
+    private func setMemoryPressureSource(_ source: DispatchSourceMemoryPressure) {
+        memoryPressureSource = source
     }
     
     /// Apple Silicon GPU 사용률 조회 (IOKit IOAccelerator → PerformanceStatistics)

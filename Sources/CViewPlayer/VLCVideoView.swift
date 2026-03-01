@@ -2,20 +2,22 @@
 // CViewPlayer — VLC Video NSViewRepresentable (SwiftUI)
 //
 // [아키텍처 원칙]
-// VLCPlayerEngine은 자신만의 VLCKitSPM.VLCVideoView(playerView)를 소유한다.
-// VLCMediaPlayer는 play() 직전 MainActor에서 setVideoView(playerView)로 바인딩된다.
+// VLCPlayerEngine은 자신만의 VLCLayerHostView(playerView)를 소유한다.
+// VLCLayerHostView는 NSView 컨테이너로, VLC가 내부적으로 렌더링 서피스를
+// 생성하여 이 뷰의 서브뷰로 추가한다.
+// VLCMediaPlayer.drawable = playerView 로 설정하면 정상 렌더링.
 //
 // 이 NSViewRepresentable은 NSView container를 관리하고,
-// engine.playerView를 container의 서브뷰로 삽입/교체한다.
+// engine.playerView(VLCLayerHostView)를 container의 서브뷰로 삽입/교체한다.
 //
 // [왜 container 방식인가?]
 // NSViewRepresentable은 makeNSView에서 한 번 생성된 NSView를 SwiftUI가 계속 재사용한다.
 // engine이 교체(stopStream→startStream)될 때 새 engine의 playerView를 서브뷰로 swap할 수 있도록
 // container(outer NSView)를 유지하며 그 안의 playerView만 교체한다.
 //
-// [drawable/setVideoView 관리 제거]
-// 이전 방식: NSViewRepresentable이 player.drawable = view 를 호출 (타이밍 경쟁 조건 발생).
-// 현재 방식: 엔진이 playerView를 소유하고 play() 직전 setVideoView 확정 → drawable 관리 불필요.
+// [drawable 관리]
+// 엔진이 playerView를 소유하고 play() 직전 player.drawable = playerView 확정
+// → NSViewRepresentable에서 drawable 관리 불필요.
 
 import SwiftUI
 import AppKit
@@ -81,7 +83,7 @@ public struct VLCVideoView: NSViewRepresentable {
 
     // MARK: - Private Helpers
 
-    private func attach(_ playerView: VLCKitSPM.VLCVideoView, to container: NSView) {
+    private func attach(_ playerView: VLCLayerHostView, to container: NSView) {
         // Auto Layout으로 container를 꽉 채움 (makeNSView 시 frame이 zero일 수 있으므로
         // autoresizingMask 프레임 세팅보다 Auto Layout이 더 안정적)
         playerView.translatesAutoresizingMaskIntoConstraints = false

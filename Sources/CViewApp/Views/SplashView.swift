@@ -28,7 +28,7 @@ struct SplashView: View {
     var body: some View {
         ZStack {
             // 배경
-            DesignTokens.Colors.backgroundDark
+            DesignTokens.Colors.background
                 .ignoresSafeArea()
 
             // ── 확산 링 ─────────────────────────────────────────────
@@ -45,11 +45,11 @@ struct SplashView: View {
 
                 VStack(spacing: 6) {
                     Text("CView")
-                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .font(DesignTokens.Typography.custom(size: 34, weight: .black, design: .rounded))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                     Text("치지직 스트리밍 뷰어")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(DesignTokens.Typography.bodyMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .tracking(0.8)
                 }
@@ -74,7 +74,7 @@ struct SplashView: View {
 
     private func runAnimation() {
         // 1단계: 아이콘 등장 (스프링)
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.68).delay(0.05)) {
+        withAnimation(DesignTokens.Animation.bouncy.delay(0.05)) {
             iconScale = 1.0
             iconOpacity = 1.0
         }
@@ -96,16 +96,18 @@ struct SplashView: View {
         }
 
         // 3단계: 텍스트 슬라이드 업
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.78).delay(0.35)) {
+        withAnimation(DesignTokens.Animation.smooth.delay(0.35)) {
             textOpacity = 1.0
             textOffset = 0
         }
 
         // 4단계: 전체 페이드 아웃 → 메인 화면 전환
-        withAnimation(.easeInOut(duration: 0.45).delay(1.4)) {
+        withAnimation(DesignTokens.Animation.slow.delay(1.4)) {
             fadeOut = 0
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.85) {
+        // Swift Concurrency 기반 — DispatchQueue.main.asyncAfter 대체
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.85))
             onFinished()
         }
     }

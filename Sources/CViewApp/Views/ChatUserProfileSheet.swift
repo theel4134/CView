@@ -18,23 +18,23 @@ struct ChatUserProfileSheet: View {
                 if let urlString = message.profileImageUrl, let url = URL(string: urlString) {
                     CachedAsyncImage(url: url) {
                         Image(systemName: "person.circle.fill")
-                            .font(.system(size: 48))
+                            .font(DesignTokens.Typography.custom(size: 48))
                             .foregroundStyle(.secondary)
                     }
                     .frame(width: 56, height: 56)
                     .clipShape(Circle())
                 } else {
                     Image(systemName: "person.circle.fill")
-                        .font(.system(size: 48))
+                        .font(DesignTokens.Typography.custom(size: 48))
                         .foregroundStyle(.secondary)
                 }
 
                 Text(message.nickname)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(DesignTokens.Typography.custom(size: 16, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                 Text("ID: \(message.userId)")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DesignTokens.Typography.custom(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
@@ -51,10 +51,10 @@ struct ChatUserProfileSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
+                .padding(.vertical, DesignTokens.Spacing.xs)
+                .padding(.horizontal, DesignTokens.Spacing.xs)
                 .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
 
                 Button {
                     if let url = URL(string: "https://chzzk.naver.com/live/\(message.userId)") {
@@ -66,13 +66,13 @@ struct ChatUserProfileSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
+                .padding(.vertical, DesignTokens.Spacing.xs)
+                .padding(.horizontal, DesignTokens.Spacing.xs)
                 .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
 
                 Divider()
-                    .padding(.vertical, 4)
+                    .padding(.vertical, DesignTokens.Spacing.xxs)
 
                 Button(role: .destructive) {
                     Task { await chatVM?.blockUser(message.userId) }
@@ -80,16 +80,16 @@ struct ChatUserProfileSheet: View {
                 } label: {
                     Label("차단", systemImage: "person.fill.xmark")
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DesignTokens.Colors.error)
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
+                .padding(.vertical, DesignTokens.Spacing.xs)
+                .padding(.horizontal, DesignTokens.Spacing.xs)
                 .background(Color.red.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             }
         }
-        .padding(20)
+        .padding(DesignTokens.Spacing.xl)
         .frame(width: 260)
         .background(DesignTokens.Colors.backgroundElevated)
     }

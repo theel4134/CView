@@ -143,6 +143,11 @@ public struct HLSManifestParser: Sendable {
             }
         }
         
+        // 빈 variants → 유효하지 않은 매니페스트
+        guard !variants.isEmpty else {
+            throw AppError.player(.invalidManifest)
+        }
+        
         // Sort by bandwidth descending
         let sorted = variants.sorted { $0.bandwidth > $1.bandwidth }
         return MasterPlaylist(variants: sorted, uri: baseURL)
@@ -194,7 +199,11 @@ public struct HLSManifestParser: Sendable {
                 
             } else if trimmed.hasPrefix("#EXT-X-PROGRAM-DATE-TIME:") {
                 let dateStr = String(trimmed.dropFirst("#EXT-X-PROGRAM-DATE-TIME:".count))
-                currentPDT = ISO8601DateFormatter().date(from: dateStr)
+                let fmtFrac = ISO8601DateFormatter()
+                fmtFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let fmtPlain = ISO8601DateFormatter()
+                fmtPlain.formatOptions = [.withInternetDateTime]
+                currentPDT = fmtFrac.date(from: dateStr) ?? fmtPlain.date(from: dateStr)
                 
             } else if trimmed == "#EXT-X-DISCONTINUITY" {
                 currentDiscontinuity = true
@@ -337,7 +346,17 @@ public struct HLSManifestParser: Sendable {
         if cleaned.hasPrefix("http://") || cleaned.hasPrefix("https://") {
             return URL(string: cleaned) ?? base
         }
-        return base.deletingLastPathComponent().appendingPathComponent(cleaned)
+        // [Fix] appendingPathComponent()는 파일시스템 API로서 percent-encoding을 재적용한다.
+        // Chzzk CDN의 Akamai 토큰 경로에 포함된 %2F가 %252F로 이중 인코딩되면
+        // CDN이 HTTP 400을 반환하여 VLC가 OPENING → ERROR 즉시 전환된다.
+        //
+        // URL(string:relativeTo:)는 RFC 3986에 따라 기존 percent-encoding을 보존하므로
+        // 이중 인코딩 없이 올바른 URL을 생성한다.
+        let baseDir = base.deletingLastPathComponent()
+        if let resolved = URL(string: cleaned, relativeTo: baseDir) {
+            return resolved.absoluteURL
+        }
+        return baseDir.appendingPathComponent(cleaned)  // 최후 폴백
     }
     
     private func parseByteRange(_ input: String) -> MediaPlaylist.ByteRange? {

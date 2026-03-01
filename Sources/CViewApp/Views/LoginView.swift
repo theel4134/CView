@@ -64,17 +64,17 @@ struct LoginView: View {
             HStack {
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .fill(DesignTokens.Gradients.primary)
                             .frame(width: 24, height: 24)
                         
                         Text("C")
-                            .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(.black)
+                            .font(DesignTokens.Typography.custom(size: 14, weight: .black))
+                            .foregroundStyle(DesignTokens.Colors.onPrimary)
                     }
                     
                     Text("CView 로그인")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(DesignTokens.Typography.bodySemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                 }
                 
@@ -84,22 +84,22 @@ struct LoginView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .frame(width: 28, height: 28)
-                        .background(DesignTokens.Colors.surface)
+                        .background(.ultraThinMaterial)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
             
             Text("로그인하여 팔로잉, 채팅 등 모든 기능을 이용하세요")
-                .font(.system(size: 12))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.backgroundDark)
+        .background(DesignTokens.Colors.background)
     }
     
     // MARK: - OAuth Login
@@ -128,17 +128,17 @@ struct LoginView: View {
                     .frame(width: 80, height: 80)
                 
                 Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 36))
+                    .font(DesignTokens.Typography.custom(size: 36))
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen)
             }
             
             VStack(spacing: DesignTokens.Spacing.xs) {
                 Text("치지직 OAuth 로그인")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(DesignTokens.Typography.custom(size: 18, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 
                 Text("치지직 공식 인증을 통해\n안전하게 로그인합니다")
-                    .font(.system(size: 13))
+                    .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -159,14 +159,14 @@ struct LoginView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 16))
+                        .font(DesignTokens.Typography.custom(size: 16))
                     Text("치지직으로 로그인")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(DesignTokens.Typography.bodySemibold)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(DesignTokens.Colors.chzzkGreen)
-                .foregroundStyle(.black)
+                .foregroundStyle(DesignTokens.Colors.onPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.md))
             }
             .buttonStyle(.plain)
@@ -178,12 +178,12 @@ struct LoginView: View {
     private func oauthBenefitRow(icon: String, text: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 .frame(width: 20)
             
             Text(text)
-                .font(.system(size: 12))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
     }
@@ -213,7 +213,7 @@ struct LoginView: View {
                     ProgressView()
                         .controlSize(.large)
                     Text("인증 준비 중...")
-                        .font(.system(size: 13))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -242,11 +242,11 @@ struct LoginView: View {
     private func errorBar(_ error: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 11))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.error)
             
             Text(error)
-                .font(.system(size: 12))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.error)
             
             Spacer()
@@ -255,7 +255,7 @@ struct LoginView: View {
                 loginError = nil
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10))
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                     .foregroundStyle(DesignTokens.Colors.error.opacity(0.7))
             }
             .buttonStyle(.plain)
@@ -263,7 +263,7 @@ struct LoginView: View {
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DesignTokens.Colors.error.opacity(0.08))
+        .background(.thinMaterial)
     }
     
     // MARK: - OAuth Actions

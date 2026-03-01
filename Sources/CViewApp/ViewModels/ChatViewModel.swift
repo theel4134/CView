@@ -6,6 +6,81 @@ import Foundation
 import SwiftUI
 import CViewCore
 import CViewChat
+import AppKit
+
+// MARK: - Chat TTS Service
+
+/// 후원/구독 메시지를 음성으로 읽어주는 TTS 서비스
+/// NSSpeechSynthesizer 기반, 큐 방식 (최대 5개 대기)
+@MainActor
+final class ChatTTSService: NSObject, NSSpeechSynthesizerDelegate {
+    private let synthesizer = NSSpeechSynthesizer()
+    private var queue: [String] = []
+    private let maxQueueSize = 5
+    private var isSpeaking = false
+
+    var isEnabled: Bool = false
+    var volume: Float = 0.8 {
+        didSet { synthesizer.volume = volume }
+    }
+    var rate: Float = 200 {
+        didSet { synthesizer.rate = rate }
+    }
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+        synthesizer.volume = volume
+        synthesizer.rate = rate
+    }
+
+    /// 후원/구독 메시지를 TTS 큐에 추가
+    func enqueue(_ message: ChatMessageItem) {
+        guard isEnabled else { return }
+        guard let text = formatTTSText(message) else { return }
+        guard queue.count < maxQueueSize else { return }
+        queue.append(text)
+        speakNextIfIdle()
+    }
+
+    /// TTS 중지 및 큐 초기화
+    func stop() {
+        synthesizer.stopSpeaking()
+        queue.removeAll()
+        isSpeaking = false
+    }
+
+    // MARK: - Private
+
+    private func formatTTSText(_ message: ChatMessageItem) -> String? {
+        if message.type == .donation, let amount = message.donationAmount {
+            let content = message.content.isEmpty ? "" : ". \(message.content)"
+            return "\(message.nickname)님이 \(amount)원 후원\(content)"
+        } else if message.type == .subscription {
+            if let months = message.subscriptionMonths, months > 0 {
+                return "\(message.nickname)님이 \(months)개월 구독"
+            }
+            return "\(message.nickname)님이 구독"
+        }
+        return nil
+    }
+
+    private func speakNextIfIdle() {
+        guard !isSpeaking, !queue.isEmpty else { return }
+        let text = queue.removeFirst()
+        isSpeaking = true
+        synthesizer.startSpeaking(text)
+    }
+
+    // MARK: - NSSpeechSynthesizerDelegate
+
+    nonisolated func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+        Task { @MainActor [weak self] in
+            self?.isSpeaking = false
+            self?.speakNextIfIdle()
+        }
+    }
+}
 
 // MARK: - Chat ViewModel
 
@@ -15,7 +90,10 @@ public final class ChatViewModel {
     
     // MARK: - State
     
-    public var messages: [ChatMessageItem] = []
+    /// Virtualized message buffer — ring buffer that caps visible messages at `maxVisibleMessages`.
+    /// Using a ring buffer instead of plain Array gives O(1) append/eviction and avoids
+    /// Array.removeFirst reallocation when trimming old messages.
+    public var messages = ChatMessageBuffer(capacity: 200)
     public var connectionState: ChatConnectionState = .disconnected
     public var inputText = ""
     public var isAutoScrollEnabled = true
@@ -32,24 +110,65 @@ public final class ChatViewModel {
     public var showDonation: Bool = true
 
     // Filter / capacity
-    public var maxVisibleMessages: Int = 500
+    public var maxVisibleMessages: Int = 200 {
+        didSet {
+            if maxVisibleMessages != messages.capacity {
+                messages.resize(to: maxVisibleMessages)
+            }
+        }
+    }
     public var blockedWords: [String] = []
     
     // Stats
     public var messageCount: Int = 0
     public var messagesPerSecond: Double = 0
+
+    // MARK: - Chat History & Replay Mode
+
+    /// Full chat history (up to 5000 messages), separate from the visible ring buffer.
+    public var chatHistory: [ChatMessageItem] = []
+
+    /// When true, the user has scrolled up — auto-scroll is paused and new messages
+    /// accumulate without jumping the viewport.
+    public var isReplayMode: Bool = false
+
+    /// Number of new messages received while in replay mode.
+    public var unreadCount: Int = 0
+
+    /// Maximum number of messages retained in the full history buffer.
+    private static let maxHistorySize = 5000
     
     // Emoticon/highlight
     public var highlightedUsers: Set<String> = []
     public var pinnedMessage: ChatMessageItem?
     public var isFilterEnabled: Bool = true
+
+    // MARK: - Autocomplete State
+
+    /// 이모티콘 자동완성 제안 목록 (`:keyword` 입력 시)
+    public var emoticonSuggestions: [EmoticonSuggestion] = []
+    /// 멘션 자동완성 제안 목록 (`@name` 입력 시)
+    public var mentionSuggestions: [MentionSuggestion] = []
+    /// 선택된 자동완성 항목 인덱스
+    public var autocompleteSelectedIndex: Int = 0
+    /// 현재 자동완성 트리거
+    public var autocompleteTrigger: AutocompleteTrigger = .none
+    /// 최근 채팅 참여자 (멘션 제안용, 최신순)
+    public var recentChatters: [MentionSuggestion] = []
+    /// 최대 보관할 최근 참여자 수
+    private static let maxRecentChatters = 100
+
+    /// 자동완성 제안이 활성 상태인지
+    public var isAutocompleteActive: Bool {
+        !emoticonSuggestions.isEmpty || !mentionSuggestions.isEmpty
+    }
     
     /// 채널 이모티콘 맵 (emoticonId → imageURL)
     public var channelEmoticons: [String: String] = [:] {
         didSet {
             guard !channelEmoticons.isEmpty, !messages.isEmpty else { return }
-            // 채널 이모티콘 로드 완료 후 기존 메시지에 소급 적용
-            messages = messages.map { enrichWithChannelEmoticons($0) }
+            // 채널 이모티콘 로드 완료 후 기존 메시지에 소급 적용 (in-place, no array copy)
+            messages.mapInPlace { enrichWithChannelEmoticons($0) }
         }
     }
     
@@ -94,6 +213,9 @@ public final class ChatViewModel {
     private var moderationService: ChatModerationService?
     private let logger = AppLogger.chat
     
+    /// TTS 서비스 (후원/구독 메시지 음성 읽기)
+    private let ttsService = ChatTTSService()
+    
     /// 차단 목록 변경 시 외부 저장용 콜백
     public var onBlockedUsersChanged: (([String]) -> Void)?
     
@@ -109,9 +231,40 @@ public final class ChatViewModel {
     private var statsTask: Task<Void, Never>?
     private var recentMessageTimestamps: [Date] = []
     
+    // MARK: - Batching (reduces SwiftUI update frequency from 1000/s → ~10/s)
+    
+    /// Pending messages accumulated before the next batch flush.
+    @ObservationIgnored private var pendingMessages: [ChatMessageItem] = []
+    /// Active batch‐flush timer task.
+    @ObservationIgnored private var batchFlushTask: Task<Void, Never>?
+    /// Batch flush interval in nanoseconds (default 100 ms).
+    @ObservationIgnored private let batchFlushIntervalNs: UInt64 = 100_000_000
+
+    // MARK: - Scroll Position Debouncing
+
+    /// 리플레이 모드 진입 디바운스 태스크 — 0.3초 지연으로 깜빡임 방지
+    @ObservationIgnored private var replayModeDebounceTask: Task<Void, Never>?
+    
+    // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
+    
+    /// 고유 참여 사용자 수 (증분 캐시)
+    public private(set) var uniqueUserCount: Int = 0
+    @ObservationIgnored private var _uniqueUsers = Set<String>()
+    
+    /// 도네이션 총 횟수 (증분 캐시)
+    public private(set) var donationCount: Int = 0
+    
+    /// 도네이션 총 금액 (증분 캐시)
+    public private(set) var totalDonationAmount: Int = 0
+    
+    /// 구독 메시지 수 (증분 캐시)
+    public private(set) var subscriptionCount: Int = 0
+    
     // MARK: - Initialization
     
-    public init() {}
+    public init() {
+        pendingMessages.reserveCapacity(64)
+    }
 
     /// SettingsStore.chat 에서 뷰모델 상태를 일괄 동기화
     public func applySettings(_ settings: CViewCore.ChatSettings) {
@@ -129,6 +282,9 @@ public final class ChatViewModel {
         isFilterEnabled = settings.chatFilterEnabled
         blockedWords = settings.blockedWords
         initialBlockedUsers = settings.blockedUsers
+        ttsService.isEnabled = settings.ttsEnabled
+        ttsService.volume = settings.ttsVolume
+        ttsService.rate = settings.ttsRate
     }
 
     /// 현재 뷰모델 상태를 ChatSettings 스냅샷으로 내보내기 (팝업에서 저장 시 사용)
@@ -166,6 +322,15 @@ public final class ChatViewModel {
         
         // 메시지 초기화 (채널 전환 시 이전 채널 메시지 제거)
         messages.removeAll()
+        pendingMessages.removeAll(keepingCapacity: true)
+        chatHistory.removeAll()
+        exitReplayMode()
+        
+        // 통계 카운터 리셋 (채널 전환 시 이전 채널 수치 누적 방지)
+        messageCount = 0
+        messagesPerSecond = 0
+        recentMessageTimestamps.removeAll()
+        resetIncrementalStats()
         
         let config = ChatEngine.Configuration(
             chatChannelId: chatChannelId,
@@ -193,6 +358,12 @@ public final class ChatViewModel {
         eventListenTask = nil
         statsTask?.cancel()
         statsTask = nil
+        batchFlushTask?.cancel()
+        batchFlushTask = nil
+        replayModeDebounceTask?.cancel()
+        replayModeDebounceTask = nil
+        pendingMessages.removeAll(keepingCapacity: true)
+        ttsService.stop()
         
         await chatEngine?.disconnect()
         chatEngine = nil
@@ -237,9 +408,10 @@ public final class ChatViewModel {
                 isNotice: false,
                 isSystem: false
             )
+            // Local messages bypass batching for instant feedback
+            appendToHistory([localMessage])
             messages.append(localMessage)
-            trimMessageBuffer()
-            
+
             inputText = ""
         } catch {
             errorMessage = "메시지 전송 실패: \(error.localizedDescription)"
@@ -313,18 +485,82 @@ public final class ChatViewModel {
     /// Clear all displayed messages
     public func clearMessages() {
         messages.removeAll()
+        pendingMessages.removeAll(keepingCapacity: true)
+        batchFlushTask?.cancel()
+        batchFlushTask = nil
         messageCount = 0
+        chatHistory.removeAll()
+        resetIncrementalStats()
+        exitReplayMode()
         Task { await chatEngine?.clearMessages() }
     }
     
     /// Toggle auto-scroll
     public func toggleAutoScroll() {
         isAutoScrollEnabled.toggle()
+        if !isAutoScrollEnabled {
+            enterReplayMode()
+        } else {
+            exitReplayMode()
+        }
     }
-    
-    /// Scroll to bottom
+
+    /// Scroll to bottom and exit replay mode
     public func scrollToBottom() {
+        exitReplayMode()
+    }
+
+    // MARK: - Scroll Position
+
+    /// 스크롤 위치 변경 시 호출 — 디바운싱을 통해 안정적인 리플레이 모드 전환
+    /// - Parameter isNearBottom: 스크롤이 하단 근처(50px 이내)인지 여부
+    public func onScrollPositionChanged(isNearBottom: Bool) {
+        if isNearBottom {
+            // 하단에 도달하면 즉시 디바운스 취소 + 리플레이 모드 해제
+            replayModeDebounceTask?.cancel()
+            replayModeDebounceTask = nil
+            if isReplayMode {
+                exitReplayMode()
+            }
+        } else {
+            // 하단에서 벗어나면 0.3초 디바운싱 후 리플레이 모드 진입
+            guard !isReplayMode, replayModeDebounceTask == nil else { return }
+            guard messages.count > 3 else { return }
+            replayModeDebounceTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, let self else { return }
+                guard self.messages.count > 3 else { return }
+                self.enterReplayMode()
+                self.replayModeDebounceTask = nil
+            }
+        }
+    }
+
+    // MARK: - Replay Mode
+
+    /// Enter replay mode (user scrolled away from bottom).
+    public func enterReplayMode() {
+        guard !isReplayMode else { return }
+        isReplayMode = true
+        unreadCount = 0
+        isAutoScrollEnabled = false
+    }
+
+    /// Exit replay mode and jump back to the latest messages.
+    public func exitReplayMode() {
+        replayModeDebounceTask?.cancel()
+        replayModeDebounceTask = nil
+        isReplayMode = false
+        unreadCount = 0
         isAutoScrollEnabled = true
+    }
+
+    /// Append items to the persistent history buffer, capping at `maxHistorySize`.
+    private func appendToHistory(_ items: [ChatMessageItem]) {
+        chatHistory.append(contentsOf: items)
+        if chatHistory.count > Self.maxHistorySize {
+            chatHistory.removeFirst(chatHistory.count - Self.maxHistorySize)
+        }
     }
     
     // MARK: - Private Methods
@@ -391,12 +627,38 @@ public final class ChatViewModel {
         case .messagesCleared:
             messages.removeAll()
         }
-        
-        trimMessageBuffer()
     }
     
     private func appendFilteredMessages(_ msgs: [ChatMessage]) async {
         // 메시지의 이모티콘을 수집 (피커용 가상 팩 구성에 사용)
+        collectEmoticons(from: msgs)
+        
+        // 채널 이모티콘 맵과 필터 설정을 캡처 — 백그라운드 Task에서 사용
+        let channelEmotes = channelEmoticons
+        let donationsOnly = showDonationsOnly
+        let showDon = showDonation
+        
+        // Moderation 필터링 (actor hop은 여기서 — 결과는 [ChatMessage])
+        let filteredMsgs: [ChatMessage]
+        if let modService = moderationService {
+            filteredMsgs = await modService.filterMessages(msgs)
+        } else {
+            filteredMsgs = msgs
+        }
+        
+        // 무거운 변환/필터링을 백그라운드 스레드에서 수행 — 메인 스레드 부하 제거
+        let items = await Task.detached(priority: .userInitiated) {
+            let rawItems = filteredMsgs.map { msg in
+                Self.enrichWithChannelEmoticonsPure(ChatMessageItem(from: msg), channelEmoticons: channelEmotes)
+            }
+            return Self.filterByDonationPrefsPure(rawItems, donationsOnly: donationsOnly, showDonation: showDon)
+        }.value
+        
+        enqueueBatchedMessages(items)
+    }
+    
+    /// 이모티콘 수집 — MainActor에서 실행 (collectedEmoticons 딕셔너리 접근)
+    private func collectEmoticons(from msgs: [ChatMessage]) {
         for msg in msgs {
             if let emojis = msg.extras?.emojis {
                 for (id, urlStr) in emojis {
@@ -406,29 +668,18 @@ public final class ChatViewModel {
                 }
             }
         }
-        
-        guard let modService = moderationService else {
-            let rawItems = msgs.map { self.enrichWithChannelEmoticons(ChatMessageItem(from: $0)) }
-            let items = filterByDonationPrefs(rawItems)
-            messages.append(contentsOf: items)
-            messageCount += items.count
-            recentMessageTimestamps.append(contentsOf: items.map { _ in Date() })
-            return
-        }
-        
-        let filtered = await modService.filterMessages(msgs)
-        let items = filterByDonationPrefs(
-            filtered.map { self.enrichWithChannelEmoticons(ChatMessageItem(from: $0)) }
-        )
-        
-        messages.append(contentsOf: items)
-        messageCount += items.count
-        recentMessageTimestamps.append(contentsOf: items.map { _ in Date() })
     }
 
     /// `showDonationsOnly` / `showDonation` 프리퍼런스 적용 필터
     private func filterByDonationPrefs(_ items: [ChatMessageItem]) -> [ChatMessageItem] {
-        if showDonationsOnly {
+        Self.filterByDonationPrefsPure(items, donationsOnly: showDonationsOnly, showDonation: showDonation)
+    }
+    
+    /// nonisolated 순수 함수 — Task.detached에서 안전하게 호출 가능
+    private nonisolated static func filterByDonationPrefsPure(
+        _ items: [ChatMessageItem], donationsOnly: Bool, showDonation: Bool
+    ) -> [ChatMessageItem] {
+        if donationsOnly {
             return items.filter { $0.type == MessageType.donation }
         } else if !showDonation {
             return items.filter { $0.type != MessageType.donation }
@@ -438,6 +689,13 @@ public final class ChatViewModel {
     
     /// 채널 이모티콘 맵을 메시지의 emojis에 병합
     private func enrichWithChannelEmoticons(_ item: ChatMessageItem) -> ChatMessageItem {
+        Self.enrichWithChannelEmoticonsPure(item, channelEmoticons: channelEmoticons)
+    }
+    
+    /// nonisolated 순수 함수 — Task.detached에서 안전하게 호출 가능
+    private nonisolated static func enrichWithChannelEmoticonsPure(
+        _ item: ChatMessageItem, channelEmoticons: [String: String]
+    ) -> ChatMessageItem {
         guard !channelEmoticons.isEmpty else { return item }
         var merged = item.emojis
         for (key, value) in channelEmoticons where merged[key] == nil {
@@ -460,41 +718,89 @@ public final class ChatViewModel {
         
         guard let modService = moderationService else { return }
         let filtered = await modService.filterMessages(allMessages)
-        messages = filterByDonationPrefs(
-            filtered.map { enrichWithChannelEmoticons(ChatMessageItem(from: $0)) }
-        )
+        
+        // 백그라운드에서 변환 수행
+        let channelEmotes = channelEmoticons
+        let donationsOnly = showDonationsOnly
+        let showDon = showDonation
+        let items = await Task.detached(priority: .userInitiated) {
+            let raw = filtered.map { Self.enrichWithChannelEmoticonsPure(ChatMessageItem(from: $0), channelEmoticons: channelEmotes) }
+            return Self.filterByDonationPrefsPure(raw, donationsOnly: donationsOnly, showDonation: showDon)
+        }.value
+        messages.replaceAll(with: items)
     }
     
-    private func trimMessageBuffer() {
-        if messages.count > maxVisibleMessages {
-            messages.removeFirst(messages.count - maxVisibleMessages)
+    // MARK: - Batching
+    
+    /// Enqueue items for the next batch flush (instead of directly mutating `messages`).
+    /// Reduces SwiftUI state updates from potentially 1 000+/s to ~10/s.
+    private func enqueueBatchedMessages(_ items: [ChatMessageItem]) {
+        guard !items.isEmpty else { return }
+        pendingMessages.append(contentsOf: items)
+        recentMessageTimestamps.append(contentsOf: items.map { _ in Date() })
+        messageCount += items.count
+        scheduleBatchFlush()
+    }
+    
+    /// Schedule a single batch-flush task. No-op if one is already pending.
+    private func scheduleBatchFlush() {
+        guard batchFlushTask == nil else { return }
+        batchFlushTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: self?.batchFlushIntervalNs ?? 100_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.flushPendingMessages()
         }
+    }
+    
+    /// Move all pending messages into the visible ring buffer in one shot.
+    private func flushPendingMessages() {
+        batchFlushTask = nil
+        guard !pendingMessages.isEmpty else { return }
+        // TTS: 후원/구독 메시지를 음성으로 읽어주기
+        for msg in pendingMessages {
+            if msg.type == .donation || msg.type == .subscription {
+                ttsService.enqueue(msg)
+            }
+        }
+        // Track recent chatters for mention autocomplete
+        trackRecentChatters(from: pendingMessages)
+        // Persist into full history
+        appendToHistory(pendingMessages)
+        // Track unread while in replay mode
+        if isReplayMode {
+            unreadCount += pendingMessages.count
+        }
+        // 증분 통계 업데이트 — O(batch_size), 이전의 O(messages.count) 대비 대폭 절감
+        updateIncrementalStats(with: pendingMessages)
+        messages.append(contentsOf: pendingMessages)
+        pendingMessages.removeAll(keepingCapacity: true)
+    }
+    
+    /// 배치 단위로 통계를 증분 업데이트
+    private func updateIncrementalStats(with batch: [ChatMessageItem]) {
+        for msg in batch {
+            _uniqueUsers.insert(msg.userId)
+            if msg.type == .donation {
+                donationCount += 1
+                if let amt = msg.donationAmount { totalDonationAmount += amt }
+            } else if msg.type == .subscription {
+                subscriptionCount += 1
+            }
+        }
+        uniqueUserCount = _uniqueUsers.count
+    }
+    
+    /// 통계 캐시 초기화
+    private func resetIncrementalStats() {
+        _uniqueUsers.removeAll(keepingCapacity: true)
+        uniqueUserCount = 0
+        donationCount = 0
+        totalDonationAmount = 0
+        subscriptionCount = 0
     }
     
     // State for export sheet
     public var showExportSheet = false
-    
-    // MARK: - Aggregate Stats (computed)
-    
-    /// 고유 참여 사용자 수
-    public var uniqueUserCount: Int {
-        Set(messages.map(\.userId)).count
-    }
-    
-    /// 도네이션 총 횟수
-    public var donationCount: Int {
-        messages.filter { $0.type == MessageType.donation }.count
-    }
-    
-    /// 도네이션 총 금액
-    public var totalDonationAmount: Int {
-        messages.compactMap(\.donationAmount).reduce(0, +)
-    }
-    
-    /// 구독 메시지 수
-    public var subscriptionCount: Int {
-        messages.filter { $0.type == MessageType.subscription }.count
-    }
     
     private func handleCommandResult(_ result: ChatCommandResult) {
         switch result {
@@ -535,95 +841,175 @@ public final class ChatViewModel {
             }
         }
     }
-}
 
-// MARK: - Chat Message Item (View Model)
+    // MARK: - Autocomplete
 
-public struct ChatMessageItem: Identifiable, Sendable {
-    public let id: String
-    public let userId: String
-    public let nickname: String
-    public let content: String
-    public let timestamp: Date
-    public let type: MessageType
-    public let badgeImageURL: URL?
-    public let emojis: [String: String]
-    public let donationAmount: Int?
-    public let donationType: String?
-    public let subscriptionMonths: Int?
-    public let profileImageUrl: String?
-    public let isNotice: Bool
-    public let isSystem: Bool
-    
-    public init(from message: ChatMessage, isNotice: Bool = false) {
-        self.id = message.id
-        self.userId = message.userId ?? "unknown"
-        self.nickname = message.nickname
-        self.content = message.content
-        self.timestamp = message.timestamp
-        self.type = message.type
-        self.badgeImageURL = message.profile?.badge?.imageURL
-        self.emojis = message.extras?.emojis ?? [:]
-        self.donationAmount = message.extras?.donation?.amount
-        self.donationType = message.extras?.donation?.type
-        self.subscriptionMonths = message.extras?.subscription?.months
-        self.profileImageUrl = message.profile?.profileImageURL?.absoluteString
-        self.isNotice = isNotice
-        self.isSystem = false
+    /// 수신된 메시지에서 최근 채팅 참여자 목록 업데이트
+    public func trackRecentChatters(from items: [ChatMessageItem]) {
+        for item in items {
+            guard !item.isSystem, item.userId != "system", item.userId != (currentUserUid ?? "") else { continue }
+            // 이미 존재하면 제거 후 앞에 추가 (최신순 유지)
+            recentChatters.removeAll { $0.userId == item.userId }
+            recentChatters.insert(
+                MentionSuggestion(
+                    userId: item.userId,
+                    nickname: item.nickname,
+                    profileImageUrl: item.profileImageUrl
+                ),
+                at: 0
+            )
+        }
+        // 최대 수 초과 시 truncate
+        if recentChatters.count > Self.maxRecentChatters {
+            recentChatters = Array(recentChatters.prefix(Self.maxRecentChatters))
+        }
     }
-    
-    public static func system(_ message: String) -> ChatMessageItem {
-        ChatMessageItem(
-            id: UUID().uuidString,
-            userId: "system",
-            nickname: "시스템",
-            content: message,
-            timestamp: Date(),
-            type: .systemMessage,
-            badgeImageURL: nil,
-            emojis: [:],
-            donationAmount: nil,
-            donationType: nil,
-            subscriptionMonths: nil,
-            profileImageUrl: nil,
-            isNotice: false,
-            isSystem: true
-        )
-    }
-    
-    fileprivate init(
-        id: String, userId: String, nickname: String, content: String,
-        timestamp: Date, type: MessageType, badgeImageURL: URL?,
-        emojis: [String: String], donationAmount: Int?, donationType: String?,
-        subscriptionMonths: Int?,
-        profileImageUrl: String?,
-        isNotice: Bool, isSystem: Bool
-    ) {
-        self.id = id
-        self.userId = userId
-        self.nickname = nickname
-        self.content = content
-        self.timestamp = timestamp
-        self.type = type
-        self.badgeImageURL = badgeImageURL
-        self.emojis = emojis
-        self.donationAmount = donationAmount
-        self.donationType = donationType
-        self.subscriptionMonths = subscriptionMonths
-        self.profileImageUrl = profileImageUrl
-        self.isNotice = isNotice
-        self.isSystem = isSystem
-    }
-    
-    /// 시간 포맷터: 새 인스턴스 생성 대신 정적 재사용 (read-only이므로 nonisolated(unsafe) 안전)
-    nonisolated(unsafe) private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
 
-    /// Formatted timestamp (HH:mm)
-    public var formattedTime: String {
-        Self.timeFormatter.string(from: timestamp)
+    /// 입력 텍스트에서 자동완성 트리거를 감지하고 제안 목록 업데이트
+    public func updateAutocompleteSuggestions(for text: String, cursorOffset: Int? = nil) {
+        let effectiveCursor = cursorOffset ?? text.count
+        let trigger = detectAutocompleteTrigger(in: text, cursorOffset: effectiveCursor)
+        autocompleteTrigger = trigger
+
+        switch trigger {
+        case .none:
+            emoticonSuggestions = []
+            mentionSuggestions = []
+            autocompleteSelectedIndex = 0
+
+        case .emoticon(let query, _):
+            let q = query.lowercased()
+            let allEmoticons = gatherAllEmoticons()
+            let filtered = allEmoticons.filter {
+                $0.displayName.lowercased().contains(q) || $0.emoticonId.lowercased().contains(q)
+            }
+            emoticonSuggestions = Array(filtered.prefix(8))
+            mentionSuggestions = []
+            autocompleteSelectedIndex = 0
+
+        case .mention(let query, _):
+            let q = query.lowercased()
+            if q.isEmpty {
+                mentionSuggestions = Array(recentChatters.prefix(8))
+            } else {
+                let filtered = recentChatters.filter {
+                    $0.nickname.lowercased().contains(q)
+                }
+                mentionSuggestions = Array(filtered.prefix(8))
+            }
+            emoticonSuggestions = []
+            autocompleteSelectedIndex = 0
+        }
+    }
+
+    /// 자동완성 항목 선택 시 텍스트에 반영 — 대체된 텍스트 반환
+    public func applyAutocompletion(to text: String, selectedIndex: Int) -> String? {
+        switch autocompleteTrigger {
+        case .emoticon(_, let range):
+            guard selectedIndex < emoticonSuggestions.count else { return nil }
+            let suggestion = emoticonSuggestions[selectedIndex]
+            var result = text
+            result.replaceSubrange(range, with: suggestion.chatPattern)
+            dismissAutocomplete()
+            return result
+
+        case .mention(_, let range):
+            guard selectedIndex < mentionSuggestions.count else { return nil }
+            let suggestion = mentionSuggestions[selectedIndex]
+            var result = text
+            result.replaceSubrange(range, with: "@\(suggestion.nickname) ")
+            dismissAutocomplete()
+            return result
+
+        case .none:
+            return nil
+        }
+    }
+
+    /// 자동완성 팝업 닫기
+    public func dismissAutocomplete() {
+        emoticonSuggestions = []
+        mentionSuggestions = []
+        autocompleteSelectedIndex = 0
+        autocompleteTrigger = .none
+    }
+
+    /// 방향키로 선택 인덱스 이동
+    public func moveAutocompleteSelection(delta: Int) {
+        let count = isEmoticonAutocomplete ? emoticonSuggestions.count : mentionSuggestions.count
+        guard count > 0 else { return }
+        autocompleteSelectedIndex = (autocompleteSelectedIndex + delta + count) % count
+    }
+
+    /// 현재 이모티콘 자동완성 모드인지
+    public var isEmoticonAutocomplete: Bool {
+        !emoticonSuggestions.isEmpty
+    }
+
+    // MARK: - Private Autocomplete Helpers
+
+    /// 텍스트에서 커서 위치 기준 자동완성 트리거 감지
+    private func detectAutocompleteTrigger(in text: String, cursorOffset: Int) -> AutocompleteTrigger {
+        guard !text.isEmpty, cursorOffset > 0 else { return .none }
+
+        let safeOffset = min(cursorOffset, text.count)
+        let cursorIndex = text.index(text.startIndex, offsetBy: safeOffset)
+        let beforeCursor = text[text.startIndex..<cursorIndex]
+
+        // `:` 이모티콘 트리거 — `:keyword` 형태 감지
+        if let colonRange = beforeCursor.range(of: ":[a-zA-Z0-9_가-힣]{1,20}$", options: .regularExpression) {
+            let queryStart = text.index(after: colonRange.lowerBound)
+            let query = String(text[queryStart..<colonRange.upperBound])
+            let fullRange = colonRange.lowerBound..<colonRange.upperBound
+            return .emoticon(query: query, range: fullRange)
+        }
+
+        // `@` 멘션 트리거 — `@name` 형태 감지
+        if let atRange = beforeCursor.range(of: "@[a-zA-Z0-9_가-힣]{0,20}$", options: .regularExpression) {
+            let queryStart = text.index(after: atRange.lowerBound)
+            let query = String(text[queryStart..<atRange.upperBound])
+            let fullRange = atRange.lowerBound..<atRange.upperBound
+            return .mention(query: query, range: fullRange)
+        }
+
+        return .none
+    }
+
+    /// 모든 이모티콘 소스에서 제안 목록 구축
+    private func gatherAllEmoticons() -> [EmoticonSuggestion] {
+        var suggestions: [EmoticonSuggestion] = []
+        var seen = Set<String>()
+
+        // emoticonPacks (API 로드)
+        for pack in emoticonPacks {
+            for item in pack.emoticons ?? [] where !seen.contains(item.emoticonId) {
+                seen.insert(item.emoticonId)
+                suggestions.append(EmoticonSuggestion(from: item))
+            }
+        }
+
+        // channelEmoticons (fallback)
+        for (id, urlStr) in channelEmoticons where !seen.contains(id) {
+            seen.insert(id)
+            suggestions.append(EmoticonSuggestion(
+                emoticonId: id,
+                displayName: id,
+                imageURL: URL(string: urlStr),
+                chatPattern: "{:\(id):}"
+            ))
+        }
+
+        // collectedEmoticons (채팅 수집분)
+        for (id, url) in collectedEmoticons where !seen.contains(id) {
+            seen.insert(id)
+            suggestions.append(EmoticonSuggestion(
+                emoticonId: id,
+                displayName: id,
+                imageURL: url,
+                chatPattern: "{:\(id):}"
+            ))
+        }
+
+        return suggestions
     }
 }

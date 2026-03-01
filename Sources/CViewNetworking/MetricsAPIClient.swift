@@ -24,8 +24,8 @@ public actor MetricsAPIClient {
             "Content-Type": "application/json",
             "Accept": "application/json",
         ]
-        config.timeoutIntervalForRequest = 10
-        config.timeoutIntervalForResource = 20
+        config.timeoutIntervalForRequest = MetricsNetDefaults.requestTimeout
+        config.timeoutIntervalForResource = MetricsNetDefaults.resourceTimeout
         config.waitsForConnectivity = false
         config.httpMaximumConnectionsPerHost = 4
         
@@ -123,13 +123,31 @@ public actor MetricsAPIClient {
         throw lastError ?? APIError.networkError("Request failed after retries")
     }
     
-    /// POST 요청 (응답 디코딩 포함)
+    /// POST 요청 (별도 body + 응답 디코딩)
+    /// endpoint의 body 대신 외부 전달 body를 사용한다.
     public func post<Req: Encodable & Sendable, Res: Decodable & Sendable>(
         _ endpoint: MetricsEndpoint,
         body: Req,
         as type: Res.Type
     ) async throws -> Res {
-        try await request(endpoint, as: type)
+        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = endpoint.queryItems
+
+        guard let url = urlComponents.url else {
+            throw APIError.networkError("Invalid URL: \(endpoint.path)")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = endpoint.method.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        return try JSONDecoder().decode(Res.self, from: data)
     }
     
     /// POST 요청 (응답 무시)

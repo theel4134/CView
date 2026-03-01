@@ -163,7 +163,7 @@ public final class AppRouter {
     }
     
     public func selectSidebar(_ item: SidebarItem) {
-        withAnimation(.easeOut(duration: 0.22)) {
+        withAnimation(DesignTokens.Animation.contentTransition) {
             selectedSidebarItem = item
         }
         if !path.isEmpty {

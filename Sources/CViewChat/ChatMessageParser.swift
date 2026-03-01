@@ -312,7 +312,7 @@ public struct ChatMessageParser: Sendable {
             "cid": chatChannelId,
             "bdy": [
                 "uid": uid ?? "",
-                "devType": 2001,
+                "devType": ChatDefaults.deviceType,
                 "accTkn": accessToken,
                 "auth": uid != nil ? "SEND" : "READ",
                 "libVer": "4.9.3",
@@ -371,7 +371,7 @@ public struct ChatMessageParser: Sendable {
     }
     
     /// Build a recent chat request
-    public func buildRecentChatRequest(chatChannelId: String, count: Int = 50) -> String {
+    public func buildRecentChatRequest(chatChannelId: String, count: Int = ChatDefaults.recentChatDefaultCount) -> String {
         let body: [String: Any] = [
             "ver": "3",
             "cmd": ChzzkChatCommand.requestRecentChat.rawValue,

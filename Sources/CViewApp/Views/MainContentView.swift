@@ -1,6 +1,6 @@
 // MARK: - MainContentView.swift
-// CViewApp - Main content view with minimal monochrome sidebar
-// Design: Clean dark monochrome + chzzk green accent
+// CViewApp - Main content view with Dark Glass sidebar
+// Design: Translucent sidebar + 4-layer surface stack + chzzk green accent
 
 import SwiftUI
 import CViewCore
@@ -16,6 +16,7 @@ struct MainContentView: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     @State private var showSplash = true
+    @State private var isCompactSidebar = false
 
     var body: some View {
         @Bindable var router = router
@@ -25,7 +26,7 @@ struct MainContentView: View {
 
             if showSplash {
                 SplashView {
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    withAnimation(DesignTokens.Animation.normal) {
                         showSplash = false
                     }
                 }
@@ -34,6 +35,24 @@ struct MainContentView: View {
             }
         }
         .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
+        .commandPaletteOverlay(isPresented: Binding(
+            get: { appState.showCommandPalette },
+            set: { appState.showCommandPalette = $0 }
+        ))
+        .background(DesignTokens.Colors.background)
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onChange(of: geo.size.width, initial: true) { _, newWidth in
+                        let shouldBeCompact = newWidth < 800
+                        if shouldBeCompact != isCompactSidebar {
+                            withAnimation(DesignTokens.Animation.contentTransition) {
+                                isCompactSidebar = shouldBeCompact
+                            }
+                        }
+                    }
+            }
+        }
     }
 
     @ViewBuilder
@@ -41,16 +60,21 @@ struct MainContentView: View {
         @Bindable var router = router
 
         NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 270)
+            SidebarView(isCompact: isCompactSidebar)
+                .navigationSplitViewColumnWidth(
+                    min: isCompactSidebar ? 56 : 210,
+                    ideal: isCompactSidebar ? 62 : 230,
+                    max: isCompactSidebar ? 68 : 270
+                )
         } detail: {
             NavigationStack(path: $router.path) {
                 detailView
-                    .animation(.easeOut(duration: 0.22), value: router.selectedSidebarItem)
+                    .animation(DesignTokens.Animation.contentTransition, value: router.selectedSidebarItem)
                     .navigationDestination(for: AppRoute.self) { route in
                         routeDestination(for: route)
                     }
             }
+            .clipped()
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(item: $router.presentedSheet) { sheet in
@@ -167,6 +191,8 @@ struct MainContentView: View {
 
 struct SidebarView: View {
 
+    let isCompact: Bool
+
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     @State private var hoveredItem: AppRouter.SidebarItem?
@@ -185,7 +211,7 @@ struct SidebarView: View {
 
             Divider()
                 .overlay(DesignTokens.Colors.border.opacity(0.4))
-                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.horizontal, isCompact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.md)
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -195,7 +221,7 @@ struct SidebarView: View {
                     sectionDivider
                     itemSection(items: toolItems, label: "도구")
                 }
-                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.horizontal, isCompact ? 4 : DesignTokens.Spacing.sm)
                 .padding(.vertical, DesignTokens.Spacing.sm)
             }
 
@@ -205,56 +231,65 @@ struct SidebarView: View {
             VStack(spacing: 0) {
                 Divider()
                     .overlay(DesignTokens.Colors.border.opacity(0.35))
-                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.horizontal, isCompact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.md)
 
                 SidebarNavItem(
                     item: .settings,
                     isSelected: router.selectedSidebarItem == .settings,
                     isHovered: hoveredItem == .settings,
+                    isCompact: isCompact,
                     namespace: sidebarNS,
                     onSelect: {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                        withAnimation(DesignTokens.Animation.indicator) {
                             router.selectSidebar(.settings)
                         }
                     },
                     onHover: { h in hoveredItem = h ? .settings : nil }
                 )
-                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.horizontal, isCompact ? 4 : DesignTokens.Spacing.sm)
                 .padding(.vertical, DesignTokens.Spacing.xxs)
             }
 
             Divider()
                 .overlay(DesignTokens.Colors.border.opacity(0.4))
-                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.horizontal, isCompact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.md)
 
             sidebarFooter
         }
-        .frame(minWidth: 210)
-        .background(DesignTokens.Colors.backgroundDark)
+        .frame(minWidth: isCompact ? 56 : 210)
+        .background {
+            // Translucent Glass 사이드바 배경
+            ZStack {
+                DesignTokens.Colors.background
+                DesignTokens.Colors.surfaceBase.opacity(0.5)
+            }
+        }
+        .background(.ultraThinMaterial)
     }
 
     // MARK: - Section Builder
 
     @ViewBuilder
     private func itemSection(items: [AppRouter.SidebarItem], label: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let label {
+        VStack(alignment: isCompact ? .center : .leading, spacing: 2) {
+            if let label, !isCompact {
                 Text(label.uppercased())
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .font(DesignTokens.Typography.custom(size: 9.5, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .tracking(1.1)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 10)
-                    .padding(.bottom, 2)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.top, DesignTokens.Spacing.md)
+                    .padding(.bottom, DesignTokens.Spacing.xxs)
             }
             ForEach(items) { item in
                 SidebarNavItem(
                     item: item,
                     isSelected: router.selectedSidebarItem == item,
                     isHovered: hoveredItem == item,
+                    isCompact: isCompact,
                     namespace: sidebarNS,
                     onSelect: {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                        withAnimation(DesignTokens.Animation.indicator) {
                             router.selectSidebar(item)
                         }
                     },
@@ -269,51 +304,115 @@ struct SidebarView: View {
     private var sectionDivider: some View {
         Divider()
             .overlay(DesignTokens.Colors.border.opacity(0.25))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DesignTokens.Spacing.xs)
+            .padding(.vertical, DesignTokens.Spacing.xxs)
     }
 
     // MARK: - Sidebar Header
 
     private var sidebarHeader: some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
-            AppIconView(size: 32, showLiveDot: false, animated: true)
-                // animated: true 이므로 drawingGroup는 AppIconView 내부에서 처리
-                .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.12), radius: 5)
+        Group {
+            if isCompact {
+                // Compact: icon only, centered
+                AppIconView(size: 28, showLiveDot: false, animated: true)
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.12), radius: 5)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DesignTokens.Spacing.sm)
+            } else {
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    AppIconView(size: 32, showLiveDot: false, animated: true)
+                        .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.12), radius: 5)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("CView")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("CView")
+                            .font(DesignTokens.Typography.bodySemibold)
+                            .foregroundStyle(DesignTokens.Colors.textPrimary)
 
-                let liveCount = appState.backgroundUpdateService.onlineChannels.count
-                if liveCount > 0 {
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(DesignTokens.Colors.live)
-                            .frame(width: 5, height: 5)
-                        Text("\(liveCount) LIVE")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(DesignTokens.Colors.live)
+                        let liveCount = appState.backgroundUpdateService.onlineChannels.count
+                        if liveCount > 0 {
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(DesignTokens.Colors.live)
+                                    .frame(width: 5, height: 5)
+                                Text("\(liveCount) LIVE")
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.Colors.live)
+                            }
+                        } else {
+                            Text("2.0")
+                                .font(DesignTokens.Typography.footnoteMedium)
+                                .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
+                        }
                     }
-                } else {
-                    Text("2.0")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
-                }
-            }
 
-            Spacer()
+                    Spacer()
+                }
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.vertical, DesignTokens.Spacing.sm)
+            }
         }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, 12)
     }
 
     // MARK: - Sidebar Footer
 
     private var sidebarFooter: some View {
         Group {
-            if appState.isLoggedIn {
+            if isCompact {
+                // Compact footer: icon-only
+                if appState.isLoggedIn {
+                    VStack(spacing: 6) {
+                        ZStack {
+                            if let profileURL = appState.userProfileURL {
+                                CachedAsyncImage(url: profileURL) { profilePlaceholder }
+                                    .frame(width: 28, height: 28)
+                                    .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(DesignTokens.Colors.surfaceElevated)
+                                    .frame(width: 28, height: 28)
+                                    .overlay {
+                                        Image(systemName: "person.fill")
+                                            .font(DesignTokens.Typography.caption)
+                                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    }
+                            }
+                        }
+                        .overlay {
+                            Circle()
+                                .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.45), lineWidth: 1.5)
+                        }
+                        .help(appState.userNickname ?? "사용자")
+
+                        Button { Task { await appState.handleLogout() } } label: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(DesignTokens.Typography.captionMedium)
+                                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                .padding(DesignTokens.Spacing.xs)
+                                .background(DesignTokens.Colors.surfaceElevated.opacity(0.6))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("로그아웃")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DesignTokens.Spacing.sm)
+                } else {
+                    Button { router.presentSheet(.login) } label: {
+                        ZStack {
+                            Circle()
+                                .fill(DesignTokens.Colors.chzzkGreen.opacity(0.15))
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(DesignTokens.Typography.custom(size: 15))
+                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("로그인")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DesignTokens.Spacing.sm)
+                }
+            } else if appState.isLoggedIn {
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     ZStack {
                         if let profileURL = appState.userProfileURL {
@@ -332,7 +431,7 @@ struct SidebarView: View {
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(appState.userNickname ?? "사용자")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(DesignTokens.Typography.captionSemibold)
                             .foregroundStyle(DesignTokens.Colors.textPrimary)
                             .lineLimit(1)
 
@@ -341,13 +440,13 @@ struct SidebarView: View {
                             HStack(spacing: 3) {
                                 Circle().fill(DesignTokens.Colors.live).frame(width: 4, height: 4)
                                 Text("팔로잉 \(liveCount)채널 라이브")
-                                    .font(.system(size: 10)).foregroundStyle(DesignTokens.Colors.textSecondary)
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular)).foregroundStyle(DesignTokens.Colors.textSecondary)
                             }
                         } else {
                             HStack(spacing: 3) {
                                 Circle().fill(DesignTokens.Colors.chzzkGreen).frame(width: 4, height: 4)
                                 Text("온라인")
-                                    .font(.system(size: 10)).foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular)).foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
                             }
                         }
                     }
@@ -356,10 +455,10 @@ struct SidebarView: View {
 
                     Button { Task { await appState.handleLogout() } } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .padding(6)
-                            .background(DesignTokens.Colors.surfaceLight.opacity(0.6))
+                            .padding(DesignTokens.Spacing.xs)
+                            .background(DesignTokens.Colors.surfaceElevated.opacity(0.6))
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -375,15 +474,15 @@ struct SidebarView: View {
                                 .fill(DesignTokens.Colors.chzzkGreen.opacity(0.15))
                                 .frame(width: 32, height: 32)
                             Image(systemName: "person.crop.circle.badge.plus")
-                                .font(.system(size: 15))
+                                .font(DesignTokens.Typography.custom(size: 15))
                                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                         }
                         Text("로그인")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(DesignTokens.Typography.captionSemibold)
                             .foregroundStyle(DesignTokens.Colors.textPrimary)
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     .padding(.vertical, DesignTokens.Spacing.xs)
@@ -406,11 +505,11 @@ struct SidebarView: View {
 
     private var profilePlaceholder: some View {
         Circle()
-            .fill(DesignTokens.Colors.surfaceLight)
+            .fill(DesignTokens.Colors.surfaceElevated)
             .frame(width: 32, height: 32)
             .overlay {
                 Image(systemName: "person.fill")
-                    .font(.system(size: 14))
+                    .font(DesignTokens.Typography.body)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
     }
@@ -422,6 +521,7 @@ struct SidebarNavItem: View {
     let item: AppRouter.SidebarItem
     let isSelected: Bool
     let isHovered: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
     let onHover: (Bool) -> Void
@@ -431,91 +531,151 @@ struct SidebarNavItem: View {
 
     var body: some View {
         Button(action: {
-            withAnimation(.spring(response: 0.18, dampingFraction: 0.42)) { iconScale = 1.28 }
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.55).delay(0.12)) { iconScale = 1.0 }
+            withAnimation(DesignTokens.Animation.micro) { iconScale = 1.28 }
+            withAnimation(DesignTokens.Animation.indicator.delay(0.1)) { iconScale = 1.0 }
             onSelect()
         }) {
-            HStack(spacing: 10) {
-
-                // ── 애니메이션 인디케이터 바 ──────────────────────────
-                ZStack {
-                    if isSelected {
-                        LinearGradient(
-                            colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.4)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                        .frame(width: 3, height: 22)
-                        .clipShape(Capsule())
-                        .matchedGeometryEffect(id: "sidebarIndicator", in: namespace)
-                        .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.7), radius: 5)
-                    } else {
-                        Color.clear.frame(width: 3, height: 22)
-                    }
-                }
-                .frame(width: 3)
-
-                // ── 아이콘 (선택시 배경 원 + 애니메이션) ───────────────
-                ZStack {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(DesignTokens.Colors.chzzkGreen.opacity(0.15))
-                            .frame(width: 30, height: 30)
-                    } else if isHovered {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(DesignTokens.Colors.surfaceHover.opacity(0.6))
-                            .frame(width: 30, height: 30)
-                    }
-                    Image(systemName: item.icon)
-                        .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(
-                            isSelected
-                            ? DesignTokens.Colors.chzzkGreen
-                            : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
-                        )
-                        .scaleEffect(iconScale)
-                }
-                .frame(width: 30, height: 30)
-                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isSelected)
-                .animation(DesignTokens.Animation.fast, value: isHovered)
-
-                // ── 텍스트 ────────────────────────────────────────────
-                Text(item.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(
-                        isSelected
-                        ? DesignTokens.Colors.textPrimary
-                        : (isHovered ? DesignTokens.Colors.textPrimary.opacity(0.85) : DesignTokens.Colors.textSecondary)
-                    )
-
-                Spacer()
-
-                // ── 라이브 배지 (팔로잉) ───────────────────────────────
-                if item == .following && onlineBadgeCount > 0 {
-                    liveBadge(onlineBadgeCount)
-                }
+            if isCompact {
+                compactLayout
+            } else {
+                expandedLayout
             }
-            .padding(.vertical, 6)
-            .padding(.trailing, DesignTokens.Spacing.sm)
-            .background {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(
-                        isSelected
-                        ? AnyShapeStyle(DesignTokens.Gradients.sidebarActive)
-                        : (isHovered ? AnyShapeStyle(DesignTokens.Colors.surfaceHover.opacity(0.3)) : AnyShapeStyle(Color.clear))
-                    )
-                    .overlay {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.14), lineWidth: 0.5)
-                        }
-                    }
-            }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover(perform: onHover)
-        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isSelected)
-        .animation(DesignTokens.Animation.fast, value: isHovered)
+        .animation(DesignTokens.Animation.indicator, value: isSelected)
+        .animation(DesignTokens.Animation.micro, value: isHovered)
+        .help(isCompact ? item.rawValue : "")
+    }
+
+    // MARK: - Compact Layout (icon only)
+
+    private var compactLayout: some View {
+        ZStack {
+            if isSelected {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.15))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                            .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.14), lineWidth: 0.5)
+                    }
+            } else if isHovered {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.6))
+            }
+
+            Image(systemName: item.icon)
+                .font(DesignTokens.Typography.custom(size: 16, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(
+                    isSelected
+                    ? DesignTokens.Colors.chzzkGreen
+                    : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                )
+                .scaleEffect(iconScale)
+        }
+        .frame(width: 40, height: 36)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .topTrailing) {
+            if item == .following && onlineBadgeCount > 0 {
+                compactBadge(onlineBadgeCount)
+            }
+        }
+        .animation(DesignTokens.Animation.indicator, value: isSelected)
+        .animation(DesignTokens.Animation.micro, value: isHovered)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func compactBadge(_ count: Int) -> some View {
+        Text("\(count)")
+            .font(DesignTokens.Typography.micro)
+            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+            .padding(.horizontal, DesignTokens.Spacing.xs)
+            .padding(.vertical, DesignTokens.Spacing.xxs)
+            .background(DesignTokens.Colors.live)
+            .clipShape(Capsule())
+            .offset(x: 2, y: -2)
+    }
+
+    // MARK: - Expanded Layout (icon + text)
+
+    private var expandedLayout: some View {
+        HStack(spacing: 10) {
+
+            // ── 애니메이션 인디케이터 바 ──────────────────────────
+            ZStack {
+                if isSelected {
+                    LinearGradient(
+                        colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.4)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(width: 3, height: 22)
+                    .clipShape(Capsule())
+                    .matchedGeometryEffect(id: "sidebarIndicator", in: namespace)
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.7), radius: 5)
+                } else {
+                    Color.clear.frame(width: 3, height: 22)
+                }
+            }
+            .frame(width: 3)
+
+            // ── 아이콘 (선택시 배경 원 + 애니메이션) ───────────────
+            ZStack {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .fill(DesignTokens.Colors.chzzkGreen.opacity(0.15))
+                        .frame(width: 30, height: 30)
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.6))
+                        .frame(width: 30, height: 30)
+                }
+                Image(systemName: item.icon)
+                    .font(DesignTokens.Typography.custom(size: 14, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(
+                        isSelected
+                        ? DesignTokens.Colors.chzzkGreen
+                        : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    )
+                    .scaleEffect(iconScale)
+            }
+            .frame(width: 30, height: 30)
+            .animation(DesignTokens.Animation.indicator, value: isSelected)
+            .animation(DesignTokens.Animation.micro, value: isHovered)
+
+            // ── 텍스트 ────────────────────────────────────────────
+            Text(item.rawValue)
+                .font(DesignTokens.Typography.captionMedium)
+                .foregroundStyle(
+                    isSelected
+                    ? DesignTokens.Colors.textPrimary
+                    : (isHovered ? DesignTokens.Colors.textPrimary.opacity(0.85) : DesignTokens.Colors.textSecondary)
+                )
+
+            Spacer()
+
+            // ── 라이브 배지 (팔로잉) ───────────────────────────────
+            if item == .following && onlineBadgeCount > 0 {
+                liveBadge(onlineBadgeCount)
+            }
+        }
+        .padding(.vertical, DesignTokens.Spacing.xs)
+        .padding(.trailing, DesignTokens.Spacing.sm)
+        .background {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .fill(
+                    isSelected
+                    ? AnyShapeStyle(DesignTokens.Gradients.sidebarActive)
+                    : (isHovered ? AnyShapeStyle(DesignTokens.Colors.surfaceOverlay.opacity(0.3)) : AnyShapeStyle(Color.clear))
+                )
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                            .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.14), lineWidth: 0.5)
+                    }
+                }
+        }
+        .contentShape(Rectangle())
     }
 
     // 펄스 링 + 라이브 뱃지 — TimelineView 기반 Metal 3 순수 수학 애니메이션
@@ -534,10 +694,10 @@ struct SidebarNavItem: View {
                     .frame(width: 26, height: 18)
                     .scaleEffect(ringScale)
                 Text("\(count)")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .font(DesignTokens.Typography.micro)
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .padding(.horizontal, DesignTokens.Spacing.sm)
+                    .padding(.vertical, DesignTokens.Spacing.xxs)
                     .background(DesignTokens.Colors.live)
                     .clipShape(Capsule())
             }

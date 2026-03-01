@@ -41,13 +41,13 @@ struct ClipPlayerView: View {
                 // Loading (초기 로딩만 표시 — .buffering은 재생 중 버퍼링이므로 오버레이 미표시)
                 if viewModel.playbackState == .loading {
                     ZStack {
-                        Color.black.opacity(0.5)
+                        Rectangle().fill(.ultraThinMaterial)
                         VStack(spacing: 14) {
                             ProgressView()
                                 .controlSize(.large)
                                 .tint(.white)
                             Text("클립 로딩 중...")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.8))
                         }
                     }
@@ -81,13 +81,13 @@ struct ClipPlayerView: View {
         }
         .onHover { hovering in
             if viewModel.embedFallbackURL == nil && viewModel.isPlaybackActive {
-                withAnimation(.easeInOut(duration: 0.2)) { showControls = hovering }
+                withAnimation(DesignTokens.Animation.fast) { showControls = hovering }
                 if hovering { resetControlsTimer() }
             }
         }
         .onTapGesture {
             if viewModel.embedFallbackURL == nil && viewModel.isPlaybackActive {
-                withAnimation(.easeInOut(duration: 0.2)) { showControls.toggle() }
+                withAnimation(DesignTokens.Animation.fast) { showControls.toggle() }
                 if showControls { resetControlsTimer() }
             }
         }
@@ -114,15 +114,15 @@ struct ClipPlayerView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(viewModel.clipTitle)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(DesignTokens.Typography.bodySemibold)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .lineLimit(1)
                     if !viewModel.channelName.isEmpty {
                         HStack(spacing: 4) {
                             Image(systemName: "person.fill")
-                                .font(.system(size: 10))
+                                .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                             Text(viewModel.channelName)
-                                .font(.system(size: 11))
+                                .font(DesignTokens.Typography.caption)
                         }
                         .foregroundStyle(.white.opacity(0.7))
                     }
@@ -130,14 +130,14 @@ struct ClipPlayerView: View {
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(DesignTokens.Typography.headline)
                         .foregroundStyle(.white.opacity(0.8))
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
             .background(
                 LinearGradient(colors: [.black.opacity(0.75), .clear],
                                startPoint: .top, endPoint: .bottom)
@@ -149,11 +149,12 @@ struct ClipPlayerView: View {
             Button { viewModel.togglePlayPause() } label: {
                 ZStack {
                     Circle()
-                        .fill(.black.opacity(0.45))
+                        .fill(.ultraThinMaterial)
                         .frame(width: 60, height: 60)
+                        .overlay { Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
                     Image(systemName: viewModel.playbackState == .playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(DesignTokens.Typography.custom(size: 24, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                 }
             }
             .buttonStyle(.plain)
@@ -170,25 +171,25 @@ struct ClipPlayerView: View {
 
                 HStack(spacing: 14) {
                     Button { viewModel.seekRelative(-10) } label: {
-                        Image(systemName: "gobackward.10").font(.system(size: 14))
+                        Image(systemName: "gobackward.10").font(DesignTokens.Typography.body)
                     }
                     .buttonStyle(.plain)
 
                     Button { viewModel.togglePlayPause() } label: {
                         Image(systemName: viewModel.playbackState == .playing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15))
+                            .font(DesignTokens.Typography.custom(size: 15))
                     }
                     .buttonStyle(.plain)
 
                     Button { viewModel.seekRelative(10) } label: {
-                        Image(systemName: "goforward.10").font(.system(size: 14))
+                        Image(systemName: "goforward.10").font(DesignTokens.Typography.body)
                     }
                     .buttonStyle(.plain)
 
                     HStack(spacing: 4) {
                         Button { viewModel.toggleMute() } label: {
                             Image(systemName: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.system(size: 13))
+                                .font(DesignTokens.Typography.captionMedium)
                         }
                         .buttonStyle(.plain)
 
@@ -201,19 +202,19 @@ struct ClipPlayerView: View {
                     }
 
                     Text("\(ClipPlayerViewModel.formatTime(viewModel.currentTime)) / \(ClipPlayerViewModel.formatTime(viewModel.duration))")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
 
                     Spacer()
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.bottom, DesignTokens.Spacing.md)
             .background(
                 LinearGradient(colors: [.clear, .black.opacity(0.75)],
                                startPoint: .top, endPoint: .bottom)
             )
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
     }
 
     // MARK: - Embed title bar
@@ -224,48 +225,48 @@ struct ClipPlayerView: View {
                 // 썸네일 미리보기
                 if let thumbURL = clipInfo.thumbnailImageURL {
                     CachedAsyncImage(url: thumbURL) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.white.opacity(0.1))
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                            .fill(.ultraThinMaterial)
                     }
                     .frame(width: 56, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                            .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
                     )
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(viewModel.clipTitle.isEmpty ? clipInfo.clipTitle : viewModel.clipTitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .lineLimit(1)
                     HStack(spacing: 4) {
                         if let channel = clipInfo.channel {
                             if let avatarURL = channel.channelImageURL {
                                 CachedAsyncImage(url: avatarURL) {
-                                    Circle().fill(Color.white.opacity(0.15))
+                                    Circle().fill(.ultraThinMaterial)
                                 }
                                 .frame(width: 13, height: 13)
                                 .clipShape(Circle())
                             }
                             Text(channel.channelName)
-                                .font(.system(size: 10))
+                                .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                                 .foregroundStyle(.white.opacity(0.6))
                         } else if !viewModel.channelName.isEmpty {
                             Text(viewModel.channelName)
-                                .font(.system(size: 10))
+                                .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                                 .foregroundStyle(.white.opacity(0.6))
                         }
                         if clipInfo.readCount > 0 {
                             Text("·")
-                                .font(.system(size: 9))
+                                .font(DesignTokens.Typography.micro)
                                 .foregroundStyle(.white.opacity(0.4))
                             Image(systemName: "eye.fill")
-                                .font(.system(size: 8))
+                                .font(DesignTokens.Typography.custom(size: 8))
                                 .foregroundStyle(.white.opacity(0.4))
                             Text(formattedCount(clipInfo.readCount))
-                                .font(.system(size: 10))
+                                .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                                 .foregroundStyle(.white.opacity(0.4))
                         }
                     }
@@ -275,13 +276,13 @@ struct ClipPlayerView: View {
 
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(DesignTokens.Typography.headline)
                         .foregroundStyle(.white.opacity(0.8))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.md)
             .background(
                 LinearGradient(colors: [.black.opacity(0.75), .clear],
                                startPoint: .top, endPoint: .bottom)
@@ -300,16 +301,16 @@ struct ClipPlayerView: View {
     @ViewBuilder
     private func errorOverlay(_ message: String) -> some View {
         ZStack {
-            Color.black.opacity(0.7)
+            Rectangle().fill(.thinMaterial)
             VStack(spacing: 16) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 40))
+                    .font(DesignTokens.Typography.custom(size: 40))
                     .foregroundStyle(.yellow)
                 Text(message)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white)
+                    .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, DesignTokens.Spacing.xl)
                 HStack(spacing: 12) {
                     Button("다시 시도") {
                         Task { await viewModel.startClip(from: clipInfo) }
@@ -320,7 +321,7 @@ struct ClipPlayerView: View {
                         NSWorkspace.shared.open(url)
                     }
                     .buttonStyle(.bordered)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                 }
             }
         }
@@ -328,14 +329,14 @@ struct ClipPlayerView: View {
 
     private var endedOverlay: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            Rectangle().fill(.ultraThinMaterial)
             VStack(spacing: 14) {
                 Image(systemName: "arrow.counterclockwise.circle.fill")
-                    .font(.system(size: 48))
+                    .font(DesignTokens.Typography.custom(size: 48))
                     .foregroundStyle(.white.opacity(0.85))
                 Text("재생 완료")
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                 Button("다시 재생") { viewModel.togglePlayPause() }
                     .buttonStyle(CViewButtonStyle())
             }
@@ -350,7 +351,7 @@ struct ClipPlayerView: View {
             try? await Task.sleep(for: .seconds(3))
             if !Task.isCancelled {
                 await MainActor.run {
-                    withAnimation(.easeOut(duration: 0.4)) { showControls = false }
+                    withAnimation(DesignTokens.Animation.normal) { showControls = false }
                 }
             }
         }

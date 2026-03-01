@@ -83,10 +83,18 @@ public struct ChatFilter: Sendable {
     
     public let type: FilterType
     public let isEnabled: Bool
+    /// 컴파일된 regex 캐시 — 매 메시지마다 재컴파일 방지
+    private let compiledRegex: NSRegularExpression?
     
     public init(type: FilterType, isEnabled: Bool = true) {
         self.type = type
         self.isEnabled = isEnabled
+        // regex 타입일 때 init에서 1회만 컴파일
+        if case .regex(let pattern) = type {
+            self.compiledRegex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        } else {
+            self.compiledRegex = nil
+        }
     }
     
     /// Check if a message should be filtered (hidden)
@@ -99,8 +107,8 @@ public struct ChatFilter: Sendable {
                 message.content.localizedCaseInsensitiveContains(keyword)
             }
             
-        case .regex(let pattern):
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+        case .regex:
+            guard let regex = compiledRegex else {
                 return false
             }
             let range = NSRange(message.content.startIndex..., in: message.content)
@@ -179,11 +187,13 @@ public actor ChatModerationService {
     
     public func isMuted(_ userId: String) -> Bool {
         guard let expiry = mutedUsers[userId] else { return false }
-        if Date() > expiry {
-            mutedUsers.removeValue(forKey: userId)
-            return false
-        }
-        return true
+        return Date() <= expiry
+    }
+    
+    /// 만료된 뮤트 항목 정리
+    public func cleanExpiredMutes() {
+        let now = Date()
+        mutedUsers = mutedUsers.filter { $0.value > now }
     }
     
     // MARK: - Message Processing
@@ -231,7 +241,7 @@ public actor ChatModerationService {
             guard let userId = args.first else {
                 return .error("사용법: /mute <사용자ID> [시간(초)]")
             }
-            let duration = args.count > 1 ? TimeInterval(args[1]) ?? 300 : 300
+            let duration = args.count > 1 ? TimeInterval(args[1]) ?? ChatDefaults.defaultMuteDurationSecs : ChatDefaults.defaultMuteDurationSecs
             muteUser(userId, duration: duration)
             return .localAction("'\(userId)' 님이 \(Int(duration))초간 채팅 금지 되었습니다.")
             

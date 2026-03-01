@@ -28,10 +28,10 @@ struct ChatOnlyView: View {
             if let error = errorMessage {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(.yellow)
                     Text(error)
-                        .font(.system(size: 12))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                     Spacer()
                     Button {
@@ -39,7 +39,7 @@ struct ChatOnlyView: View {
                         Task { await connectChat() }
                     } label: {
                         Text("재시도")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                     }
                     .buttonStyle(.plain)
@@ -56,7 +56,8 @@ struct ChatOnlyView: View {
                 router.presentSheet(.chatSettings)
             }
         }
-        .background(DesignTokens.Colors.backgroundDark)
+        .background(DesignTokens.Colors.background)
+        .background(.ultraThinMaterial)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -64,9 +65,9 @@ struct ChatOnlyView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "play.tv")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                         Text("방송 보기")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                     }
                 }
                 .buttonStyle(.plain)
@@ -86,17 +87,17 @@ struct ChatOnlyView: View {
     private var chatOnlyHeader: some View {
         HStack(spacing: DesignTokens.Spacing.sm) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 14))
+                .font(DesignTokens.Typography.body)
                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
             
             VStack(alignment: .leading, spacing: 1) {
                 Text(channelName.isEmpty ? "채팅" : channelName)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(DesignTokens.Typography.custom(size: 15, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 
                 if isConnecting {
                     Text("연결 중...")
-                        .font(.system(size: 11))
+                        .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
             }
@@ -105,7 +106,7 @@ struct ChatOnlyView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(.thinMaterial)
     }
     
     // MARK: - Connect

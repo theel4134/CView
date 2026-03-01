@@ -17,11 +17,11 @@ struct DashboardStatCard: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             HStack(spacing: DesignTokens.Spacing.xs) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(accentColor ?? DesignTokens.Colors.textTertiary)
 
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .textCase(.uppercase)
                     .tracking(0.5)
@@ -31,7 +31,7 @@ struct DashboardStatCard: View {
 
             HStack(alignment: .lastTextBaseline, spacing: DesignTokens.Spacing.xs) {
                 Text(value)
-                    .font(.system(size: 28, weight: .bold))
+                    .font(DesignTokens.Typography.display)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                     .contentTransition(.numericText())
 
@@ -44,19 +44,16 @@ struct DashboardStatCard: View {
 
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(DesignTokens.Typography.footnoteMedium)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .lineLimit(1)
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .fill(DesignTokens.Colors.surface)
-        }
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
     
@@ -65,15 +62,15 @@ struct DashboardStatCard: View {
         let isPositive = value >= 0
         HStack(spacing: 2) {
             Image(systemName: isPositive ? "arrow.up.right" : "arrow.down.right")
-                .font(.system(size: 9, weight: .bold))
+                .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
             Text("\(abs(value))%")
-                .font(.system(size: 11, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
         }
         .foregroundStyle(isPositive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.horizontal, DesignTokens.Spacing.xs)
+        .padding(.vertical, DesignTokens.Spacing.xxs)
         .background(
-            (isPositive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceLight)
+            (isPositive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceElevated)
                 .opacity(0.12)
         )
         .clipShape(Capsule())
@@ -100,50 +97,49 @@ struct MiniChannelCard: View {
                 // Viewer count + LIVE badge
                 VStack(alignment: .leading, spacing: 4) {
                     Text("LIVE")
-                        .font(.system(size: 8, weight: .black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
+                        .font(DesignTokens.Typography.custom(size: 8, weight: .black))
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                        .padding(.horizontal, DesignTokens.Spacing.xs)
+                        .padding(.vertical, DesignTokens.Spacing.xxs)
                         .background(DesignTokens.Colors.live)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     
                     HStack(spacing: 3) {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 8))
+                            .font(DesignTokens.Typography.custom(size: 8))
                         Text(channel.formattedViewerCount)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(.black.opacity(0.65))
-                    .clipShape(Capsule())
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .padding(.horizontal, DesignTokens.Spacing.xs)
+                    .padding(.vertical, DesignTokens.Spacing.xxs)
+                    .background(.ultraThinMaterial, in: Capsule())
                 }
-                .padding(6)
+                .padding(DesignTokens.Spacing.xs)
             }
             
             // Info
             HStack(spacing: DesignTokens.Spacing.xs) {
                 CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
-                    Circle().fill(DesignTokens.Colors.surfaceLight)
+                    Circle().fill(DesignTokens.Colors.surfaceElevated)
                 }
                 .frame(width: 24, height: 24)
                 .clipShape(Circle())
                 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(channel.channelName)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
                     
                     Text(channel.liveTitle)
-                        .font(.system(size: 10))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .lineLimit(1)
                     
                     if let cat = channel.categoryName {
                         Text(cat)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .lineLimit(1)
                     }
@@ -154,12 +150,11 @@ struct MiniChannelCard: View {
             .padding(.horizontal, DesignTokens.Spacing.xs)
             .padding(.vertical, DesignTokens.Spacing.xs)
         }
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(
-                    isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : DesignTokens.Colors.border.opacity(0.3),
+                    isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : .white.opacity(DesignTokens.Glass.borderOpacity),
                     lineWidth: 0.5
                 )
         }

@@ -32,6 +32,15 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         playerLayer.shouldRasterize = false    // 매 프레임 변경되므로 캐시 불필요
         playerLayer.allowsGroupOpacity = false // compositing group pass 제거
 
+        // Retina 디스플레이 대응 — contentsScale을 backingScaleFactor에 맞춤
+        // 미설정 시 1x로 렌더링 후 2x로 업스케일되어 흐릿해짐
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        playerLayer.contentsScale = scale
+        
+        // 스케일링 시 선명도 향상 — trilinear 필터링
+        playerLayer.magnificationFilter = .trilinear
+        playerLayer.minificationFilter  = .trilinear
+
         // 이 레이어의 모든 암묵적 애니메이션 비활성화
         playerLayer.actions = [
             "position":   NSNull(),
@@ -46,6 +55,14 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
 
     func attach(player: AVPlayer) {
         playerLayer.player = player
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // 윈도우 이동/스크린 변경 시 contentsScale 자동 업데이트
+        if let scale = window?.backingScaleFactor {
+            playerLayer.contentsScale = scale
+        }
     }
 
     override func layout() {
@@ -105,7 +122,12 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     // MARK: - Public Properties
 
     public let player: AVPlayer
-    public var catchupConfig: AVLiveCatchupConfig = .lowLatency
+    /// lock 보호: 네트워크 모니터 콜백/메인 스레드에서 동시 접근
+    public var catchupConfig: AVLiveCatchupConfig {
+        get { lock.withLock { _catchupConfig } }
+        set { lock.withLock { _catchupConfig = newValue } }
+    }
+    private var _catchupConfig: AVLiveCatchupConfig = .lowLatency
 
     /// State change callback
     public var onStateChange: (@Sendable (PlayerState.Phase) -> Void)?
@@ -120,6 +142,13 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
     public var isPlaying: Bool {
         lock.withLock { _state == .playing }
+    }
+
+    public var isInErrorState: Bool {
+        lock.withLock {
+            if case .error = _state { return true }
+            return false
+        }
     }
 
     public var currentTime: TimeInterval {
@@ -165,10 +194,20 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
     // MARK: - Live Stream State
 
-    private var isLiveStream: Bool = false
+    /// lock 보호: play()/KVO/networkMonitor에서 동시 접근
+    private var isLiveStream: Bool {
+        get { lock.withLock { _isLiveStream } }
+        set { lock.withLock { _isLiveStream = newValue } }
+    }
+    private var _isLiveStream: Bool = false
     private var stallWatchdogTask: Task<Void, Never>?
     private var liveCatchupTask: Task<Void, Never>?
-    private var lastProgressTime: Date = Date()
+    /// lock 보호: KVO/watchdog/networkMonitor에서 동시 접근
+    private var lastProgressTime: Date {
+        get { lock.withLock { _lastProgressTime } }
+        set { lock.withLock { _lastProgressTime = newValue } }
+    }
+    private var _lastProgressTime: Date = Date()
     /// 최근 캐치업 속도 히스토리 — 급격한 속도 변화 스무딩용 (최대 4개)
     private var rateHistory: [Float] = []
     /// 현재 측정 지연 시간 (초) — AccessLog/Catchup 공유
@@ -183,6 +222,12 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     private let networkMonitor = NWPathMonitor()
     private var currentNetworkType: NWInterface.InterfaceType = .wifi
     private var networkQueue = DispatchQueue(label: "av.engine.network")
+
+    // MARK: - Recording
+
+    private var _isRecording: Bool = false
+    private var _recordingURL: URL?
+    private let recordingService = StreamRecordingService()
 
     // MARK: - Initialization
 
@@ -253,15 +298,18 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         let item = AVPlayerItem(asset: asset)
 
         // ── 화면 해상도 기반 ABR 최적화 ───────────────────────────────────
-        // 필요 이상 고해상도 세그먼트를 선택하지 않아 CPU/GPU 디코딩 부하 절감
+        // 전체 화면 크기 × Retina 스케일 기준 — visibleFrame 대신 frame 사용하여
+        // 메뉴바/독 영역까지 포함한 최대 해상도 스트림 선택 허용
         if let screen = NSScreen.main {
             let scale = screen.backingScaleFactor
-            let size  = screen.visibleFrame.size
+            let size  = screen.frame.size
             item.preferredMaximumResolution = CGSize(
                 width:  size.width  * scale,
                 height: size.height * scale
             )
         }
+        // 싱글 재생 시 비트레이트 무제한 — 최고 화질 variant 빠르게 선택
+        item.preferredPeakBitRate = 0
         // macOS 14+: 첫 번째 적합 variant 즉시 재생 → 초기 버퍼링 시간 단축
         if #available(macOS 14.0, *) {
             item.startsOnFirstEligibleVariant = true
@@ -322,6 +370,9 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         stallWatchdogTask = nil
         liveCatchupTask = nil
 
+        // KVO observer 잔존 방지 — replaceCurrentItem(nil) 전에 제거
+        removeItemObservers()
+
         player.pause()
         player.replaceCurrentItem(with: nil)
         lock.withLock {
@@ -360,6 +411,45 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         lock.withLock { _volume = v }
     }
 
+    // MARK: - Recording (PlayerEngineProtocol)
+
+    /// 현재 녹화 중인지 여부
+    public var isRecording: Bool {
+        lock.withLock { _isRecording }
+    }
+
+    /// 스트림 녹화 시작 — HLS 세그먼트 다운로드 방식
+    /// 현재 재생 중인 HLS 스트림의 세그먼트를 직접 다운로드·저장한다.
+    public func startRecording(to url: URL) async throws {
+        guard !lock.withLock({ _isRecording }) else {
+            throw PlayerError.recordingFailed("이미 녹화 중입니다")
+        }
+        guard let streamURL = lock.withLock({ _currentURL }) else {
+            throw PlayerError.recordingFailed("재생 중인 스트림이 없습니다")
+        }
+
+        try await recordingService.startRecording(playlistURL: streamURL, to: url)
+
+        lock.withLock {
+            _isRecording = true
+            _recordingURL = url
+        }
+        logger.info("AVPlayer 녹화 시작: \(url.lastPathComponent, privacy: .public)")
+    }
+
+    /// 녹화 중지
+    public func stopRecording() async {
+        guard lock.withLock({ _isRecording }) else { return }
+
+        await recordingService.stopRecording()
+
+        lock.withLock {
+            _isRecording = false
+            _recordingURL = nil
+        }
+        logger.info("AVPlayer 녹화 중지")
+    }
+
     // MARK: - AVPlayer-Specific Accessors
 
     public var currentPhase: PlayerState.Phase {
@@ -369,15 +459,21 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     // MARK: - Stall Watchdog
 
     /// 스마트 스톨 워치독:
-    /// 1) 12초 무진행: 즉각 재연결
-    /// 2) 버퍼 고갈(isPlaybackLikelyToKeepUp=false): 최대 20초 추가 대기
-    /// 3) 재생 중 연속 5회 스톨 → .connectionLost 에러
+    /// 1) 12초 무진행: 재연결 요청
+    /// 2) 버퍼 고갈(isPlaybackLikelyToKeepUp=false): 연속 7회 → 재연결 요청
+    /// 3) 장시간 재생 안정성: 워치독이 재연결 후에도 영구 종료되지 않고 계속 감시
+    /// 4) 연속 재연결 실패 보호: 5분 내 3회 이상 재연결 시 에러 상태 전환
+    private var recentReconnectTimestamps: [Date] = []
+    private let maxReconnectsInWindow = 3
+    private let reconnectWindowSeconds: TimeInterval = 300 // 5분
+
     private func startStallWatchdog() {
         let kStallTimeout: TimeInterval = 12.0
         let kCheckInterval: UInt64 = 3_000_000_000 // 3초
 
         stallWatchdogTask?.cancel()
         lastProgressTime = Date()
+        recentReconnectTimestamps.removeAll()
 
         stallWatchdogTask = Task { [weak self] in
             var bufferStallCount = 0
@@ -386,6 +482,17 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
                 guard let self, !Task.isCancelled else { return }
 
                 let phase = self.lock.withLock { self._state }
+
+                // idle/ended/error 상태에서는 감시 일시 중지 (루프는 유지)
+                if phase == .idle || phase == .ended {
+                    bufferStallCount = 0
+                    continue
+                }
+                if case .error = phase {
+                    bufferStallCount = 0
+                    continue
+                }
+
                 guard phase == .playing || phase == .buffering(progress: 0) else {
                     bufferStallCount = 0
                     continue
@@ -401,8 +508,29 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
                     self.logger.warning(
                         "AVPlayerEngine: stall watchdog — elapsed=\(Int(elapsed))s bufferStalls=\(bufferStallCount)"
                     )
+
+                    // 연속 재연결 실패 보호: 5분 내 maxReconnectsInWindow회 초과 시 에러 전환
+                    let now = Date()
+                    self.recentReconnectTimestamps.append(now)
+                    self.recentReconnectTimestamps.removeAll {
+                        now.timeIntervalSince($0) > self.reconnectWindowSeconds
+                    }
+
+                    if self.recentReconnectTimestamps.count > self.maxReconnectsInWindow {
+                        self.logger.error(
+                            "AVPlayerEngine: \(self.maxReconnectsInWindow)+ reconnects in \(Int(self.reconnectWindowSeconds))s — giving up"
+                        )
+                        self.handleError(.connectionLost)
+                        return // 워치독 종료 (복구 불가 상태)
+                    }
+
+                    // 재연결 요청 후 카운터 리셋, 루프 계속
+                    bufferStallCount = 0
+                    self.lastProgressTime = Date()
                     self.handleError(.connectionLost)
-                    return
+                    // 재연결 완료 대기 (15초) — play()가 다시 호출될 때까지 대기
+                    try? await Task.sleep(nanoseconds: 15_000_000_000)
+                    continue
                 }
             }
         }
@@ -483,6 +611,8 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     private func setupNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
+            let previousType = self.currentNetworkType
+            
             if path.usesInterfaceType(.wiredEthernet) {
                 self.currentNetworkType = .wiredEthernet
             } else if path.usesInterfaceType(.wifi) {
@@ -491,6 +621,33 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
                 self.currentNetworkType = .cellular
             } else {
                 self.currentNetworkType = .other
+            }
+            
+            // 네트워크 인터페이스 변경 시 자동 대응
+            if previousType != self.currentNetworkType {
+                self.logger.info("AVPlayerEngine: 네트워크 전환 \(String(describing: previousType)) → \(String(describing: self.currentNetworkType))")
+                
+                // 연결 상실 시 즉시 재연결 요청
+                if path.status != .satisfied {
+                    self.logger.warning("AVPlayerEngine: 네트워크 연결 해제 감지 — 재연결 대기")
+                    return
+                }
+                
+                // 라이브 스트림에서만 캐치업 설정 재조정
+                let isLive = self.isLiveStream
+                if isLive {
+                    self.adjustCatchupConfigForNetwork()
+                    
+                    // 현재 재생 중인 아이템의 버퍼 설정 즉시 업데이트
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, let item = self.player.currentItem else { return }
+                        item.preferredForwardBufferDuration = self.catchupConfig.preferredForwardBuffer
+                        self.logger.info("AVPlayerEngine: 버퍼 설정 업데이트 — target=\(self.catchupConfig.targetLatency)s max=\(self.catchupConfig.maxLatency)s buffer=\(self.catchupConfig.preferredForwardBuffer)s")
+                    }
+                }
+                
+                // 스톨 워치독 타임스탬프 갱신 — 전환 순간의 일시 정지를 스톨로 오인 방지
+                self.lastProgressTime = Date()
             }
         }
         networkMonitor.start(queue: networkQueue)
@@ -662,7 +819,9 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
                 if case .buffering = phase {
                     self.lock.withLock { self._state = .playing }
                     self.notifyStateChange(.playing)
-                    self.player.play()
+                    DispatchQueue.main.async { [weak self] in
+                        self?.player.play()
+                    }
                 }
             }
         }
@@ -682,6 +841,18 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             self.logger.warning("AVPlayerEngine: playback stalled")
             self.lock.withLock { self._state = .buffering(progress: 0) }
             self.notifyStateChange(.buffering(progress: 0))
+            // 스톨 복구: 2초 후 자동 play() 재시도
+            // AVPlayer는 버퍼가 충분히 쌓이면 자동 재개하지 않는 경우가 있음
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard let self else { return }
+                let keepUp = self.player.currentItem?.isPlaybackLikelyToKeepUp ?? false
+                if keepUp && self.player.timeControlStatus != .playing {
+                    self.logger.info("AVPlayerEngine: stall recovery — buffer ready, resuming play")
+                    self.player.play()
+                    self.lastProgressTime = Date()
+                }
+            }
         }
 
         bufferObservation = NotificationCenter.default.addObserver(
@@ -694,7 +865,8 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             self.notifyStateChange(.ended)
         }
 
-        // AccessLog: 든로드 프레임, 비트레이트, 스트리밍 정보 모니터링
+        // AccessLog: 드롭 프레임, 비트레이트, 스트리밍 정보 모니터링
+        // + 주기적 AccessLog 정리 — 장시간 재생 시 이벤트 무한 축적 방지
         accessLogObservation = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemNewAccessLogEntry,
             object: item,
@@ -716,6 +888,15 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
                         "AVPlayerEngine: \(diff) frames dropped (total=\(newDropped)) bitrate=\(Int(entry.indicatedBitrate / 1000))kbps"
                     )
                 }
+            }
+            
+            // AccessLog 이벤트 수가 과다하면 경고 (AVPlayerItem은 자체 정리 불가)
+            // 10분 이상 재생 시 수백 개의 이벤트가 쌓일 수 있음
+            let eventCount = log.events.count
+            if eventCount > 500 && eventCount % 100 == 0 {
+                self.logger.warning(
+                    "AVPlayerEngine: AccessLog events accumulating: \(eventCount) entries (memory concern for long playback)"
+                )
             }
         }
     }
@@ -751,7 +932,13 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     // MARK: - Helpers
 
     private func notifyStateChange(_ phase: PlayerState.Phase) {
-        onStateChange?(phase)
+        if Thread.isMainThread {
+            onStateChange?(phase)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.onStateChange?(phase)
+            }
+        }
     }
 }
 

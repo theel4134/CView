@@ -42,7 +42,7 @@ public struct LoginWebView: NSViewRepresentable {
         webView.allowsBackForwardNavigationGestures = true
 
         // User Agent 설정 (데스크톱 브라우저)
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        webView.customUserAgent = CommonHeaders.chromeUserAgent
 
         // 로그인 페이지 로드
         let request = URLRequest(url: Self.loginURL)
@@ -109,7 +109,7 @@ public struct LoginWebView: NSViewRepresentable {
                         HTTPCookieStorage.shared.setCookie(cookie)
                     }
 
-                    Log.auth.info("Login cookies acquired: \(foundCookies.map(\.name).joined(separator: ", "))")
+                    Log.auth.info("Login cookies acquired: \(foundCookies.map(\.name).joined(separator: ", "), privacy: .private)")
 
                     DispatchQueue.main.async {
                         self.parent.onLoginSuccess()

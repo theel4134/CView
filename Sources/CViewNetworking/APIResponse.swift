@@ -2,6 +2,7 @@
 // 치지직 API 응답 래퍼
 
 import Foundation
+import os
 
 /// 치지직 API 표준 응답 래퍼
 public struct ChzzkResponse<T: Decodable & Sendable>: Decodable, Sendable {
@@ -13,6 +14,40 @@ public struct ChzzkResponse<T: Decodable & Sendable>: Decodable, Sendable {
         self.code = code
         self.message = message
         self.content = content
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case code, message, content
+    }
+
+    /// 방어적 디코딩: code/message/content 누락 시에도 최대한 복원
+    public init(from decoder: Decoder) throws {
+        let logger = os.Logger(subsystem: "com.cview.app", category: "ChzzkResponse")
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // code: 없으면 -1 (알 수 없음)
+        if let codeValue = try? container.decode(Int.self, forKey: .code) {
+            self.code = codeValue
+        } else {
+            logger.warning("ChzzkResponse: 'code' 필드 누락, 기본값 -1 사용")
+            self.code = -1
+        }
+
+        // message: 없으면 nil
+        self.message = try? container.decode(String.self, forKey: .message)
+
+        // content: 없거나 디코딩 실패 시 nil + 경고
+        if container.contains(.content) {
+            do {
+                self.content = try container.decodeIfPresent(T.self, forKey: .content)
+            } catch {
+                logger.warning("ChzzkResponse: 'content' 디코딩 실패 (\(error.localizedDescription, privacy: .public)), nil 처리")
+                self.content = nil
+            }
+        } else {
+            logger.warning("ChzzkResponse: 'content' 필드 누락")
+            self.content = nil
+        }
     }
 }
 
@@ -179,40 +214,43 @@ public struct UserStatusInfo: Decodable, Sendable {
 
 // MARK: - JSON Decoder Extension
 
-/// 날짜 파서 — 매 디코딩마다 새 인스턴스 생성 방지 (read-only 사용이므로 nonisolated(unsafe) 안전)
+/// 날짜 파서 — DateFormatter/ISO8601DateFormatter는 thread-unsafe이므로
+/// 호출마다 새 인스턴스를 생성하되, 포맷 문자열은 상수로 공유한다.
 private enum ChzzkDateParsers {
-    nonisolated(unsafe) static let iso8601WithFrac: ISO8601DateFormatter = {
+    static func iso8601WithFrac() -> ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
-    }()
-    nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = ISO8601DateFormatter()
-    nonisolated(unsafe) static let legacy: DateFormatter = {
+    }
+    static func iso8601() -> ISO8601DateFormatter {
+        ISO8601DateFormatter()
+    }
+    static func legacy() -> DateFormatter {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm:ss"
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
-    }()
+    }
 }
 
 extension JSONDecoder {
-    /// 치지직 API용 JSON 디코더
-    public static let chzzk: JSONDecoder = {
+    /// 치지직 API용 JSON 디코더 — 동시 사용 안전을 위해 매번 새 인스턴스 반환
+    public static var chzzk: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
 
             // ISO 8601 (소수초 포함 및 미포함 순서로 시도)
-            if let date = ChzzkDateParsers.iso8601WithFrac.date(from: dateString) {
+            if let date = ChzzkDateParsers.iso8601WithFrac().date(from: dateString) {
                 return date
             }
-            if let date = ChzzkDateParsers.iso8601.date(from: dateString) {
+            if let date = ChzzkDateParsers.iso8601().date(from: dateString) {
                 return date
             }
 
             // yyyy-MM-dd HH:mm:ss
-            if let date = ChzzkDateParsers.legacy.date(from: dateString) {
+            if let date = ChzzkDateParsers.legacy().date(from: dateString) {
                 return date
             }
 
@@ -222,5 +260,5 @@ extension JSONDecoder {
             )
         }
         return decoder
-    }()
+    }
 }

@@ -76,8 +76,8 @@ struct CategoryBrowseView: View {
                     ))
             }
         }
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: selectedCategory)
-        .background(DesignTokens.Colors.backgroundDark)
+        .animation(DesignTokens.Animation.contentTransition, value: selectedCategory)
+        .background(DesignTokens.Colors.background)
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
@@ -99,7 +99,7 @@ struct CategoryBrowseView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 categoryHeader
-                    .padding(.bottom, 16)
+                    .padding(.bottom, DesignTokens.Spacing.md)
                 if viewModel.isLoading && viewModel.liveChannels.isEmpty {
                     loadingPlaceholder
                 } else if viewModel.isLoadingStats && viewModel.allStatChannels.isEmpty {
@@ -108,8 +108,8 @@ struct CategoryBrowseView: View {
                         loadingPlaceholder
                     } else {
                         categoryTypeFilter
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
+                            .padding(.horizontal, DesignTokens.Spacing.md)
+                            .padding(.bottom, DesignTokens.Spacing.sm)
                         LazyVGrid(columns: gridColumns, spacing: 12) {
                             ForEach(categorizedChannels, id: \.category) { group in
                                 CategoryGridCard(
@@ -118,21 +118,21 @@ struct CategoryBrowseView: View {
                                     previewChannels: Array(group.channels.prefix(2)),
                                     accentColor: accentColor(for: group.category)
                                 ) {
-                                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                                    withAnimation(DesignTokens.Animation.contentTransition) {
                                         selectedCategory = group.category
                                     }
                                 }
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 32)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.bottom, DesignTokens.Spacing.xl)
                     }
                 } else if categorizedChannels.isEmpty {
                     emptyState("라이브 중인 카테고리가 없습니다")
                 } else {
                     categoryTypeFilter
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.bottom, DesignTokens.Spacing.sm)
                     LazyVGrid(columns: gridColumns, spacing: 12) {
                         ForEach(categorizedChannels, id: \.category) { group in
                             CategoryGridCard(
@@ -141,14 +141,14 @@ struct CategoryBrowseView: View {
                                 previewChannels: Array(group.channels.prefix(2)),
                                 accentColor: accentColor(for: group.category)
                             ) {
-                                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                                withAnimation(DesignTokens.Animation.contentTransition) {
                                     selectedCategory = group.category
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 32)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.bottom, DesignTokens.Spacing.xl)
                 }
             }
         }
@@ -159,19 +159,19 @@ struct CategoryBrowseView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Image(systemName: "square.grid.2x2.fill")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                         .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                     Text("CATEGORY")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(DesignTokens.Typography.micro)
                         .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                         .tracking(1.8)
                 }
                 Text("카테고리")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(DesignTokens.Typography.custom(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 HStack(spacing: 6) {
                     Text("\(categorizedChannels.count)개 카테고리")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                     Text("·")
                         .foregroundStyle(DesignTokens.Colors.border)
@@ -180,7 +180,7 @@ struct CategoryBrowseView: View {
                             .fill(DesignTokens.Colors.live)
                             .frame(width: 5, height: 5)
                         Text("\(sourceChannels.count)개 라이브 중")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DesignTokens.Typography.captionMedium)
                             .foregroundStyle(DesignTokens.Colors.live.opacity(0.9))
                     }
                     if viewModel.isLoadingStats {
@@ -191,7 +191,7 @@ struct CategoryBrowseView: View {
                                 .scaleEffect(0.6)
                                 .tint(DesignTokens.Colors.chzzkGreen)
                             Text("전체 수집 중")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(DesignTokens.Typography.captionMedium)
                                 .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.8))
                         }
                     }
@@ -208,7 +208,7 @@ struct CategoryBrowseView: View {
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(isRefreshing ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
                     .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                     .animation(
@@ -216,14 +216,13 @@ struct CategoryBrowseView: View {
                         value: isRefreshing
                     )
                     .frame(width: 34, height: 34)
-                    .background(DesignTokens.Colors.surfaceLight)
-                    .clipShape(Circle())
-                    .overlay { Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5) }
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay { Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5) }
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.top, DesignTokens.Spacing.xl)
     }
 
     // MARK: - 채널 목록
@@ -232,10 +231,10 @@ struct CategoryBrowseView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 channelListHeader(for: category)
-                    .padding(.bottom, 14)
+                    .padding(.bottom, DesignTokens.Spacing.md)
                 channelSearchBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 14)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.bottom, DesignTokens.Spacing.md)
                 if channelsInCategory.isEmpty && !channelSearchText.isEmpty {
                     emptyState("'\(channelSearchText)' 검색 결과가 없습니다")
                 } else if channelsInCategory.isEmpty {
@@ -249,8 +248,8 @@ struct CategoryBrowseView: View {
                                 }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 32)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.bottom, DesignTokens.Spacing.xl)
                 }
             }
         }
@@ -260,31 +259,30 @@ struct CategoryBrowseView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 6) {
                 Button {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    withAnimation(DesignTokens.Animation.contentTransition) {
                         selectedCategory = nil
                         channelSearchText = ""
                     }
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(DesignTokens.Typography.micro)
                         Text("카테고리")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(DesignTokens.Typography.captionSemibold)
                     }
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .padding(.vertical, 5)
-                    .padding(.horizontal, 10)
-                    .background(DesignTokens.Colors.surfaceLight)
-                    .clipShape(Capsule())
-                    .overlay { Capsule().strokeBorder(DesignTokens.Colors.border.opacity(0.6), lineWidth: 0.5) }
+                    .padding(.vertical, DesignTokens.Spacing.xs)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay { Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5) }
                 }
                 .buttonStyle(.plain)
                 HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                         .fill(accentColor(for: category))
                         .frame(width: 4, height: 24)
                     Text(category)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(DesignTokens.Typography.custom(size: 22, weight: .bold, design: .rounded))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                 }
                 let count = sourceChannels.filter { ($0.categoryName ?? "기타") == category }.count
@@ -293,45 +291,44 @@ struct CategoryBrowseView: View {
                         .fill(DesignTokens.Colors.live)
                         .frame(width: 5, height: 5)
                     Text("\(count)개 라이브 중")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.live.opacity(0.85))
                 }
             }
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.top, DesignTokens.Spacing.xl)
     }
 
     private var channelSearchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(channelSearchText.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen)
             TextField("채널, 방송 제목 검색...", text: $channelSearchText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
             if !channelSearchText.isEmpty {
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) { channelSearchText = "" }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(DesignTokens.Typography.body)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.sm)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: 9)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(
-                    channelSearchText.isEmpty ? DesignTokens.Colors.border : DesignTokens.Colors.chzzkGreen.opacity(0.4),
+                    channelSearchText.isEmpty ? .white.opacity(DesignTokens.Glass.borderOpacity) : DesignTokens.Colors.chzzkGreen.opacity(0.4),
                     lineWidth: 0.75
                 )
         }
@@ -359,23 +356,24 @@ struct CategoryBrowseView: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                 Text(label)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DesignTokens.Typography.captionSemibold)
             }
-            .foregroundStyle(isSelected ? DesignTokens.Colors.backgroundDark : DesignTokens.Colors.textSecondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                isSelected
-                    ? DesignTokens.Colors.chzzkGreen
-                    : DesignTokens.Colors.surfaceLight,
-                in: Capsule()
-            )
+            .foregroundStyle(isSelected ? DesignTokens.Colors.background : DesignTokens.Colors.textSecondary)
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.xs)
+            .background {
+                if isSelected {
+                    Capsule().fill(DesignTokens.Colors.chzzkGreen)
+                } else {
+                    Capsule().fill(.ultraThinMaterial)
+                }
+            }
             .overlay {
                 Capsule()
                     .strokeBorder(
-                        isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.border,
+                        isSelected ? DesignTokens.Colors.chzzkGreen : .white.opacity(DesignTokens.Glass.borderOpacityLight),
                         lineWidth: 0.75
                     )
             }
@@ -392,13 +390,13 @@ struct CategoryBrowseView: View {
                 .scaleEffect(0.8)
                 .tint(DesignTokens.Colors.chzzkGreen)
             Text("모든 카테고리 로드 중...")
-                .font(.system(size: 12, weight: .medium))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(DesignTokens.Colors.surface)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.md)
+        .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(DesignTokens.Colors.chzzkGreen.opacity(0.25))
@@ -410,7 +408,7 @@ struct CategoryBrowseView: View {
         VStack(spacing: 14) {
             ProgressView().scaleEffect(1.1)
             Text("불러오는 중...")
-                .font(.system(size: 12, weight: .medium))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         }
         .frame(maxWidth: .infinity, minHeight: 260)
@@ -419,10 +417,10 @@ struct CategoryBrowseView: View {
     private func emptyState(_ message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "tv.slash")
-                .font(.system(size: 32, weight: .thin))
+                .font(DesignTokens.Typography.custom(size: 32, weight: .thin))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(DesignTokens.Typography.bodyMedium)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -470,7 +468,7 @@ private struct CategoryGridCard: View {
                     colors: [
                         accentColor.opacity(0.28),
                         accentColor.opacity(0.10),
-                        DesignTokens.Colors.surface
+                        DesignTokens.Colors.surfaceBase
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -478,7 +476,7 @@ private struct CategoryGridCard: View {
 
                 // 중앙 아이콘 (약간 위로 오프셋)
                 Image(systemName: categoryIcon)
-                    .font(.system(size: 38, weight: .light))
+                    .font(DesignTokens.Typography.custom(size: 38, weight: .light))
                     .foregroundStyle(accentColor.opacity(0.52))
                     // Metal 3: 동적 glow shadow 제거 — hover 마다 GPU blur 연산 방지
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -494,7 +492,7 @@ private struct CategoryGridCard: View {
                 // 하단 텍스트 정보
                 VStack(alignment: .leading, spacing: 3) {
                     Text(category)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -504,12 +502,12 @@ private struct CategoryGridCard: View {
                             .fill(DesignTokens.Colors.live)
                             .frame(width: 5, height: 5)
                         Text("라이브 \(liveCount)개")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.78))
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.bottom, DesignTokens.Spacing.md)
 
                 // 라이브 수 뱃지 (우상단)
                 VStack {
@@ -521,21 +519,22 @@ private struct CategoryGridCard: View {
                                 .frame(width: 5, height: 5)
                                 .shadow(color: DesignTokens.Colors.live.opacity(0.9), radius: 3)
                             Text("\(liveCount)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
+                                .font(DesignTokens.Typography.micro)
+                                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.52), in: Capsule())
+                        .padding(.horizontal, DesignTokens.Spacing.xs)
+                        .padding(.vertical, DesignTokens.Spacing.xxs)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay { Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
                     }
                     Spacer()
                 }
-                .padding(8)
+                .padding(DesignTokens.Spacing.xs)
             }
             .frame(height: 140)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                     .strokeBorder(
                         isHovered ? accentColor.opacity(0.65) : DesignTokens.Colors.border.opacity(0.5),
                         lineWidth: isHovered ? 1.5 : 0.75
@@ -581,56 +580,57 @@ private struct CategoryChannelCard: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
-                        Circle().fill(DesignTokens.Colors.surface)
+                        Circle().fill(DesignTokens.Colors.surfaceBase)
                     }
                     .frame(width: 22, height: 22)
                     .clipShape(Circle())
-                    .overlay { Circle().strokeBorder(.white.opacity(0.20), lineWidth: 0.75) }
+                    .overlay { Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5) }
 
                     Text(channel.channelName)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
                         .shadow(color: .black.opacity(0.6), radius: 4)
                 }
                 Text(channel.liveTitle)
-                    .font(.system(size: 11))
+                    .font(DesignTokens.Typography.caption)
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .shadow(color: .black.opacity(0.5), radius: 3)
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.bottom, DesignTokens.Spacing.md)
 
             // LIVE + 시청자 수 (좌상단)
             VStack {
                 HStack(spacing: 5) {
                     Text("LIVE")
-                        .font(.system(size: 8, weight: .black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 3)
-                        .background(DesignTokens.Colors.live, in: RoundedRectangle(cornerRadius: 3))
+                        .font(DesignTokens.Typography.custom(size: 8, weight: .black))
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                        .padding(.horizontal, DesignTokens.Spacing.xs)
+                        .padding(.vertical, DesignTokens.Spacing.xxs)
+                        .background(DesignTokens.Colors.live, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     HStack(spacing: 3) {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 8))
+                            .font(DesignTokens.Typography.custom(size: 8))
                         Text(channel.formattedViewerCount)
-                            .font(.system(size: 9, weight: .bold))
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(.black.opacity(0.55), in: Capsule())
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .padding(.horizontal, DesignTokens.Spacing.xs)
+                    .padding(.vertical, DesignTokens.Spacing.xxs)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay { Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
                     Spacer()
                 }
                 Spacer()
             }
-            .padding(8)
+            .padding(DesignTokens.Spacing.xs)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(
                     isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.55) : DesignTokens.Colors.border.opacity(0.5),
                     lineWidth: isHovered ? 1.5 : 0.75

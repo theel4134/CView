@@ -157,14 +157,16 @@ public actor MetricsForwarder {
         await monitor.updateDroppedFrames(metrics.droppedFramesDelta)
         await monitor.updateNetworkBytes(metrics.networkBytesPerSec)
         await monitor.updateBufferHealth(metrics.bufferHealth * 100)  // 0-1 → 0-100%
+        await monitor.updateResolution(metrics.resolution)
+        await monitor.updateInputBitrate(metrics.inputBitrateKbps)
+        await monitor.updateNetworkSpeed(metrics.networkBytesPerSec)
     }
 
     // MARK: - Metrics Forwarding
 
     private func startForwarding() {
         forwardingTask?.cancel()
-        forwardingTask = Task { [weak self] in
-            guard let self else { return }
+        forwardingTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(self.forwardInterval))
                 guard !Task.isCancelled else { break }
@@ -213,8 +215,7 @@ public actor MetricsForwarder {
     
     private func startPing() {
         pingTask?.cancel()
-        pingTask = Task { [weak self] in
-            guard let self else { return }
+        pingTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(self.pingInterval))
                 guard !Task.isCancelled else { break }

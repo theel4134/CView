@@ -43,7 +43,7 @@ struct QualitySelectorView: View {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(quality.name)
-                                            .font(.system(size: 14, weight: .medium))
+                                            .font(DesignTokens.Typography.bodyMedium)
                                         Text("\(quality.resolution) · \(formatBandwidth(quality.bandwidth))")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
@@ -57,7 +57,7 @@ struct QualitySelectorView: View {
                                     }
                                 }
                                 .padding(.horizontal)
-                                .padding(.vertical, 10)
+                                .padding(.vertical, DesignTokens.Spacing.md)
                             }
                             .buttonStyle(.plain)
                             
@@ -113,13 +113,13 @@ struct ChatSettingsView: View {
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(DesignTokens.Typography.title3)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
 
             Divider()
 
@@ -133,7 +133,7 @@ struct ChatSettingsView: View {
                         statsSection(vm: vm)
                         actionSection(vm: vm)
                     }
-                    .padding(16)
+                    .padding(DesignTokens.Spacing.md)
                 }
             } else {
                 Spacer()
@@ -153,16 +153,16 @@ struct ChatSettingsView: View {
         ChatSettingsCard(title: "표시", icon: "textformat.size", color: DesignTokens.Colors.accentPurple) {
             ChatSettingsRow(label: "글꼴 크기", icon: "textformat", iconColor: DesignTokens.Colors.accentPurple) {
                 HStack(spacing: 6) {
-                    Text("가").font(.system(size: 10)).foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text("가").font(DesignTokens.Typography.custom(size: 10, weight: .regular)).foregroundStyle(DesignTokens.Colors.textTertiary)
                     Slider(value: Binding(
                         get: { vm.fontSize },
                         set: { vm.fontSize = $0; saveToStore(vm) }
                     ), in: 10...24, step: 1)
                     .tint(DesignTokens.Colors.accentPurple)
                     .frame(width: 110)
-                    Text("가").font(.system(size: 17)).foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text("가").font(DesignTokens.Typography.custom(size: 17)).foregroundStyle(DesignTokens.Colors.textTertiary)
                     Text("\(Int(vm.fontSize))pt")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.accentPurple)
                         .frame(width: 34)
                 }
@@ -179,7 +179,7 @@ struct ChatSettingsView: View {
                     .tint(DesignTokens.Colors.accentPurple)
                     .frame(width: 110)
                     Text("\(Int(vm.opacity * 100))%")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.accentPurple)
                         .frame(width: 34)
                 }
@@ -196,7 +196,7 @@ struct ChatSettingsView: View {
                     .tint(DesignTokens.Colors.accentPurple)
                     .frame(width: 110)
                     Text(String(format: "%.0fpt", vm.lineSpacing))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.accentPurple)
                         .frame(width: 38)
                 }
@@ -296,10 +296,10 @@ struct ChatSettingsView: View {
                 ChatSettingsDivider()
                 VStack(alignment: .leading, spacing: 8) {
                     Text("차단 키워드")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 6)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.top, DesignTokens.Spacing.xs)
 
                     if !vm.blockedWords.isEmpty {
                         FlowTagView(tags: vm.blockedWords) { keyword in
@@ -307,24 +307,24 @@ struct ChatSettingsView: View {
                             saveToStore(vm)
                             Task { await vm.addKeywordFilter(vm.blockedWords) }
                         }
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
                     }
 
                     HStack(spacing: 6) {
                         TextField("키워드 입력 후 +", text: $newKeyword)
                             .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12))
+                            .font(DesignTokens.Typography.caption)
                             .onSubmit { addKeyword(vm: vm) }
                         Button { addKeyword(vm: vm) } label: {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(DesignTokens.Colors.accentBlue)
-                                .font(.system(size: 18))
+                                .font(DesignTokens.Typography.title3)
                         }
                         .buttonStyle(.plain)
                         .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.bottom, DesignTokens.Spacing.xs)
                 }
             }
         }
@@ -353,10 +353,10 @@ struct ChatSettingsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "trash")
                 Text("채팅 지우기")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            .padding(.vertical, DesignTokens.Spacing.sm)
         }
         .buttonStyle(.bordered)
         .tint(.red)
@@ -395,23 +395,23 @@ private struct ChatSettingsCard<Content: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(color)
                 Text(title)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .textCase(.uppercase)
                 Spacer()
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.top, DesignTokens.Spacing.sm)
+            .padding(.bottom, DesignTokens.Spacing.xs)
 
             content()
-                .padding(.bottom, 4)
+                .padding(.bottom, DesignTokens.Spacing.xxs)
         }
         .background(DesignTokens.Colors.backgroundElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
     }
 }
 
@@ -425,22 +425,22 @@ private struct ChatSettingsRow<Control: View>: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 12))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(iconColor)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.system(size: 13))
+                Text(label).font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 if let desc = description {
-                    Text(desc).font(.system(size: 10))
+                    Text(desc).font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
             }
             Spacer()
             control()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.sm)
     }
 }
 
@@ -458,18 +458,18 @@ private struct ChatStatRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 12))
+                .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .frame(width: 18)
-            Text(label).font(.system(size: 13))
+            Text(label).font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
             Spacer()
             Text(value)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .font(DesignTokens.Typography.custom(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.sm)
     }
 }
 
@@ -483,17 +483,17 @@ private struct FlowTagView: View {
             ForEach(tags, id: \.self) { tag in
                 HStack(spacing: 4) {
                     Text(tag)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.accentBlue)
                     Button { onRemove(tag) } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, DesignTokens.Spacing.xs)
+                .padding(.vertical, DesignTokens.Spacing.xxs)
                 .background(DesignTokens.Colors.accentBlue.opacity(0.12))
                 .clipShape(Capsule())
             }
@@ -559,7 +559,7 @@ struct ClipLookupView: View {
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "film.stack")
-                        .font(.system(size: 48))
+                        .font(DesignTokens.Typography.custom(size: 48))
                         .foregroundStyle(.tertiary)
                     Text("클립을 찾을 수 없습니다")
                         .font(.title3)

@@ -3,6 +3,16 @@
 
 import PackageDescription
 
+// MARK: - 공통 Swift 빌드 설정
+/// Debug: 타입 체크 경고로 느린 컴파일 감지 / Release: 크로스 모듈 최적화
+private let commonSwiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .unsafeFlags([
+        "-Xfrontend", "-warn-long-function-bodies=200",
+        "-Xfrontend", "-warn-long-expression-type-checking=200",
+    ], .when(configuration: .debug)),
+]
+
 let package = Package(
     name: "CView_v2",
     platforms: [
@@ -20,41 +30,42 @@ let package = Package(
         .executable(name: "CViewApp", targets: ["CViewApp"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/tylerjonesio/vlckit-spm.git", from: "3.6.0"),
+        // VLCKitSPM — 리비전 고정으로 매 빌드마다 branch 해시 조회 방지
+        .package(url: "https://github.com/rursache/VLCKitSPM.git", revision: "94ca521c32a9c1cd76824a34ab82e9ddb3360e65"),
     ],
     targets: [
         // MARK: - Core Module (도메인 모델, 프로토콜, 유틸리티)
         .target(
             name: "CViewCore",
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Networking Module (API 클라이언트, 엔드포인트)
         .target(
             name: "CViewNetworking",
             dependencies: ["CViewCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Auth Module (인증, 키체인, 쿠키)
         .target(
             name: "CViewAuth",
             dependencies: ["CViewCore", "CViewNetworking"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Persistence Module (SwiftData, 설정 저장)
         .target(
             name: "CViewPersistence",
             dependencies: ["CViewCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Chat Module (채팅 엔진, WebSocket)
         .target(
             name: "CViewChat",
             dependencies: ["CViewCore", "CViewNetworking"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Player Module (플레이어 엔진, HLS, 동기화)
@@ -63,23 +74,23 @@ let package = Package(
             dependencies: [
                 "CViewCore",
                 "CViewNetworking",
-                .product(name: "VLCKitSPM", package: "vlckit-spm"),
+                .product(name: "VLCKitSPM", package: "VLCKitSPM"),
             ],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - UI Module (디자인 시스템, 공유 컴포넌트)
         .target(
             name: "CViewUI",
             dependencies: ["CViewCore", "CViewNetworking"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Monitoring Module (성능, 메트릭)
         .target(
             name: "CViewMonitoring",
             dependencies: ["CViewCore", "CViewNetworking"],
-            swiftSettings: [.swiftLanguageMode(.v6)],
+            swiftSettings: commonSwiftSettings,
             linkerSettings: [.linkedFramework("IOKit")]
         ),
 
@@ -96,34 +107,34 @@ let package = Package(
                 "CViewUI",
                 "CViewMonitoring",
             ],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
 
         // MARK: - Tests
         .testTarget(
             name: "CViewCoreTests",
             dependencies: ["CViewCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
         .testTarget(
             name: "CViewNetworkingTests",
             dependencies: ["CViewNetworking", "CViewCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
         .testTarget(
             name: "CViewChatTests",
             dependencies: ["CViewChat", "CViewCore", "CViewNetworking"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
         .testTarget(
             name: "CViewPlayerTests",
             dependencies: ["CViewPlayer", "CViewCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
         .testTarget(
             name: "CViewAuthTests",
             dependencies: ["CViewAuth", "CViewCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: commonSwiftSettings
         ),
     ]
 )

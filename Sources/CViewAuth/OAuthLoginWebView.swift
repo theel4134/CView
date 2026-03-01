@@ -39,7 +39,7 @@ public struct OAuthLoginWebView: NSViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        webView.customUserAgent = CommonHeaders.chromeUserAgent
         
         webView.load(URLRequest(url: authURL))
         return webView
@@ -97,13 +97,13 @@ public struct OAuthLoginWebView: NSViewRepresentable {
                                 }
                             }
                         }
-                        Log.auth.info("  \(cookie.name): domain=\(cookie.domain), session=\(cookie.isSessionOnly)")
+                        Log.auth.info("  \(cookie.name, privacy: .private): domain=\(cookie.domain, privacy: .private), session=\(cookie.isSessionOnly)")
                     }
                     
                     if authCookies.isEmpty {
                         Log.auth.warning("OAuth WebView: NO NID_AUT/NID_SES cookies found")
                         if !naverCookies.isEmpty {
-                            Log.auth.info("  naver cookies: \(Set(naverCookies.map(\.name)).sorted().joined(separator: ", "))")
+                            Log.auth.info("  naver cookies: \(Set(naverCookies.map(\.name)).sorted().joined(separator: ", "), privacy: .private)")
                         }
                     }
                     self?.handleCallback(url: url)
@@ -172,7 +172,7 @@ public struct OAuthLoginWebView: NSViewRepresentable {
             
             let state = queryItems.first(where: { $0.name == "state" })?.value
             
-            Log.auth.info("OAuth callback intercepted: code=\(code.prefix(10))...")
+            Log.auth.info("OAuth callback intercepted: code=\(LogMask.token(code), privacy: .private)")
             parent.onCodeReceived(code, state)
         }
     }

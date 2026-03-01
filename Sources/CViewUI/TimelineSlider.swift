@@ -36,12 +36,12 @@ public struct TimelineSlider: View {
                 
                 ZStack(alignment: .leading) {
                     // Background track
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                         .fill(Color.white.opacity(0.2))
                         .frame(height: isHovering || isDragging ? 8 : 4)
                     
                     // Progress fill
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                         .fill(DesignTokens.Colors.chzzkGreen)
                         .frame(width: max(0, min(width, width * progress)),
                                height: isHovering || isDragging ? 8 : 4)
@@ -59,18 +59,18 @@ public struct TimelineSlider: View {
                     if isHovering && !isDragging {
                         let hoverTime = duration * Double(max(0, min(1, hoverPosition / width)))
                         Text(formatTime(hoverTime))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
+                            .padding(.horizontal, DesignTokens.Spacing.xs)
+                            .padding(.vertical, DesignTokens.Spacing.xxs)
                             .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                             .offset(x: max(20, min(width - 50, hoverPosition - 25)), y: -24)
                     }
                 }
                 .frame(height: isHovering || isDragging ? 8 : 4)
                 .contentShape(Rectangle().size(width: width, height: 20))
                 .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(DesignTokens.Animation.fast) {
                         isHovering = hovering
                     }
                 }
@@ -102,13 +102,13 @@ public struct TimelineSlider: View {
             // Time labels
             HStack {
                 Text(formatTime(isDragging ? dragTime : currentTime))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DesignTokens.Typography.custom(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
                 
                 Spacer()
                 
                 Text(formatTime(duration))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DesignTokens.Typography.custom(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
         }

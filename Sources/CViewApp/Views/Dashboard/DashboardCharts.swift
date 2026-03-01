@@ -13,7 +13,7 @@ struct ViewerTrendChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             Text("시청자 트렌드")
-                .font(.system(size: 12, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
@@ -50,7 +50,7 @@ struct ViewerTrendChart: View {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                     }
                 }
                 .chartYAxis {
@@ -59,7 +59,7 @@ struct ViewerTrendChart: View {
                             .foregroundStyle(DesignTokens.Colors.border)
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                     }
                 }
                 .chartPlotStyle { plotArea in
@@ -69,11 +69,10 @@ struct ViewerTrendChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
     
@@ -82,10 +81,10 @@ struct ViewerTrendChart: View {
             Spacer()
             VStack(spacing: 6) {
                 Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 20))
+                    .font(DesignTokens.Typography.headline)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text("데이터 수집 중...")
-                    .font(.system(size: 11))
+                    .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             Spacer()
@@ -102,7 +101,7 @@ struct CategoryBarChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             Text("인기 카테고리 TOP 5")
-                .font(.system(size: 12, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
@@ -116,10 +115,10 @@ struct CategoryBarChart: View {
                         y: .value("카테고리", cat.name)
                     )
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
-                    .cornerRadius(3)
+                    .cornerRadius(DesignTokens.Radius.xs)
                     .annotation(position: .trailing, spacing: 4) {
                         Text(formatViewerCount(cat.totalViewers))
-                            .font(.system(size: 9, weight: .medium))
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                 }
@@ -128,7 +127,7 @@ struct CategoryBarChart: View {
                     AxisMarks { _ in
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .font(.system(size: 10))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                     }
                 }
                 .chartPlotStyle { plotArea in
@@ -138,11 +137,10 @@ struct CategoryBarChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
     
@@ -151,10 +149,10 @@ struct CategoryBarChart: View {
             Spacer()
             VStack(spacing: 6) {
                 Image(systemName: "chart.bar")
-                    .font(.system(size: 20))
+                    .font(DesignTokens.Typography.headline)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text("카테고리 데이터 없음")
-                    .font(.system(size: 11))
+                    .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             Spacer()
@@ -181,7 +179,7 @@ struct LatencyComparisonChart: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             HStack {
                 Text("레이턴시 비교")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .textCase(.uppercase)
                     .tracking(0.5)
@@ -222,7 +220,7 @@ struct LatencyComparisonChart: View {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                     }
                 }
                 .chartYAxis {
@@ -231,7 +229,7 @@ struct LatencyComparisonChart: View {
                             .foregroundStyle(DesignTokens.Colors.border)
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                     }
                 }
                 .chartPlotStyle { plotArea in
@@ -241,11 +239,10 @@ struct LatencyComparisonChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
     
@@ -253,7 +250,7 @@ struct LatencyComparisonChart: View {
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(label)
-                .font(.system(size: 9, weight: .medium))
+                .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         }
     }
@@ -263,10 +260,10 @@ struct LatencyComparisonChart: View {
             Spacer()
             VStack(spacing: 6) {
                 Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 20))
+                    .font(DesignTokens.Typography.headline)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text("레이턴시 데이터 수집 중...")
-                    .font(.system(size: 11))
+                    .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             Spacer()
@@ -291,7 +288,7 @@ struct CategoryTypeDonutChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             Text("콘텐츠 유형 분포")
-                .font(.system(size: 12, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
@@ -301,10 +298,10 @@ struct CategoryTypeDonutChart: View {
                     Spacer()
                     VStack(spacing: 6) {
                         Image(systemName: "chart.pie")
-                            .font(.system(size: 20))
+                            .font(DesignTokens.Typography.headline)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Text("데이터 수집 중...")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     Spacer()
@@ -319,22 +316,22 @@ struct CategoryTypeDonutChart: View {
                             angularInset: 2
                         )
                         .foregroundStyle(color(for: item.type))
-                        .cornerRadius(3)
+                        .cornerRadius(DesignTokens.Radius.xs)
                     }
                     .frame(width: 110, height: 110)
 
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(distribution) { item in
                             HStack(spacing: 7) {
-                                RoundedRectangle(cornerRadius: 2)
+                                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                                     .fill(color(for: item.type))
                                     .frame(width: 10, height: 10)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(item.displayName)
-                                        .font(.system(size: 11, weight: .semibold))
+                                        .font(DesignTokens.Typography.captionSemibold)
                                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                                     Text(String(format: "%.0f%%  ·  %d채널", item.percentage, item.channelCount))
-                                        .font(.system(size: 9, weight: .medium))
+                                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
                                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                                 }
                             }
@@ -345,11 +342,10 @@ struct CategoryTypeDonutChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
 }
@@ -364,7 +360,7 @@ struct ViewerDistributionChart: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             HStack {
                 Text("시청자수 분포")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .textCase(.uppercase)
                     .tracking(0.5)
@@ -372,14 +368,14 @@ struct ViewerDistributionChart: View {
                 if medianViewers > 0 {
                     HStack(spacing: 4) {
                         Text("중앙값")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Text(formatViewerCount(medianViewers))
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                     }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, DesignTokens.Spacing.sm)
+                    .padding(.vertical, DesignTokens.Spacing.xxs)
                     .background(DesignTokens.Colors.chzzkGreen.opacity(0.08))
                     .clipShape(Capsule())
                 }
@@ -390,10 +386,10 @@ struct ViewerDistributionChart: View {
                     Spacer()
                     VStack(spacing: 6) {
                         Image(systemName: "chart.bar.doc.horizontal")
-                            .font(.system(size: 20))
+                            .font(DesignTokens.Typography.headline)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Text("데이터 수집 중...")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     Spacer()
@@ -415,11 +411,11 @@ struct ViewerDistributionChart: View {
                             endPoint: .bottom
                         )
                     )
-                    .cornerRadius(4)
+                    .cornerRadius(DesignTokens.Radius.xs)
                     .annotation(position: .top, spacing: 3) {
                         if bucket.count > 0 {
                             Text("\(bucket.count)")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(DesignTokens.Typography.microSemibold)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                         }
                     }
@@ -428,7 +424,7 @@ struct ViewerDistributionChart: View {
                     AxisMarks { _ in
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .font(.system(size: 10))
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                     }
                 }
                 .chartYAxis {
@@ -437,7 +433,7 @@ struct ViewerDistributionChart: View {
                             .foregroundStyle(DesignTokens.Colors.border)
                         AxisValueLabel()
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .font(.system(size: 9))
+                            .font(DesignTokens.Typography.micro)
                     }
                 }
                 .chartPlotStyle { plotArea in plotArea.background(Color.clear) }
@@ -445,11 +441,10 @@ struct ViewerDistributionChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
 
@@ -468,7 +463,7 @@ struct ServerChannelStatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             Text("채널별 레이턴시")
-                .font(.system(size: 12, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
@@ -478,10 +473,10 @@ struct ServerChannelStatsView: View {
                     Spacer()
                     VStack(spacing: 6) {
                         Image(systemName: "server.rack")
-                            .font(.system(size: 20))
+                            .font(DesignTokens.Typography.headline)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Text("활성 채널 없음")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     Spacer()
@@ -496,18 +491,17 @@ struct ServerChannelStatsView: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
         }
     }
     
     private func channelStatRow(_ stat: ChannelStatsItem) -> some View {
         HStack(spacing: 8) {
             Text(stat.channelName ?? stat.channelId.prefix(8).description)
-                .font(.system(size: 11, weight: .medium))
+                .font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -516,7 +510,7 @@ struct ServerChannelStatsView: View {
                 HStack(spacing: 3) {
                     Circle().fill(.cyan).frame(width: 4, height: 4)
                     Text(String(format: "%.0f", webAvg))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .frame(width: 50, alignment: .trailing)
@@ -526,7 +520,7 @@ struct ServerChannelStatsView: View {
                 HStack(spacing: 3) {
                     Circle().fill(DesignTokens.Colors.chzzkGreen).frame(width: 4, height: 4)
                     Text(String(format: "%.0f", appAvg))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .frame(width: 50, alignment: .trailing)
@@ -534,14 +528,13 @@ struct ServerChannelStatsView: View {
             
             if let delta = stat.delta?.avg {
                 Text(String(format: "%+.0f", delta))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(DesignTokens.Typography.custom(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(delta > 0 ? .orange : DesignTokens.Colors.chzzkGreen)
                     .frame(width: 36, alignment: .trailing)
             }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
-        .background(DesignTokens.Colors.backgroundDark.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .padding(.vertical, DesignTokens.Spacing.xxs)
+        .padding(.horizontal, DesignTokens.Spacing.xs)
+        .background(.white.opacity(0.03), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
     }
 }

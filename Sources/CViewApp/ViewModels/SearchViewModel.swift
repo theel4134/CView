@@ -41,12 +41,49 @@ public final class SearchViewModel {
     private let maxRecentSearches = 10
 
     // 라이브 정렬
-    public enum LiveSortOption: String, CaseIterable {
-        case viewerCount = "시청자 많은순"
-        case recent = "최신순"
-    }
     public var liveSortOption: LiveSortOption = .viewerCount {
         didSet { sortLiveResults() }
+    }
+
+    // MARK: - Autocomplete
+
+    /// 팔로잉 채널 이름 목록 (외부에서 주입)
+    public var followingChannelNames: [String] = []
+
+    /// 자동완성이 보여야 하는지 (검색 실행 전 타이핑 중)
+    public var showAutocomplete: Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        // 검색 결과가 이미 있으면 자동완성 숨김
+        let hasResults = !channelResults.isEmpty || !liveResults.isEmpty || !videoResults.isEmpty || !clipResults.isEmpty
+        let anySearching = isSearchingChannels || isSearchingLives || isSearchingVideos || isSearchingClips
+        return !hasResults && !anySearching
+    }
+
+    /// 자동완성 제안 목록: 최근 검색어 매칭 + 팔로잉 채널명 매칭
+    public var autocompleteSuggestions: [AutocompleteSuggestion] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !trimmed.isEmpty else { return [] }
+
+        var suggestions: [AutocompleteSuggestion] = []
+
+        // 최근 검색어 매칭
+        let matchedRecent = recentSearches.filter { $0.lowercased().contains(trimmed) }.prefix(3)
+        for term in matchedRecent {
+            suggestions.append(AutocompleteSuggestion(text: term, kind: .recent))
+        }
+
+        // 팔로잉 채널명 매칭
+        let matchedFollowing = followingChannelNames
+            .filter { $0.lowercased().contains(trimmed) }
+            .prefix(5)
+        for name in matchedFollowing {
+            if !suggestions.contains(where: { $0.text == name }) {
+                suggestions.append(AutocompleteSuggestion(text: name, kind: .following))
+            }
+        }
+
+        return Array(suggestions.prefix(8))
     }
 
     /// 현재 선택된 탭의 로딩 상태

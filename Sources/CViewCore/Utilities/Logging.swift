@@ -27,3 +27,39 @@ public enum AppLogger {
 
 /// Backward compatibility alias
 public typealias Log = AppLogger
+
+// MARK: - Sensitive Data Masking Helpers
+
+public enum LogMask {
+    /// URL에서 query string을 제거하여 토큰/인증 파라미터 노출 방지
+    /// - Example: "https://api.example.com/path?key=secret" → "https://api.example.com/path?[REDACTED]"
+    public static func url(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return "[invalid-url]"
+        }
+        if components.queryItems != nil && !components.queryItems!.isEmpty {
+            components.queryItems = nil
+            return (components.string ?? url.host ?? "[url]") + "?[REDACTED]"
+        }
+        return components.string ?? url.host ?? "[url]"
+    }
+
+    /// URL 문자열에서 query string 제거
+    public static func urlString(_ urlString: String) -> String {
+        guard let url = URL(string: urlString) else { return "[invalid-url]" }
+        return self.url(url)
+    }
+
+    /// 토큰/키의 앞부분만 노출 (기본 4자)
+    /// - Example: "abcdef123456" → "abcd****"
+    public static func token(_ value: String, prefixLength: Int = 4) -> String {
+        guard value.count > prefixLength else { return "****" }
+        return String(value.prefix(prefixLength)) + "****"
+    }
+
+    /// 응답 바디 등 민감할 수 있는 텍스트를 길이만 표시
+    /// - Example: "{ \"token\": \"secret\" }" → "[body: 25 chars]"
+    public static func body(_ text: String) -> String {
+        "[body: \(text.count) chars]"
+    }
+}

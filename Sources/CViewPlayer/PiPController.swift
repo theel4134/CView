@@ -18,10 +18,18 @@ public enum PiPState: Sendable {
 // MARK: - PiP Hover Controls View
 
 /// PiP 패널 위 마우스오버 컨트롤 오버레이 (NSHostingView 기반)
+///
+/// [크래시 방지 설계]
+/// macOS 26(Sequoia)에서 AppKit은 constraint update 사이클 중 constraint 재진입을
+/// EXC_BREAKPOINT로 강제 종료한다. 이를 방지하기 위해 NSHostingView를 한 번만 생성하고
+/// alphaValue로만 가시성을 제어한다. 마우스 이벤트 핸들러에서 subview를 추가/제거하거나
+/// NSLayoutConstraint.activate()를 호출하면 진행 중인 layout/display cycle에 재진입하여
+/// 재귀 constraint 갱신 크래시가 발생한다.
 private final class PiPHoverControlsView: NSView {
 
     private var trackingArea: NSTrackingArea?
-    private var hostingView: NSView?
+    // NSHostingView는 초기화 시 한 번만 생성되어 유지됨 — 절대 제거/재생성 금지
+    private var hostingView: NSHostingView<PiPControlsSwiftUIView>?
     var onClose: (() -> Void)?
     var onReturnToMain: (() -> Void)?
     var onToggleMute: (() -> Void)?
@@ -32,7 +40,7 @@ private final class PiPHoverControlsView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         autoresizingMask = [.width, .height]
-        setupHostingView(isVisible: false)
+        setupHostingView()
         setupTrackingArea()
     }
 
@@ -49,9 +57,10 @@ private final class PiPHoverControlsView: NSView {
         trackingArea = area
     }
 
-    private func setupHostingView(isVisible: Bool) {
-        hostingView?.removeFromSuperview()
-        guard isVisible else { return }
+    /// NSHostingView를 한 번만 생성하고 constraints를 설정한다.
+    /// 이후에는 alphaValue만 변경하여 가시성을 제어한다.
+    private func setupHostingView() {
+        guard hostingView == nil else { return }
 
         let controls = PiPControlsSwiftUIView(
             onClose: { [weak self] in self?.onClose?() },
@@ -61,6 +70,8 @@ private final class PiPHoverControlsView: NSView {
         )
         let hosting = NSHostingView(rootView: controls)
         hosting.translatesAutoresizingMaskIntoConstraints = false
+        // 초기에는 투명하게 시작
+        hosting.alphaValue = 0
         addSubview(hosting)
         NSLayoutConstraint.activate([
             hosting.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -72,7 +83,6 @@ private final class PiPHoverControlsView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        setupHostingView(isVisible: true)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             hostingView?.animator().alphaValue = 1
@@ -80,12 +90,10 @@ private final class PiPHoverControlsView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
-        NSAnimationContext.runAnimationGroup({ ctx in
+        NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.25
             hostingView?.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            self?.setupHostingView(isVisible: false)
-        })
+        }
     }
 
     override func updateTrackingAreas() {
@@ -127,7 +135,7 @@ private struct PiPControlsSwiftUIView: View {
                     onClose()
                 }
             }
-            .padding(10)
+            .padding(DesignTokens.Spacing.md)
         }
         .allowsHitTesting(true)
     }
@@ -135,7 +143,7 @@ private struct PiPControlsSwiftUIView: View {
     private func pipButton(icon: String, help: String, isDestructive: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(isDestructive ? .red : .white)
                 .frame(width: 28, height: 28)
                 .background(.ultraThinMaterial)

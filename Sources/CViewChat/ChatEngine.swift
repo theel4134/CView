@@ -31,7 +31,7 @@ public actor ChatEngine {
             channelId: String? = nil,
             serverUrl: URL? = nil,
             reconnectionConfig: ReconnectionPolicy.Configuration = .default,
-            maxMessageBuffer: Int = 500
+            maxMessageBuffer: Int = ChatDefaults.maxMessageBuffer
         ) {
             self.chatChannelId = chatChannelId
             self.accessToken = accessToken
@@ -146,9 +146,9 @@ public actor ChatEngine {
             emojis: emojis
         )
         
-        logger.info("Chat send payload: \(message.prefix(500), privacy: .public)")
+        logger.info("Chat send payload: [\(message.count) chars]")
         try await webSocket?.send(message)
-        logger.debug("Chat message sent: \(text.prefix(50))")
+        logger.debug("Chat message sent: \(text.prefix(50), privacy: .private)")
     }
     
     /// Request recent chat messages
@@ -173,7 +173,7 @@ public actor ChatEngine {
     // MARK: - Connection Management
     
     private func establishConnection() async throws {
-        logger.info("Chat connecting to: \(self.config.serverUrl.absoluteString, privacy: .public) (chatChannelId: \(self.config.chatChannelId, privacy: .public))")
+        logger.info("Chat connecting to: \(LogMask.url(self.config.serverUrl), privacy: .private) (chatChannelId: \(self.config.chatChannelId, privacy: .public))")
         
         // NID_AUT, NID_SES 쿠키를 URLRequest Cookie 헤더로 전달 (v1 동일)
         // uid 유무와 관계없이 항상 쿠키 주입 — 서버가 쿠키로 인증 수행
@@ -188,7 +188,7 @@ public actor ChatEngine {
             if !authCookies.isEmpty {
                 let cookieHeader = authCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
                 httpHeaders["Cookie"] = cookieHeader
-                logger.info("WS cookie header: \(authCookies.map(\.name).joined(separator: ", "), privacy: .public)")
+                logger.info("WS cookie header: \(authCookies.count) cookies attached")
             } else {
                 logger.warning("No NID_AUT/NID_SES cookies found in HTTPCookieStorage")
             }
@@ -198,9 +198,15 @@ public actor ChatEngine {
         
         let wsConfig = WebSocketService.Configuration(
             url: config.serverUrl,
-            pingInterval: 20,
+            pingInterval: ChatDefaults.pingInterval,
             httpHeaders: httpHeaders
         )
+        
+        // 기존 WebSocket 정리 — URLSession 메모리 누수 방지 (장시간 재생 시 세션 축적 방지)
+        if let oldWs = self.webSocket {
+            await oldWs.disconnect()
+            self.webSocket = nil
+        }
         
         let ws = WebSocketService(configuration: wsConfig)
         self.webSocket = ws
@@ -231,7 +237,10 @@ public actor ChatEngine {
                 guard !Task.isCancelled else { break }
                 
                 if let text = message.textValue {
-                    await self.handleIncomingMessage(text)
+                    // 파싱을 actor 직렬 큐에서 분리 — 멀티코어 활용
+                    // ChatMessageParser는 stateless Sendable struct이므로 안전
+                    let parseResult = Self.parseOffActor(text: text, parser: self.parser)
+                    await self.handleParsedResult(parseResult, rawLength: text.count)
                 }
             }
             
@@ -255,7 +264,7 @@ public actor ChatEngine {
                 case .connected:
                     break // Wait for protocol-level connected
                 case .failed(let reason):
-                    await self.logger.error("WS state failed: \(reason, privacy: .public)")
+                    await self.logger.error("WS state failed: \(reason, privacy: .private)")
                 case .disconnected:
                     break
                 default:
@@ -267,83 +276,92 @@ public actor ChatEngine {
     
     // MARK: - Message Handling
     
-    private func handleIncomingMessage(_ text: String) {
-        // Pre-parse raw logging
-        let cmdPreview: String
-        if let range = text.range(of: "\"cmd\":"), let endRange = text[range.upperBound...].range(of: ",") ?? text[range.upperBound...].range(of: "}") {
-            cmdPreview = String(text[range.lowerBound..<endRange.lowerBound])
-        } else {
-            cmdPreview = "?"
-        }
-        let preview = String(text.prefix(300))
-        logger.debug("Chat raw (\(cmdPreview, privacy: .public)): \(preview, privacy: .public)")
-        
+    /// 파싱 결과를 나타내는 enum — actor 바깥에서 생성 후 actor로 전달
+    private enum ParseResult: Sendable {
+        case success(ChatEvent)
+        case failure(String, String) // (errorDescription, rawPreview)
+    }
+    
+    /// nonisolated 파싱 — actor 직렬 큐를 차단하지 않고 멀티코어에서 실행
+    /// ChatMessageParser는 stateless Sendable struct이므로 안전
+    private nonisolated static func parseOffActor(text: String, parser: ChatMessageParser) -> ParseResult {
         do {
             let event = try parser.parse(text)
+            return .success(event)
+        } catch {
+            let preview = String(text.prefix(200))
+            return .failure(error.localizedDescription, preview)
+        }
+    }
+    
+    /// 파싱된 결과를 actor 격리 내에서 처리
+    private func handleParsedResult(_ result: ParseResult, rawLength: Int) {
+        switch result {
+        case .success(let event):
+            handleParsedEvent(event)
+        case .failure(let errorDesc, let preview):
+            logger.warning("Failed to parse message: \(errorDesc, privacy: .public) | raw: \(preview, privacy: .public)")
+        }
+    }
+    
+    private func handleParsedEvent(_ event: ChatEvent) {
+        switch event {
+        case .connected(let sessionId):
+            _sessionId = sessionId
+            updateConnectionState(.connected(serverIndex: 0))
+            logger.info("Chat CONNECTED (sid: \(LogMask.token(sessionId), privacy: .private))")
+            Task { try? await requestRecentMessages() }
+            emitEvent(.connected)
             
-            switch event {
-            case .connected(let sessionId):
-                _sessionId = sessionId
-                updateConnectionState(.connected(serverIndex: 0))
-                logger.info("Chat CONNECTED (sid: \(sessionId.prefix(20), privacy: .public))")
-                Task { try? await requestRecentMessages() }
-                emitEvent(.connected)
-                
-            case .messages(let msgs):
-                logger.debug("Chat messages received: \(msgs.count) msgs")
-                appendMessages(msgs)
-                emitEvent(.newMessages(msgs))
-                
-            case .recentMessages(let msgs):
-                logger.info("Chat recent messages: \(msgs.count) msgs")
-                appendMessages(msgs)
-                emitEvent(.recentMessages(msgs))
-                
-            case .donations(let msgs):
-                appendMessages(msgs)
-                emitEvent(.donations(msgs))
-                
-            case .notice(let msg):
-                appendMessages([msg])
-                emitEvent(.notice(msg))
-                
-            case .blind(let messageId, _):
-                removeMessage(id: messageId)
-                emitEvent(.messageBlinded(messageId))
-                
-            case .kick:
-                emitEvent(.kicked)
-                
-            case .penalty(let userId, let duration):
-                emitEvent(.userPenalized(userId: userId, duration: duration))
-                
-            case .ping:
-                Task {
-                    let pong = parser.buildPong()
-                    try? await webSocket?.send(pong)
-                }
-                
-            case .pong:
-                break
-                
-            case .sendConfirmed(let retCode):
-                if retCode == 0 {
-                    logger.info("Chat send confirmed ✅")
-                } else {
-                    logger.warning("Chat send failed: retCode=\(retCode, privacy: .public)")
-                }
-                
-            case .system(let msg):
-                emitEvent(.systemMessage(msg))
-                
-            case .unknown(let cmd):
-                logger.debug("Unknown chat command: \(cmd)")
+        case .messages(let msgs):
+            logger.debug("Chat messages received: \(msgs.count) msgs")
+            appendMessages(msgs)
+            emitEvent(.newMessages(msgs))
+            
+        case .recentMessages(let msgs):
+            logger.info("Chat recent messages: \(msgs.count) msgs")
+            appendMessages(msgs)
+            emitEvent(.recentMessages(msgs))
+            
+        case .donations(let msgs):
+            appendMessages(msgs)
+            emitEvent(.donations(msgs))
+            
+        case .notice(let msg):
+            appendMessages([msg])
+            emitEvent(.notice(msg))
+            
+        case .blind(let messageId, _):
+            removeMessage(id: messageId)
+            emitEvent(.messageBlinded(messageId))
+            
+        case .kick:
+            emitEvent(.kicked)
+            
+        case .penalty(let userId, let duration):
+            emitEvent(.userPenalized(userId: userId, duration: duration))
+            
+        case .ping:
+            Task {
+                let pong = parser.buildPong()
+                try? await webSocket?.send(pong)
             }
             
-        } catch {
-            // 파싱 실패 시 원본 메시지 일부를 표시하여 디버깅 가능하게
-            let preview = String(text.prefix(200))
-            logger.warning("Failed to parse message: \(error.localizedDescription, privacy: .public) | raw: \(preview, privacy: .public)")
+        case .pong:
+            break
+            
+        case .sendConfirmed(let retCode):
+            if retCode == 0 {
+                logger.info("Chat send confirmed ✅")
+            } else {
+                logger.warning("Chat send failed: retCode=\(retCode, privacy: .public)")
+            }
+            
+        case .system(let msg):
+            emitEvent(.systemMessage(msg))
+            
+        case .unknown(let cmd):
+            logger.debug("Unknown chat command: \(cmd)")
         }
     }
     
@@ -365,12 +383,16 @@ public actor ChatEngine {
     
     // MARK: - Reconnection
     
+    private var reconnectionTask: Task<Void, Never>?
+
     private func handleWebSocketClosed() {
         guard !isManualDisconnect else { return }
         
         updateConnectionState(.reconnecting(attempt: 0))
         
-        Task {
+        // 기존 재연결 Task가 있으면 취소 후 새로 시작 — 중복 재연결 방지
+        reconnectionTask?.cancel()
+        reconnectionTask = Task {
             await startReconnection()
         }
     }
@@ -383,7 +405,9 @@ public actor ChatEngine {
         
         do {
             try await reconnection.executeReconnection { [weak self] in
-                guard let self else { return }
+                guard let self else {
+                    throw AppError.chat(.connectionFailed("ChatEngine이 해제되어 재연결 불가"))
+                }
                 try await self.establishConnection()
             }
         } catch {

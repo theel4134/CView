@@ -6,6 +6,28 @@ import AppKit       // NSWorkspace sleep/wake 알림
 import CViewCore
 import CViewNetworking
 
+/// 백그라운드 업데이트에서 감지된 이벤트들
+struct BackgroundUpdateEvent: Sendable {
+    /// 새로 온라인 된 채널들
+    let newlyOnline: [OnlineChannel]
+    /// 카테고리가 변경된 채널들 (channelId, channelName, oldCategory, newCategory)
+    let categoryChanged: [ChannelChangeInfo]
+    /// 제목이 변경된 채널들 (channelId, channelName, oldTitle, newTitle)
+    let titleChanged: [ChannelChangeInfo]
+    
+    var hasAnyEvent: Bool {
+        !newlyOnline.isEmpty || !categoryChanged.isEmpty || !titleChanged.isEmpty
+    }
+}
+
+/// 채널 변경 정보 DTO
+struct ChannelChangeInfo: Sendable {
+    let channelId: String
+    let channelName: String
+    let oldValue: String
+    let newValue: String
+}
+
 /// 팔로잉 채널 상태를 주기적으로 업데이트하는 서비스
 @Observable
 @MainActor
@@ -24,6 +46,10 @@ final class BackgroundUpdateService {
 
     private var updateTask: Task<Void, Never>?
     private var previousOnlineIds: Set<String> = []
+    /// 이전 체크 시 채널별 카테고리 맵 (변경 감지용)
+    private var previousCategoryMap: [String: String] = [:]
+    /// 이전 체크 시 채널별 제목 맵 (변경 감지용)
+    private var previousTitleMap: [String: String] = [:]
     private let logger = AppLogger.app
     /// 시스템 슬립 중이면 폴링 일시 중지
     private var isSleeping = false
@@ -36,7 +62,7 @@ final class BackgroundUpdateService {
     func start(
         apiClient: ChzzkAPIClient,
         interval: TimeInterval,
-        onNewOnline: @escaping @MainActor ([OnlineChannel]) -> Void
+        onEvent: @escaping @MainActor (BackgroundUpdateEvent) -> Void
     ) {
         stop()
 
@@ -53,7 +79,7 @@ final class BackgroundUpdateService {
             // 초기화 직후 부하 방지 — 5초 지연 후 첫 체크
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
-            await self?.performUpdate(apiClient: apiClient, onNewOnline: onNewOnline)
+            await self?.performUpdate(apiClient: apiClient, onEvent: onEvent)
 
             // 주기적 반복
             let timerInterval = max(interval, 30) // 최소 30초
@@ -61,7 +87,7 @@ final class BackgroundUpdateService {
                 guard !Task.isCancelled else { break }
                 // 슬립 중이면 건너뜀
                 if await self?.isSleeping == true { continue }
-                await self?.performUpdate(apiClient: apiClient, onNewOnline: onNewOnline)
+                await self?.performUpdate(apiClient: apiClient, onEvent: onEvent)
             }
         }
 
@@ -80,14 +106,14 @@ final class BackgroundUpdateService {
 
     /// 수동 새로고침
     func refresh(apiClient: ChzzkAPIClient) async {
-        await performUpdate(apiClient: apiClient, onNewOnline: { _ in })
+        await performUpdate(apiClient: apiClient, onEvent: { _ in })
     }
 
     // MARK: - Update Logic
 
     private func performUpdate(
         apiClient: ChzzkAPIClient,
-        onNewOnline: @MainActor ([OnlineChannel]) -> Void
+        onEvent: @MainActor (BackgroundUpdateEvent) -> Void
     ) async {
         guard !isUpdating else { return }
         isUpdating = true
@@ -95,41 +121,98 @@ final class BackgroundUpdateService {
 
         do {
             let following = try await apiClient.fetchFollowingChannels()
+            
+            // 이전 상태를 캡처하여 백그라운드에서 diff 계산
+            let prevOnlineIds = previousOnlineIds
+            let prevCategoryMap = previousCategoryMap
+            let prevTitleMap = previousTitleMap
 
-            let currentOnline = following
-                .filter { $0.isLive }
-                .map { item in
-                    OnlineChannel(
-                        channelId: item.channelId,
-                        channelName: item.channelName,
-                        liveTitle: item.liveTitle,
-                        viewerCount: item.viewerCount,
-                        thumbnailURL: item.thumbnailUrl,
-                        categoryName: item.categoryName
-                    )
+            // 데이터 가공/비교를 백그라운드 스레드에서 수행 — 메인 스레드 차단 방지
+            let result = await Task.detached(priority: .utility) {
+                let currentOnline = following
+                    .filter { $0.isLive }
+                    .map { item in
+                        OnlineChannel(
+                            channelId: item.channelId,
+                            channelName: item.channelName,
+                            liveTitle: item.liveTitle,
+                            viewerCount: item.viewerCount,
+                            thumbnailURL: item.thumbnailUrl,
+                            categoryName: item.categoryName
+                        )
+                    }
+
+                let currentOnlineIds = Set(currentOnline.map(\.channelId))
+
+                // 새로 온라인 된 채널 감지
+                let newlyOnline = currentOnline.filter { !prevOnlineIds.contains($0.channelId) }
+
+                // 카테고리/제목 변경 감지
+                var categoryChanged: [ChannelChangeInfo] = []
+                var titleChanged: [ChannelChangeInfo] = []
+
+                for channel in currentOnline {
+                    guard prevOnlineIds.contains(channel.channelId) else { continue }
+
+                    if let oldCategory = prevCategoryMap[channel.channelId],
+                       let newCategory = channel.categoryName,
+                       oldCategory != newCategory {
+                        categoryChanged.append(ChannelChangeInfo(
+                            channelId: channel.channelId,
+                            channelName: channel.channelName,
+                            oldValue: oldCategory,
+                            newValue: newCategory
+                        ))
+                    }
+
+                    if let oldTitle = prevTitleMap[channel.channelId],
+                       oldTitle != channel.liveTitle,
+                       !channel.liveTitle.isEmpty {
+                        titleChanged.append(ChannelChangeInfo(
+                            channelId: channel.channelId,
+                            channelName: channel.channelName,
+                            oldValue: oldTitle,
+                            newValue: channel.liveTitle
+                        ))
+                    }
                 }
 
-            // Equality 체크 — 동일 목록 할당으로 인한 @Observable 재평가 방지
-            let currentOnlineIds = Set(currentOnline.map(\.channelId))
+                let newCategoryMap = Dictionary(
+                    uniqueKeysWithValues: currentOnline.compactMap { ch in
+                        ch.categoryName.map { (ch.channelId, $0) }
+                    }
+                )
+                let newTitleMap = Dictionary(
+                    uniqueKeysWithValues: currentOnline.map { ($0.channelId, $0.liveTitle) }
+                )
+
+                return (currentOnline, currentOnlineIds, newlyOnline, categoryChanged, titleChanged, newCategoryMap, newTitleMap)
+            }.value
+
+            // UI 상태 업데이트는 @MainActor에서만 수행
             let previousIds = Set(onlineChannels.map(\.channelId))
-
-            // 새로 온라인 된 채널 감지
-            let newlyOnline = currentOnline.filter { !previousOnlineIds.contains($0.channelId) }
-
-            if currentOnlineIds != previousIds {
-                onlineChannels = currentOnline
+            if result.1 != previousIds {
+                onlineChannels = result.0
             }
-            if !newlyOnline.isEmpty {
-                newlyOnlineChannels = newlyOnline
+            if !result.2.isEmpty {
+                newlyOnlineChannels = result.2
             }
-            previousOnlineIds = currentOnlineIds
+            previousOnlineIds = result.1
             lastUpdated = .now
+            previousCategoryMap = result.5
+            previousTitleMap = result.6
 
-            if !newlyOnline.isEmpty {
-                onNewOnline(newlyOnline)
+            let event = BackgroundUpdateEvent(
+                newlyOnline: result.2,
+                categoryChanged: result.3,
+                titleChanged: result.4
+            )
+
+            if event.hasAnyEvent {
+                onEvent(event)
             }
 
-            logger.info("Background update: \(currentOnline.count) online, \(newlyOnline.count) newly online")
+            logger.info("Background update: \(result.0.count) online, \(result.2.count) newly online, \(result.3.count) cat changed, \(result.4.count) title changed")
         } catch {
             logger.error("Background update failed: \(error.localizedDescription)")
         }
