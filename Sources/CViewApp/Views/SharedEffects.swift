@@ -13,7 +13,7 @@ struct ShimmerModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay {
-                TimelineView(.animation) { timeline in
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
                     GeometryReader { geometry in
                         let t = timeline.date.timeIntervalSinceReferenceDate
                         let phase = CGFloat(t.truncatingRemainder(dividingBy: 1.5) / 1.5)
@@ -68,19 +68,5 @@ struct LivePulseBadge: View {
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
         }
         .drawingGroup(opaque: false)  // 배지 전체를 단일 Metal 텍스처로 격리
-    }
-}
-
-// MARK: - Pointing Hand Cursor Helper
-
-extension View {
-    @ViewBuilder
-    func cursor(_ cursor: NSCursor) -> some View {
-        self.onContinuousHover { phase in
-            switch phase {
-            case .active: cursor.push()
-            case .ended:  NSCursor.pop()
-            }
-        }
     }
 }

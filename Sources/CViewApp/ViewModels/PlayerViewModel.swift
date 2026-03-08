@@ -148,6 +148,19 @@ public final class PlayerViewModel {
         }
     }
 
+    // MARK: - Background Mode (멀티라이브 CPU 절약)
+    
+    /// 멀티라이브 비활성 세션의 CPU 사용 감소
+    /// AVPlayerEngine: catchupLoop + stallWatchdog 건너뜀
+    /// VLCPlayerEngine: statsTimer 건너뜀
+    public func setBackgroundMode(_ enabled: Bool) {
+        if let avEngine = playerEngine as? AVPlayerEngine {
+            avEngine.isBackgroundMode = enabled
+        } else if let vlcEngine = playerEngine as? VLCPlayerEngine {
+            vlcEngine.setTimeUpdateMode(background: enabled)
+        }
+    }
+
     // MARK: - 스트림 제어
 
     public func startStream(

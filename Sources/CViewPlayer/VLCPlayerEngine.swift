@@ -30,6 +30,7 @@ public final class VLCLayerHostView: NSView {
         layer.isOpaque = true
         layer.backgroundColor = NSColor.black.cgColor
         layer.drawsAsynchronously = true
+        layer.allowsGroupOpacity = false
         layer.actions = [
             "onOrderIn": NSNull(), "onOrderOut": NSNull(),
             "sublayers": NSNull(), "contents": NSNull(),
@@ -40,7 +41,10 @@ public final class VLCLayerHostView: NSView {
 
     public override func layout() {
         super.layout()
-        boundPlayer?.drawable = self  // 리사이즈 시 drawable 재바인딩
+        // drawable이 이미 self이면 재할당 스킵 — layout() 무한 루프 방지
+        if let player = boundPlayer, player.drawable as? NSView !== self {
+            player.drawable = self
+        }
     }
 }
 
@@ -55,22 +59,49 @@ public enum QualityAdaptationAction: Sendable {
 // MARK: - 스트리밍 프로파일
 
 /// VLC 스트리밍 시나리오별 캐싱 프로파일.
+/// - ultraLow: 최저 지연 (네트워크 안정적인 유선/고속WiFi 전용)
+/// - lowLatency: 저지연 기본값 (대부분의 라이브 시청)
+/// - multiLive: 멀티라이브 (GPU/메모리 절약 우선)
 public enum VLCStreamingProfile: Sendable {
-    case lowLatency           // 라이브 (저지연 우선)
+    case ultraLow             // 라이브 (최저 지연, 유선/고속WiFi 전용)
+    case lowLatency           // 라이브 (저지연 기본)
+    case multiLive            // 멀티라이브 (GPU/메모리 절약 우선)
 
     var networkCaching: Int {
         switch self {
-        case .lowLatency: return 1200
+        case .ultraLow: return 800
+        case .lowLatency: return 1000
+        case .multiLive: return 800
         }
     }
     var liveCaching: Int {
         switch self {
-        case .lowLatency: return 1200
+        case .ultraLow: return 800
+        case .lowLatency: return 1000
+        case .multiLive: return 800
         }
     }
     var manifestRefreshInterval: Int {
         switch self {
-        case .lowLatency: return 15
+        case .ultraLow: return 10
+        case .lowLatency: return 12
+        case .multiLive: return 15
+        }
+    }
+    /// clock-jitter 허용 범위 (µs) — 낮을수록 더 빠른 동기화
+    var clockJitter: Int {
+        switch self {
+        case .ultraLow: return 10000
+        case .lowLatency: return 15000
+        case .multiLive: return 20000
+        }
+    }
+    /// cr-average 클럭 복구 평균 (ms) — 낮을수록 더 빠른 타이밍 조정
+    var crAverage: Int {
+        switch self {
+        case .ultraLow: return 30
+        case .lowLatency: return 40
+        case .multiLive: return 40
         }
     }
 }
@@ -153,6 +184,10 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     // 재생 정체 감지 (0-프레임 연속 횟수)
     private var _zeroFrameCount: Int = 0
     private let _zeroFrameStallThreshold: Int = 3  // 3회 연속(6초) 0프레임 시 정체 판단
+
+    // mediaPlayerTimeChanged 스로틀링 — 초당 10~30회 콜백을 0.5초 간격으로 제한
+    private var _lastTimeChangeNotify: UInt64 = 0
+    private let _timeChangeThrottleNs: UInt64 = 500_000_000  // 0.5초
 
     // MARK: - Init / Deinit
 
@@ -256,7 +291,7 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         media.addOption(":live-caching=\(profile.liveCaching)")
         media.addOption(":file-caching=0")
         media.addOption(":disc-caching=0")
-        media.addOption(":cr-average=40")
+        media.addOption(":cr-average=\(profile.crAverage)")
         media.addOption(":avcodec-threads=2")
         media.addOption(":avcodec-fast=1")
         // HTTP 재연결: 네트워크 일시 끊김 시 VLC 내부에서 자동 재연결
@@ -264,8 +299,16 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         // adaptive 모듈 최적화: VLC 내부 버퍼링 안정성 개선
         media.addOption(":adaptive-maxwidth=1920")
         media.addOption(":adaptive-maxheight=1080")
-        // 저지연 HW 가속 재생
-        media.addOption(":clock-jitter=20000")
+        // 라이브 스트림 adaptive 모듈 설정 (predictive: 대역폭 예측 기반 안정적 ABR)
+        media.addOption(":adaptive-logic=predictive")
+        // GPU 부하 최적화: 불필요한 후처리 비활성화
+        media.addOption(":deinterlace=0")
+        media.addOption(":postproc-q=0")
+        media.addOption(":skip-frames")
+        // 저지연 HW 가속 재생 — profile별 clock-jitter 적용
+        media.addOption(":clock-jitter=\(profile.clockJitter)")
+        // clock-synchro=0: VLC 내부 클럭 동기화를 비활성화 → 라이브 스트림 지연 감소
+        media.addOption(":clock-synchro=0")
         media.addOption(":codec=videotoolbox,avcodec,all")
         media.addOption(":avcodec-hw=any")
         media.addOption(":videotoolbox-zero-copy=1")
@@ -308,13 +351,14 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         if Thread.isMainThread {
             p.stop()
             p.drawable = nil
+            _setPhase(.idle)
         } else {
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 p.stop()
                 p.drawable = nil
+                self?._setPhase(.idle)
             }
         }
-        _setPhase(.idle)
     }
 
     /// 특정 시간으로 탐색 (TimeInterval 초 단위)
@@ -337,7 +381,8 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         _volume = volume
         Task { @MainActor [weak self] in
             guard let self else { return }
-            player.audio?.volume = Int32(volume * 200)
+            // VLCKit 4.0: volume 범위 0-100 (이전 *200은 과증폭 유발)
+            player.audio?.volume = Int32(volume * 100)
         }
     }
 
@@ -345,7 +390,7 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         _isMuted = muted
         Task { @MainActor [weak self] in
             guard let self else { return }
-            player.audio?.volume = muted ? 0 : Int32(_volume * 200)
+            player.audio?.volume = muted ? 0 : Int32(_volume * 100)
         }
     }
 
@@ -389,10 +434,8 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
             p.stop()
             p.drawable = nil
             self?._setPhase(.idle)
-            // delegate만 복원 (media = nil 호출하지 않음)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                p.delegate = self  // 재사용을 위해 delegate 복원
-            }
+            // delegate 즉시 복원 — 이전 0.3s asyncAfter 갭에서 VLC 상태 이벤트 유실 + 풀 race condition 수정
+            p.delegate = self
         }
         if Thread.isMainThread {
             doStop()
@@ -707,12 +750,16 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         let prev = _prevStats
         _prevStats = stats
 
-        let droppedDelta = Int(stats.lostPictures) - Int(prev?.lostPictures ?? 0)
-        let decodedDelta = Int(stats.decodedVideo) - Int(prev?.decodedVideo ?? 0)
-        let audioLostDelta = Int(stats.lostAudioBuffers) - Int(prev?.lostAudioBuffers ?? 0)
-        let lateDelta = Int(stats.latePictures) - Int(prev?.latePictures ?? 0)
-        let demuxCorruptDelta = Int(stats.demuxCorrupted) - Int(prev?.demuxCorrupted ?? 0)
-        let demuxDiscDelta = Int(stats.demuxDiscontinuity) - Int(prev?.demuxDiscontinuity ?? 0)
+        // 초회 수집 시 prev == nil → 누적값이 delta가 되는 문제 방지
+        // 첫 호출은 baseline만 저장하고 delta 계산 스킵
+        guard let prev else { return }
+
+        let droppedDelta = Int(stats.lostPictures) - Int(prev.lostPictures)
+        let decodedDelta = Int(stats.decodedVideo) - Int(prev.decodedVideo)
+        let audioLostDelta = Int(stats.lostAudioBuffers) - Int(prev.lostAudioBuffers)
+        let lateDelta = Int(stats.latePictures) - Int(prev.latePictures)
+        let demuxCorruptDelta = Int(stats.demuxCorrupted) - Int(prev.demuxCorrupted)
+        let demuxDiscDelta = Int(stats.demuxDiscontinuity) - Int(prev.demuxDiscontinuity)
 
         let inputKbps = Double(stats.inputBitrate) * 8.0
         let demuxKbps = Double(stats.demuxBitrate) * 8.0
@@ -743,7 +790,7 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
         // 재생 정체 감지: playing 상태에서 디코딩 프레임이 0이면 카운터 증가
         let currentPhase = stateLock.withLock { _currentPhase }
-        if case .playing = currentPhase, prev != nil {
+        if case .playing = currentPhase {
             if decodedDelta <= 0 {
                 _zeroFrameCount += 1
                 if _zeroFrameCount >= _zeroFrameStallThreshold {
@@ -801,7 +848,12 @@ extension VLCPlayerEngine: VLCMediaPlayerDelegate {
     }
 
     /// 재생 위치 변경 — VLCKit 4.0: Notification 파라미터
+    /// [스로틀링] VLC는 초당 10~30회 호출 → 멀티라이브 4세션 = 초당 40~120회
+    /// 0.5초 미만 간격의 콜백은 무시하여 CPU 부하 대폭 감소
     public func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard now - _lastTimeChangeNotify >= _timeChangeThrottleNs else { return }
+        _lastTimeChangeNotify = now
         let t = TimeInterval(player.time.intValue) / 1000.0
         let d = TimeInterval(player.media?.length.intValue ?? 0) / 1000.0
         onTimeChange?(t, d)

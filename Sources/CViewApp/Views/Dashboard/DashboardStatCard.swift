@@ -162,5 +162,6 @@ struct MiniChannelCard: View {
         .drawingGroup(opaque: false)  // 카드 내부 레이어 단일 Metal 패스
         .animation(DesignTokens.Animation.fast, value: isHovered)
         .onHover { isHovered = $0 }
+        .cursor(.pointingHand)
     }
 }

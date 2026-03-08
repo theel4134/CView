@@ -211,7 +211,7 @@ struct ErrorBanner: View {
                 }
                 
                 Button {
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    withAnimation(DesignTokens.Animation.fast) {
                         isVisible = false
                     }
                 } label: {

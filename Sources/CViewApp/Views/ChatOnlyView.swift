@@ -138,12 +138,27 @@ struct ChatOnlyView: View {
                 uid = userStatus.userIdHash
             }
             
+            // 캐시된 기본 이모티콘 즉시 적용
+            let cachedMap = appState.cachedBasicEmoticonMap
+            let cachedPacks = appState.cachedBasicEmoticonPacks
+            if !cachedMap.isEmpty {
+                chatVM.channelEmoticons = cachedMap
+                chatVM.emoticonPacks = cachedPacks
+            }
+
             // 채널 이모티콘 로드 (기본 + 구독 + 채널 전용, soft auth)
             let allPacks = await apiClient.basicEmoticonPacks(channelId: channelId)
             let (emoMap, loadedPacks) = await apiClient.resolveEmoticonPacks(allPacks)
-            Log.chat.info("채널 이모티콘: \(emoMap.count)개 로드 완료 (팩 \(loadedPacks.count)개)")
-            chatVM.channelEmoticons = emoMap
-            chatVM.emoticonPacks = loadedPacks
+
+            // 채널별 이모티콘을 기본 이모티콘과 병합
+            let mergedMap = cachedMap.merging(emoMap) { _, channel in channel }
+            let mergedPacks = cachedPacks + loadedPacks.filter { pack in
+                !cachedPacks.contains(where: { $0.id == pack.id })
+            }
+
+            Log.chat.info("채널 이모티콘: \(mergedMap.count)개 로드 완료 (팩 \(mergedPacks.count)개, 기본 \(cachedMap.count)개 포함)")
+            chatVM.channelEmoticons = mergedMap
+            chatVM.emoticonPacks = mergedPacks
             
             // 채팅 연결
             await chatVM.connect(chatChannelId: chatChannelId, accessToken: accessToken, uid: uid)

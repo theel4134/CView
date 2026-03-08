@@ -180,12 +180,11 @@ struct MenuBarChannelRow: View {
                         .shadow(color: DesignTokens.Colors.live.opacity(0.7), radius: 3)
                 }
                 .onAppear {
-                    withAnimation(
-                        .easeInOut(duration: 1.1)
-                        .repeatForever(autoreverses: true)
-                    ) {
-                        pulseScale = 1.6
-                        pulseOpacity = 0.0
+                    if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.menuPulse) {
+                        withAnimation(anim) {
+                            pulseScale = 1.6
+                            pulseOpacity = 0.0
+                        }
                     }
                 }
                 // pulse 레이어를 Metal 오프스크린으로 합성
@@ -232,5 +231,6 @@ struct MenuBarChannelRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .cursor(.pointingHand)
     }
 }

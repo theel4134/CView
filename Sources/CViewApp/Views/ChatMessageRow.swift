@@ -118,6 +118,7 @@ struct ChatMessageRow: View {
         )
         .contentShape(Rectangle())
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .popover(isPresented: $showProfile) {
             ChatUserProfileSheet(message: message, chatVM: chatVM)
         }
@@ -234,6 +235,8 @@ struct ChatMessageRow: View {
                 }
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
+        // Metal 3: material+gradient+border+shadow 4중 합성 → GPU 단일 패스
+        .compositingGroup()
         .shadow(color: tierColor.opacity(0.08), radius: 6, x: 0, y: 2)
         .padding(.vertical, 2)
         .contextMenu {
@@ -343,10 +346,9 @@ struct ChatMessageRow: View {
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
 
-                // 메시지 본문
+                // 메시지 본문 (이모티콘 지원)
                 if !message.content.isEmpty {
-                    Text(message.content)
-                        .font(DesignTokens.Typography.caption)
+                    ChatContentRenderer(content: message.content, emojis: message.emojis, fontSize: 13)
                         .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -373,6 +375,8 @@ struct ChatMessageRow: View {
                 }
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
+        // Metal 3: material+gradient+border+shadow 4중 합성 → GPU 단일 패스
+        .compositingGroup()
         .shadow(color: subColor.opacity(0.08), radius: 6, x: 0, y: 2)
         .padding(.vertical, 2)
         .contextMenu {
@@ -392,10 +396,15 @@ struct ChatMessageRow: View {
             Text(message.content)
                 .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.7))
-                .italic()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
         .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
+                .fill(systemMessageColor.opacity(0.04))
+        )
+        .padding(.horizontal, DesignTokens.Spacing.xxs)
     }
 
     private var systemMessageIcon: String {
@@ -433,7 +442,6 @@ struct ChatMessageRow: View {
                     .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.9))
                     .textSelection(.enabled)
-                    .lineLimit(3)
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.sm)
@@ -455,8 +463,12 @@ struct ChatMessageRow: View {
         }
     }
 
+    /// djb2 해시 — 실행마다 동일한 닉네임에 동일한 색상 보장 (hashValue는 런타임마다 달라짐)
     private var nicknameColor: Color {
-        let hash = abs(message.nickname.hashValue)
+        var hash: UInt64 = 5381
+        for ch in message.nickname.utf8 {
+            hash = ((hash &<< 5) &+ hash) &+ UInt64(ch)
+        }
         let colors: [Color] = [
             DesignTokens.Colors.chzzkGreen,    // 치지직 그린
             DesignTokens.Colors.accentBlue,    // 블루
@@ -469,7 +481,7 @@ struct ChatMessageRow: View {
             Color(hex: 0xFF6B6B),              // 코랄
             Color(hex: 0x64D2FF),              // 스카이
         ]
-        return colors[hash % colors.count]
+        return colors[Int(hash % UInt64(colors.count))]
     }
 }
 

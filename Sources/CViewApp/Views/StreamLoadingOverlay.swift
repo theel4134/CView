@@ -73,12 +73,16 @@ struct StreamLoadingOverlay: View {
             withAnimation(DesignTokens.Animation.normal) {
                 contentOpacity = 1.0
             }
-            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                ringScale = 1.0
-                ringOpacity = 1.0
+            if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) {
+                withAnimation(anim) {
+                    ringScale = 1.0
+                    ringOpacity = 1.0
+                }
             }
-            withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                spinnerRotation = 360
+            if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.loadingSpin) {
+                withAnimation(anim) {
+                    spinnerRotation = 360
+                }
             }
         }
     }

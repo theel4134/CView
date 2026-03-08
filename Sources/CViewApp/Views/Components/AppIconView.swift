@@ -29,7 +29,7 @@ struct AppIconView: View {
                 .frame(width: size * 0.62, height: size * 0.62)
                 .blur(radius: size * 0.08)
                 .animation(
-                    animated ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true) : .default,
+                    animated ? DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) : .default,
                     value: glowPulse
                 )
 

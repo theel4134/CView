@@ -24,17 +24,23 @@ struct MultiLivePlayerPane: View {
     var body: some View {
         ZStack {
             videoLayer
-            stateOverlay
 
-            if showControls {
-                controlOverlay
-                    .transition(.opacity)
-            }
+            // 오버레이 그룹: compositingGroup으로 비디오 레이어와 렌더링 격리
+            // → 오버레이 opacity 변경 시 비디오 CALayer recomposition 방지
+            Group {
+                stateOverlay
 
-            if isCompact && !showControls {
-                compactBadge
-                    .transition(.opacity)
+                if showControls {
+                    controlOverlay
+                        .transition(.opacity)
+                }
+
+                if isCompact && !showControls {
+                    compactBadge
+                        .transition(.opacity)
+                }
             }
+            .compositingGroup()
         }
         .clipShape(RoundedRectangle(cornerRadius: isCompact ? DesignTokens.Radius.sm : 0))
         .overlay {
@@ -49,7 +55,6 @@ struct MultiLivePlayerPane: View {
             }
             scheduleHideControls()
         }
-        .animation(DesignTokens.Animation.fast, value: showControls)
     }
 
     // MARK: - 비디오 레이어
@@ -71,10 +76,10 @@ struct MultiLivePlayerPane: View {
                             .frame(width: 5, height: 5)
                     }
                     Text(session.channelName)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
                         .lineLimit(1)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(Capsule().fill(.black.opacity(0.55)))
@@ -83,8 +88,8 @@ struct MultiLivePlayerPane: View {
 
                 if session.playerViewModel.isMuted {
                     Image(systemName: "speaker.slash.fill")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(DesignTokens.Typography.micro)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
                         .padding(4)
                         .background(Circle().fill(.black.opacity(0.55)))
                 }
@@ -104,7 +109,7 @@ struct MultiLivePlayerPane: View {
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Image(systemName: "person.circle.fill")
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
                 }
                 .frame(width: isCompact ? 20 : 28, height: isCompact ? 20 : 28)
                 .clipShape(Circle())
@@ -112,13 +117,13 @@ struct MultiLivePlayerPane: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(session.channelName)
                         .font(isCompact ? .caption.weight(.semibold) : .callout.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .lineLimit(1)
 
                     if !isCompact {
                         Text(session.liveTitle)
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
                             .lineLimit(1)
                     }
                 }
@@ -128,19 +133,19 @@ struct MultiLivePlayerPane: View {
                 if session.loadState == .playing {
                     HStack(spacing: 6) {
                         Text("LIVE")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.red))
+                            .background(Capsule().fill(DesignTokens.Colors.live))
 
                         HStack(spacing: 2) {
                             Image(systemName: "person.fill")
-                                .font(.system(size: 8))
+                                .font(DesignTokens.Typography.custom(size: 8))
                             Text("\(session.viewerCount)")
-                                .font(.system(size: 10).monospacedDigit())
+                                .font(DesignTokens.Typography.custom(size: 10).monospacedDigit())
                         }
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.8))
                     }
                 }
             }
@@ -157,7 +162,7 @@ struct MultiLivePlayerPane: View {
                 } label: {
                     Image(systemName: volumeIcon)
                         .font(isCompact ? .caption : .body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .frame(width: isCompact ? 24 : 32, height: isCompact ? 24 : 32)
                         .background(Circle().fill(.white.opacity(0.15)))
                 }
@@ -203,7 +208,7 @@ struct MultiLivePlayerPane: View {
                                     .font(.caption)
                             }
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .padding(.horizontal, isCompact ? 6 : 8)
                         .padding(.vertical, isCompact ? 3 : 4)
                         .background(Capsule().fill(.white.opacity(0.15)))
@@ -220,7 +225,7 @@ struct MultiLivePlayerPane: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(isCompact ? .caption.weight(.bold) : .callout.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .frame(width: isCompact ? 24 : 32, height: isCompact ? 24 : 32)
                         .background(Circle().fill(.white.opacity(0.15)))
                 }
@@ -230,16 +235,12 @@ struct MultiLivePlayerPane: View {
             .padding(.bottom, isCompact ? 8 : DesignTokens.Spacing.md)
         }
         .background(
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.5), location: 0),
-                    .init(color: .clear, location: 0.35),
-                    .init(color: .clear, location: 0.65),
-                    .init(color: .black.opacity(0.5), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            // GPU 셰이더 최적화: 4-stop → 2-stop gradient (중간 clear 영역 제거)
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom)
+                Spacer()
+                LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
+            }
             .allowsHitTesting(false)
         )
     }
@@ -269,15 +270,15 @@ struct MultiLivePlayerPane: View {
                 VStack(spacing: DesignTokens.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.title2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DesignTokens.Colors.accentOrange)
 
                     VStack(spacing: 4) {
                         Text("연결 오류")
                             .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         Text(message)
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
                             .multilineTextAlignment(.center)
                             .lineLimit(3)
                             .padding(.horizontal, DesignTokens.Spacing.xl)

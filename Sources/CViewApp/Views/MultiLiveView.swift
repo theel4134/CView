@@ -24,8 +24,10 @@ struct MultiLiveView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
                 HStack(spacing: 0) {
-                    // 왼쪽: 비디오 영역 + 탭바
+                    // 왼쪽: 탭바 + 비디오 영역
                     VStack(spacing: 0) {
+                        MultiLiveTabBar(manager: manager)
+
                         ZStack {
                             if manager.isGridLayout {
                                 gridLayout
@@ -36,24 +38,22 @@ struct MultiLiveView: View {
                             }
                         }
                         .animation(DesignTokens.Animation.contentTransition, value: manager.isGridLayout)
-
-                        MultiLiveTabBar(manager: manager)
                     }
 
-                    // 오른쪽: 채팅 패널
+                    // 오른쪽: 채팅 패널 — 탭 전환 시 즉시 교체 (애니메이션 없음)
                     if manager.showChat, let selected = manager.selectedSession {
                         multiLiveChatPanel(session: selected)
+                            .id(selected.id)
                             .frame(width: 320)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 }
-                .animation(DesignTokens.Animation.spring, value: manager.showChat)
-                .animation(DesignTokens.Animation.spring, value: manager.selectedSessionId)
+                .animation(DesignTokens.Animation.smooth, value: manager.showChat)
                 .transition(.opacity)
             }
         }
         .background(Color.black)
-        .animation(DesignTokens.Animation.smooth, value: manager.sessions.isEmpty)
+        .animation(DesignTokens.Animation.contentTransition, value: manager.sessions.isEmpty)
         .sheet(isPresented: Binding(
             get: { manager.showAddSheet },
             set: { manager.showAddSheet = $0 }
@@ -90,7 +90,7 @@ struct MultiLiveView: View {
                 columns: Array(repeating: GridItem(.flexible(), spacing: gap), count: max(cols, 1)),
                 spacing: gap
             ) {
-                ForEach(manager.sessions) { session in
+                ForEach(manager.sessions, id: \.id) { session in
                     MultiLivePlayerPane(
                         session: session,
                         isSelected: session.id == manager.selectedSessionId,
@@ -102,17 +102,15 @@ struct MultiLiveView: View {
                             manager.selectSession(id: session.id)
                         }
                     }
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: 0.9).combined(with: .opacity),
-                        removal: .scale(scale: 0.9).combined(with: .opacity)
-                    ))
+                    .transition(.opacity)
                 }
             }
-            .animation(DesignTokens.Animation.spring, value: manager.sessions.map(\.id))
+            .animation(DesignTokens.Animation.contentTransition, value: manager.sessions.count)
+            .padding(gap)
         }
     }
 
-    // MARK: - 빈 상태
+    // MARK: - 빈 상태 뷰
 
     private var emptyStateView: some View {
         VStack(spacing: DesignTokens.Spacing.xl) {
@@ -176,7 +174,7 @@ struct MultiLiveView: View {
             }
             .overlay {
                 Image(systemName: "play.fill")
-                    .font(.system(size: 14))
+                    .font(DesignTokens.Typography.custom(size: 14))
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.6))
             }
             .frame(width: 48, height: 36)
@@ -213,7 +211,7 @@ struct MultiLiveView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(.ultraThinMaterial)
+            .background(.black.opacity(0.5))
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
@@ -314,16 +312,16 @@ private struct MultiLiveChatSettingsView: View {
                     // 글꼴 크기
                     settingsRow(label: "글꼴 크기", icon: "textformat") {
                         HStack(spacing: 6) {
-                            Text("가").font(.system(size: 10)).foregroundStyle(DesignTokens.Colors.textTertiary)
+                            Text("가").font(DesignTokens.Typography.custom(size: 10)).foregroundStyle(DesignTokens.Colors.textTertiary)
                             Slider(value: Binding(
                                 get: { chatVM.fontSize },
                                 set: { chatVM.fontSize = $0 }
                             ), in: 10...24, step: 1)
                             .tint(DesignTokens.Colors.chzzkGreen)
                             .frame(width: 110)
-                            Text("가").font(.system(size: 17)).foregroundStyle(DesignTokens.Colors.textTertiary)
+                            Text("가").font(DesignTokens.Typography.custom(size: 17)).foregroundStyle(DesignTokens.Colors.textTertiary)
                             Text("\(Int(chatVM.fontSize))pt")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                                 .frame(width: 34)
                         }

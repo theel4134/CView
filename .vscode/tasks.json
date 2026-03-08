@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build CView_v2 (Debug)",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-scheme", "CView_v2",
+        "-configuration", "Debug",
+        "-derivedDataPath", "Build",
+        "build"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build and Launch CView_v2",
+      "dependsOn": ["Build CView_v2 (Debug)"],
+      "dependsOrder": "sequence",
+      "type": "shell",
+      "command": "open",
+      "args": [
+        "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "isBackground": true
+    }
+  ]
+}

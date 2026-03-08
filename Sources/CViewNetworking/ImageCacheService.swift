@@ -218,6 +218,37 @@ public actor ImageCacheService {
         }
     }
 
+    // MARK: - Prefetch
+
+    /// 여러 URL의 이미지를 백그라운드에서 미리 다운로드하여 캐시에 저장
+    /// 이미 캐시에 있는 항목은 건너뜀. 최대 동시 다운로드 수 제한.
+    /// - Parameters:
+    ///   - urls: 프리페치할 이미지 URL 배열
+    ///   - concurrency: 동시 다운로드 수 (기본 6)
+    public func prefetch(_ urls: [URL], concurrency: Int = 6) async {
+        // 캐시에 없는 URL만 필터링
+        let uncached = urls.filter { url in
+            let key = cacheKey(for: url) as NSString
+            if memoryCache.object(forKey: key) != nil { return false }
+            let diskURL = diskPath(for: String(key))
+            return !FileManager.default.fileExists(atPath: diskURL.path)
+        }
+        guard !uncached.isEmpty else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            var launched = 0
+            for url in uncached {
+                if launched >= concurrency {
+                    await group.next()
+                }
+                launched += 1
+                group.addTask { [weak self] in
+                    _ = await self?.imageData(for: url)
+                }
+            }
+        }
+    }
+
     /// 캐시 전체 삭제
     public func clearAll() {
         memoryCache.removeAllObjects()

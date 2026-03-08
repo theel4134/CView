@@ -51,7 +51,8 @@ public struct CViewLoadingIndicator: View {
     @State private var spinnerRotation: Angle = .zero
 
     private func startSpinning() {
-        withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+        guard let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.loadingSpin) else { return }
+        withAnimation(anim) {
             spinnerRotation = .degrees(360)
         }
     }
@@ -98,10 +99,14 @@ public struct LiveBadge: View {
         )
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .clipShape(Capsule())
+        // Metal 3: gradient+shadow+pulse 다중 레이어 → GPU 단일 텍스처
+        .drawingGroup(opaque: false)
         .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 6, y: 2)
         .onAppear {
-            withAnimation(DesignTokens.Animation.pulse) {
-                isPulsing = true
+            if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) {
+                withAnimation(anim) {
+                    isPulsing = true
+                }
             }
         }
     }
@@ -207,15 +212,20 @@ public struct UserAvatar: View {
 public struct CViewButtonStyle: ButtonStyle {
     public init() {}
 
+    @State private var isHovered = false
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(DesignTokens.Typography.bodyMedium)
             .padding(.horizontal, DesignTokens.Spacing.lg)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(DesignTokens.Colors.chzzkGreen, in: Capsule())
+            .background(DesignTokens.Colors.chzzkGreen.opacity(isHovered ? 0.85 : 1.0), in: Capsule())
             .foregroundStyle(DesignTokens.Colors.onPrimary)
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+            .animation(DesignTokens.Animation.fast, value: isHovered)
+            .cursor(.pointingHand)
     }
 }
 

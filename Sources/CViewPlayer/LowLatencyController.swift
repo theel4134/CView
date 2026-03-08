@@ -27,26 +27,26 @@ public actor LowLatencyController {
         
         public static let `default` = Configuration(
             targetLatency: 3.0,
-            maxLatency: 10.0,
+            maxLatency: 8.0,
             minLatency: 1.0,
             maxPlaybackRate: 1.15,
-            minPlaybackRate: 0.9,
-            catchUpThreshold: 1.5,
+            minPlaybackRate: 0.90,
+            catchUpThreshold: 1.2,
             slowDownThreshold: 0.5,
             pidKp: 0.8,
-            pidKi: 0.1,
-            pidKd: 0.05
+            pidKi: 0.12,
+            pidKd: 0.06
         )
         
         public static let ultraLow = Configuration(
             targetLatency: 1.5,
             maxLatency: 5.0,
             minLatency: 0.5,
-            maxPlaybackRate: 1.2,
+            maxPlaybackRate: 1.20,
             minPlaybackRate: 0.85,
             catchUpThreshold: 1.0,
             slowDownThreshold: 0.3,
-            pidKp: 1.2,
+            pidKp: 1.0,
             pidKi: 0.15,
             pidKd: 0.08
         )
@@ -190,7 +190,7 @@ public actor LowLatencyController {
         
         // Calculate PID output
         let error = smoothedLatency - config.targetLatency
-        let pidOutput = pidController.update(error: error, deltaTime: 0.5)
+        let pidOutput = pidController.update(error: error, deltaTime: 2.0)
         
         // Determine rate adjustment
         let newRate: Double

@@ -120,15 +120,15 @@ public struct AVLiveCatchupConfig: Sendable {
 
     public static let lowLatency = AVLiveCatchupConfig(
         targetLatency: 3.0, maxLatency: 8.0,
-        maxCatchupRate: 1.5, preferredForwardBuffer: 4.0
+        maxCatchupRate: 1.3, preferredForwardBuffer: 4.0
     )
     public static let balanced = AVLiveCatchupConfig(
-        targetLatency: 6.0, maxLatency: 15.0,
-        maxCatchupRate: 1.25, preferredForwardBuffer: 8.0
+        targetLatency: 5.0, maxLatency: 12.0,
+        maxCatchupRate: 1.2, preferredForwardBuffer: 7.0
     )
     public static let stable = AVLiveCatchupConfig(
-        targetLatency: 10.0, maxLatency: 25.0,
-        maxCatchupRate: 1.1, preferredForwardBuffer: 15.0
+        targetLatency: 8.0, maxLatency: 20.0,
+        maxCatchupRate: 1.1, preferredForwardBuffer: 12.0
     )
 
     public init(targetLatency: Double, maxLatency: Double,
@@ -260,6 +260,14 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     private var _recordingURL: URL?
     private let recordingService = StreamRecordingService()
 
+    // MARK: - Background Mode (멀티라이브 비활성 세션 CPU 절약)
+    
+    /// 멀티라이브에서 비활성(음소거) 세션의 CPU 사용 절감
+    /// - liveCatchupLoop 건너뜀 (재생 속도 조정 불필요)
+    /// - stallWatchdog 건너뜀 (비활성 세션 복구 지연 허용)
+    /// - timeObserver 콜백 공백 전파 안 함
+    public var isBackgroundMode: Bool = false
+
     // MARK: - Initialization
 
     public override init() {
@@ -360,11 +368,15 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             adjustCatchupConfigForNetwork()
             item.preferredForwardBufferDuration = catchupConfig.preferredForwardBuffer
 
-            // macOS 12+: 라이브 엣지로부터의 오프셋 설정
+            // macOS 12+: 라이브 엣지로부터의 오프셋 설정 (timescale 1000으로 정밀 설정)
             item.configuredTimeOffsetFromLive = CMTime(
                 seconds: catchupConfig.targetLatency,
-                preferredTimescale: 1
+                preferredTimescale: 1000
             )
+            
+            // canUseNetworkResourcesForLiveStreamingWhilePaused:
+            // 일시정지 상태에서도 네트워크 리소스를 유지 → 재개 시 버퍼링 지연 최소화
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
         } else {
             player.automaticallyWaitsToMinimizeStalling = true
         }
@@ -491,17 +503,19 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
     // MARK: - Stall Watchdog
 
-    /// 스마트 스톨 워치독:
-    /// 1) 12초 무진행: 재연결 요청
-    /// 2) 버퍼 고갈(isPlaybackLikelyToKeepUp=false): 연속 7회 → 재연결 요청
-    /// 3) 장시간 재생 안정성: 워치독이 재연결 후에도 영구 종료되지 않고 계속 감시
-    /// 4) 연속 재연결 실패 보호: 5분 내 3회 이상 재연결 시 에러 상태 전환
+    /// 스마트 스톨 워치독 — currentTime 기반 실질 정체 감지:
+    /// 1) currentTime 정체: 21초(7회 연속) 동안 재생 위치 변화 없음 → 재연결
+    /// 2) 버퍼 고갈: 24초(8회 연속) isPlaybackLikelyToKeepUp=false → 재연결
+    /// 3) 연속 재연결 실패 보호: 5분 내 3회 이상 재연결 시 에러 상태 전환
+    /// 
+    /// 이전 문제: lastProgressTime + timeControlStatus 기반 감지가 멀티라이브에서
+    /// false positive를 일으킴 (timeControlStatus가 잠시 .waiting 상태일 때
+    /// 실제로는 재생 중이지만 재연결 트리거). currentTime 직접 비교로 해결.
     private var recentReconnectTimestamps: [Date] = []
     private let maxReconnectsInWindow = 3
     private let reconnectWindowSeconds: TimeInterval = 300 // 5분
 
     private func startStallWatchdog() {
-        let kStallTimeout: TimeInterval = 12.0
         let kCheckInterval: UInt64 = 3_000_000_000 // 3초
 
         stallWatchdogTask?.cancel()
@@ -509,37 +523,74 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         recentReconnectTimestamps.removeAll()
 
         stallWatchdogTask = Task { [weak self] in
+            // 초기 안정화 대기: play() → readyToPlay 변환에 최대 8초 소요 가능
+            // 이 동안 currentTime이 0이거나 변화 없어 false positive 발생 방지
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            
             var bufferStallCount = 0
+            var timeStallCount = 0
+            var previousCurrentTime: Double = -1
+            
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: kCheckInterval)
                 guard let self, !Task.isCancelled else { return }
+
+                // 백그라운드 세션은 스톨 감시 건너뜀 (비활성 세션 복구 지연 허용)
+                guard !self.isBackgroundMode else {
+                    bufferStallCount = 0
+                    timeStallCount = 0
+                    previousCurrentTime = -1
+                    continue
+                }
 
                 let phase = self.lock.withLock { self._state }
 
                 // idle/ended/error 상태에서는 감시 일시 중지 (루프는 유지)
                 if phase == .idle || phase == .ended {
                     bufferStallCount = 0
+                    timeStallCount = 0
+                    previousCurrentTime = -1
                     continue
                 }
                 if case .error = phase {
                     bufferStallCount = 0
+                    timeStallCount = 0
+                    previousCurrentTime = -1
                     continue
                 }
 
                 guard phase == .playing || phase == .buffering(progress: 0) else {
                     bufferStallCount = 0
+                    timeStallCount = 0
+                    previousCurrentTime = -1
                     continue
                 }
 
-                let elapsed = Date().timeIntervalSince(self.lastProgressTime)
+                // ── currentTime 기반 실질 정체 감지 ──
+                let currentTime = CMTimeGetSeconds(self.player.currentTime())
+                if previousCurrentTime >= 0 && currentTime.isFinite {
+                    if abs(currentTime - previousCurrentTime) < 0.1 {
+                        timeStallCount += 1
+                    } else {
+                        timeStallCount = 0
+                    }
+                }
+                if currentTime.isFinite {
+                    previousCurrentTime = currentTime
+                }
 
-                // 버퍼 부족 + 장시간 스톨 → 재연결
+                // 버퍼 부족 카운트
                 let keepUp = player.currentItem?.isPlaybackLikelyToKeepUp ?? true
                 if !keepUp { bufferStallCount += 1 } else { bufferStallCount = 0 }
 
-                if elapsed >= kStallTimeout || bufferStallCount >= 7 {
+                // 재연결 조건 (false positive 방지를 위해 더 보수적):
+                // 1) currentTime 정체 7회 연속 (21초간 재생 위치 변화 없음)
+                // 2) 버퍼 고갈 연속 8회 (24초간 isPlaybackLikelyToKeepUp=false)
+                let shouldReconnect = timeStallCount >= 7 || bufferStallCount >= 8
+
+                if shouldReconnect {
                     self.logger.warning(
-                        "AVPlayerEngine: stall watchdog — elapsed=\(Int(elapsed))s bufferStalls=\(bufferStallCount)"
+                        "AVPlayerEngine: stall watchdog — timeStalls=\(timeStallCount) bufferStalls=\(bufferStallCount) currentTime=\(String(format: "%.1f", currentTime))"
                     )
 
                     // 연속 재연결 실패 보호: 5분 내 maxReconnectsInWindow회 초과 시 에러 전환
@@ -559,6 +610,8 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
                     // 재연결 요청 후 카운터 리셋, 루프 계속
                     bufferStallCount = 0
+                    timeStallCount = 0
+                    previousCurrentTime = -1
                     self.lastProgressTime = Date()
                     self.handleError(.connectionLost)
                     // 재연결 완료 대기 (15초) — play()가 다시 호출될 때까지 대기
@@ -574,6 +627,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     /// 1초마다 지연 측정 → 스무딩된 속도 조정
     /// - 급격한 속도 변화를 방지하기 위해 최근 4개 측정값의 EMA 사용
     /// - latency > maxLatency: 라이브 엣지로 즉시 점프 후 offset 재설정
+    /// - 백그라운드 세션은 건너뜀 (비활성 세션에서 속도 조정 불필요)
     private func startLiveCatchupLoop() {
         let kCheckInterval: UInt64 = 1_000_000_000 // 1초
 
@@ -582,6 +636,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: kCheckInterval)
                 guard let self, !Task.isCancelled else { return }
+                guard !self.isBackgroundMode else { continue }
                 await MainActor.run { self.adjustPlaybackRateForLatency() }
             }
         }
@@ -620,7 +675,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             let curved = Float(1.0 - cos(ratio * .pi / 2))    // 코사인 이징
             targetRate = 1.0 + curved * (cfg.maxCatchupRate - 1.0)
         } else if latency < cfg.targetLatency * 0.6 {
-            targetRate = 1.0   // 지연이 목표보다 훨씬 낮으면 정상 속도 복구
+            targetRate = 1.0   // 지연이 목표보다 충분히 낮으면 정상 속도 유지
         } else {
             return // 목표 범위 내 → 아무것도 하지 않음
         }
@@ -690,17 +745,24 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     private func adjustCatchupConfigForNetwork() {
         switch currentNetworkType {
         case .wiredEthernet:
+            // 유선: 저지연 (안정적 네트워크)
             catchupConfig.targetLatency = 2.0
             catchupConfig.maxLatency = 6.0
+            catchupConfig.preferredForwardBuffer = 3.0
         case .wifi:
+            // WiFi: 기본 저지연
             catchupConfig.targetLatency = 3.0
             catchupConfig.maxLatency = 8.0
+            catchupConfig.preferredForwardBuffer = 4.0
         case .cellular:
-            catchupConfig.targetLatency = 6.0
-            catchupConfig.maxLatency = 15.0
+            // 모바일: 안정 우선
+            catchupConfig.targetLatency = 5.0
+            catchupConfig.maxLatency = 12.0
+            catchupConfig.preferredForwardBuffer = 8.0
         default:
             catchupConfig.targetLatency = 4.0
             catchupConfig.maxLatency = 10.0
+            catchupConfig.preferredForwardBuffer = 5.0
         }
     }
 
@@ -820,6 +882,8 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             guard let self else { return }
             switch item.status {
             case .readyToPlay:
+                let prev = self.lock.withLock { self._state }
+                guard prev != .playing else { break }
                 self.lock.withLock { self._state = .playing }
                 self.notifyStateChange(.playing)
                 self.logger.info("AVPlayerEngine: readyToPlay")

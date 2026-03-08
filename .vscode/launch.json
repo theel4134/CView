@@ -1,0 +1,73 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug CView_v2",
+      "program": "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app/Contents/MacOS/CView_v2",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build CView_v2 (Debug)",
+      "env": {
+        "OS_ACTIVITY_DT_MODE": "YES"
+      },
+      "initCommands": [
+        "settings set target.process.stop-on-exec false"
+      ],
+      "preRunCommands": [
+        "breakpoint delete --name cpp_exception"
+      ]
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug CView_v2 (빌드 없이)",
+      "program": "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app/Contents/MacOS/CView_v2",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OS_ACTIVITY_DT_MODE": "YES"
+      },
+      "initCommands": [
+        "settings set target.process.stop-on-exec false"
+      ],
+      "preRunCommands": [
+        "breakpoint delete --name cpp_exception"
+      ]
+    },
+    {
+      "type": "lldb",
+      "request": "attach",
+      "name": "Attach CView_v2 (빌드+실행 후 연결)",
+      "program": "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app/Contents/MacOS/CView_v2",
+      "preLaunchTask": "Build and Launch CView_v2",
+      "initCommands": [
+        "settings set target.process.stop-on-exec false"
+      ],
+      "preRunCommands": [
+        "breakpoint delete --name cpp_exception"
+      ],
+      "waitFor": true
+    },
+    {
+      "type": "lldb-dap",
+      "request": "launch",
+      "name": "Debug CView_v2 (LLDB DAP)",
+      "program": "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app/Contents/MacOS/CView_v2",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build CView_v2 (Debug)",
+      "env": {
+        "OS_ACTIVITY_DT_MODE": "YES"
+      }
+    },
+    {
+      "type": "lldb-dap",
+      "request": "launch",
+      "name": "Debug CView_v2 (LLDB DAP, 빌드 없이)",
+      "program": "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app/Contents/MacOS/CView_v2",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OS_ACTIVITY_DT_MODE": "YES"
+      }
+    }
+  ]
+}

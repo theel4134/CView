@@ -6,6 +6,7 @@ import Foundation
 import SwiftUI
 import CViewCore
 import CViewChat
+import CViewNetworking
 import AppKit
 
 // MARK: - Chat TTS Service
@@ -109,6 +110,13 @@ public final class ChatViewModel {
     public var emoticonEnabled: Bool = true
     public var showDonation: Bool = true
 
+    // 채팅 표시 모드
+    public var displayMode: ChatDisplayMode = .side
+    public var overlayWidth: CGFloat = 340
+    public var overlayHeight: CGFloat = 400
+    public var overlayBackgroundOpacity: Double = 0.5
+    public var overlayShowInput: Bool = false
+
     // Filter / capacity
     public var maxVisibleMessages: Int = 200 {
         didSet {
@@ -166,14 +174,28 @@ public final class ChatViewModel {
     /// 채널 이모티콘 맵 (emoticonId → imageURL)
     public var channelEmoticons: [String: String] = [:] {
         didSet {
-            guard !channelEmoticons.isEmpty, !messages.isEmpty else { return }
+            guard !channelEmoticons.isEmpty else { return }
             // 채널 이모티콘 로드 완료 후 기존 메시지에 소급 적용 (in-place, no array copy)
-            messages.mapInPlace { enrichWithChannelEmoticons($0) }
+            if !messages.isEmpty {
+                messages.mapInPlace { enrichWithChannelEmoticons($0) }
+            }
+            // 채널 이모티콘 이미지 프리페치
+            let urls = channelEmoticons.values.compactMap { URL(string: $0) }
+            if !urls.isEmpty {
+                Task.detached(priority: .background) {
+                    await ImageCacheService.shared.prefetch(urls)
+                }
+            }
         }
     }
     
     /// 채널 이모티콘 팩 목록
-    public var emoticonPacks: [EmoticonPack] = []
+    public var emoticonPacks: [EmoticonPack] = [] {
+        didSet {
+            guard !emoticonPacks.isEmpty else { return }
+            prefetchEmoticonImages()
+        }
+    }
     
     /// 채팅 메시지에서 수집된 이모티콘 (ID → URL)
     private var collectedEmoticons: [String: URL] = [:]
@@ -229,7 +251,12 @@ public final class ChatViewModel {
     // Tasks
     private var eventListenTask: Task<Void, Never>?
     private var statsTask: Task<Void, Never>?
-    private var recentMessageTimestamps: [Date] = []
+    @ObservationIgnored private var recentMessageTimestamps: [Date] = []
+    
+    /// 멀티라이브 비활성 세션 CPU 절약: 백그라운드 모드에서 flush 간격 증가 + 통계 중단
+    @ObservationIgnored public var isBackgroundMode: Bool = false
+    /// 백그라운드 모드에서의 배치 flush 간격 (1초 — 기본 100ms의 10배)
+    @ObservationIgnored private let backgroundFlushIntervalNs: UInt64 = 1_000_000_000
     
     // MARK: - Batching (reduces SwiftUI update frequency from 1000/s → ~10/s)
     
@@ -280,6 +307,11 @@ public final class ChatViewModel {
         ttsService.isEnabled = settings.ttsEnabled
         ttsService.volume = settings.ttsVolume
         ttsService.rate = settings.ttsRate
+        displayMode = settings.displayMode
+        overlayWidth = settings.overlayWidth
+        overlayHeight = settings.overlayHeight
+        overlayBackgroundOpacity = settings.overlayBackgroundOpacity
+        overlayShowInput = settings.overlayShowInput
     }
 
     /// 현재 뷰모델 상태를 ChatSettings 스냅샷으로 내보내기 (팝업에서 저장 시 사용)
@@ -298,6 +330,11 @@ public final class ChatViewModel {
         s.autoScroll = isAutoScrollEnabled
         s.chatFilterEnabled = isFilterEnabled
         s.blockedWords = blockedWords
+        s.displayMode = displayMode
+        s.overlayWidth = overlayWidth
+        s.overlayHeight = overlayHeight
+        s.overlayBackgroundOpacity = overlayBackgroundOpacity
+        s.overlayShowInput = overlayShowInput
         // blockedUsers는 모더레이션 서비스 통해 관리 (별도 콜백)
         return s
     }
@@ -355,6 +392,8 @@ public final class ChatViewModel {
         statsTask = nil
         batchFlushTask?.cancel()
         batchFlushTask = nil
+        replayDebounceTask?.cancel()
+        replayDebounceTask = nil
         pendingMessages.removeAll(keepingCapacity: true)
         ttsService.stop()
         
@@ -505,19 +544,30 @@ public final class ChatViewModel {
 
     // MARK: - Scroll Position
 
-    /// 스크롤 위치 변경 시 호출 — 치지직 방식: 즉시 리플레이 모드 전환
+    /// replay mode 진입 debounce 타스크 — 빠른 연속 스크롤 시 불필요한 replay 진입/해제 반복 방지
+    @ObservationIgnored private var replayDebounceTask: Task<Void, Never>?
+
+    /// 스크롤 위치 변경 시 호출 — 치지직 방식: 하단 도달 시 즉시 해제, 이탈 시 debounce 후 진입
     /// - Parameter isNearBottom: 스크롤이 하단 근처(80px 이내)인지 여부
     public func onScrollPositionChanged(isNearBottom: Bool) {
         if isNearBottom {
-            // 하단에 도달하면 즉시 리플레이 모드 해제
+            // 하단에 도달하면 즉시 리플레이 모드 해제 + 보류 중인 진입 취소
+            replayDebounceTask?.cancel()
+            replayDebounceTask = nil
             if isReplayMode {
                 exitReplayMode()
             }
         } else {
-            // 하단에서 벗어나면 즉시 리플레이 모드 진입
+            // 하단에서 벗어나면 debounce(150ms) 후 리플레이 모드 진입
             guard !isReplayMode else { return }
             guard messages.count > 3 else { return }
-            enterReplayMode()
+            guard replayDebounceTask == nil else { return }
+            replayDebounceTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                guard !Task.isCancelled, let self, !self.isReplayMode else { return }
+                self.enterReplayMode()
+                self.replayDebounceTask = nil
+            }
         }
     }
 
@@ -533,6 +583,8 @@ public final class ChatViewModel {
 
     /// Exit replay mode and jump back to the latest messages.
     public func exitReplayMode() {
+        replayDebounceTask?.cancel()
+        replayDebounceTask = nil
         isReplayMode = false
         unreadCount = 0
         isAutoScrollEnabled = true
@@ -563,7 +615,6 @@ public final class ChatViewModel {
     
     @MainActor
     private func handleEvent(_ event: ChatEngineEvent) async {
-        logger.debug("ChatVM handleEvent: \(String(describing: event).prefix(80), privacy: .public)")
         switch event {
         case .connected:
             connectionState = .connected(serverIndex: 0)
@@ -580,7 +631,6 @@ public final class ChatViewModel {
             connectionState = state
             
         case .newMessages(let msgs):
-            logger.debug("ChatVM newMessages: \(msgs.count) msgs, current total: \(self.messages.count)")
             await appendFilteredMessages(msgs)
             
         case .recentMessages(let msgs):
@@ -641,15 +691,35 @@ public final class ChatViewModel {
     }
     
     /// 이모티콘 수집 — MainActor에서 실행 (collectedEmoticons 딕셔너리 접근)
+    /// 새로 발견된 이모티콘은 바로 프리페치하여 다음 표시 시 즉시 로드
     private func collectEmoticons(from msgs: [ChatMessage]) {
+        var newURLs: [URL] = []
         for msg in msgs {
             if let emojis = msg.extras?.emojis {
                 for (id, urlStr) in emojis {
                     if collectedEmoticons[id] == nil, let url = URL(string: urlStr) {
                         collectedEmoticons[id] = url
+                        newURLs.append(url)
                     }
                 }
             }
+        }
+        if !newURLs.isEmpty {
+            Task.detached(priority: .background) {
+                await ImageCacheService.shared.prefetch(newURLs)
+            }
+        }
+    }
+
+    /// 이모티콘 팩의 모든 이미지를 백그라운드에서 미리 다운로드
+    private func prefetchEmoticonImages() {
+        let urls = emoticonPacks
+            .flatMap { $0.emoticons ?? [] }
+            .compactMap { $0.imageURL }
+        guard !urls.isEmpty else { return }
+        logger.info("이모티콘 프리페치 시작: \(urls.count)개 이미지")
+        Task.detached(priority: .background) {
+            await ImageCacheService.shared.prefetch(urls)
         }
     }
 
@@ -726,10 +796,12 @@ public final class ChatViewModel {
     }
     
     /// Schedule a single batch-flush task. No-op if one is already pending.
+    /// 백그라운드 세션은 1초 간격, 포그라운드는 100ms 간격
     private func scheduleBatchFlush() {
         guard batchFlushTask == nil else { return }
+        let interval = isBackgroundMode ? backgroundFlushIntervalNs : batchFlushIntervalNs
         batchFlushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: self?.batchFlushIntervalNs ?? 100_000_000)
+            try? await Task.sleep(nanoseconds: interval)
             guard !Task.isCancelled, let self else { return }
             self.flushPendingMessages()
         }
@@ -814,10 +886,17 @@ public final class ChatViewModel {
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 
+                // 백그라운드 세션은 통계 계산 생략 — CPU 절약
+                guard !self.isBackgroundMode else { continue }
+                
                 let now = Date()
                 await MainActor.run {
-                    self.recentMessageTimestamps = self.recentMessageTimestamps.filter {
-                        now.timeIntervalSince($0) < 5.0
+                    // O(1) 접근: 정렬된 배열에서 5초 이전 항목의 인덱스 찾기
+                    let cutoff = now.addingTimeInterval(-5.0)
+                    if let idx = self.recentMessageTimestamps.firstIndex(where: { $0 >= cutoff }) {
+                        self.recentMessageTimestamps.removeSubrange(..<idx)
+                    } else {
+                        self.recentMessageTimestamps.removeAll()
                     }
                     self.messagesPerSecond = Double(self.recentMessageTimestamps.count) / 5.0
                 }

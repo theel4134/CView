@@ -89,7 +89,13 @@ extension AppState {
             NotificationService.shared.registerCategories()
         }
 
-        // 8. 앱 활성/비활성 생명주기 옵저버 등록
+        // 8. 기본 이모티콘 프리로드 — 모든 채널 공통 이모티콘을 앱 시작 시 1회 다운로드
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            await self.preloadBasicEmoticons(apiClient: apiClient)
+        }
+
+        // 9. 앱 활성/비활성 생명주기 옵저버 등록
         setupLifecycleObservers()
     }
 
@@ -145,5 +151,38 @@ extension AppState {
         await followingLoad
 
         startBackgroundUpdates()
+    }
+
+    // MARK: - Basic Emoticon Preloading
+
+    /// 치지직 기본 이모티콘을 앱 시작 시 1회 프리로드
+    /// API에서 팩 목록 로드 → 상세 조회(resolve) → 이미지 프리페치 → AppState에 캐시
+    func preloadBasicEmoticons(apiClient: ChzzkAPIClient) async {
+        let packs = await apiClient.globalBasicEmoticons()
+        guard !packs.isEmpty else {
+            logger.info("기본 이모티콘: 팩 없음 (API 실패 또는 빈 응답)")
+            return
+        }
+
+        let (emoMap, resolvedPacks) = await apiClient.resolveEmoticonPacks(packs)
+        guard !emoMap.isEmpty else {
+            logger.info("기본 이모티콘: resolve 후 이모티콘 없음")
+            return
+        }
+
+        // AppState 캐시에 저장
+        cachedBasicEmoticonPacks = resolvedPacks
+        cachedBasicEmoticonMap = emoMap
+
+        // MultiLiveManager에도 전달
+        multiLiveManager.updateCachedEmoticons(map: emoMap, packs: resolvedPacks)
+
+        logger.info("기본 이모티콘 프리로드 완료: \(resolvedPacks.count)개 팩, \(emoMap.count)개 이모티콘")
+
+        // 모든 이모티콘 이미지를 디스크/메모리 캐시에 미리 다운로드
+        let urls = emoMap.values.compactMap { URL(string: $0) }
+        Task.detached(priority: .background) {
+            await ImageCacheService.shared.prefetch(urls)
+        }
     }
 }

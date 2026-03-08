@@ -84,11 +84,11 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
     /// 시간 포맷터: 새 인스턴스 생성 대신 정적 재사용 (read-only이므로 nonisolated(unsafe) 안전)
     nonisolated(unsafe) private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "HH:mm"
+        f.dateFormat = "HH:mm:ss"
         return f
     }()
 
-    /// Formatted timestamp (HH:mm)
+    /// Formatted timestamp (HH:mm:ss)
     public var formattedTime: String {
         Self.timeFormatter.string(from: timestamp)
     }

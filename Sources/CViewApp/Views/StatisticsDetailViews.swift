@@ -675,5 +675,6 @@ struct StatCard: View {
         .drawingGroup(opaque: false)  // 카드 컨텐츠 단일 Metal 텍스처
         .animation(DesignTokens.Animation.smooth, value: isHovered)
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
     }
 }

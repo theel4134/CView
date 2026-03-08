@@ -108,7 +108,11 @@ public final class ClipPlayerViewModel {
         errorMessage = nil
 
         // embed WebView 즉시 표시 — 로딩 없이 바로 재생 시작
-        let embedURL = URL(string: "https://chzzk.naver.com/embed/clip/\(clipInfo.clipUID)")!
+        guard let embedURL = URL(string: "https://chzzk.naver.com/embed/clip/\(clipInfo.clipUID)") else {
+            playbackState = .error("잘못된 클립 URL")
+            errorMessage = "잘못된 클립 URL"
+            return
+        }
         embedFallbackURL = embedURL
         playbackState = .paused
 

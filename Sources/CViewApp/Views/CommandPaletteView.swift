@@ -502,7 +502,7 @@ struct CommandPaletteOverlay: ViewModifier {
                             Spacer()
                         }
                     }
-                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                    .transition(.opacity)
                 }
             }
             .animation(DesignTokens.Animation.snappy, value: isPresented)

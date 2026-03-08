@@ -81,6 +81,9 @@ public actor MetricsAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.httpBody = endpoint.body
+        if endpoint.body != nil {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         
         // 재시도 루프
         var lastError: Error?

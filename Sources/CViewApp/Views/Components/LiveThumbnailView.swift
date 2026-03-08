@@ -42,7 +42,7 @@ public struct LiveThumbnailView: View {
                     }
             }
         }
-        .animation(.easeIn(duration: 0.25), value: image != nil)
+        .animation(DesignTokens.Animation.fadeIn, value: image != nil)
         // scenePhase를 ID에 포함 → 백그라운드(숨김/최소화) 시 task 취소, 복귀 시 즉시 재갱신
         .task(id: "\(channelId)_\(thumbnailUrl?.absoluteString ?? "")_\(isLive)_\(scenePhase == .background)") {
             guard scenePhase != .background else { return }

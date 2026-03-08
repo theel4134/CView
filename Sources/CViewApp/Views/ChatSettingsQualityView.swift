@@ -151,6 +151,52 @@ struct ChatSettingsView: View {
     @ViewBuilder
     private func displaySection(vm: ChatViewModel) -> some View {
         ChatSettingsCard(title: "표시", icon: "textformat.size", color: DesignTokens.Colors.accentPurple) {
+            // 채팅 표시 모드
+            ChatSettingsRow(label: "채팅 모드", icon: "rectangle.on.rectangle", iconColor: DesignTokens.Colors.chzzkGreen) {
+                Picker("", selection: Binding(
+                    get: { vm.displayMode },
+                    set: { vm.displayMode = $0; saveToStore(vm) }
+                )) {
+                    ForEach(ChatDisplayMode.allCases, id: \.self) { mode in
+                        Label(mode.label, systemImage: mode.icon).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 110)
+            }
+
+            ChatSettingsDivider()
+
+            // 오버레이 전용 설정
+            if vm.displayMode == .overlay {
+                ChatSettingsRow(label: "오버레이 배경", icon: "square.fill", iconColor: DesignTokens.Colors.textSecondary) {
+                    HStack(spacing: 6) {
+                        Slider(value: Binding(
+                            get: { vm.overlayBackgroundOpacity },
+                            set: { vm.overlayBackgroundOpacity = $0; saveToStore(vm) }
+                        ), in: 0.0...1.0, step: 0.05)
+                        .tint(DesignTokens.Colors.chzzkGreen)
+                        .frame(width: 110)
+                        Text("\(Int(vm.overlayBackgroundOpacity * 100))%")
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            .frame(width: 34)
+                    }
+                }
+
+                ChatSettingsDivider()
+
+                ChatSettingsRow(label: "입력창 표시", icon: "keyboard", iconColor: DesignTokens.Colors.textSecondary) {
+                    Toggle("", isOn: Binding(
+                        get: { vm.overlayShowInput },
+                        set: { vm.overlayShowInput = $0; saveToStore(vm) }
+                    ))
+                    .toggleStyle(.switch).tint(DesignTokens.Colors.chzzkGreen).labelsHidden()
+                }
+
+                ChatSettingsDivider()
+            }
+
             ChatSettingsRow(label: "글꼴 크기", icon: "textformat", iconColor: DesignTokens.Colors.accentPurple) {
                 HStack(spacing: 6) {
                     Text("가").font(DesignTokens.Typography.custom(size: 10, weight: .regular)).foregroundStyle(DesignTokens.Colors.textTertiary)

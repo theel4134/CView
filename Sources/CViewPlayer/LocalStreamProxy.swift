@@ -253,8 +253,6 @@ public final class LocalStreamProxy: @unchecked Sendable {
             }
             
             let reqNum = requestCount + 1
-            let pathPreview = String(path.prefix(120))
-            self.logger.info("Proxy ← VLC req#\(reqNum, privacy: .public): \(pathPreview, privacy: .public)")
 
             // [멀티CDN 지원] /_p_/HOST/path 형식이면 해당 CDN 호스트로 직접 라우팅
             // M3U8 URL 재작성 시 크로스CDN 절대 URL을 이 형식으로 인코딩함
@@ -319,21 +317,22 @@ public final class LocalStreamProxy: @unchecked Sendable {
             
             // Content-Type 수정 (fMP4 → mp4)
             var contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream"
-            let origContentType = contentType
-            let urlSuffix = String(targetURL.suffix(80))
-            self.logger.info("Proxy → CDN res#\(requestNum, privacy: .public): HTTP \(httpResponse.statusCode, privacy: .public) Content-Type=\(origContentType, privacy: .public) size=\(data.count, privacy: .public) [\(urlSuffix, privacy: .public)]")
+
+            // 에러 응답만 로그 (정상 세그먼트 로그 억제 — 초당 수십 건 발생)
+            if httpResponse.statusCode >= 400 {
+                let urlSuffix = String(targetURL.suffix(80))
+                self.logger.warning("Proxy → CDN res#\(requestNum, privacy: .public): HTTP \(httpResponse.statusCode, privacy: .public) [\(urlSuffix, privacy: .public)]")
+            }
 
             // fMP4/CMAF 세그먼트에 대한 Content-Type 강제 수정
             // CDN이 잘못된 MIME 타입으로 응답하는 경우 처리
             let lower = contentType.lowercased()
             let lowerURL = targetURL.lowercased()
             if lower.contains("mp2t") {
-                self.logger.info("Proxy: Content-Type fix mp2t→mp4: [\(urlSuffix, privacy: .public)]")
                 contentType = "video/mp4"
             } else if (lower.contains("quicktime") || lower.contains("octet-stream"))
                       && (lowerURL.hasSuffix(".m4s") || lowerURL.hasSuffix(".m4v")
                           || lowerURL.contains(".m4v?") || lowerURL.contains(".m4s?")) {
-                self.logger.info("Proxy: Content-Type fix \(origContentType)→video/mp4: [\(urlSuffix, privacy: .public)]")
                 contentType = "video/mp4"
             }
             
@@ -344,34 +343,14 @@ public final class LocalStreamProxy: @unchecked Sendable {
                          (String(data: data.prefix(20), encoding: .utf8)?.contains("#EXTM3U") == true)
             
             if isM3U8 {
-                if var m3u8Content = String(data: data, encoding: .utf8) {
-                    // 1) 현재 타겟 호스트의 절대 URL 재작성 (기존 방식)
-                    let sameHostOriginal = "\(self.targetScheme)://\(self.targetHost)"
+                if let m3u8Content = String(data: data, encoding: .utf8) {
+                    // 단일 패스 URL 재작성 — 정규식 1회 스캔으로 sameHost + crossCDN 동시 처리
+                    // 기존: replacingOccurrences × (1 + N_크로스호스트) + regex 스캔 1회
+                    // 개선: regex 1회 스캔 → 매치 역순 치환 (String 1회 복사)
                     let proxyBase = "http://127.0.0.1:\(self.port)"
-                    m3u8Content = m3u8Content.replacingOccurrences(of: sameHostOriginal, with: proxyBase)
+                    let rewritten = self.rewriteM3U8URLs(m3u8Content, proxyBase: proxyBase)
                     
-                    // 2) 크로스CDN 절대 URL 재작성 (/_p_/HOST/path 인코딩)
-                    // Chzzk CDN에서 M3U8에 다른 CDN 호스트의 절대 URL이 포함될 수 있음
-                    // 예: https://ex-nlive-streaming.navercdn.com/... → /_p_/ex-nlive-streaming.navercdn.com/...
-                    let regex = LocalStreamProxy.cdnRegex
-                    let range = NSRange(m3u8Content.startIndex..., in: m3u8Content)
-                    // 매칭된 호스트 수집
-                    var crossHosts = Set<String>()
-                    regex.enumerateMatches(in: m3u8Content, range: range) { match, _, _ in
-                        guard let match,
-                              let hostRange = Range(match.range(at: 1), in: m3u8Content) else { return }
-                        let host = String(m3u8Content[hostRange])
-                        if host != self.targetHost { crossHosts.insert(host) }
-                    }
-                    // 크로스CDN 호스트를 순서대로 재작성
-                    for cdnHost in crossHosts {
-                        let crossOriginal = "https://\(cdnHost)"
-                        let crossReplacement = "\(proxyBase)/_p_/\(cdnHost)"
-                        m3u8Content = m3u8Content.replacingOccurrences(of: crossOriginal, with: crossReplacement)
-                        self.logger.info("Proxy: cross-CDN URL rewrite \(cdnHost) → /_p_/\(cdnHost)")
-                    }
-                    
-                    responseData = m3u8Content.data(using: .utf8) ?? data
+                    responseData = rewritten.data(using: .utf8) ?? data
                     
                     if !contentType.contains("mpegurl") {
                         contentType = "application/vnd.apple.mpegurl"
@@ -400,7 +379,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
         
         connection.send(content: fullResponse, contentContext: .defaultMessage, isComplete: false, completion: .contentProcessed { [weak self] error in
             if let error {
-                self?.logger.error("Proxy response send failed: \(error.localizedDescription, privacy: .public)")
+                self?.logger.debug("Proxy response send: \(error.localizedDescription, privacy: .public)")
                 connection.cancel()
                 return
             }
@@ -426,6 +405,44 @@ public final class LocalStreamProxy: @unchecked Sendable {
                 connection.cancel()
             }
         })
+    }
+    
+    // MARK: - Single-Pass M3U8 URL Rewriting
+    
+    /// 단일 정규식 스캔으로 sameHost + crossCDN URL을 동시 치환
+    /// 기존: replacingOccurrences×(1+N) + regex 1회 = O(M×(1+N))
+    /// 개선: regex 1회 + 역순 치환 = O(M) (M=M3U8 길이)
+    private func rewriteM3U8URLs(_ content: String, proxyBase: String) -> String {
+        // https:// 뒤에 CDN 호스트가 오는 패턴 + 현재 타겟 호스트 모두 매치
+        // cdnRegex는 navercdn.com|pstatic.net|naver.com|akamaized.net 호스트를 매치
+        // 타겟 호스트도 포함되므로 단일 패스로 처리
+        let regex = LocalStreamProxy.cdnRegex
+        let nsContent = content as NSString
+        let fullRange = NSRange(location: 0, length: nsContent.length)
+        
+        // 모든 매치를 수집 (range가 큰 쪽부터 치환하기 위해)
+        let matches = regex.matches(in: content, range: fullRange)
+        guard !matches.isEmpty else { return content }
+        
+        var result = content
+        // 역순으로 치환하여 앞쪽 인덱스가 무효화되지 않도록
+        for match in matches.reversed() {
+            guard let fullRange = Range(match.range, in: result),
+                  let hostRange = Range(match.range(at: 1), in: result) else { continue }
+            let host = String(result[hostRange])
+            
+            let replacement: String
+            if host == targetHost {
+                // 동일 호스트 → 프록시 주소로 직접 치환
+                replacement = proxyBase
+            } else {
+                // 크로스CDN → /_p_/HOST 인코딩
+                replacement = "\(proxyBase)/_p_/\(host)"
+            }
+            result.replaceSubrange(fullRange, with: replacement)
+        }
+        
+        return result
     }
 }
 

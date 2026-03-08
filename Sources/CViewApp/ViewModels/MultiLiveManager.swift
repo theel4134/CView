@@ -53,6 +53,10 @@ public final class MultiLiveManager {
     private var userUid: String?
     private var userNickname: String?
 
+    /// 캐시된 기본 이모티콘 (AppState에서 주입)
+    private var cachedBasicEmoticonMap: [String: String] = [:]
+    private var cachedBasicEmoticonPacks: [EmoticonPack] = []
+
     // MARK: - Init
 
     init() {}
@@ -62,6 +66,12 @@ public final class MultiLiveManager {
         self.apiClient = apiClient
         self.userUid = userUid
         self.userNickname = userNickname
+    }
+
+    /// 캐시된 기본 이모티콘 업데이트 (프리로드 완료 후 호출)
+    func updateCachedEmoticons(map: [String: String], packs: [EmoticonPack]) {
+        self.cachedBasicEmoticonMap = map
+        self.cachedBasicEmoticonPacks = packs
     }
 
     /// 사용자 정보 업데이트 (로그인/로그아웃 시)
@@ -108,7 +118,9 @@ public final class MultiLiveManager {
                 liveInfo: liveInfo,
                 apiClient: apiClient,
                 userUid: userUid,
-                userNickname: userNickname
+                userNickname: userNickname,
+                cachedBasicEmoticonMap: cachedBasicEmoticonMap,
+                cachedBasicEmoticonPacks: cachedBasicEmoticonPacks
             )
             sessions.append(session)
 
@@ -116,8 +128,10 @@ public final class MultiLiveManager {
             if sessions.count == 1 {
                 selectedSessionId = session.id
             } else {
-                // 추가 세션은 음소거 상태로 시작
+                // 추가 세션은 음소거 + 백그라운드 모드로 시작
                 session.playerViewModel.toggleMute()
+                session.chatViewModel.isBackgroundMode = true
+                session.playerViewModel.setBackgroundMode(true)
             }
 
             // 스트림 시작 (비동기)
@@ -157,17 +171,23 @@ public final class MultiLiveManager {
         let previousId = selectedSessionId
         selectedSessionId = id
 
-        // 오디오 라우팅: 이전 세션 음소거, 새 세션 음소거 해제
+        // 오디오 라우팅 + CPU 최적화: 이전 세션 → 백그라운드, 새 세션 → 포그라운드
         if previousId != id {
             if let prev = sessions.first(where: { $0.id == previousId }) {
                 if !prev.playerViewModel.isMuted {
                     prev.playerViewModel.toggleMute()
                 }
+                // 비활성 세션 CPU 절약: 채팅 배치 flush 간격 증가 + 플레이어 루프 건너뜀
+                prev.chatViewModel.isBackgroundMode = true
+                prev.playerViewModel.setBackgroundMode(true)
             }
             if let current = sessions.first(where: { $0.id == id }) {
                 if current.playerViewModel.isMuted {
                     current.playerViewModel.toggleMute()
                 }
+                // 활성 세션: 채팅 배치 flush 정상 빈도 복원 + 플레이어 루프 정상화
+                current.chatViewModel.isBackgroundMode = false
+                current.playerViewModel.setBackgroundMode(false)
             }
         }
     }

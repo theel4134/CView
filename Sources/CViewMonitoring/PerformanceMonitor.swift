@@ -93,6 +93,12 @@ public actor PerformanceMonitor {
     /// 메모리 증가 추세 경고 임계치 (MB/분) — 이 이상이면 누수 의심
     private let memoryGrowthWarningThreshold: Double = 50.0
     
+    /// CPU/GPU 캐시 — IOKit+task_threads 커널 호출을 매초→3초로 줄임
+    private var _cachedCPU: Double = 0
+    private var _cachedGPU: (usage: Double, renderer: Double, memMB: Double) = (0, 0, 0)
+    private var _kernelSampleCounter: Int = 0
+    private let kernelSampleInterval = 3  // 3초마다 커널 호출
+    
     public var currentMetrics: Metrics? { metricsHistory.last }
     
     // MARK: - Initialization
@@ -184,13 +190,21 @@ public actor PerformanceMonitor {
     // MARK: - Private
     
     private func collectMetrics() {
-        let gpu = readGPUStats()
+        // CPU/GPU는 커널 호출(task_threads, IOKit)이므로 3초마다만 실제 샘플링
+        _kernelSampleCounter += 1
+        if _kernelSampleCounter >= kernelSampleInterval {
+            _kernelSampleCounter = 0
+            _cachedGPU = readGPUStats()
+            _cachedCPU = currentCPUUsage()
+        }
+        
+        let gpu = _cachedGPU
         let memUsage = currentMemoryUsage()
         let metrics = Metrics(
             fps: _currentFPS,
             droppedFrames: _droppedFrames,
             memoryUsageMB: memUsage,
-            cpuUsage: currentCPUUsage(),
+            cpuUsage: _cachedCPU,
             networkBytesReceived: _networkBytes,
             bufferHealthPercent: _bufferHealth,
             latencyMs: _latencyMs,
@@ -222,12 +236,14 @@ public actor PerformanceMonitor {
             if memoryTrend.count >= 5 {
                 let recentCount = min(5, memoryTrend.count)
                 let recent = Array(memoryTrend.suffix(recentCount))
-                let growthPerMinute = (recent.last! - recent.first!) / Double(recentCount - 1)
+                if let last = recent.last, let first = recent.first {
+                    let growthPerMinute = (last - first) / Double(recentCount - 1)
                 
-                if growthPerMinute > memoryGrowthWarningThreshold {
-                    logger.warning("⚠️ 메모리 증가 추세 감지: \(String(format: "%.1f", growthPerMinute))MB/분 (현재 \(String(format: "%.0f", memUsage))MB)")
-                    // 메모리 경고 콜백 트리거
-                    onMemoryWarning?()
+                    if growthPerMinute > memoryGrowthWarningThreshold {
+                        logger.warning("⚠️ 메모리 증가 추세 감지: \(String(format: "%.1f", growthPerMinute))MB/분 (현재 \(String(format: "%.0f", memUsage))MB)")
+                        // 메모리 경고 콜백 트리거
+                        onMemoryWarning?()
+                    }
                 }
             }
         }

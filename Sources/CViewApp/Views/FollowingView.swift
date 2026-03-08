@@ -424,7 +424,7 @@ struct FollowingView: View {
                 if count > 0 {
                     Text("\(count)")
                         .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
-                        .foregroundStyle(isSelected ? .black : DesignTokens.Colors.textTertiary)
+                        .foregroundStyle(isSelected ? DesignTokens.Colors.onPrimary : DesignTokens.Colors.textTertiary)
                         .padding(.horizontal, DesignTokens.Spacing.xxs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
                         .background(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceElevated)

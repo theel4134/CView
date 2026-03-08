@@ -103,13 +103,27 @@ public struct HLSManifestParser: Sendable {
     
     private let logger = AppLogger.hls
     
+    /// ISO8601DateFormatter는 내부에 ICU/NSCalendar 초기화가 포함되어 비용이 큼
+    /// 매 PDT 라인마다 재생성하지 않고 static으로 한 번만 생성
+    private nonisolated(unsafe) static let iso8601FracFormatter: ISO8601DateFormatter = {
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fmt
+    }()
+    private nonisolated(unsafe) static let iso8601PlainFormatter: ISO8601DateFormatter = {
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime]
+        return fmt
+    }()
+    
     public init() {}
     
     // MARK: - Master Playlist
     
     /// Parse a master playlist from M3U8 content
     public func parseMasterPlaylist(content: String, baseURL: URL) throws -> MasterPlaylist {
-        let lines = content.components(separatedBy: .newlines)
+        // split은 Substring을 반환하여 원본 String storage 공유 (heap 할당 없음)
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
         
         guard lines.first?.hasPrefix("#EXTM3U") == true else {
             throw AppError.player(.invalidManifest)
@@ -119,6 +133,7 @@ public struct HLSManifestParser: Sendable {
         var currentAttributes: [String: String] = [:]
         
         for line in lines {
+            // Substring에서도 직접 작동 (StringProtocol)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             
             if trimmed.hasPrefix("#EXT-X-STREAM-INF:") {
@@ -157,7 +172,7 @@ public struct HLSManifestParser: Sendable {
     
     /// Parse a media playlist from M3U8 content
     public func parseMediaPlaylist(content: String, baseURL: URL) throws -> MediaPlaylist {
-        let lines = content.components(separatedBy: .newlines)
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
         
         guard lines.first?.hasPrefix("#EXTM3U") == true else {
             throw AppError.player(.invalidManifest)
@@ -199,11 +214,9 @@ public struct HLSManifestParser: Sendable {
                 
             } else if trimmed.hasPrefix("#EXT-X-PROGRAM-DATE-TIME:") {
                 let dateStr = String(trimmed.dropFirst("#EXT-X-PROGRAM-DATE-TIME:".count))
-                let fmtFrac = ISO8601DateFormatter()
-                fmtFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let fmtPlain = ISO8601DateFormatter()
-                fmtPlain.formatOptions = [.withInternetDateTime]
-                currentPDT = fmtFrac.date(from: dateStr) ?? fmtPlain.date(from: dateStr)
+                // static 캐시된 포매터 사용 — 세그먼트당 2개 DateFormatter 할당 제거
+                currentPDT = Self.iso8601FracFormatter.date(from: dateStr)
+                    ?? Self.iso8601PlainFormatter.date(from: dateStr)
                 
             } else if trimmed == "#EXT-X-DISCONTINUITY" {
                 currentDiscontinuity = true

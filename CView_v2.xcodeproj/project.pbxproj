@@ -79,6 +79,7 @@
 		EE11223344556677AABB0019 /* Sources/CViewApp/Views/MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* Sources/CViewApp/Views/PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* Sources/CViewApp/Views/ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */; };
+		EE11223344556677AABB0099 /* Sources/CViewApp/Views/ChatOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */; };
 		EE6D96E875945AE62F7DC3E6 /* CViewAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 14CD73D506FE4B4592AF3E0A /* CViewAuth */; };
 		F2D063FE109ED88FD428F817 /* Sources/CViewApp/Views/LiveStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDCB3FCE46E4EDBF596E295 /* Sources/CViewApp/Views/LiveStreamView.swift */; };
 		FDF40C1A2D801D341C3EFED2 /* Sources/CViewApp/Views/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B08923024BC3E319ABAF23 /* Sources/CViewApp/Views/MainContentView.swift */; };
@@ -164,6 +165,7 @@
 		EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerControlsView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatPanelView.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatOverlayView.swift; sourceTree = SOURCE_ROOT; };
 		EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/HomeViewModel.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0030 /* Sources/CViewApp/Views/MultiChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiChatView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatUserProfileSheet.swift; sourceTree = SOURCE_ROOT; };
@@ -277,6 +279,7 @@
 				EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */,
 				AA99887766554433CCDD0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift */,
 				EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */,
+				EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */,
 				DD11223344556677CCDD0096 /* Sources/CViewApp/Views/ChatMessageRow.swift */,
 				DD11223344556677CCDD0097 /* Sources/CViewApp/Views/ChatInputView.swift */,
 				CC99887766554433CCDD0090 /* Sources/CViewApp/Views/ChatAutocompleteView.swift */,
@@ -498,6 +501,7 @@
 				EE11223344556677AABB0020 /* Sources/CViewApp/Views/PlayerControlsView.swift in Sources */,
 				AA99887766554433AABB0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift in Sources */,
 				EE11223344556677AABB0021 /* Sources/CViewApp/Views/ChatPanelView.swift in Sources */,
+				EE11223344556677AABB0099 /* Sources/CViewApp/Views/ChatOverlayView.swift in Sources */,
 				DD11223344556677AABB0096 /* Sources/CViewApp/Views/ChatMessageRow.swift in Sources */,
 				DD11223344556677AABB0097 /* Sources/CViewApp/Views/ChatInputView.swift in Sources */,
 				CC99887766554433AABB0090 /* Sources/CViewApp/Views/ChatAutocompleteView.swift in Sources */,

@@ -60,6 +60,14 @@ final class AppState {
     /// HLS 매니페스트 프리페치 서비스 (채널 카드 호버 시 사전 로드)
     var hlsPrefetchService: HLSPrefetchService?
 
+    // MARK: - Cached Basic Emoticons (앱 시작 시 프리로드)
+
+    /// 프리로드된 기본 이모티콘 팩 (전 채널 공통)
+    var cachedBasicEmoticonPacks: [EmoticonPack] = []
+
+    /// 프리로드된 기본 이모티콘 맵 (emoticonId → imageURL)
+    var cachedBasicEmoticonMap: [String: String] = [:]
+
     // MARK: - Internal Services
 
     /// 공유 서비스 — View에서 접근 가능

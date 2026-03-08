@@ -359,7 +359,7 @@ struct ChannelInfoTabContent: View {
             HStack(spacing: 6) {
                 Image(systemName: "note.text")
                     .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(Color.orange)
+                    .foregroundStyle(DesignTokens.Colors.accentOrange)
                 Text("내 메모")
                     .font(DesignTokens.Typography.bodyBold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
@@ -412,9 +412,9 @@ struct ChannelInfoTabContent: View {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
-                    withAnimation { urlCopied = true }
+                    withAnimation(DesignTokens.Animation.fast) { urlCopied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        withAnimation { urlCopied = false }
+                        withAnimation(DesignTokens.Animation.fast) { urlCopied = false }
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -456,7 +456,7 @@ struct ChannelInfoTabContent: View {
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Spacer()
                 Button {
-                    withAnimation { selectedTab = .clip }
+                    withAnimation(DesignTokens.Animation.snappy) { selectedTab = .clip }
                 } label: {
                     Text("전체 보기")
                         .font(DesignTokens.Typography.caption)
@@ -491,7 +491,7 @@ struct ChannelInfoTabContent: View {
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Spacer()
                 Button {
-                    withAnimation { selectedTab = .vod }
+                    withAnimation(DesignTokens.Animation.snappy) { selectedTab = .vod }
                 } label: {
                     Text("전체 보기")
                         .font(DesignTokens.Typography.caption)

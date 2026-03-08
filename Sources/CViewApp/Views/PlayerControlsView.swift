@@ -183,9 +183,9 @@ struct LiveBadge: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(Color.white)
+                .fill(DesignTokens.Colors.textOnOverlay)
                 .frame(width: 7, height: 7)
-                .shadow(color: .white.opacity(0.6), radius: isPulsing ? 4 : 1)
+                .shadow(color: DesignTokens.Colors.textOnOverlay.opacity(0.6), radius: isPulsing ? 4 : 1)
 
             Text("LIVE")
                 .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
@@ -206,8 +206,10 @@ struct LiveBadge: View {
         .clipShape(Capsule())
         .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 6, y: 2)
         .onAppear {
-            withAnimation(DesignTokens.Animation.pulse) {
-                isPulsing = true
+            if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) {
+                withAnimation(anim) {
+                    isPulsing = true
+                }
             }
         }
         .accessibilityLabel("라이브 방송 중")
@@ -450,6 +452,7 @@ struct QualitySelector: View {
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
         }
+        .cursor(.pointingHand)
         .popover(isPresented: $showPopover, arrowEdge: .top) {
             QualityPopoverContent(
                 qualities: qualities,
@@ -538,6 +541,7 @@ struct QualityRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .accessibilityLabel(quality.name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -571,6 +575,7 @@ struct PlayerButton: View {
         .buttonStyle(.plain)
         .focusable()
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -618,11 +623,11 @@ struct RecordButton: View {
             HStack(spacing: 5) {
                 // 빨간 원 (녹화 중: 펄싱)
                 Circle()
-                    .fill(isRecording ? Color.red : Color.red.opacity(0.8))
+                    .fill(isRecording ? DesignTokens.Colors.live : DesignTokens.Colors.live.opacity(0.8))
                     .frame(width: isRecording ? 10 : 8, height: isRecording ? 10 : 8)
                     .scaleEffect(isRecording && isPulsing ? 1.3 : 1.0)
                     .opacity(isRecording && isPulsing ? 0.6 : 1.0)
-                    .shadow(color: isRecording ? .red.opacity(0.6) : .clear, radius: 4)
+                    .shadow(color: isRecording ? DesignTokens.Colors.live.opacity(0.6) : .clear, radius: 4)
 
                 // 녹화 중이면 경과 시간 표시
                 if isRecording {
@@ -637,9 +642,9 @@ struct RecordButton: View {
             .background {
                 if isRecording {
                     Capsule()
-                        .fill(Color.red.opacity(0.25))
+                        .fill(DesignTokens.Colors.live.opacity(0.25))
                         .overlay(
-                            Capsule().strokeBorder(Color.red.opacity(0.5), lineWidth: 1)
+                            Capsule().strokeBorder(DesignTokens.Colors.live.opacity(0.5), lineWidth: 1)
                         )
                 } else {
                     Circle()
@@ -650,13 +655,16 @@ struct RecordButton: View {
         .buttonStyle(.plain)
         .focusable()
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .help(isRecording ? "녹화 중지 (⌘R)" : "녹화 시작 (⌘R)")
         .accessibilityLabel(isRecording ? "녹화 중지" : "녹화 시작")
         .accessibilityValue(isRecording ? recordingDuration : "")
         .onChange(of: isRecording) { _, newValue in
             if newValue {
-                withAnimation(DesignTokens.Animation.pulse) {
-                    isPulsing = true
+                if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) {
+                    withAnimation(anim) {
+                        isPulsing = true
+                    }
                 }
             } else {
                 isPulsing = false

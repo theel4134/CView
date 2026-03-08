@@ -121,11 +121,9 @@ public actor PlaybackReconnectionHandler {
                 let delay = await self.calculateDelay(for: currentAttempt)
                 await self.log(attempt: currentAttempt, delay: delay)
 
+                // onAttempt 클로저가 delay 대기 + 실제 재시도를 모두 처리
+                // (이전에는 onAttempt 내부 sleep + 여기서 추가 sleep으로 이중 대기 발생)
                 await onAttempt(currentAttempt, delay)
-
-                if delay > 0 {
-                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                }
 
                 guard !Task.isCancelled else {
                     await self.markFinished()

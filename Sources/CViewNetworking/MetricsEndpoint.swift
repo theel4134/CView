@@ -36,7 +36,7 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     public var path: String {
         switch self {
         case .stats:
-            "/stats"
+            "/api/stats"
         case .health:
             "/health"
         case .channelStats(let id):

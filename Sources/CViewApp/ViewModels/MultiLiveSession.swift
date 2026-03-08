@@ -60,6 +60,10 @@ final class MultiLiveSession: Identifiable {
     private var userUid: String?
     private var userNickname: String?
 
+    /// 앱 시작 시 프리로드된 기본 이모티콘 (채널 진입 전 즉시 사용)
+    private let cachedBasicEmoticonMap: [String: String]
+    private let cachedBasicEmoticonPacks: [EmoticonPack]
+
     // MARK: - Init
 
     init(
@@ -69,7 +73,9 @@ final class MultiLiveSession: Identifiable {
         liveInfo: LiveInfo?,
         apiClient: ChzzkAPIClient,
         userUid: String? = nil,
-        userNickname: String? = nil
+        userNickname: String? = nil,
+        cachedBasicEmoticonMap: [String: String] = [:],
+        cachedBasicEmoticonPacks: [EmoticonPack] = []
     ) {
         self.id = UUID()
         self.channelId = channelId
@@ -83,6 +89,8 @@ final class MultiLiveSession: Identifiable {
         self.apiClient = apiClient
         self.userUid = userUid
         self.userNickname = userNickname
+        self.cachedBasicEmoticonMap = cachedBasicEmoticonMap
+        self.cachedBasicEmoticonPacks = cachedBasicEmoticonPacks
 
         // AVPlayer 전용 PlayerViewModel 생성
         self.playerViewModel = PlayerViewModel(engineType: .avPlayer)
@@ -93,6 +101,12 @@ final class MultiLiveSession: Identifiable {
             self.chatViewModel.currentUserUid = userUid
         }
         self.chatViewModel.currentUserNickname = userNickname
+
+        // 캐시된 기본 이모티콘 즉시 적용
+        if !cachedBasicEmoticonMap.isEmpty {
+            self.chatViewModel.channelEmoticons = cachedBasicEmoticonMap
+            self.chatViewModel.emoticonPacks = cachedBasicEmoticonPacks
+        }
     }
 
     // MARK: - Lifecycle
@@ -123,20 +137,22 @@ final class MultiLiveSession: Identifiable {
                 thumbnailURL = info.liveImageURL
             }
 
-            // HLS 스트림 URL 추출
+            // HLS 스트림 URL 추출 — JSON 디코딩을 백그라운드에서 수행
             guard let playbackJSON = info.livePlaybackJSON,
                   let jsonData = playbackJSON.data(using: .utf8) else {
                 loadState = .error("재생 정보 없음")
                 return
             }
-            let playback = try JSONDecoder().decode(LivePlayback.self, from: jsonData)
-            let media = playback.media.first { $0.mediaProtocol?.uppercased() == "HLS" }
-                ?? playback.media.first
-            guard let mediaPath = media?.path,
-                  let streamURL = URL(string: mediaPath) else {
-                loadState = .error("스트림 URL 없음")
-                return
-            }
+            let streamURL: URL = try await Task.detached(priority: .userInitiated) {
+                let playback = try JSONDecoder().decode(LivePlayback.self, from: jsonData)
+                let media = playback.media.first { $0.mediaProtocol?.uppercased() == "HLS" }
+                    ?? playback.media.first
+                guard let mediaPath = media?.path,
+                      let url = URL(string: mediaPath) else {
+                    throw AppError.player(.invalidManifest)
+                }
+                return url
+            }.value
 
             // AVPlayer로 스트림 시작
             await playerViewModel.startStream(
@@ -193,9 +209,14 @@ final class MultiLiveSession: Identifiable {
             let packs = await packsTask.value
             let (emoMap, loadedPacks) = await apiClient.resolveEmoticonPacks(packs)
 
-            // 이모티콘 설정
-            chatViewModel.channelEmoticons = emoMap
-            chatViewModel.emoticonPacks = loadedPacks
+            // 채널별 이모티콘을 캐시된 기본 이모티콘과 병합
+            let mergedMap = cachedBasicEmoticonMap.merging(emoMap) { _, channel in channel }
+            let mergedPacks = cachedBasicEmoticonPacks + loadedPacks.filter { pack in
+                !cachedBasicEmoticonPacks.contains(where: { $0.id == pack.id })
+            }
+
+            chatViewModel.channelEmoticons = mergedMap
+            chatViewModel.emoticonPacks = mergedPacks
 
             // 채팅 연결 (extraToken + uid 전달 → SEND 권한)
             await chatViewModel.connect(

@@ -73,7 +73,6 @@ public actor ChzzkAPIClient: APIClientProtocol {
         let cacheKey = endpoint.path + "?" + queryString
         if case .returnCacheElseLoad(let ttl) = endpoint.cachePolicy {
             if let cached: T = await cache.get(key: cacheKey, ttl: ttl) {
-                Log.network.debug("Cache hit: \(endpoint.path)")
                 return cached
             }
         }
@@ -173,7 +172,11 @@ public actor ChzzkAPIClient: APIClientProtocol {
                     throw APIError.httpError(statusCode: httpResponse.statusCode)
                 default:
                     let body = String(data: data, encoding: .utf8) ?? "N/A"
-                    Log.network.error("HTTP \(httpResponse.statusCode, privacy: .public) \(endpoint.path, privacy: .public): \(LogMask.body(body), privacy: .private)")
+                    if httpResponse.statusCode == 404 {
+                        Log.network.info("HTTP 404 \(endpoint.path, privacy: .public)")
+                    } else {
+                        Log.network.error("HTTP \(httpResponse.statusCode, privacy: .public) \(endpoint.path, privacy: .public): \(LogMask.body(body), privacy: .private)")
+                    }
                     throw APIError.httpError(statusCode: httpResponse.statusCode)
                 }
 
@@ -571,6 +574,20 @@ public actor ChzzkAPIClient: APIClientProtocol {
             return deploy.allPacks
         }
         return []
+    }
+
+    /// 치지직 글로벌 기본 이모티콘 (/service/v1/emoticons) — 채널 ID 불필요, 인증 불필요
+    /// 앱 시작 시 1회 호출하여 기본 이모티콘을 사전 캐싱하는 용도
+    public func globalBasicEmoticons() async -> [CViewCore.EmoticonPack] {
+        do {
+            let deploy = try await request(ChzzkEndpoint.basicEmoticonPacks, as: CViewCore.EmoticonDeploy.self)
+            let all = deploy.allPacks
+            Log.network.info("globalBasicEmoticons: \(all.count)개 팩 로드")
+            return all
+        } catch {
+            Log.network.info("globalBasicEmoticons: API 미지원 (\(error.localizedDescription))")
+            return []
+        }
     }
     
     /// 사용자 상태 조회 (game server API)

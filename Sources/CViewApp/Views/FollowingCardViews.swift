@@ -50,13 +50,12 @@ struct FollowingLiveCard: View, Equatable {
         // scaleEffect 제거 — 전체 카드 재합성 유발
         // shadow(radius:14) 제거 — macOS 고비용 blur 패스
         .opacity(appeared ? 1 : 0)
-        .animation(DesignTokens.Animation.fast, value: appeared)
         .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { hovering in
             isHovered = hovering
             if hovering { onPrefetch?(channel.channelId) }
         }
-        .onAppear { appeared = true }
+        .onAppear { withAnimation(DesignTokens.Animation.fast) { appeared = true } }
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .cursor(.pointingHand)
     }
@@ -260,10 +259,9 @@ struct FollowingOfflineRow: View, Equatable {
         }
         // offset 진입 애니메이션 제거 — geometry 재계산 없이 alpha만 변경
         .opacity(appeared ? 1 : 0)
-        .animation(DesignTokens.Animation.fast, value: appeared)
         .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
-        .onAppear { appeared = true }
+        .onAppear { withAnimation(DesignTokens.Animation.fast) { appeared = true } }
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .cursor(.pointingHand)
     }

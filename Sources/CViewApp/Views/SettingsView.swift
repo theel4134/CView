@@ -102,7 +102,7 @@ struct SettingsView: View {
 
             ForEach(SettingsTab.allCases) { tab in
                 SidebarTabButton(tab: tab, isSelected: selectedTab == tab) {
-                    withAnimation(.easeInOut(duration: 0.18)) { selectedTab = tab }
+                    withAnimation(DesignTokens.Animation.snappy) { selectedTab = tab }
                 }
             }
 
@@ -164,6 +164,7 @@ private struct SidebarTabButton: View {
         .buttonStyle(.plain)
         .padding(.horizontal, DesignTokens.Spacing.xs)
         .onHover { isHovered = $0 }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.indicator, value: isSelected)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }

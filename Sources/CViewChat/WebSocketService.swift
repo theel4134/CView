@@ -72,11 +72,11 @@ public actor WebSocketService {
     
     // Message stream
     private var messageContinuation: AsyncStream<WebSocketMessage>.Continuation?
-    private var _messageStream: AsyncStream<WebSocketMessage>?
+    private let _messageStream: AsyncStream<WebSocketMessage>
     
     // State stream
     private var stateContinuation: AsyncStream<State>.Continuation?
-    private var _stateStream: AsyncStream<State>?
+    private let _stateStream: AsyncStream<State>
     
     // MARK: - Initialization
     
@@ -140,7 +140,11 @@ public actor WebSocketService {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        let task = session!.webSocketTask(with: request)
+        guard let session else {
+            updateState(.failed("Session creation failed"))
+            return
+        }
+        let task = session.webSocketTask(with: request)
         task.maximumMessageSize = configuration.maxMessageSize
         webSocket = task
         task.resume()
@@ -193,12 +197,12 @@ public actor WebSocketService {
     
     /// Get the message stream (init에서 즉시 생성됨)
     public func messages() -> AsyncStream<WebSocketMessage> {
-        _messageStream!
+        _messageStream
     }
     
     /// Get the state change stream (init에서 즉시 생성됨)
     public func stateChanges() -> AsyncStream<State> {
-        _stateStream!
+        _stateStream
     }
     
     // MARK: - Private Methods
@@ -217,10 +221,8 @@ public actor WebSocketService {
                     switch message {
                     case .string(let text):
                         wsMessage = .text(text)
-                        await self.logger.debug("WS recv: [\(text.count) chars]")
                     case .data(let data):
                         wsMessage = .data(data)
-                        await self.logger.debug("WS recv data: \(data.count) bytes")
                     @unknown default:
                         continue
                     }

@@ -98,6 +98,8 @@ struct StreamLoadingOverlay: View {
                             .clipped()
                             .blur(radius: 24, opaque: true)
                             .scaleEffect(1.08)
+                            // Metal 3: blur(24px) + scale → GPU 단일 패스
+                            .drawingGroup(opaque: true)
                     }
                 }
             }
@@ -143,6 +145,8 @@ struct StreamLoadingOverlay: View {
                     .foregroundStyle(Color.white.opacity(0.85))
                     .symbolEffect(.pulse)
             }
+            // Metal 3: 펄스 링+스피너+아이콘 다중 레이어 → GPU 오프스크린 합성
+            .drawingGroup(opaque: false)
 
             // 상태 텍스트
             VStack(spacing: DesignTokens.Spacing.xxs) {

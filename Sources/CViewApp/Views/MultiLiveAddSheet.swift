@@ -132,7 +132,7 @@ struct MultiLiveAddSheet: View {
                         Text(tab.rawValue)
                         if tab == .following, !followingChannels.isEmpty {
                             Text("\(followingChannels.count)")
-                                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                                .font(DesignTokens.Typography.custom(size: 9, weight: .semibold).monospacedDigit())
                                 .foregroundStyle(selectedTab == tab ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
@@ -206,7 +206,7 @@ struct MultiLiveAddSheet: View {
                         .font(.caption)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                         .rotationEffect(.degrees(isLoadingFollowing ? 360 : 0))
-                        .animation(isLoadingFollowing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isLoadingFollowing)
+                        .animation(isLoadingFollowing ? DesignTokens.Animation.loadingSpin : .default, value: isLoadingFollowing)
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoadingFollowing)
@@ -229,7 +229,7 @@ struct MultiLiveAddSheet: View {
                 Spacer()
                 VStack(spacing: DesignTokens.Spacing.sm) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 24, weight: .light))
+                        .font(DesignTokens.Typography.custom(size: 24, weight: .light))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                     Text("일치하는 채널이 없습니다")
                         .font(.caption)
@@ -330,7 +330,7 @@ struct MultiLiveAddSheet: View {
                 if channel.isLive && channel.viewerCount > 0 {
                     HStack(spacing: 3) {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 8))
+                            .font(DesignTokens.Typography.custom(size: 8))
                         Text(channel.formattedViewerCount)
                             .font(.caption.monospacedDigit())
                     }
@@ -356,7 +356,7 @@ struct MultiLiveAddSheet: View {
     private var followingEmptyView: some View {
         VStack(spacing: DesignTokens.Spacing.md) {
             Image(systemName: "heart.slash")
-                .font(.system(size: 28, weight: .light))
+                .font(DesignTokens.Typography.custom(size: 28, weight: .light))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             VStack(spacing: 4) {
                 Text("팔로잉 채널이 없습니다")
@@ -419,7 +419,7 @@ struct MultiLiveAddSheet: View {
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .transition(.scale.combined(with: .opacity))
+                .transition(.opacity)
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
@@ -465,7 +465,7 @@ struct MultiLiveAddSheet: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
             Text("\(count)")
-                .font(.system(size: 9, weight: .medium).monospacedDigit())
+                .font(DesignTokens.Typography.custom(size: 9, weight: .medium).monospacedDigit())
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
@@ -478,7 +478,7 @@ struct MultiLiveAddSheet: View {
     private var searchPromptView: some View {
         VStack(spacing: DesignTokens.Spacing.sm) {
             Image(systemName: "tv")
-                .font(.system(size: 28, weight: .light))
+                .font(DesignTokens.Typography.custom(size: 28, weight: .light))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             Text("채널명 또는 방송 제목으로 검색하세요")
                 .font(.caption)
@@ -489,7 +489,7 @@ struct MultiLiveAddSheet: View {
     private var noResultsView: some View {
         VStack(spacing: DesignTokens.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 28, weight: .light))
+                .font(DesignTokens.Typography.custom(size: 28, weight: .light))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             Text("검색 결과가 없습니다")
                 .font(.callout)
@@ -827,7 +827,7 @@ struct MultiLiveAddSheet: View {
                 followingChannels = channels
             }
         } catch {
-            withAnimation { addError = "팔로잉 채널 로드 실패: \(error.localizedDescription)" }
+            withAnimation(DesignTokens.Animation.fast) { addError = "팔로잉 채널 로드 실패: \(error.localizedDescription)" }
         }
     }
 
@@ -882,7 +882,7 @@ struct MultiLiveAddSheet: View {
 
         Task {
             await manager.addSession(channelId: channelId)
-            withAnimation(DesignTokens.Animation.spring) {
+            withAnimation(DesignTokens.Animation.snappy) {
                 recentlyAddedIds.insert(channelId)
                 addingChannelId = nil
             }

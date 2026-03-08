@@ -41,7 +41,10 @@ public struct ChatMessageBuffer: RandomAccessCollection, Sendable {
     public subscript(logicalIndex: Int) -> ChatMessageItem {
         precondition(logicalIndex >= 0 && logicalIndex < _count,
                      "ChatMessageBuffer index \(logicalIndex) out of range [0..<\(_count)]")
-        return storage[(head + logicalIndex) % storage.count]!
+        guard let item = storage[(head + logicalIndex) % storage.count] else {
+            fatalError("ChatMessageBuffer corrupted: nil at valid index \(logicalIndex)")
+        }
+        return item
     }
 
     public var first: ChatMessageItem? {
@@ -117,7 +120,9 @@ public struct ChatMessageBuffer: RandomAccessCollection, Sendable {
     public mutating func mapInPlace(_ transform: (ChatMessageItem) -> ChatMessageItem) {
         for i in 0..<_count {
             let idx = (head + i) % storage.count
-            storage[idx] = transform(storage[idx]!)
+            if let item = storage[idx] {
+                storage[idx] = transform(item)
+            }
         }
     }
 
@@ -146,7 +151,9 @@ public struct ChatMessageBuffer: RandomAccessCollection, Sendable {
         var result = [ChatMessageItem]()
         result.reserveCapacity(_count)
         for i in 0..<_count {
-            result.append(storage[(head + i) % storage.count]!)
+            if let item = storage[(head + i) % storage.count] {
+                result.append(item)
+            }
         }
         return result
     }

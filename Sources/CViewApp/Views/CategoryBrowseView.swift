@@ -64,16 +64,10 @@ struct CategoryBrowseView: View {
         ZStack {
             if let category = selectedCategory {
                 channelListView(for: category)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
                 categoryGridView
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             }
         }
         .animation(DesignTokens.Animation.contentTransition, value: selectedCategory)
@@ -212,7 +206,7 @@ struct CategoryBrowseView: View {
                     .foregroundStyle(isRefreshing ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
                     .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                     .animation(
-                        isRefreshing ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
+                        isRefreshing ? DesignTokens.Animation.loadingSpin : .default,
                         value: isRefreshing
                     )
                     .frame(width: 34, height: 34)
@@ -312,7 +306,7 @@ struct CategoryBrowseView: View {
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
             if !channelSearchText.isEmpty {
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { channelSearchText = "" }
+                    withAnimation(DesignTokens.Animation.fast) { channelSearchText = "" }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(DesignTokens.Typography.body)
@@ -332,7 +326,7 @@ struct CategoryBrowseView: View {
                     lineWidth: 0.75
                 )
         }
-        .animation(.easeOut(duration: 0.2), value: channelSearchText.isEmpty)
+        .animation(DesignTokens.Animation.fast, value: channelSearchText.isEmpty)
     }
 
     // MARK: - 카테고리 타입 필터
@@ -350,7 +344,7 @@ struct CategoryBrowseView: View {
     private func typeFilterButton(label: String, icon: String, value: String?) -> some View {
         let isSelected = selectedTypeFilter == value
         return Button {
-            withAnimation(.easeOut(duration: 0.18)) {
+            withAnimation(DesignTokens.Animation.fast) {
                 selectedTypeFilter = value
             }
         } label: {
@@ -547,8 +541,9 @@ private struct CategoryGridCard: View {
         // Metal 3: scaleEffect 제거 (GPU texture scale 연산 제거)
         // Metal 3: 동적 shadow → 정적 shadow (hover 마다 GPU blur 연산 방지)
         .shadow(color: .black.opacity(0.14), radius: 5, x: 0, y: 3)
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
+        .cursor(.pointingHand)
     }
 }
 
@@ -640,7 +635,8 @@ private struct CategoryChannelCard: View {
         .drawingGroup(opaque: false)
         // Metal 3: scaleEffect 제거, 동적 shadow → 정적
         .shadow(color: .black.opacity(0.14), radius: 5, x: 0, y: 3)
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
+        .cursor(.pointingHand)
     }
 }

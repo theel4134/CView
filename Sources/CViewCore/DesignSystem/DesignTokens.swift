@@ -389,39 +389,53 @@ public enum DesignTokens {
     // MARK: - Animation (Spring-first, 60fps)
 
     public enum Animation {
-        // ── 기본 (easeInOut — 짧은 단발 전환만) ──
-        /// 150ms 빠른 전환 (hover, 토글 등)
-        public static let fast: SwiftUI.Animation = .easeInOut(duration: 0.15)
-        /// 250ms 일반 전환 (패널 열기/닫기)
-        public static let normal: SwiftUI.Animation = .easeInOut(duration: 0.25)
-        /// 400ms 느린 전환 (모달, 풀스크린)
-        public static let slow: SwiftUI.Animation = .easeInOut(duration: 0.4)
+        // ── 기본 (Spring 기반 — 자연스러운 감속) ──
+        /// 빠른 전환 (hover, 토글 등) — 150ms급 spring
+        public static let fast: SwiftUI.Animation = .spring(response: 0.15, dampingFraction: 0.9)
+        /// 일반 전환 (패널 열기/닫기) — 250ms급 spring
+        public static let normal: SwiftUI.Animation = .spring(response: 0.25, dampingFraction: 0.88)
+        /// 느린 전환 (모달, 풀스크린) — 400ms급 spring
+        public static let slow: SwiftUI.Animation = .spring(response: 0.4, dampingFraction: 0.86)
 
         // ── Spring (핵심) ──
-        /// 범용 spring — 자연스러운 바운스
-        public static let spring: SwiftUI.Animation = .spring(response: 0.35, dampingFraction: 0.72)
-        /// 탄성 spring — 카드 등장, 드래그 릴리스
-        public static let bouncy: SwiftUI.Animation = .spring(response: 0.4, dampingFraction: 0.65)
-        /// 부드러운 spring — 뷰 전환, 콘텐츠 이동
-        public static let smooth: SwiftUI.Animation = .spring(response: 0.5, dampingFraction: 0.85)
+        /// 범용 spring — 자연스러운 안착 (damping 0.82: 진동 최소화)
+        public static let spring: SwiftUI.Animation = .spring(response: 0.32, dampingFraction: 0.82)
+        /// 탄성 spring — 카드 등장, 드래그 릴리스 (damping 0.75: 미세 바운스)
+        public static let bouncy: SwiftUI.Animation = .spring(response: 0.38, dampingFraction: 0.75)
+        /// 부드러운 spring — 뷰 전환, 콘텐츠 이동 (개선)
+        public static let smooth: SwiftUI.Animation = .spring(response: 0.35, dampingFraction: 0.88)
         /// 빠르고 정확한 spring — 탭 전환, 셀렉터
-        public static let snappy: SwiftUI.Animation = .spring(response: 0.25, dampingFraction: 0.82)
+        public static let snappy: SwiftUI.Animation = .spring(response: 0.22, dampingFraction: 0.88)
 
         // ── 60fps 전용 ──
-        /// 마이크로 인터랙션 — 호버, 아이콘 스케일
-        public static let micro: SwiftUI.Animation = .spring(response: 0.2, dampingFraction: 0.82)
+        /// 마이크로 인터랙션 — 호버, 아이콘 스케일 (즉각 반응)
+        public static let micro: SwiftUI.Animation = .spring(response: 0.14, dampingFraction: 0.92)
         /// 인터랙티브 제스처 — 드래그 중 실시간 피드백
-        public static let interactive: SwiftUI.Animation = .interactiveSpring(response: 0.18, dampingFraction: 0.86, blendDuration: 0.04)
-        /// 콘텐츠 뷰 전환 — 사이드바→디테일
-        public static let contentTransition: SwiftUI.Animation = .spring(response: 0.32, dampingFraction: 0.88)
-        /// 사이드바 인디케이터 / matchedGeometry
-        public static let indicator: SwiftUI.Animation = .spring(response: 0.3, dampingFraction: 0.78)
-        /// 반복(pulse) — LiveBadge, RecordButton
-        public static let pulse: SwiftUI.Animation = .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
+        public static let interactive: SwiftUI.Animation = .interactiveSpring(response: 0.15, dampingFraction: 0.9, blendDuration: 0.02)
+        /// 콘텐츠 뷰 전환 — 사이드바→디테일 (빠른 안착)
+        public static let contentTransition: SwiftUI.Animation = .spring(response: 0.24, dampingFraction: 0.90)
+        /// 사이드바 인디케이터 / matchedGeometry (정밀 안착)
+        public static let indicator: SwiftUI.Animation = .spring(response: 0.22, dampingFraction: 0.88)
+        /// 반복(pulse) — LiveBadge, RecordButton (reduceMotion 시 nil 사용)
+        public static let pulse: SwiftUI.Animation = .easeInOut(duration: 1.0).repeatForever(autoreverses: true)
         /// 채팅 스크롤 — 빠른 자동 스크롤
-        public static let chatScroll: SwiftUI.Animation = .spring(response: 0.15, dampingFraction: 0.92)
+        public static let chatScroll: SwiftUI.Animation = .spring(response: 0.12, dampingFraction: 0.95)
         /// Glass 등장 — 모달/팝오버 등장
-        public static let glassAppear: SwiftUI.Animation = .spring(response: 0.38, dampingFraction: 0.78)
+        public static let glassAppear: SwiftUI.Animation = .spring(response: 0.3, dampingFraction: 0.85)
+        /// 로딩 스피너 — 무한 회전
+        public static let loadingSpin: SwiftUI.Animation = .linear(duration: 1).repeatForever(autoreverses: false)
+        /// 메뉴바 Pulse — 라이브 표시 느린 맥동
+        public static let menuPulse: SwiftUI.Animation = .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+        /// 이미지 페이드인 — 썸네일/프로필 등장 (즉각)
+        public static let fadeIn: SwiftUI.Animation = .easeOut(duration: 0.16)
+
+        /// reduceMotion 고려 — 모션 감소 설정 시 nil 반환 (즉시 전환)
+        public static func motionSafe(_ animation: SwiftUI.Animation?) -> SwiftUI.Animation? {
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                return nil
+            }
+            return animation
+        }
     }
 
     // MARK: - Layout
@@ -629,15 +643,20 @@ public struct PillButtonStyle: ButtonStyle {
         self.isCompact = isCompact
     }
 
+    @State private var isHovered = false
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(isCompact ? DesignTokens.Typography.captionMedium : DesignTokens.Typography.bodyMedium)
             .foregroundStyle(textColor)
             .padding(.horizontal, isCompact ? DesignTokens.Spacing.md : DesignTokens.Spacing.lg)
             .padding(.vertical, isCompact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.sm)
-            .background(fillColor, in: Capsule())
+            .background(fillColor.opacity(isHovered ? 0.85 : 1.0), in: Capsule())
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+            .animation(DesignTokens.Animation.fast, value: isHovered)
+            .cursor(.pointingHand)
     }
 }
 
@@ -657,6 +676,8 @@ public struct GhostPillButtonStyle: ButtonStyle {
         self.isCompact = isCompact
     }
 
+    @State private var isHovered = false
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(isCompact ? DesignTokens.Typography.captionMedium : DesignTokens.Typography.bodyMedium)
@@ -665,10 +686,13 @@ public struct GhostPillButtonStyle: ButtonStyle {
             .padding(.vertical, isCompact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.sm)
             .background(
                 Capsule()
-                    .strokeBorder(borderColor, lineWidth: 0.5)
+                    .strokeBorder(isHovered ? borderColor.opacity(0.8) : borderColor, lineWidth: isHovered ? 1.0 : 0.5)
             )
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+            .animation(DesignTokens.Animation.fast, value: isHovered)
+            .cursor(.pointingHand)
     }
 }
 
@@ -765,5 +789,15 @@ extension View {
         material: Material = .thinMaterial
     ) -> some View {
         self.background(material, in: RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    /// 커서 변경 — 인터랙티브 요소에 포인팅 핸드 등 커서 표시
+    public func cursor(_ cursor: NSCursor) -> some View {
+        self.onContinuousHover { phase in
+            switch phase {
+            case .active: cursor.push()
+            case .ended:  NSCursor.pop()
+            }
+        }
     }
 }

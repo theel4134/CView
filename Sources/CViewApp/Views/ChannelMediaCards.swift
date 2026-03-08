@@ -44,7 +44,7 @@ struct CompactVODCard: View {
                     .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                     .lineLimit(2)
-                    .frame(height: 32, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
 
                 HStack(spacing: 3) {
                     Image(systemName: "eye").font(DesignTokens.Typography.micro)
@@ -63,10 +63,13 @@ struct CompactVODCard: View {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .fill(.ultraThinMaterial)
             )
+            // Metal 3: material+thumbnail 레이어 → GPU 단일 텍스처
+            .compositingGroup()
             .scaleEffect(isHovered ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
-        .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .onHover { isHovered = $0 }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -119,7 +122,7 @@ struct CompactClipCard: View {
                     .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                     .lineLimit(2)
-                    .frame(height: 32, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
 
                 HStack(spacing: 3) {
                     Image(systemName: "scissors").font(DesignTokens.Typography.micro)
@@ -139,10 +142,13 @@ struct CompactClipCard: View {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .fill(.ultraThinMaterial)
             )
+            // Metal 3: material+thumbnail 레이어 → GPU 단일 텍스처
+            .compositingGroup()
             .scaleEffect(isHovered ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
-        .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .onHover { isHovered = $0 }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -213,6 +219,7 @@ struct VODCard: View {
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .cursor(.pointingHand)
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
@@ -276,7 +283,7 @@ struct ClipCard: View {
                     .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                     .lineLimit(2)
-                    .frame(height: 34, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
 
                 HStack(spacing: 6) {
                     HStack(spacing: 3) {
@@ -305,6 +312,7 @@ struct ClipCard: View {
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .cursor(.pointingHand)
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }

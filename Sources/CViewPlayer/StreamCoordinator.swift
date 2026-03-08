@@ -108,7 +108,11 @@ public actor StreamCoordinator {
     private var _watchdogTask: Task<Void, Never>?
     private var _lastWatchdogTime: TimeInterval = -1
     private var _stallCount: Int = 0
-    private let _stallThreshold: Int = 3  // 연속 3회(15초) 정체 시 재연결
+    private let _stallThreshold: Int = 3  // 연속 3회(12초) 정체 시 재연결
+    
+    // 재연결 이중 트리거 방지: 마지막 재연결 시각 (VLC stall + Watchdog 동시 발화 차단)
+    private var _lastReconnectTime: Date = .distantPast
+    private let _reconnectCooldown: TimeInterval = 10  // 10초 내 이중 재연결 차단
     
     // PDT-based latency provider (Method A)
     private var pdtProvider: PDTLatencyProvider?
@@ -393,7 +397,11 @@ public actor StreamCoordinator {
             }
             
             // 재생 감시(Watchdog) 시작 — currentTime 정체 감지
-            startPlaybackWatchdog()
+            // AVPlayerEngine은 자체 스마트 워치독(백그라운드 모드 인식, 버퍼 상태 확인,
+            // 5분 내 재연결 횟수 제한)을 갖고 있으므로 이중 워치독 방지
+            if isVLCEngine {
+                startPlaybackWatchdog()
+            }
             
             // 저지연 싱크: 백그라운드에서 비동기 실행 (play() 직후 바로 반환, 화면 출력 차단 안 함)
             // PDT 안정화 루프(최대 6초)가 startStream을 블로킹하던 문제 해결
@@ -645,6 +653,7 @@ public actor StreamCoordinator {
         _watchdogTask = nil
         _stallCount = 0
         _lastWatchdogTime = -1
+        _lastReconnectTime = .distantPast
         
         updatePhase(.idle)
         emitEvent(.stopped)
@@ -668,11 +677,17 @@ public actor StreamCoordinator {
     public func switchQuality(to variant: MasterPlaylist.Variant) async throws {
         guard let engine = playerEngine else { return }
 
-        // Stop current playback
-        engine.stop()
-
         // 프록시 활성 시 프록시 경유 URL 사용 (Content-Type 수정 필요)
         let playURL = _isProxyActive ? streamProxy.proxyURL(from: variant.uri) : variant.uri
+
+        // VLC: stop() 없이 바로 play()로 미디어 교체 — 블랙 프레임 방지
+        // VLCPlayerEngine._startPlay()에서 player.media = newMedia가 이전 미디어를 안전하게 교체
+        // (player.media = nil만 금지, 새 미디어 할당은 안전)
+        // 비-VLC 엔진은 기존 stop→play 방식 유지
+        if !(engine is VLCPlayerEngine) {
+            engine.stop()
+        }
+        
         try await engine.play(url: playURL)
 
         _currentQuality = qualityFromVariant(variant)
@@ -852,6 +867,15 @@ public actor StreamCoordinator {
         }
         // 이미 재연결 중이면 무시
         guard _phase != .reconnecting else { return }
+        
+        // 이중 트리거 방지: 최근 재연결로부터 cooldown 이내면 무시
+        let now = Date()
+        if now.timeIntervalSince(_lastReconnectTime) < _reconnectCooldown {
+            logger.info("StreamCoordinator: 재연결 쿨다운 중 — 무시 (\(reason))")
+            return
+        }
+        _lastReconnectTime = now
+        
         updatePhase(.reconnecting)
         logger.info("StreamCoordinator: 재연결 시작 (\(reason))")
 
@@ -905,8 +929,8 @@ public actor StreamCoordinator {
     
     // MARK: - Playback Watchdog
 
-    /// 5초마다 `currentTime`을 확인하여 재생이 멈췄는지 감시합니다.
-    /// 15초(3연속 체크) 동안 시간이 진행되지 않으면 자동 재연결을 시도합니다.
+    /// 4초마다 `currentTime`을 확인하여 재생이 멈췄는지 감시합니다.
+    /// 12초(3연속 체크) 동안 시간이 진행되지 않으면 자동 재연결을 시도합니다.
     private func startPlaybackWatchdog() {
         _watchdogTask?.cancel()
         _stallCount = 0
@@ -914,10 +938,10 @@ public actor StreamCoordinator {
         
         _watchdogTask = Task { [weak self] in
             // 초기 안정화 대기
-            try? await Task.sleep(for: .seconds(10))
+            try? await Task.sleep(for: .seconds(8))
             
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(4))
                 guard !Task.isCancelled, let self else { break }
                 
                 let phase = await self._phase
@@ -940,7 +964,7 @@ public actor StreamCoordinator {
                         await self.resetStallCounter()
                         await self.triggerReconnect(reason: "watchdog: currentTime 정체")
                         // 재연결 후 안정화 대기
-                        try? await Task.sleep(for: .seconds(10))
+                        try? await Task.sleep(for: .seconds(8))
                     }
                 } else {
                     await self.resetStallCounter()

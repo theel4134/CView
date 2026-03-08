@@ -131,6 +131,32 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
     public static let `default` = PlayerSettings()
 }
 
+/// 채팅 표시 모드
+public enum ChatDisplayMode: String, Codable, Sendable, CaseIterable {
+    /// 사이드 패널 (기본) — HSplitView 오른쪽 영역
+    case side
+    /// 비디오 오버레이 — 플레이어 위에 반투명하게 표시
+    case overlay
+    /// 숨김 — 채팅 UI 비표시
+    case hidden
+
+    public var label: String {
+        switch self {
+        case .side: "사이드"
+        case .overlay: "화면 위"
+        case .hidden: "숨김"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .side: "sidebar.right"
+        case .overlay: "text.bubble"
+        case .hidden: "eye.slash"
+        }
+    }
+}
+
 /// 채팅 설정
 public struct ChatSettings: Codable, Sendable, Equatable {
     public var fontSize: CGFloat
@@ -153,6 +179,15 @@ public struct ChatSettings: Codable, Sendable, Equatable {
     public var ttsVolume: Float
     public var ttsRate: Float
 
+    // 채팅 표시 모드
+    public var displayMode: ChatDisplayMode
+
+    // 오버레이 모드 설정
+    public var overlayWidth: CGFloat
+    public var overlayHeight: CGFloat
+    public var overlayBackgroundOpacity: Double
+    public var overlayShowInput: Bool
+
     public init(
         fontSize: CGFloat = 14,
         chatOpacity: Double = 1.0,
@@ -170,7 +205,12 @@ public struct ChatSettings: Codable, Sendable, Equatable {
         blockedUsers: [String] = [],
         ttsEnabled: Bool = false,
         ttsVolume: Float = 0.8,
-        ttsRate: Float = 200
+        ttsRate: Float = 200,
+        displayMode: ChatDisplayMode = .side,
+        overlayWidth: CGFloat = 340,
+        overlayHeight: CGFloat = 400,
+        overlayBackgroundOpacity: Double = 0.5,
+        overlayShowInput: Bool = false
     ) {
         self.fontSize = fontSize
         self.chatOpacity = chatOpacity
@@ -189,6 +229,11 @@ public struct ChatSettings: Codable, Sendable, Equatable {
         self.ttsEnabled = ttsEnabled
         self.ttsVolume = ttsVolume
         self.ttsRate = ttsRate
+        self.displayMode = displayMode
+        self.overlayWidth = overlayWidth
+        self.overlayHeight = overlayHeight
+        self.overlayBackgroundOpacity = overlayBackgroundOpacity
+        self.overlayShowInput = overlayShowInput
     }
 
     public static let `default` = ChatSettings()
@@ -422,7 +467,7 @@ public struct KeyboardShortcutSettings: Codable, Sendable, Equatable {
     ]
 
     public func binding(for action: ShortcutAction) -> KeyBinding {
-        bindings[action] ?? Self.defaultBindings[action]!
+        bindings[action] ?? Self.defaultBindings[action] ?? KeyBinding(key: "")
     }
 
     public static let `default` = KeyboardShortcutSettings()

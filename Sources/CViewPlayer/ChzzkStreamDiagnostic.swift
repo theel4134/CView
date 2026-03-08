@@ -218,7 +218,7 @@ public actor ChzzkStreamDiagnostic {
         if let initURI = mediaAnalysis.extXMapURI {
             let initURL: URL
             if initURI.hasPrefix("http") {
-                initURL = URL(string: initURI) ?? mediaAnalysis.sampleSegmentURLs.first!
+                initURL = URL(string: initURI) ?? mediaAnalysis.sampleSegmentURLs.first ?? masterURL
             } else {
                 // 상대 URL — 미디어 플레이리스트 기본 URL 기준
                 let baseURL = mediaAnalysis.sampleSegmentURLs.first?.deletingLastPathComponent()
@@ -261,7 +261,9 @@ public actor ChzzkStreamDiagnostic {
     public func analyzeM3U8(url: URL) async throws -> M3U8Analysis {
         let request = makeRequest(url: url)
         let (data, response) = try await session.data(for: request)
-        let httpResponse = response as! HTTPURLResponse
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw DiagnosticError.httpError(-1)
+        }
 
         guard httpResponse.statusCode == 200 else {
             throw DiagnosticError.httpError(httpResponse.statusCode)
@@ -296,7 +298,9 @@ public actor ChzzkStreamDiagnostic {
     public func analyzeSegment(url: URL) async throws -> SegmentAnalysis {
         let request = makeRequest(url: url)
         let (data, response) = try await session.data(for: request)
-        let httpResponse = response as! HTTPURLResponse
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw DiagnosticError.httpError(-1)
+        }
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
 
         let (format, boxType) = detectFormat(data: data)

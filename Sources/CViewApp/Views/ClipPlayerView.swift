@@ -96,8 +96,9 @@ struct ClipPlayerView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
-                    let url = URL(string: "https://chzzk.naver.com/clips/\(clipInfo.clipUID)")!
-                    NSWorkspace.shared.open(url)
+                    if let url = URL(string: "https://chzzk.naver.com/clips/\(clipInfo.clipUID)") {
+                        NSWorkspace.shared.open(url)
+                    }
                 } label: {
                     Image(systemName: "arrow.up.right.square")
                 }
@@ -247,7 +248,7 @@ struct ClipPlayerView: View {
                                 CachedAsyncImage(url: avatarURL) {
                                     Circle().fill(.ultraThinMaterial)
                                 }
-                                .frame(width: 13, height: 13)
+                                .frame(width: 16, height: 16)
                                 .clipShape(Circle())
                             }
                             Text(channel.channelName)
@@ -317,8 +318,9 @@ struct ClipPlayerView: View {
                     }
                     .buttonStyle(CViewButtonStyle())
                     Button("치지직에서 열기") {
-                        let url = URL(string: "https://chzzk.naver.com/clips/\(clipInfo.clipUID)")!
-                        NSWorkspace.shared.open(url)
+                        if let url = URL(string: "https://chzzk.naver.com/clips/\(clipInfo.clipUID)") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
                     .buttonStyle(.bordered)
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)

@@ -375,8 +375,8 @@ struct PremiumChannelRow: View {
         .onTapGesture { onTap() }
         .onHover { hovering in
             isHovered = hovering
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+        .cursor(.pointingHand)
     }
 
     private var avatarPlaceholder: some View {
@@ -467,6 +467,7 @@ struct SimpleChannelRow: View {
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
         }
+        .cursor(.pointingHand)
     }
     
     private var channelPlaceholder: some View {

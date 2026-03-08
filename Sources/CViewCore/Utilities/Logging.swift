@@ -37,7 +37,7 @@ public enum LogMask {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return "[invalid-url]"
         }
-        if components.queryItems != nil && !components.queryItems!.isEmpty {
+        if let queryItems = components.queryItems, !queryItems.isEmpty {
             components.queryItems = nil
             return (components.string ?? url.host ?? "[url]") + "?[REDACTED]"
         }

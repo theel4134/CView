@@ -208,7 +208,7 @@ private struct FlowContentView: View {
                     result.append(Token(id: "w-\(result.count)", kind: .word(buf)))
                 }
             case .emoticon(let id, let url):
-                result.append(Token(id: "e-\(id)", kind: .emoticon(url)))
+                result.append(Token(id: "e-\(id)-\(result.count)", kind: .emoticon(url)))
             }
         }
         return result
@@ -223,7 +223,7 @@ private struct FlowContentView: View {
                         .font(DesignTokens.Typography.custom(size: fontSize))
                         .fixedSize()
                 case .emoticon(let url):
-                    EmoticonImageView(url: url, size: floor(fontSize * 1.8))
+                    EmoticonImageView(url: url, size: floor(fontSize * 1.5))
                         .padding(.horizontal, DesignTokens.Spacing.xxs)
                 }
             }

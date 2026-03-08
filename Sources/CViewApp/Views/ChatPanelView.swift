@@ -1,6 +1,7 @@
 // MARK: - ChatPanelView.swift
 // CViewApp - 프리미엄 채팅 패널
 // Design: Glass Morphism Dark Chat + Modern Layout
+// 채팅 모드: side(사이드), overlay(화면 위), hidden(숨김)
 
 import SwiftUI
 import Combine
@@ -19,7 +20,7 @@ struct ChatPanelView: View {
             // Chat header
             chatHeader
 
-            // Messages list
+            // Messages list — rebuilt scroll engine
             ChatMessagesView(viewModel: chatVM)
 
             // Input area
@@ -47,7 +48,20 @@ struct ChatPanelView: View {
                 .font(DesignTokens.Typography.bodySemibold)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
 
+            // 참여자 수 표시
+            if let count = chatVM?.uniqueUserCount, count > 0 {
+                Text("\(count)명")
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(DesignTokens.Colors.chzzkGreen.opacity(0.08), in: Capsule())
+            }
+
             Spacer()
+
+            // 채팅 모드 전환 메뉴
+            chatModeMenu
 
             // Connection status pill — Glass
             HStack(spacing: 5) {
@@ -108,6 +122,36 @@ struct ChatPanelView: View {
         }
     }
 
+    // MARK: - Chat Mode Menu
+
+    private var chatModeMenu: some View {
+        Menu {
+            ForEach(ChatDisplayMode.allCases, id: \.self) { mode in
+                Button {
+                    withAnimation(DesignTokens.Animation.snappy) {
+                        chatVM?.displayMode = mode
+                    }
+                } label: {
+                    Label(mode.label, systemImage: mode.icon)
+                }
+                .disabled(chatVM?.displayMode == mode)
+            }
+        } label: {
+            Image(systemName: chatVM?.displayMode.icon ?? "sidebar.right")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("채팅 표시 모드")
+    }
+
     // MARK: - Connection State
 
     private var connectionColor: Color {
@@ -129,53 +173,24 @@ struct ChatPanelView: View {
     }
 }
 
-// MARK: - Chat Messages View
+// MARK: - Chat Messages View (Rebuilt Scroll Engine)
 
 struct ChatMessagesView: View {
     let viewModel: ChatViewModel?
 
     /// ScrollView가 화면에 표시 중인지 추적 — 백그라운드 전환에 의한 잘못된 replay mode 진입 방지
     @State private var isScrollViewVisible = true
+    /// 프로그래밍적 스크롤 중 onScrollGeometryChange 오탐 방지 (카운터 기반)
+    @State private var scrollSuppressionCount = 0
+
+    /// 스크롤 억제 중인지 여부
+    private var isScrollSuppressed: Bool { scrollSuppressionCount > 0 }
 
     var body: some View {
         VStack(spacing: 0) {
             // Pinned message banner
             if let pinned = viewModel?.pinnedMessage {
-                HStack(spacing: 0) {
-                    DesignTokens.Colors.accentOrange
-                        .frame(width: 3)
-
-                    HStack(spacing: 8) {
-                        Image(systemName: "pin.fill")
-                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                            .foregroundStyle(DesignTokens.Colors.accentOrange)
-                            .rotationEffect(.degrees(-45))
-
-                        Text(pinned.nickname)
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
-                            .foregroundStyle(DesignTokens.Colors.accentOrange)
-
-                        Text(pinned.content)
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                            .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.85))
-                            .lineLimit(1)
-
-                        Spacer()
-
-                        Button {
-                            viewModel?.unpinMessage()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
-                                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, DesignTokens.Spacing.sm)
-                    .padding(.vertical, DesignTokens.Spacing.xs + 2)
-                }
-                .background(DesignTokens.Colors.accentOrange.opacity(0.06))
-                .transition(.move(edge: .top).combined(with: .opacity))
+                pinnedMessageBanner(pinned)
             }
 
             ScrollViewReader { proxy in
@@ -196,94 +211,143 @@ struct ChatMessagesView: View {
                     .padding(.vertical, DesignTokens.Spacing.xs)
                 }
                 .defaultScrollAnchor(.bottom)
-                // onScrollGeometryChange: 실제 스크롤 위치 기반 감지
+                // Rebuilt scroll detection — 거리 기반 하단 감지
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     let maxScrollY = geometry.contentSize.height - geometry.containerSize.height
                     guard maxScrollY > 0 else { return true }
                     let distanceFromBottom = maxScrollY - geometry.contentOffset.y
                     return distanceFromBottom <= 80
                 } action: { _, isNearBottom in
-                    guard isScrollViewVisible else { return }
+                    guard isScrollViewVisible, !isScrollSuppressed else { return }
                     viewModel?.onScrollPositionChanged(isNearBottom: isNearBottom)
                 }
                 .onAppear {
                     isScrollViewVisible = true
-                    if viewModel?.isAutoScrollEnabled == true,
-                       let lastId = viewModel?.messages.last?.id {
-                        proxy.scrollTo(lastId, anchor: .bottom)
-                    }
+                    scrollToLatest(proxy: proxy)
                 }
                 .onDisappear {
                     isScrollViewVisible = false
                 }
-                // 새 메시지 도착 시 자동 스크롤 (애니메이션 없이 즉시 이동 — 치지직 방식)
+                // 새 메시지 도착 시 자동 스크롤 — isAutoScrollEnabled 기반 (shouldScrollToLatest 레이스컨디션 제거)
                 .onChange(of: viewModel?.messages.last?.id) { _, _ in
-                    if viewModel?.isAutoScrollEnabled == true && viewModel?.isReplayMode != true {
-                        if let lastId = viewModel?.messages.last?.id {
-                            proxy.scrollTo(lastId, anchor: .bottom)
-                        }
-                    }
+                    guard viewModel?.isAutoScrollEnabled == true else { return }
+                    scrollToLatest(proxy: proxy)
                 }
                 // 앱이 다시 포그라운드로 돌아올 때 자동 스크롤 복원
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     guard viewModel?.isAutoScrollEnabled == true,
-                          viewModel?.isReplayMode != true,
-                          let lastId = viewModel?.messages.last?.id else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        proxy.scrollTo(lastId, anchor: .bottom)
-                    }
+                          viewModel?.isReplayMode != true else { return }
+                    scrollToLatest(proxy: proxy)
                 }
                 // Floating scroll-to-bottom button
                 .overlay(alignment: .bottom) {
-                    if let vm = viewModel, vm.isReplayMode {
-                        Button {
-                            vm.exitReplayMode()
-                            if let lastId = vm.messages.last?.id {
-                                withAnimation(DesignTokens.Animation.chatScroll) {
-                                    proxy.scrollTo(lastId, anchor: .bottom)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "chevron.down")
-                                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
-                                if vm.unreadCount > 0 {
-                                    Text("새 메시지 \(vm.unreadCount)개")
-                                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                                } else {
-                                    Text("맨 아래로")
-                                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                                }
-                            }
-                            .foregroundStyle(vm.unreadCount > 0 ? Color.black : DesignTokens.Colors.textPrimary)
-                            .padding(.horizontal, DesignTokens.Spacing.sm)
-                            .padding(.vertical, 6)
-                            .background {
-                                if vm.unreadCount > 0 {
-                                    Capsule()
-                                        .fill(DesignTokens.Colors.chzzkGreen)
-                                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-                                } else {
-                                    Capsule()
-                                        .fill(.ultraThinMaterial)
-                                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-                                }
-                            }
-                            .overlay {
-                                if vm.unreadCount == 0 {
-                                    Capsule()
-                                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
-                                }
-                            }
+                    Group {
+                        if let vm = viewModel, vm.isReplayMode {
+                            replayModeButton(vm: vm, proxy: proxy)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
-                        .buttonStyle(.plain)
-                        .padding(.bottom, DesignTokens.Spacing.sm)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
+                    .animation(DesignTokens.Animation.snappy, value: viewModel?.isReplayMode)
                 }
-                .animation(DesignTokens.Animation.snappy, value: viewModel?.isReplayMode)
             }
         } // VStack
+    }
+
+    // MARK: - Scroll Helpers
+
+    /// 최하단으로 프로그래밍적 스크롤 — 억제 카운터로 onScrollGeometryChange 오탐 방지
+    private func scrollToLatest(proxy: ScrollViewProxy) {
+        guard let lastId = viewModel?.messages.last?.id else { return }
+        scrollSuppressionCount += 1
+        proxy.scrollTo(lastId, anchor: .bottom)
+        // 스크롤 완료 후 억제 해제 — 배치 간격(100ms) + 렌더링 여유 충분히 확보
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
+        }
+    }
+
+    // MARK: - Pinned Message
+
+    private func pinnedMessageBanner(_ pinned: ChatMessageItem) -> some View {
+        HStack(spacing: 0) {
+            DesignTokens.Colors.accentOrange
+                .frame(width: 3)
+
+            HStack(spacing: 8) {
+                Image(systemName: "pin.fill")
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.accentOrange)
+                    .rotationEffect(.degrees(-45))
+
+                Text(pinned.nickname)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
+                    .foregroundStyle(DesignTokens.Colors.accentOrange)
+
+                Text(pinned.content)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.85))
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button {
+                    viewModel?.unpinMessage()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.xs + 2)
+        }
+        .background(DesignTokens.Colors.accentOrange.opacity(0.06))
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    // MARK: - Replay Mode Button
+
+    private func replayModeButton(vm: ChatViewModel, proxy: ScrollViewProxy) -> some View {
+        Button {
+            vm.exitReplayMode()
+            scrollToLatest(proxy: proxy)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.down")
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
+                if vm.unreadCount > 0 {
+                    Text("새 메시지 \(vm.unreadCount)개")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                } else {
+                    Text("맨 아래로")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                }
+            }
+            .foregroundStyle(vm.unreadCount > 0 ? DesignTokens.Colors.onPrimary : DesignTokens.Colors.textPrimary)
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, 6)
+            .background {
+                if vm.unreadCount > 0 {
+                    Capsule()
+                        .fill(DesignTokens.Colors.chzzkGreen)
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                } else {
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                }
+            }
+            .overlay {
+                if vm.unreadCount == 0 {
+                    Capsule()
+                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, DesignTokens.Spacing.sm)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Empty State

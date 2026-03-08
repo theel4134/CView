@@ -100,9 +100,14 @@ public final class PlayerContainerView: NSView {
         guard videoView !== currentSubview else { return }
 
         // layout() 실행 중 subview 교체는 constraint 재진입 크래시를 유발한다.
-        // 다음 RunLoop 사이클로 지연시킨다.
+        // 다음 RunLoop 사이클로 지연시키되 즉시 async 처리하여 1프레임 블랙 화면 최소화.
         if isLayingOut {
             pendingVideoView = videoView
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let pending = self.pendingVideoView else { return }
+                self.pendingVideoView = nil
+                self.attachVideoView(pending)
+            }
             return
         }
 

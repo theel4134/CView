@@ -26,12 +26,12 @@ struct MainContentView: View {
 
             if showSplash {
                 SplashView {
-                    withAnimation(DesignTokens.Animation.normal) {
+                    withAnimation(DesignTokens.Animation.smooth) {
                         showSplash = false
                     }
                 }
                 .zIndex(10)
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .scale(scale: 1.02)))
             }
         }
         .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
@@ -69,6 +69,8 @@ struct MainContentView: View {
         } detail: {
             NavigationStack(path: $router.path) {
                 detailView
+                    .id(router.selectedSidebarItem)
+                    .transition(.opacity.combined(with: .scale(scale: 0.995, anchor: .top)))
                     .animation(DesignTokens.Animation.contentTransition, value: router.selectedSidebarItem)
                     .navigationDestination(for: AppRoute.self) { route in
                         routeDestination(for: route)
@@ -530,11 +532,19 @@ struct SidebarNavItem: View {
     var onlineBadgeCount: Int = 0
 
     @State private var iconScale: CGFloat = 1.0
+    @State private var isPressed: Bool = false
 
     var body: some View {
         Button(action: {
-            withAnimation(DesignTokens.Animation.micro) { iconScale = 1.28 }
-            withAnimation(DesignTokens.Animation.indicator.delay(0.1)) { iconScale = 1.0 }
+            // 단일 spring으로 통합 — press→release 키프레임
+            isPressed = true
+            withAnimation(DesignTokens.Animation.snappy) { iconScale = 1.22 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                withAnimation(DesignTokens.Animation.indicator) {
+                    iconScale = 1.0
+                    isPressed = false
+                }
+            }
             onSelect()
         }) {
             if isCompact {
@@ -545,8 +555,9 @@ struct SidebarNavItem: View {
         }
         .buttonStyle(.plain)
         .onHover(perform: onHover)
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.indicator, value: isSelected)
-        .animation(DesignTokens.Animation.micro, value: isHovered)
+        .animation(DesignTokens.Animation.fast, value: isHovered)
         .help(isCompact ? item.rawValue : "")
     }
 
@@ -582,8 +593,6 @@ struct SidebarNavItem: View {
                 compactBadge(onlineBadgeCount)
             }
         }
-        .animation(DesignTokens.Animation.indicator, value: isSelected)
-        .animation(DesignTokens.Animation.micro, value: isHovered)
         .contentShape(Rectangle())
     }
 
@@ -642,8 +651,6 @@ struct SidebarNavItem: View {
                     .scaleEffect(iconScale)
             }
             .frame(width: 30, height: 30)
-            .animation(DesignTokens.Animation.indicator, value: isSelected)
-            .animation(DesignTokens.Animation.micro, value: isHovered)
 
             // ── 텍스트 ────────────────────────────────────────────
             Text(item.rawValue)

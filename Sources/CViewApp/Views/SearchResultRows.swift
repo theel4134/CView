@@ -114,6 +114,7 @@ struct SearchChannelRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -183,6 +184,7 @@ struct SearchLiveRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -240,6 +242,7 @@ struct SearchVideoRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -307,6 +310,7 @@ struct SearchClipRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
+        .cursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
     

@@ -159,7 +159,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-            .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
+            .animation(viewModel.isLoading ? DesignTokens.Animation.loadingSpin : .default, value: viewModel.isLoading)
         }
     }
 
@@ -303,6 +303,7 @@ struct HomeView: View {
                         .onHover { hovering in
                             if hovering { triggerPrefetch(channelId: channel.channelId) }
                         }
+                        .cursor(.pointingHand)
                         .onTapGesture {
                             router.navigate(to: .live(channelId: channel.channelId))
                         }
@@ -528,6 +529,7 @@ struct HomeView: View {
                             .onHover { hovering in
                                 if hovering { triggerPrefetch(channelId: channel.channelId) }
                             }
+                            .cursor(.pointingHand)
                             .onTapGesture {
                                 router.navigate(to: .live(channelId: channel.channelId))
                             }
@@ -617,6 +619,7 @@ struct HomeView: View {
                             .onHover { hovering in
                                 if hovering { triggerPrefetch(channelId: channel.channelId) }
                             }
+                            .cursor(.pointingHand)
                             .onTapGesture {
                                 router.navigate(to: .live(channelId: channel.channelId))
                             }

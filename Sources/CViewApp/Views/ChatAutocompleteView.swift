@@ -60,7 +60,7 @@ struct ChatAutocompleteView: View {
                     .padding(.vertical, DesignTokens.Spacing.xxs)
                 }
                 .onChange(of: viewModel.autocompleteSelectedIndex) { _, newIndex in
-                    withAnimation(.easeOut(duration: 0.1)) {
+                    withAnimation(DesignTokens.Animation.micro) {
                         proxy.scrollTo(newIndex, anchor: .center)
                     }
                 }

@@ -110,7 +110,7 @@ struct SearchContentView: View {
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .transition(.scale.combined(with: .opacity))
+                .transition(.opacity)
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
@@ -127,7 +127,7 @@ struct SearchContentView: View {
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, DesignTokens.Spacing.md)
         .animation(DesignTokens.Animation.fast, value: isSearchBarFocused)
-        .animation(DesignTokens.Animation.fast, value: viewModel.query.isEmpty)
+        .animation(DesignTokens.Animation.micro, value: viewModel.query.isEmpty)
     }
     
     // MARK: - Autocomplete Dropdown

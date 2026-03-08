@@ -314,7 +314,6 @@ public actor ChatEngine {
             emitEvent(.connected)
             
         case .messages(let msgs):
-            logger.debug("Chat messages received: \(msgs.count) msgs")
             appendMessages(msgs)
             emitEvent(.newMessages(msgs))
             

@@ -5,8 +5,8 @@ import Foundation
 import CViewCore
 
 /// 메트릭 서버 WebSocket 클라이언트
-/// - wss://cv.dododo.app 연결
-/// - 자동 재연결 (최대 5회, 지수 백오프)
+/// - wss://cv.dododo.app/ws 연결
+/// - 자동 재연결 (지수 백오프, 무한 재시도)
 /// - AsyncStream<MetricsWebSocketMessage>로 메시지 전달
 public actor MetricsWebSocketClient {
     
@@ -25,12 +25,11 @@ public actor MetricsWebSocketClient {
     private var state: ConnectionState = .disconnected
     private var continuation: AsyncStream<MetricsWebSocketMessage>.Continuation?
     private var reconnectTask: Task<Void, Never>?
-    private let maxReconnectAttempts = MetricsNetDefaults.maxReconnectAttempts
     private var isManuallyDisconnected = false
     
     // MARK: - Init
     
-    public init(serverURL: URL = URL(string: "wss://cv.dododo.app")!) {
+    public init(serverURL: URL = URL(string: "wss://cv.dododo.app/ws")!) {
         self.serverURL = serverURL
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = true
@@ -123,11 +122,12 @@ public actor MetricsWebSocketClient {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         
-        for attempt in 1...maxReconnectAttempts {
-            guard !isManuallyDisconnected else { return }
-            
+        var attempt = 0
+        while !isManuallyDisconnected {
+            attempt += 1
             state = .reconnecting(attempt: attempt)
-            let delay = min(Double(attempt * attempt), MetricsNetDefaults.maxBackoffDelay) // 1, 4, 9, 16, 25초
+            // 지수 백오프: 1, 4, 9, 16, 25, 30, 30, 30... 초
+            let delay = min(Double(attempt * attempt), MetricsNetDefaults.maxBackoffDelay)
             try? await Task.sleep(for: .seconds(delay))
             
             guard !isManuallyDisconnected else { return }
@@ -164,7 +164,6 @@ public actor MetricsWebSocketClient {
             }
         }
         
-        // 재연결 실패
         state = .disconnected
     }
 }

@@ -23,7 +23,6 @@ struct LiveStreamView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var chatWidth: CGFloat = 340
-    @State private var isChatVisible = true
     @State private var showOverlay = true
     @State private var isLoadingStream = false
     @State private var loadError: String?
@@ -42,23 +41,34 @@ struct LiveStreamView: View {
     private var chatVM: ChatViewModel? { appState.chatViewModel }
 
     var body: some View {
-        HSplitView {
-            // Player area
-            playerArea
-                .frame(minWidth: 400)
-                .overlay(alignment: .topTrailing) {
-                    if showDebugOverlay {
-                        PerformanceOverlayView(monitor: performanceMonitor)
-                            .padding(DesignTokens.Spacing.xs)
+        GeometryReader { geo in
+            HSplitView {
+                // Player area + overlay chat
+                ZStack {
+                    playerArea
+                        .frame(minWidth: 400)
+                        .overlay(alignment: .topTrailing) {
+                            if showDebugOverlay {
+                                PerformanceOverlayView(monitor: performanceMonitor)
+                                    .padding(DesignTokens.Spacing.xs)
+                            }
+                        }
+
+                    // 오버레이 모드: 플레이어 위에 반투명 채팅
+                    if chatVM?.displayMode == .overlay {
+                        ChatOverlayView(chatVM: chatVM, containerSize: geo.size)
+                            .allowsHitTesting(true)
+                            .transition(.opacity)
                     }
                 }
 
-            // Chat area (extracted to ChatPanelView)
-            if isChatVisible {
-                ChatPanelView(chatVM: chatVM) {
-                    router.presentSheet(.chatSettings)
+                // 사이드 모드: 기존 HSplitView 오른쪽 채팅 패널
+                if chatVM?.displayMode == .side {
+                    ChatPanelView(chatVM: chatVM) {
+                        router.presentSheet(.chatSettings)
+                    }
+                    .frame(width: chatWidth, alignment: .trailing)
                 }
-                .frame(width: chatWidth, alignment: .trailing)
             }
         }
         .toolbar { streamToolbar }
@@ -112,7 +122,13 @@ struct LiveStreamView: View {
             case .toggleFullscreen:
                 playerVM?.toggleFullscreen()
             case .toggleChat:
-                withAnimation(DesignTokens.Animation.normal) { isChatVisible.toggle() }
+                withAnimation(DesignTokens.Animation.normal) {
+                    switch chatVM?.displayMode ?? .side {
+                    case .side: chatVM?.displayMode = .overlay
+                    case .overlay: chatVM?.displayMode = .hidden
+                    case .hidden: chatVM?.displayMode = .side
+                    }
+                }
             case .togglePiP:
                 togglePiP()
             case .screenshot:
@@ -206,8 +222,7 @@ struct LiveStreamView: View {
                     bufferLevel: playerVM?.bufferHealth.map { Double($0.currentLevel) },
                     isApiLoading: isLoadingStream
                 )
-                .transition(.opacity)
-                .animation(DesignTokens.Animation.normal, value: isLoadingStream)
+                .transition(.opacity.animation(DesignTokens.Animation.normal))
             }
 
             // Load error
@@ -327,10 +342,17 @@ struct LiveStreamView: View {
             }
 
             Button {
-                withAnimation(DesignTokens.Animation.normal) { isChatVisible.toggle() }
+                withAnimation(DesignTokens.Animation.normal) {
+                    // 채팅 모드 순환: side → overlay → hidden → side
+                    switch chatVM?.displayMode ?? .side {
+                    case .side: chatVM?.displayMode = .overlay
+                    case .overlay: chatVM?.displayMode = .hidden
+                    case .hidden: chatVM?.displayMode = .side
+                    }
+                }
             } label: {
-                Image(systemName: isChatVisible ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-                    .foregroundStyle(isChatVisible ? Color.accentColor : .secondary)
+                Image(systemName: chatVM?.displayMode == .hidden ? "bubble.left.and.bubble.right" : "bubble.left.and.bubble.right.fill")
+                    .foregroundStyle(chatVM?.displayMode == .hidden ? .secondary : Color.accentColor)
             }
 
             Button {
@@ -473,6 +495,15 @@ struct LiveStreamView: View {
             if let chatChannelId = liveInfo.chatChannelId {
                 let _channelId = channelId
                 let _chatVM = chatVM
+
+                // 캐시된 기본 이모티콘 즉시 적용 (API 로드 전에 사용 가능)
+                let cachedMap = appState.cachedBasicEmoticonMap
+                let cachedPacks = appState.cachedBasicEmoticonPacks
+                if !cachedMap.isEmpty {
+                    _chatVM?.channelEmoticons = cachedMap
+                    _chatVM?.emoticonPacks = cachedPacks
+                }
+
                 Task { [isLoggedIn = appState.isLoggedIn, fallbackUid = appState.isLoggedIn ? appState.userChannelId : nil] in
                     do {
                         let tokenTask = Task { try await apiClient.chatAccessToken(chatChannelId: chatChannelId) }
@@ -487,9 +518,15 @@ struct LiveStreamView: View {
                         let packs     = await packsTask.value
                         let (emoMap, loadedPacks) = await apiClient.resolveEmoticonPacks(packs)
 
-                        Log.chat.info("채널 이모티콘: \(emoMap.count)개 로드 완료 (팩 \(loadedPacks.count)개)")
-                        _chatVM?.channelEmoticons = emoMap
-                        _chatVM?.emoticonPacks = loadedPacks
+                        // 채널별 이모티콘을 캐시된 기본 이모티콘과 병합
+                        let mergedMap = cachedMap.merging(emoMap) { _, channel in channel }
+                        let mergedPacks = cachedPacks + loadedPacks.filter { pack in
+                            !cachedPacks.contains(where: { $0.id == pack.id })
+                        }
+
+                        Log.chat.info("채널 이모티콘: \(mergedMap.count)개 로드 완료 (팩 \(mergedPacks.count)개, 기본 \(cachedMap.count)개 포함)")
+                        _chatVM?.channelEmoticons = mergedMap
+                        _chatVM?.emoticonPacks = mergedPacks
 
                         let uid: String? = userInfo?.userIdHash ?? fallbackUid
                         if let uid { _chatVM?.currentUserUid = uid }
