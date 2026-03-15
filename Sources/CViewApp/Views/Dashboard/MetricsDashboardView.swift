@@ -1,5 +1,5 @@
 // MARK: - MetricsDashboardView.swift
-// 메트릭 서버 전용 대시보드 — 실시간 모니터링 + 채널 통계 + 연결 관리
+// CView 서버 대시보드 — 실시간 모니터링 + 채널 통계 + 연결 관리
 
 import SwiftUI
 import Charts
@@ -32,7 +32,7 @@ struct MetricsDashboardView: View {
     private var headerSection: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("메트릭 서버")
+                Text("CView 서버")
                     .font(DesignTokens.Typography.title2)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Text("cv.dododo.app 실시간 모니터링")
@@ -73,7 +73,7 @@ struct MetricsDashboardView: View {
             )
             statusIndicator(
                 title: "버전",
-                value: "v3.0.0",
+                value: viewModel.serverStats?.serverVersion ?? "v5.0.0",
                 icon: "info.circle",
                 isOnline: true
             )
@@ -125,7 +125,7 @@ struct MetricsDashboardView: View {
             )
             if let webLat = viewModel.avgWebLatency {
                 DashboardStatCard(
-                    title: "웹 레이턴시",
+                    title: "웹 수집 레이턴시",
                     value: String(format: "%.0fms", webLat),
                     icon: "globe",
                     subtitle: "평균",
@@ -134,7 +134,7 @@ struct MetricsDashboardView: View {
             }
             if let appLat = viewModel.avgAppLatency {
                 DashboardStatCard(
-                    title: "앱 레이턴시",
+                    title: "CView 레이턴시",
                     value: String(format: "%.0fms", appLat),
                     icon: "desktopcomputer",
                     subtitle: "평균",
@@ -160,6 +160,15 @@ struct MetricsDashboardView: View {
                     subtitle: cviewSyncLabel(cview),
                     accentColor: .purple
                 )
+                if let grade = cview.aggregate?.qualityGrade, grade != "-" {
+                    DashboardStatCard(
+                        title: "동기화 품질",
+                        value: grade,
+                        icon: "gauge.with.needle",
+                        subtitle: cviewAggregateSubtitle(cview),
+                        accentColor: gradeColor(grade)
+                    )
+                }
             }
         }
     }
@@ -324,7 +333,7 @@ struct MetricsDashboardView: View {
             // Latency comparison
             HStack(spacing: DesignTokens.Spacing.lg) {
                 latencyColumn(title: "웹", stats: stat.web, color: .cyan)
-                latencyColumn(title: "앱", stats: stat.app, color: DesignTokens.Colors.chzzkGreen)
+                latencyColumn(title: "CView", stats: stat.app, color: DesignTokens.Colors.chzzkGreen)
                 if let delta = stat.delta {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("DELTA")
@@ -371,11 +380,17 @@ struct MetricsDashboardView: View {
                 Divider().foregroundStyle(DesignTokens.Glass.borderColor)
                 HStack(spacing: DesignTokens.Spacing.md) {
                     metricLabel(icon: cviewActionIcon(rec.action), text: cviewActionLabel(rec.action))
+                    if let tier = rec.tier {
+                        metricLabel(icon: "chart.bar.fill", text: tier)
+                    }
                     if let speed = rec.suggestedSpeed, speed != 1.0 {
                         metricLabel(icon: "gauge.with.dots.needle.33percent", text: String(format: "%.2fx", speed))
                     }
                     if let delta = rec.delta {
                         metricLabel(icon: "arrow.left.arrow.right", text: String(format: "%+.0fms", delta))
+                    }
+                    if let confidence = rec.confidence {
+                        metricLabel(icon: "waveform.path.ecg", text: String(format: "%.0f%%", confidence * 100))
                     }
                 }
             }
@@ -467,6 +482,24 @@ struct MetricsDashboardView: View {
         case "slow_down": return "감속 필요"
         case "waiting": return "대기 중"
         default: return "알 수 없음"
+        }
+    }
+
+    private func cviewAggregateSubtitle(_ summary: CViewStatsSummary) -> String {
+        guard let agg = summary.aggregate else { return "" }
+        let rate = agg.syncRate ?? 0
+        let avg = agg.avgDeltaAbs ?? 0
+        return String(format: "%.0f%% · %.0fms", rate, avg)
+    }
+
+    private func gradeColor(_ grade: String) -> Color {
+        switch grade {
+        case "S": return .green
+        case "A": return .cyan
+        case "B": return .orange
+        case "C": return .orange
+        case "D": return .red
+        default: return .gray
         }
     }
 }

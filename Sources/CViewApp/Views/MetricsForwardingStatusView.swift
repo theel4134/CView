@@ -1,11 +1,11 @@
 // MARK: - MetricsForwardingStatusView.swift
-// 메트릭 전송 현황 — 싱글/멀티라이브 설정 패널 공용 컴포넌트
+// CView 전송 현황 — 싱글/멀티라이브 설정 패널 공용 컴포넌트
 
 import SwiftUI
 import CViewCore
 import CViewMonitoring
 
-/// 메트릭 서버 전송 현황을 표시하는 설정 패널 내장 뷰
+/// CView 서버 전송 현황을 표시하는 설정 패널 내장 뷰
 /// PlayerAdvancedSettingsView, MLSettingsPanel 양쪽에서 사용
 struct MetricsForwardingStatusView: View {
     @Environment(AppState.self) private var appState
@@ -62,7 +62,7 @@ struct MetricsForwardingStatusView: View {
                         miniStat(icon: "heart.fill", label: "핑 주기", value: String(format: "%.0f초", snap.pingInterval))
                     }
                 } else {
-                    disabledPlaceholder("메트릭 포워더가 초기화되지 않았습니다")
+                    disabledPlaceholder("CView 포워더가 초기화되지 않았습니다")
                 }
             }
 
@@ -235,7 +235,7 @@ struct MetricsForwardingStatusView: View {
     }
 
     private func statusLabel(_ snap: MetricsForwarder.Snapshot) -> String {
-        if !snap.isEnabled { return "메트릭 전송 비활성화됨" }
+        if !snap.isEnabled { return "CView 전송 비활성화됨" }
         if snap.isForwarding { return "전송 중" }
         return "대기 (채널 없음)"
     }

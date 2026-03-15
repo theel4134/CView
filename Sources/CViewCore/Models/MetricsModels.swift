@@ -527,12 +527,25 @@ public struct CViewPositionData: Codable, Sendable {
     public let engine: String?
 }
 
-/// 동기화 추천 (서버→앱)
+/// 동기화 추천 (서버→앱) — 정밀 5단계 분석
 public struct CViewSyncRecommendation: Codable, Sendable {
     public let action: String?          // hold, speed_up, slow_down, waiting
     public let suggestedSpeed: Double?
     public let reason: String?
     public let delta: Double?
+    // 정밀 집계 필드
+    public let avgDelta: Double?
+    public let weightedDelta: Double?
+    public let confidence: Double?
+    public let tier: String?            // excellent, good, adjust, drift, critical
+    public let trend: String?           // stable, worsening, improving
+    public let samples: CViewSyncSamples?
+}
+
+/// 동기화 추천 샘플 카운트
+public struct CViewSyncSamples: Codable, Sendable {
+    public let web: Int?
+    public let app: Int?
 }
 
 /// CView 채널 통합 통계 (서버 응답)
@@ -626,11 +639,21 @@ public struct CViewChatRelayResponse: Codable, Sendable {
 
 // MARK: - CView Stats Summary (/api/stats 에 포함)
 
-/// `/api/stats` 응답의 cviewSummary 필드
+/// `/api/stats` 응답의 cviewSummary 필드 — 정밀 집계
 public struct CViewStatsSummary: Codable, Sendable {
     public let connectedClients: Int?
     public let clients: [CViewStatsSummaryClient]?
     public let syncChannels: [CViewStatsSyncChannel]?
+    public let aggregate: CViewAggregate?
+}
+
+/// CView 전체 통계 집계
+public struct CViewAggregate: Codable, Sendable {
+    public let avgDeltaAbs: Double?
+    public let syncRate: Double?
+    public let syncedChannels: Int?
+    public let totalSyncChannels: Int?
+    public let qualityGrade: String?   // S, A, B, C, D, -
 }
 
 /// CView 요약 – 개별 클라이언트 정보
@@ -641,6 +664,14 @@ public struct CViewStatsSummaryClient: Codable, Sendable, Identifiable {
     public let engine: String?
     public let channelId: String?
     public let channelName: String?
+    public let latency: CViewClientLatency?
+}
+
+/// 클라이언트별 레이턴시 정보
+public struct CViewClientLatency: Codable, Sendable {
+    public let last: Double?
+    public let avg: Double?
+    public let samples: Int?
 }
 
 /// CView 요약 – 채널별 동기화 정보
@@ -650,4 +681,15 @@ public struct CViewStatsSyncChannel: Codable, Sendable, Identifiable {
     public let channelName: String?
     public let recommendation: CViewSyncRecommendation?
     public let syncData: CViewSyncData?
+    public let latencyDetail: CViewLatencyDetail?
+}
+
+/// 채널별 레이턴시 상세
+public struct CViewLatencyDetail: Codable, Sendable {
+    public let webAvg: Double?
+    public let webLast: Double?
+    public let webSamples: Int?
+    public let appAvg: Double?
+    public let appLast: Double?
+    public let appSamples: Int?
 }
