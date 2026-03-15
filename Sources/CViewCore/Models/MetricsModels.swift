@@ -361,3 +361,262 @@ public struct WebLatencyInfo: Codable, Sendable {
     public let source: String?
     public let timestamp: Double?
 }
+
+// MARK: - CView App Integration Models
+
+/// POST /api/cview/connect 요청
+public struct CViewConnectPayload: Codable, Sendable {
+    public let clientId: String
+    public let appVersion: String
+    public let platform: String
+    public let engine: String
+    public let channelId: String?
+    public let channelName: String?
+    
+    public init(
+        clientId: String,
+        appVersion: String,
+        platform: String = "macOS",
+        engine: String = "VLC",
+        channelId: String? = nil,
+        channelName: String? = nil
+    ) {
+        self.clientId = clientId
+        self.appVersion = appVersion
+        self.platform = platform
+        self.engine = engine
+        self.channelId = channelId
+        self.channelName = channelName
+    }
+}
+
+/// POST /api/cview/connect 응답
+public struct CViewConnectResponse: Codable, Sendable {
+    public let success: Bool
+    public let clientId: String?
+    public let serverVersion: String?
+    public let serverTime: Int?
+    public let channelStats: CViewChannelStatsData?
+    public let syncData: CViewSyncData?
+    public let activeChannels: [CViewActiveChannel]?
+    public let connectedClients: Int?
+}
+
+/// POST /api/cview/disconnect 요청
+public struct CViewDisconnectPayload: Codable, Sendable {
+    public let clientId: String
+    public let channelId: String?
+    
+    public init(clientId: String, channelId: String? = nil) {
+        self.clientId = clientId
+        self.channelId = channelId
+    }
+}
+
+/// POST /api/cview/heartbeat 요청
+public struct CViewHeartbeatPayload: Codable, Sendable {
+    public let clientId: String
+    public let channelId: String
+    public let channelName: String
+    public let latency: Double
+    public let resolution: String?
+    public let bitrate: Int?
+    public let fps: Double?
+    public let bufferHealth: Double?
+    public let playbackRate: Double?
+    public let droppedFrames: Int?
+    public let healthScore: Double?
+    public let engine: String
+    public let vlcMetrics: CViewVLCMetrics?
+    
+    public init(
+        clientId: String,
+        channelId: String,
+        channelName: String,
+        latency: Double,
+        resolution: String? = nil,
+        bitrate: Int? = nil,
+        fps: Double? = nil,
+        bufferHealth: Double? = nil,
+        playbackRate: Double? = nil,
+        droppedFrames: Int? = nil,
+        healthScore: Double? = nil,
+        engine: String = "VLC",
+        vlcMetrics: CViewVLCMetrics? = nil
+    ) {
+        self.clientId = clientId
+        self.channelId = channelId
+        self.channelName = channelName
+        self.latency = latency
+        self.resolution = resolution
+        self.bitrate = bitrate
+        self.fps = fps
+        self.bufferHealth = bufferHealth
+        self.playbackRate = playbackRate
+        self.droppedFrames = droppedFrames
+        self.healthScore = healthScore
+        self.engine = engine
+        self.vlcMetrics = vlcMetrics
+    }
+}
+
+/// CView 하트비트에 포함되는 VLC 미디어 통계
+public struct CViewVLCMetrics: Codable, Sendable {
+    public let inputBitrate: Double?
+    public let demuxBitrate: Double?
+    public let demuxCorrupted: Int?
+    public let demuxDiscontinuity: Int?
+    public let decodedVideo: Int?
+    public let decodedAudio: Int?
+    public let displayedPictures: Int?
+    public let lostPictures: Int?
+    public let playedAudioBuffers: Int?
+    public let lostAudioBuffers: Int?
+    public let readBytes: Int?
+    public let demuxReadBytes: Int?
+    
+    public init(from vlcMetrics: VLCLiveMetrics) {
+        self.inputBitrate = vlcMetrics.inputBitrateKbps
+        self.demuxBitrate = vlcMetrics.demuxBitrateKbps
+        self.demuxCorrupted = vlcMetrics.demuxCorruptedDelta
+        self.demuxDiscontinuity = vlcMetrics.demuxDiscontinuityDelta
+        self.decodedVideo = vlcMetrics.decodedFramesDelta
+        self.decodedAudio = nil
+        self.displayedPictures = nil
+        self.lostPictures = vlcMetrics.droppedFramesDelta
+        self.playedAudioBuffers = nil
+        self.lostAudioBuffers = vlcMetrics.lostAudioBuffersDelta
+        self.readBytes = nil
+        self.demuxReadBytes = nil
+    }
+}
+
+/// POST /api/cview/heartbeat 응답 (양방향 — 서버→앱 동기화 데이터)
+public struct CViewHeartbeatResponse: Codable, Sendable {
+    public let success: Bool
+    public let syncData: CViewSyncData?
+    public let channelStats: CViewChannelStatsData?
+    public let recommendation: CViewSyncRecommendation?
+    public let serverTime: Int?
+}
+
+/// 동기화 데이터 (서버→앱)
+public struct CViewSyncData: Codable, Sendable {
+    public let webPosition: CViewPositionData?
+    public let appPosition: CViewPositionData?
+    public let webLatency: Double?
+    public let appLatency: Double?
+    public let latencyDelta: Double?
+    public let timestamp: Int?
+}
+
+/// 위치 데이터 (웹 또는 앱)
+public struct CViewPositionData: Codable, Sendable {
+    public let timestamp: Int?
+    public let channelId: String?
+    public let channelName: String?
+    public let currentTime: Double?
+    public let bufferHealth: Double?
+    public let latency: Double?
+    public let resolution: String?
+    public let bitrate: Double?
+    public let fps: Double?
+    public let engine: String?
+}
+
+/// 동기화 추천 (서버→앱)
+public struct CViewSyncRecommendation: Codable, Sendable {
+    public let action: String?          // hold, speed_up, slow_down, waiting
+    public let suggestedSpeed: Double?
+    public let reason: String?
+    public let delta: Double?
+}
+
+/// CView 채널 통합 통계 (서버 응답)
+public struct CViewChannelStatsData: Codable, Sendable {
+    public let channelId: String?
+    public let channelName: String?
+    public let web: LatencyStats?
+    public let app: LatencyStats?
+    public let delta: DeltaStats?
+    public let broadcast: BroadcastStats?
+    public let resolution: String?
+    public let bitrate: Double?
+    public let fps: Double?
+}
+
+/// GET /api/cview/channel-stats/{channelId} 응답
+public struct CViewChannelStatsResponse: Codable, Sendable {
+    public let success: Bool
+    public let channelStats: CViewChannelStatsData?
+    public let syncData: CViewSyncData?
+    public let serverTime: Int?
+}
+
+/// GET /api/cview/sync-status/{channelId} 응답
+public struct CViewSyncStatusResponse: Codable, Sendable {
+    public let success: Bool
+    public let channelId: String?
+    public let syncData: CViewSyncData?
+    public let recommendation: CViewSyncRecommendation?
+    public let hybridSync: CViewHybridSyncInfo?
+    public let cviewClients: Int?
+    public let serverTime: Int?
+}
+
+/// 하이브리드 동기화 정보
+public struct CViewHybridSyncInfo: Codable, Sendable {
+    public let active: Bool?
+    public let vlcClients: Int?
+    public let webClients: Int?
+    public let lastVlcPDT: Double?
+    public let lastWebPDT: Double?
+}
+
+/// CView 활성 채널 정보 (서버 응답)
+public struct CViewActiveChannel: Codable, Sendable {
+    public let channelId: String?
+    public let channelName: String?
+    public let webLatency: Double?
+    public let appLatency: Double?
+    public let isLive: Bool?
+    public let concurrentUsers: Int?
+}
+
+/// POST /api/cview/chat-relay 요청
+public struct CViewChatRelayPayload: Codable, Sendable {
+    public let clientId: String
+    public let channelId: String
+    public let channelName: String
+    public let message: String
+    public let nickname: String
+    public let uid: String?
+    public let badges: [String]?
+    public let timestamp: Int?
+    
+    public init(
+        clientId: String,
+        channelId: String,
+        channelName: String,
+        message: String,
+        nickname: String,
+        uid: String? = nil,
+        badges: [String]? = nil,
+        timestamp: Int? = nil
+    ) {
+        self.clientId = clientId
+        self.channelId = channelId
+        self.channelName = channelName
+        self.message = message
+        self.nickname = nickname
+        self.uid = uid
+        self.badges = badges
+        self.timestamp = timestamp ?? Int(Date().timeIntervalSince1970 * 1000)
+    }
+}
+
+/// POST /api/cview/chat-relay 응답
+public struct CViewChatRelayResponse: Codable, Sendable {
+    public let success: Bool
+    public let message: String?
+}

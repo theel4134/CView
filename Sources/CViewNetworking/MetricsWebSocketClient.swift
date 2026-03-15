@@ -73,6 +73,36 @@ public actor MetricsWebSocketClient {
         continuation = nil
     }
     
+    // MARK: - Channel Subscription
+    
+    /// 채널 구독 — 해당 채널의 메트릭만 수신
+    public func subscribe(channelId: String) async {
+        await sendJSON(["type": "subscribe", "channelId": channelId])
+    }
+    
+    /// 채널 구독 해제
+    public func unsubscribe(channelId: String) async {
+        await sendJSON(["type": "unsubscribe", "channelId": channelId])
+    }
+    
+    /// 전체 구독 해제 (모든 채널 수신 모드로 복귀)
+    public func unsubscribeAll() async {
+        await sendJSON(["type": "subscribe", "channelId": ""])
+    }
+    
+    /// 서버 상태 요청
+    public func requestStatus() async {
+        await sendJSON(["type": "status"])
+    }
+    
+    /// JSON 메시지 전송
+    private func sendJSON(_ dict: [String: String]) async {
+        guard let task = webSocketTask, !isManuallyDisconnected else { return }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let text = String(data: data, encoding: .utf8) else { return }
+        try? await task.send(.string(text))
+    }
+    
     // MARK: - Connection Management
     
     private func startConnection() async {

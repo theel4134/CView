@@ -33,6 +33,14 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     case channelCleanup
     case pingChannel(channelId: String)
     
+    // MARK: - CView App Integration
+    case cviewConnect(CViewConnectPayload)
+    case cviewDisconnect(CViewDisconnectPayload)
+    case cviewHeartbeat(CViewHeartbeatPayload)
+    case cviewChannelStats(channelId: String)
+    case cviewChatRelay(CViewChatRelayPayload)
+    case cviewSyncStatus(channelId: String)
+    
     // MARK: - EndpointProtocol
     
     public var path: String {
@@ -73,12 +81,25 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             "/api/channels/cleanup"
         case .pingChannel:
             "/api/metrics/app"
+        case .cviewConnect:
+            "/api/cview/connect"
+        case .cviewDisconnect:
+            "/api/cview/disconnect"
+        case .cviewHeartbeat:
+            "/api/cview/heartbeat"
+        case .cviewChannelStats(let id):
+            "/api/cview/channel-stats/\(id)"
+        case .cviewChatRelay:
+            "/api/cview/chat-relay"
+        case .cviewSyncStatus(let id):
+            "/api/cview/sync-status/\(id)"
         }
     }
     
     public var method: HTTPMethod {
         switch self {
-        case .postAppLatency, .postMetrics, .postPDTSync, .addChannel, .channelCleanup, .pingChannel:
+        case .postAppLatency, .postMetrics, .postPDTSync, .addChannel, .channelCleanup, .pingChannel,
+             .cviewConnect, .cviewDisconnect, .cviewHeartbeat, .cviewChatRelay:
             .post
         case .removeChannel:
             .delete
@@ -115,6 +136,14 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             nil
         case .pingChannel(let channelId):
             try? JSONEncoder().encode(["channelId": channelId, "source": "VLC", "platform": "app"])
+        case .cviewConnect(let payload):
+            try? JSONEncoder().encode(payload)
+        case .cviewDisconnect(let payload):
+            try? JSONEncoder().encode(payload)
+        case .cviewHeartbeat(let payload):
+            try? JSONEncoder().encode(payload)
+        case .cviewChatRelay(let payload):
+            try? JSONEncoder().encode(payload)
         default:
             nil
         }
@@ -134,6 +163,10 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             .returnCacheElseLoad(ttl: 5)
         case .activeAppChannels, .activeWebLatency:
             .returnCacheElseLoad(ttl: 10)
+        case .cviewChannelStats:
+            .returnCacheElseLoad(ttl: 5)
+        case .cviewSyncStatus:
+            .returnCacheElseLoad(ttl: 3)
         default:
             .reloadIgnoringCache
         }

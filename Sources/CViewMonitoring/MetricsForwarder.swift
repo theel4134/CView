@@ -28,6 +28,10 @@ public actor MetricsForwarder {
         public let forwardInterval: TimeInterval
         public let pingInterval: TimeInterval
         public let isForwarding: Bool
+        /// 서버에서 수신한 최신 동기화 추천
+        public let lastRecommendation: CViewSyncRecommendation?
+        /// 서버에서 수신한 최신 동기화 데이터
+        public let lastSyncData: CViewSyncData?
     }
 
     // MARK: - State
@@ -47,6 +51,14 @@ public actor MetricsForwarder {
     private var isEnabled: Bool
     private var forwardInterval: TimeInterval
     private var pingInterval: TimeInterval
+    
+    /// CView 클라이언트 고유 ID (서버 연결 시 부여 또는 로컬 생성)
+    private var clientId: String
+    
+    /// 서버에서 수신한 최신 동기화 추천 (양방향 통신)
+    private var lastRecommendation: CViewSyncRecommendation?
+    /// 서버에서 수신한 최신 동기화 데이터
+    private var lastSyncData: CViewSyncData?
 
     // MARK: - Stats Tracking
 
@@ -71,6 +83,7 @@ public actor MetricsForwarder {
         self.isEnabled = isEnabled
         self.forwardInterval = forwardInterval
         self.pingInterval = pingInterval
+        self.clientId = UUID().uuidString
     }
 
     // MARK: - Settings Control
@@ -82,8 +95,23 @@ public actor MetricsForwarder {
 
         // 활성화 → 현재 채널이 있으면 즉시 전송 시작
         if enabled && !wasEnabled, let channelId = activeChannelId, let channelName = activeChannelName {
-            let payload = ChannelActivatePayload(channelId: channelId, channelName: channelName, source: "VLC")
-            try? await apiClient.activateChannel(payload)
+            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0"
+            let connectPayload = CViewConnectPayload(
+                clientId: clientId,
+                appVersion: appVersion,
+                channelId: channelId,
+                channelName: channelName
+            )
+            if let response = try? await apiClient.cviewConnect(connectPayload) {
+                if let serverId = response.clientId {
+                    clientId = serverId
+                }
+                lastSyncData = response.syncData
+            } else {
+                // 폴백
+                let payload = ChannelActivatePayload(channelId: channelId, channelName: channelName, source: "VLC")
+                try? await apiClient.activateChannel(payload)
+            }
             await monitor.start()
             startForwarding()
             startPing()
@@ -95,8 +123,11 @@ public actor MetricsForwarder {
             stopPing()
             await monitor.stop()
             if let channelId = activeChannelId {
-                try? await apiClient.deactivateChannel(channelId: channelId)
+                let disconnectPayload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
+                try? await apiClient.cviewDisconnect(disconnectPayload)
             }
+            lastRecommendation = nil
+            lastSyncData = nil
         }
     }
 
@@ -130,17 +161,31 @@ public actor MetricsForwarder {
 
         guard isEnabled else { return }
 
-        // 서버에 채널 활성화 알림
-        let payload = ChannelActivatePayload(
+        // CView 통합 연결 API 사용 — 채널 등록 + 초기 동기화 데이터 수신
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0"
+        let payload = CViewConnectPayload(
+            clientId: clientId,
+            appVersion: appVersion,
             channelId: channelId,
-            channelName: channelName,
-            streamUrl: streamUrl,
-            source: "VLC"
+            channelName: channelName
         )
         do {
-            _ = try await apiClient.activateChannel(payload)
+            let response = try await apiClient.cviewConnect(payload)
+            // 서버가 clientId를 할당했으면 갱신
+            if let serverId = response.clientId {
+                clientId = serverId
+            }
+            // 초기 동기화 데이터 저장
+            lastSyncData = response.syncData
         } catch {
-            // 서버 연결 실패 시 로컬 동작에 영향 없음
+            // 서버 연결 실패 시 레거시 API 폴백
+            let legacyPayload = ChannelActivatePayload(
+                channelId: channelId,
+                channelName: channelName,
+                streamUrl: streamUrl,
+                source: "VLC"
+            )
+            try? await apiClient.activateChannel(legacyPayload)
         }
 
         await monitor.start()
@@ -157,17 +202,24 @@ public actor MetricsForwarder {
         guard let channelId = activeChannelId, isEnabled else {
             activeChannelId = nil
             activeChannelName = nil
+            lastRecommendation = nil
+            lastSyncData = nil
             return
         }
 
+        // CView 통합 연결 해제 API 사용
+        let payload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
         do {
-            try await apiClient.deactivateChannel(channelId: channelId)
+            try await apiClient.cviewDisconnect(payload)
         } catch {
-            // 네트워크 실패 무시
+            // 폴백: 레거시 API
+            try? await apiClient.deactivateChannel(channelId: channelId)
         }
 
         activeChannelId = nil
         activeChannelName = nil
+        lastRecommendation = nil
+        lastSyncData = nil
     }
 
     /// 현재 활성 채널 ID
@@ -187,7 +239,9 @@ public actor MetricsForwarder {
             lastErrorMessage: lastErrorMessage,
             forwardInterval: forwardInterval,
             pingInterval: pingInterval,
-            isForwarding: forwardingTask != nil
+            isForwarding: forwardingTask != nil,
+            lastRecommendation: lastRecommendation,
+            lastSyncData: lastSyncData
         )
     }
 
@@ -235,30 +289,57 @@ public actor MetricsForwarder {
         let metrics = await monitor.currentMetrics
         let vlc = latestVLCMetrics
 
-        // VLC 통계가 있으면 우선 사용, 없으면 PerformanceMonitor 폴백
-        let payload = AppLatencyPayload(
+        // VLC 통계가 있으면 CView 하트비트에 포함
+        let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
+
+        let payload = CViewHeartbeatPayload(
+            clientId: clientId,
             channelId: channelId,
             channelName: channelName,
             latency: metrics?.latencyMs ?? 0,
-            bitrate: vlc.map { Int($0.demuxBitrateKbps) },
             resolution: vlc?.resolution,
-            frameRate: vlc.map { $0.fps } ?? metrics?.fps,
-            droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
-            bufferHealth: vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent,  // 0-1 → 0-100%
+            bitrate: vlc.map { Int($0.demuxBitrateKbps) },
+            fps: vlc.map { $0.fps } ?? metrics?.fps,
+            bufferHealth: vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent,
             playbackRate: vlc.map { Double($0.playbackRate) },
-            engine: "VLC",
+            droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
             healthScore: vlc.map { $0.healthScore },
-            latencySource: "native"
+            vlcMetrics: vlcPayload
         )
 
         do {
-            _ = try await apiClient.sendAppLatency(payload)
+            let response = try await apiClient.cviewHeartbeat(payload)
             totalSent += 1
             lastSentAt = Date()
+            
+            // 양방향: 서버 응답에서 동기화 데이터 저장
+            lastSyncData = response.syncData
+            lastRecommendation = response.recommendation
         } catch {
-            totalErrors += 1
-            lastErrorAt = Date()
-            lastErrorMessage = error.localizedDescription
+            // CView API 실패 시 레거시 폴백
+            let legacyPayload = AppLatencyPayload(
+                channelId: channelId,
+                channelName: channelName,
+                latency: metrics?.latencyMs ?? 0,
+                bitrate: vlc.map { Int($0.demuxBitrateKbps) },
+                resolution: vlc?.resolution,
+                frameRate: vlc.map { $0.fps } ?? metrics?.fps,
+                droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
+                bufferHealth: vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent,
+                playbackRate: vlc.map { Double($0.playbackRate) },
+                engine: "VLC",
+                healthScore: vlc.map { $0.healthScore },
+                latencySource: "native"
+            )
+            do {
+                _ = try await apiClient.sendAppLatency(legacyPayload)
+                totalSent += 1
+                lastSentAt = Date()
+            } catch {
+                totalErrors += 1
+                lastErrorAt = Date()
+                lastErrorMessage = error.localizedDescription
+            }
         }
     }
     
@@ -296,4 +377,12 @@ public actor MetricsForwarder {
     public func shutdown() async {
         await deactivateCurrentChannel()
     }
+    
+    // MARK: - Sync Data Access
+    
+    /// 가장 최근 서버 동기화 추천 (외부에서 조회용)
+    public var currentRecommendation: CViewSyncRecommendation? { lastRecommendation }
+    
+    /// 가장 최근 서버 동기화 데이터 (외부에서 조회용)
+    public var currentSyncData: CViewSyncData? { lastSyncData }
 }

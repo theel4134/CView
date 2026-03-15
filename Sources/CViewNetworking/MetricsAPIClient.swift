@@ -236,4 +236,36 @@ public actor MetricsAPIClient {
     public func pingChannel(channelId: String) async throws {
         try await postIgnoringResponse(.pingChannel(channelId: channelId))
     }
+    
+    // MARK: - CView App Integration
+    
+    /// CView 앱 연결 등록 — 서버에 클라이언트 등록 및 초기 동기화 데이터 수신
+    public func cviewConnect(_ payload: CViewConnectPayload) async throws -> CViewConnectResponse {
+        try await request(.cviewConnect(payload), as: CViewConnectResponse.self)
+    }
+    
+    /// CView 앱 연결 해제
+    public func cviewDisconnect(_ payload: CViewDisconnectPayload) async throws {
+        try await postIgnoringResponse(.cviewDisconnect(payload))
+    }
+    
+    /// CView 하트비트 — 메트릭 전송 + 양방향 동기화 데이터 수신
+    public func cviewHeartbeat(_ payload: CViewHeartbeatPayload) async throws -> CViewHeartbeatResponse {
+        try await request(.cviewHeartbeat(payload), as: CViewHeartbeatResponse.self)
+    }
+    
+    /// CView 채널 통합 통계 조회
+    public func cviewChannelStats(channelId: String) async throws -> CViewChannelStatsResponse {
+        try await request(.cviewChannelStats(channelId: channelId), as: CViewChannelStatsResponse.self)
+    }
+    
+    /// CView 동기화 상태 조회
+    public func cviewSyncStatus(channelId: String) async throws -> CViewSyncStatusResponse {
+        try await request(.cviewSyncStatus(channelId: channelId), as: CViewSyncStatusResponse.self)
+    }
+    
+    /// CView 채팅 메시지 서버 중계
+    public func cviewRelayChatMessage(_ payload: CViewChatRelayPayload) async throws -> CViewChatRelayResponse {
+        try await request(.cviewChatRelay(payload), as: CViewChatRelayResponse.self)
+    }
 }
