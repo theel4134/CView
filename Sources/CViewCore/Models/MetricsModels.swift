@@ -14,6 +14,9 @@ public struct MetricsServerStats: Codable, Sendable {
     public let channelCount: Int?
     public let liveAggregation: LiveAggregation?
 
+    // CView 앱 요약 (from /api/stats)
+    public let cviewSummary: CViewStatsSummary?
+
     // v3.0.0 flat format fallback
     public let totalReceived: Int?
     public let uptime: Double?
@@ -619,4 +622,32 @@ public struct CViewChatRelayPayload: Codable, Sendable {
 public struct CViewChatRelayResponse: Codable, Sendable {
     public let success: Bool
     public let message: String?
+}
+
+// MARK: - CView Stats Summary (/api/stats 에 포함)
+
+/// `/api/stats` 응답의 cviewSummary 필드
+public struct CViewStatsSummary: Codable, Sendable {
+    public let connectedClients: Int?
+    public let clients: [CViewStatsSummaryClient]?
+    public let syncChannels: [CViewStatsSyncChannel]?
+}
+
+/// CView 요약 – 개별 클라이언트 정보
+public struct CViewStatsSummaryClient: Codable, Sendable, Identifiable {
+    public var id: String { clientId }
+    public let clientId: String
+    public let appVersion: String?
+    public let engine: String?
+    public let channelId: String?
+    public let channelName: String?
+}
+
+/// CView 요약 – 채널별 동기화 정보
+public struct CViewStatsSyncChannel: Codable, Sendable, Identifiable {
+    public var id: String { channelId ?? UUID().uuidString }
+    public let channelId: String?
+    public let channelName: String?
+    public let recommendation: CViewSyncRecommendation?
+    public let syncData: CViewSyncData?
 }

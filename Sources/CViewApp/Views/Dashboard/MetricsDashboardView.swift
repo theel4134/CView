@@ -152,6 +152,15 @@ struct MetricsDashboardView: View {
                     )
                 }
             }
+            if let cview = viewModel.serverStats?.cviewSummary, (cview.connectedClients ?? 0) > 0 {
+                DashboardStatCard(
+                    title: "CView 클라이언트",
+                    value: "\(cview.connectedClients ?? 0)",
+                    icon: "monitor.and.phone",
+                    subtitle: cviewSyncLabel(cview),
+                    accentColor: .purple
+                )
+            }
         }
     }
 
@@ -355,6 +364,21 @@ struct MetricsDashboardView: View {
                     }
                 }
             }
+
+            // CView 동기화 정보
+            if let syncChannel = viewModel.serverStats?.cviewSummary?.syncChannels?.first(where: { $0.channelId == stat.channelId }),
+               let rec = syncChannel.recommendation {
+                Divider().foregroundStyle(DesignTokens.Glass.borderColor)
+                HStack(spacing: DesignTokens.Spacing.md) {
+                    metricLabel(icon: cviewActionIcon(rec.action), text: cviewActionLabel(rec.action))
+                    if let speed = rec.suggestedSpeed, speed != 1.0 {
+                        metricLabel(icon: "gauge.with.dots.needle.33percent", text: String(format: "%.2fx", speed))
+                    }
+                    if let delta = rec.delta {
+                        metricLabel(icon: "arrow.left.arrow.right", text: String(format: "%+.0fms", delta))
+                    }
+                }
+            }
         }
         .padding(DesignTokens.Spacing.md)
         .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial)
@@ -413,5 +437,36 @@ struct MetricsDashboardView: View {
         if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000.0) }
         if n >= 1_000  { return String(format: "%.1f천", Double(n) / 1_000.0) }
         return "\(n)"
+    }
+
+    private func cviewSyncLabel(_ summary: CViewStatsSummary) -> String {
+        guard let channels = summary.syncChannels, !channels.isEmpty else {
+            return "대기 중"
+        }
+        let actions = channels.compactMap { $0.recommendation?.action }
+        if actions.allSatisfy({ $0 == "hold" }) { return "동기화 양호" }
+        if actions.contains("speed_up") { return "가속 중" }
+        if actions.contains("slow_down") { return "감속 중" }
+        return "대기 중"
+    }
+
+    private func cviewActionIcon(_ action: String?) -> String {
+        switch action {
+        case "hold": return "checkmark.circle"
+        case "speed_up": return "hare"
+        case "slow_down": return "tortoise"
+        case "waiting": return "hourglass"
+        default: return "questionmark.circle"
+        }
+    }
+
+    private func cviewActionLabel(_ action: String?) -> String {
+        switch action {
+        case "hold": return "동기화 양호"
+        case "speed_up": return "가속 필요"
+        case "slow_down": return "감속 필요"
+        case "waiting": return "대기 중"
+        default: return "알 수 없음"
+        }
     }
 }

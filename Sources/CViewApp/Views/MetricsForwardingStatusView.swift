@@ -140,6 +140,65 @@ struct MetricsForwardingStatusView: View {
                         }
                     }
                 }
+
+                // ── CView 동기화 상태 ──
+                if let snap = snapshot, snap.lastRecommendation != nil || snap.lastSyncData != nil {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                        sectionHeader("동기화 추천", icon: "arrow.triangle.2.circlepath", color: .purple)
+
+                        if let rec = snap.lastRecommendation {
+                            HStack(spacing: DesignTokens.Spacing.sm) {
+                                Image(systemName: syncActionIcon(rec.action))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(syncActionColor(rec.action))
+                                Text(syncActionLabel(rec.action))
+                                    .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
+                                    .foregroundStyle(syncActionColor(rec.action))
+                                Spacer()
+                                Text(String(format: "%.4fx", rec.suggestedSpeed))
+                                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(syncActionColor(rec.action).opacity(0.12)))
+                            }
+
+                            if let reason = rec.reason {
+                                Text(reason)
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    .lineLimit(2)
+                            }
+
+                            if let delta = rec.delta {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.left.and.right")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    Text(String(format: "델타: %+.0fms", delta))
+                                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(abs(delta) < 300 ? .green : (abs(delta) < 1000 ? .orange : .red))
+                                }
+                            }
+                        }
+
+                        if let sd = snap.lastSyncData {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignTokens.Spacing.xs) {
+                                if let webLat = sd.webLatency {
+                                    statCard("웹 레이턴시", String(format: "%.0fms", webLat), icon: "globe", color: .cyan)
+                                }
+                                if let appLat = sd.appLatency {
+                                    statCard("앱 레이턴시", String(format: "%.0fms", appLat), icon: "desktopcomputer", color: .green)
+                                }
+                                if let ld = sd.latencyDelta {
+                                    statCard("레이턴시 차이", String(format: "%+.0fms", ld), icon: "arrow.left.and.right", color: abs(ld) < 300 ? .green : .orange)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         .onAppear { startPolling() }
@@ -209,6 +268,38 @@ struct MetricsForwardingStatusView: View {
         if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
         if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
         return "\(n)"
+    }
+
+    // MARK: - Sync Helpers
+
+    private func syncActionIcon(_ action: String) -> String {
+        switch action {
+        case "hold": return "checkmark.circle.fill"
+        case "speed_up": return "hare.fill"
+        case "slow_down": return "tortoise.fill"
+        case "waiting": return "clock.fill"
+        default: return "questionmark.circle"
+        }
+    }
+
+    private func syncActionColor(_ action: String) -> Color {
+        switch action {
+        case "hold": return .green
+        case "speed_up": return .orange
+        case "slow_down": return .blue
+        case "waiting": return DesignTokens.Colors.textTertiary
+        default: return DesignTokens.Colors.textTertiary
+        }
+    }
+
+    private func syncActionLabel(_ action: String) -> String {
+        switch action {
+        case "hold": return "동기화 양호"
+        case "speed_up": return "가속 필요"
+        case "slow_down": return "감속 필요"
+        case "waiting": return "대기 중"
+        default: return action
+        }
     }
 
     // MARK: - Sub-views
