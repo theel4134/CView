@@ -53,8 +53,6 @@ public final class HomeViewModel {
     public var serverUptime: Double = 0
     /// 서버에서 수신한 총 메트릭 수
     public var serverTotalReceived: Int = 0
-    /// WebSocket 연결 클라이언트 수
-    public var wsClientCount: Int = 0
     /// 활성 앱 채널 수
     public var activeAppChannelCount: Int = 0
     /// 서버 마지막 갱신 시각
@@ -63,61 +61,28 @@ public final class HomeViewModel {
     private var metricsPollingTask: Task<Void, Never>?
     private var wsStreamTask: Task<Void, Never>?
     
-    // MARK: - Computed Stats
-    
-    /// 통계 집계 대상: 전체 수집 완료 시 allStatChannels, 수집 중에는 liveChannels
-    private var statsSource: [LiveChannelItem] {
-        allStatChannels.isEmpty ? liveChannels : allStatChannels
-    }
+    // MARK: - Cached Stats (데이터 변경 시 1회 계산, body 접근 시 O(1))
     
     /// 카테고리 탐색용: 통계 수집 완료 시 allStatChannels, 아직이면 liveChannels
     public var categoryChannels: [LiveChannelItem] {
         allStatChannels.isEmpty ? liveChannels : allStatChannels
     }
     
-    public var totalViewers: Int {
-        statsSource.reduce(0) { $0 + $1.viewerCount }
-    }
-    
-    public var averageViewers: Int {
-        guard !statsSource.isEmpty else { return 0 }
-        return totalViewers / statsSource.count
-    }
-    
-    public var categoryCount: Int {
-        Set(statsSource.compactMap { $0.categoryName }).count
-    }
-    
-    /// 통계용 라이브 채널 수 (전체)
-    public var totalLiveChannelCount: Int { statsSource.count }
-    
-    public var topCategories: [CategoryStat] {
-        let grouped = Dictionary(grouping: statsSource) { $0.categoryName ?? "기타" }
-        return grouped.map { name, channels in
-            CategoryStat(
-                id: name,
-                name: name,
-                channelCount: channels.count,
-                totalViewers: channels.reduce(0) { $0 + $1.viewerCount }
-            )
-        }
-        .sorted { $0.totalViewers > $1.totalViewers }
-        .prefix(5)
-        .map { $0 }
-    }
-    
-    public var followingLiveCount: Int {
-        followingChannels.filter { $0.isLive }.count
-    }
-    
-    public var recentLiveFollowing: [LiveChannelItem] {
-        Array(followingChannels.filter { $0.isLive }.prefix(6))
-    }
-    
-    public var topChannels: [LiveChannelItem] {
-        Array(liveChannels.sorted { $0.viewerCount > $1.viewerCount }.prefix(6))
-    }
-    
+    public private(set) var totalViewers: Int = 0
+    public private(set) var averageViewers: Int = 0
+    public private(set) var categoryCount: Int = 0
+    public private(set) var totalLiveChannelCount: Int = 0
+    public private(set) var topCategories: [CategoryStat] = []
+    public private(set) var followingLiveCount: Int = 0
+    public private(set) var recentLiveFollowing: [LiveChannelItem] = []
+    public private(set) var topChannels: [LiveChannelItem] = []
+    public private(set) var categoryTypeDistribution: [CategoryTypeStat] = []
+    public private(set) var viewerBuckets: [ViewerBucket] = []
+    public private(set) var medianViewers: Int = 0
+    public private(set) var followingLiveRate: Int = 0
+    public private(set) var followingTotalViewers: Int = 0
+    public private(set) var topThreeChannels: [LiveChannelItem] = []
+
     /// 서버 채널 중 평균 웹 레이턴시
     public var avgWebLatency: Double? {
         let vals = serverChannelStats.compactMap { $0.web?.avg }
@@ -140,33 +105,57 @@ public final class HomeViewModel {
         return "\(mins)m"
     }
 
-    /// 카테고리 타입별 분포 (GAME / SPORTS / ETC)
-    public var categoryTypeDistribution: [CategoryTypeStat] {
-        let source = statsSource
-        guard !source.isEmpty else { return [] }
-        let grouped = Dictionary(grouping: source) { $0.categoryType ?? "ETC" }
-        let total = source.count
-        return grouped.map { type, channels in
-            CategoryTypeStat(
-                id: type,
-                type: type,
-                displayName: CategoryTypeStat.displayName(for: type),
+    /// statsSource 변경 시 1회 호출 — O(N) ~ O(N log N) 연산을 body 밖에서 수행
+    private func recomputeStats() {
+        let source = allStatChannels.isEmpty ? liveChannels : allStatChannels
+
+        totalLiveChannelCount = source.count
+        totalViewers = source.reduce(0) { $0 + $1.viewerCount }
+        averageViewers = source.isEmpty ? 0 : totalViewers / source.count
+
+        let categories = Set(source.compactMap { $0.categoryName })
+        categoryCount = categories.count
+
+        let grouped = Dictionary(grouping: source) { $0.categoryName ?? "기타" }
+        topCategories = grouped.map { name, channels in
+            CategoryStat(
+                id: name,
+                name: name,
                 channelCount: channels.count,
-                totalViewers: channels.reduce(0) { $0 + $1.viewerCount },
-                percentage: Double(channels.count) / Double(total) * 100
+                totalViewers: channels.reduce(0) { $0 + $1.viewerCount }
             )
         }
-        .sorted { $0.channelCount > $1.channelCount }
-    }
+        .sorted { $0.totalViewers > $1.totalViewers }
+        .prefix(5)
+        .map { $0 }
 
-    /// 시청자수 구간별 분포 버킷 — 단일 패스 O(N) 계산
-    public var viewerBuckets: [ViewerBucket] {
-        let source = statsSource
+        let sorted = source.sorted { $0.viewerCount > $1.viewerCount }
+        topThreeChannels = Array(sorted.prefix(3))
+        topChannels = Array(liveChannels.sorted { $0.viewerCount > $1.viewerCount }.prefix(6))
+
+        // 카테고리 타입별 분포
+        if !source.isEmpty {
+            let typeGrouped = Dictionary(grouping: source) { $0.categoryType ?? "ETC" }
+            let total = source.count
+            categoryTypeDistribution = typeGrouped.map { type, channels in
+                CategoryTypeStat(
+                    id: type,
+                    type: type,
+                    displayName: CategoryTypeStat.displayName(for: type),
+                    channelCount: channels.count,
+                    totalViewers: channels.reduce(0) { $0 + $1.viewerCount },
+                    percentage: Double(channels.count) / Double(total) * 100
+                )
+            }
+            .sorted { $0.channelCount > $1.channelCount }
+        } else {
+            categoryTypeDistribution = []
+        }
+
+        // 시청자 구간별 분포 — O(N)
         let defs: [(label: String, min: Int, max: Int)] = [
-            ("0~100", 0, 100),
-            ("100~1K", 100, 1_000),
-            ("1K~1만", 1_000, 10_000),
-            ("1만+", 10_000, Int.max)
+            ("0~100", 0, 100), ("100~1K", 100, 1_000),
+            ("1K~1만", 1_000, 10_000), ("1만+", 10_000, Int.max)
         ]
         var counts = Array(repeating: 0, count: defs.count)
         for item in source {
@@ -176,33 +165,27 @@ public final class HomeViewModel {
             else if v < 10_000 { counts[2] += 1 }
             else { counts[3] += 1 }
         }
-        return defs.enumerated().map { idx, d in
+        viewerBuckets = defs.enumerated().map { idx, d in
             ViewerBucket(id: d.label, label: d.label, count: counts[idx], minViewers: d.min, maxViewers: d.max)
+        }
+
+        // 중앙값 — O(N log N)
+        let viewersSorted = source.map { $0.viewerCount }.sorted()
+        if viewersSorted.isEmpty {
+            medianViewers = 0
+        } else {
+            let mid = viewersSorted.count / 2
+            medianViewers = viewersSorted.count % 2 == 0 ? (viewersSorted[mid - 1] + viewersSorted[mid]) / 2 : viewersSorted[mid]
         }
     }
 
-    /// 시청자수 중앙값
-    public var medianViewers: Int {
-        let sorted = statsSource.map { $0.viewerCount }.sorted()
-        guard !sorted.isEmpty else { return 0 }
-        let mid = sorted.count / 2
-        return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
-    }
-
-    /// 팔로잉 라이브 비율 (0~100)
-    public var followingLiveRate: Int {
-        guard !followingChannels.isEmpty else { return 0 }
-        return followingLiveCount * 100 / followingChannels.count
-    }
-
-    /// 팔로잉 라이브 채널 전체 시청자 합계
-    public var followingTotalViewers: Int {
-        followingChannels.filter { $0.isLive }.reduce(0) { $0 + $1.viewerCount }
-    }
-
-    /// 라이브 상위 3 채널
-    public var topThreeChannels: [LiveChannelItem] {
-        Array(statsSource.sorted { $0.viewerCount > $1.viewerCount }.prefix(3))
+    /// followingChannels 변경 시 1회 호출
+    private func recomputeFollowingStats() {
+        let live = followingChannels.filter { $0.isLive }
+        followingLiveCount = live.count
+        recentLiveFollowing = Array(live.prefix(6))
+        followingTotalViewers = live.reduce(0) { $0 + $1.viewerCount }
+        followingLiveRate = followingChannels.isEmpty ? 0 : followingLiveCount * 100 / followingChannels.count
     }
     
     // MARK: - Dependencies
@@ -250,6 +233,8 @@ public final class HomeViewModel {
             followingCachedAt         = try await store.loadSetting(key: CacheKey.followingCachedAt, as: Date.self)
             let lc = liveChannels.count, sc = allStatChannels.count, fc = followingChannels.count
             logger.info("캐시 복원: 라이브 \(lc)개, 전체통계 \(sc)개, 팔로잉 \(fc)개")
+            recomputeStats()
+            recomputeFollowingStats()
         } catch {
             logger.error("캐시 로드 실패: \(error)")
         }
@@ -334,6 +319,7 @@ public final class HomeViewModel {
             liveChannels = items
             nextLiveCursor = response.page?.next
             hasMoreChannels = nextLiveCursor != nil
+            recomputeStats()
             recordViewerSnapshot()
             logger.info("Loaded \(items.count) live channels")
             // 캐시 저장
@@ -373,6 +359,7 @@ public final class HomeViewModel {
                 )
             }
             allStatChannels = items
+            recomputeStats()
             recordViewerSnapshot()
             logger.info("» 전체 라이브 통계 수집 완료: \(items.count)개 채널, 총 \(items.reduce(0) { $0 + $1.viewerCount })명")
             // 캐시 저장
@@ -417,6 +404,7 @@ public final class HomeViewModel {
             liveChannels.append(contentsOf: items)
             nextLiveCursor = response.page?.next
             hasMoreChannels = nextLiveCursor != nil
+            recomputeStats()
         } catch {
             logger.error("Failed to load more channels: \(error)")
         }
@@ -432,6 +420,7 @@ public final class HomeViewModel {
             let response = try await apiClient.fetchFollowingChannels()
             followingChannels = response
             needsCookieLogin = false
+            recomputeFollowingStats()
             logger.info("팔로잉 채널 로드 완료: \(response.count)개")
             // 캐시 저장
             let now = Date()
@@ -469,9 +458,8 @@ public final class HomeViewModel {
             serverStats = stats
             isMetricsServerOnline = true
             serverChannelStats = stats.channelStats ?? []
-            serverUptime = stats.stats?.uptime ?? 0
-            serverTotalReceived = stats.stats?.totalReceived ?? 0
-            wsClientCount = stats.wsClients ?? 0
+            serverUptime = stats.resolvedUptime
+            serverTotalReceived = stats.resolvedTotalReceived
             serverLastUpdate = Date()
             
             // 레이턴시 스냅샷 기록

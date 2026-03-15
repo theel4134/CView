@@ -77,7 +77,7 @@ struct MetricsSettingsTab: View {
                         }
 
                         Divider()
-                            .background(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+                            .background(DesignTokens.Glass.borderColorLight)
 
                         // 서버 URL 입력
                         VStack(alignment: .leading, spacing: 6) {
@@ -90,7 +90,7 @@ struct MetricsSettingsTab: View {
                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                                 .padding(.horizontal, DesignTokens.Spacing.xs)
                                 .padding(.vertical, DesignTokens.Spacing.xs)
-                                .background(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+                                .background(DesignTokens.Glass.borderColorLight)
                                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                         }
                     }
@@ -193,7 +193,7 @@ struct MetricsSettingsTab: View {
                         }
 
                         Divider()
-                            .background(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+                            .background(DesignTokens.Glass.borderColorLight)
 
                         // 핑 주기
                         VStack(alignment: .leading, spacing: 6) {
@@ -284,7 +284,7 @@ private struct MetricsGroupBoxStyle: GroupBoxStyle {
             configuration.content
                 .padding(DesignTokens.Spacing.md)
                 .frame(maxWidth: .infinity)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         }
     }

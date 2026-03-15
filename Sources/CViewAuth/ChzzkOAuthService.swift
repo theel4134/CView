@@ -58,10 +58,13 @@ public actor ChzzkOAuthService {
             return nil
         }
         
-        // state 검증
-        if let receivedState = queryItems.first(where: { $0.name == "state" })?.value,
-           let expected = currentState,
-           receivedState != expected {
+        // state 검증 — currentState가 없으면 CSRF 보호를 위해 거부
+        let receivedState = queryItems.first(where: { $0.name == "state" })?.value
+        guard let expected = currentState else {
+            Log.auth.error("OAuth state not set — rejecting callback (CSRF protection)")
+            return nil
+        }
+        guard receivedState == expected else {
             Log.auth.error("OAuth state mismatch (CSRF protection)")
             return nil
         }

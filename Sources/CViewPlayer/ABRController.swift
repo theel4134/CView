@@ -31,6 +31,21 @@ public actor ABRController {
             minSwitchInterval: 5.0,
             initialBandwidthEstimate: 5_000_000
         )
+
+        /// 멀티라이브 전용 ABR 프로파일
+        /// - 대역폭 안전 계수 0.85 (4스트림 공유 고려)
+        /// - 초기 대역폭 추정치 2.5Mbps (4분배 가정)
+        /// - 전환 간격 단축 3초 (빠른 적응)
+        /// - 다운그레이드 임계값 완화 (빠른 강등)
+        public static let multiLive = Configuration(
+            minBandwidthBps: 300_000,
+            maxBandwidthBps: 20_000_000,
+            bandwidthSafetyFactor: 0.85,
+            switchUpThreshold: 1.3,
+            switchDownThreshold: 0.7,
+            minSwitchInterval: 3.0,
+            initialBandwidthEstimate: 2_500_000
+        )
         
         public init(
             minBandwidthBps: Int = 500_000,

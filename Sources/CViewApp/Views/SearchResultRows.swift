@@ -43,7 +43,7 @@ struct SearchTabButton: View {
                         .background(isSelected ? DesignTokens.Colors.chzzkGreen : Color.clear)
                         .overlay {
                             if !isSelected {
-                                Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                                Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                             }
                         }
                         .clipShape(Capsule())
@@ -55,7 +55,7 @@ struct SearchTabButton: View {
             .background {
                 if isSelected {
                     Capsule()
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Colors.surfaceElevated)
                         .overlay {
                             Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.25), lineWidth: 0.5)
                         }
@@ -85,7 +85,6 @@ struct SearchChannelRow: View {
             .overlay {
                 Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
             }
-            .drawingGroup(opaque: false)  // 아바타 클립+stroke 합성 단일 패스
             
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
@@ -114,7 +113,7 @@ struct SearchChannelRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -145,7 +144,7 @@ struct SearchLiveRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     .padding(DesignTokens.Spacing.xxs)
             }
-            .drawingGroup(opaque: false)  // 썸네일+뱃지 합성 단일 패스
+
             
             VStack(alignment: .leading, spacing: 3) {
                 Text(live.liveTitle)
@@ -184,7 +183,7 @@ struct SearchLiveRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -213,7 +212,7 @@ struct SearchVideoRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     .padding(DesignTokens.Spacing.xxs)
             }
-            .drawingGroup(opaque: false)  // 썸네일+길이 뱃지 합성 단일 패스
+
             
             VStack(alignment: .leading, spacing: 3) {
                 Text(video.videoTitle)
@@ -242,7 +241,7 @@ struct SearchVideoRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -277,7 +276,7 @@ struct SearchClipRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                 .padding(DesignTokens.Spacing.xxs)
             }
-            .drawingGroup(opaque: false)  // 썸네일+클립 뱃지 합성 단일 패스
+
             
             VStack(alignment: .leading, spacing: 3) {
                 Text(clip.clipTitle)
@@ -310,7 +309,7 @@ struct SearchClipRow: View {
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
     
@@ -319,4 +318,30 @@ struct SearchClipRow: View {
         let seconds = clip.duration % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
+}
+
+// MARK: - Equatable Wrappers (re-render 방지)
+
+struct EquatableSearchChannelRow: View, @preconcurrency Equatable {
+    let channel: ChannelInfo
+    var body: some View { SearchChannelRow(channel: channel) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.channel == rhs.channel }
+}
+
+struct EquatableSearchLiveRow: View, @preconcurrency Equatable {
+    let live: LiveInfo
+    var body: some View { SearchLiveRow(live: live) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.live == rhs.live }
+}
+
+struct EquatableSearchVideoRow: View, @preconcurrency Equatable {
+    let video: VODInfo
+    var body: some View { SearchVideoRow(video: video) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.video == rhs.video }
+}
+
+struct EquatableSearchClipRow: View, @preconcurrency Equatable {
+    let clip: ClipInfo
+    var body: some View { SearchClipRow(clip: clip) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.clip == rhs.clip }
 }

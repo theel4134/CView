@@ -204,6 +204,8 @@ final class NotificationService: NSObject {
         guard let png = cachedIconPNG else { return nil }
 
         // 2) 매 Attachment마다 고유 파일 생성 (시스템이 파일을 이동시키기 때문)
+        // 이전 임시 파일 정리
+        cleanupOldNotificationIcons()
         let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("cview_notif_icon_\(UUID().uuidString).png")
 
@@ -224,6 +226,20 @@ final class NotificationService: NSObject {
     /// 모든 예약된 알림 취소
     func cancelAllPending() {
         notificationCenter?.removeAllPendingNotificationRequests()
+    }
+
+    /// 이전 알림 아이콘 임시 파일 정리
+    private func cleanupOldNotificationIcons() {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: tmpDir, includingPropertiesForKeys: [.creationDateKey]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-3600) // 1시간 이전 파일만 삭제
+        for file in files where file.lastPathComponent.hasPrefix("cview_notif_icon_") {
+            guard let attrs = try? file.resourceValues(forKeys: [.creationDateKey]),
+                  let created = attrs.creationDate, created < cutoff else { continue }
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     /// 알림 카테고리 등록 (액션 버튼)

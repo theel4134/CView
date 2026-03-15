@@ -8,8 +8,8 @@ import Foundation
 public enum WSDefaults {
     /// 핑 전송 간격 (초)
     public static let pingInterval: TimeInterval = 20
-    /// 최대 메시지 크기 (1MB)
-    public static let maxMessageSize = 1_048_576
+    /// 최대 메시지 크기 (64KB — 채팅 메시지는 일반적으로 1KB 미만)
+    public static let maxMessageSize = 65_536
     /// WS 세션 요청 타임아웃 (초)
     public static let requestTimeout: TimeInterval = 90
     /// WS 세션 리소스 타임아웃 (초, 15분)

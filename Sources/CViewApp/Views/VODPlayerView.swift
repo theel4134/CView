@@ -251,8 +251,8 @@ struct VODPlayerView: View {
                             .font(DesignTokens.Typography.captionMedium)
                             .padding(.horizontal, DesignTokens.Spacing.xs)
                             .padding(.vertical, DesignTokens.Spacing.xxs)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
-                            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+                            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
                     }
                     .menuStyle(.borderlessButton)
                     

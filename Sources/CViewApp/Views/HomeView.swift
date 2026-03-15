@@ -32,7 +32,7 @@ struct HomeView: View {
     
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
                 // 1. Header
                 dashboardHeader
 
@@ -68,9 +68,9 @@ struct HomeView: View {
                 // 7. Top Channels Grid
                 topChannelsSection
             }
-            .padding(DesignTokens.Spacing.lg)
+            .padding(DesignTokens.Spacing.xl)
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
         .refreshable {
             await viewModel.refresh()
         }
@@ -88,78 +88,88 @@ struct HomeView: View {
     // MARK: - 1. Dashboard Header
 
     private var dashboardHeader: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(greeting)
-                    .font(DesignTokens.Typography.title)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            // Hero greeting row
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(greeting)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.primary)
 
-                HStack(spacing: 8) {
-                    Text(Date(), format: .dateTime.year().month().day().weekday(.wide))
-                        .font(DesignTokens.Typography.captionMedium)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    HStack(spacing: 8) {
+                        Text(Date(), format: .dateTime.year().month().day().weekday(.wide))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
 
-                    // 데이터 신선도 배지
-                    if viewModel.isLoadingStats {
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .tint(DesignTokens.Colors.chzzkGreen)
-                            Text("데이터 수집 중")
-                                .font(DesignTokens.Typography.footnoteMedium)
-                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        if viewModel.isLoadingStats {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text("수집 중")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if let cachedAt = viewModel.allStatCachedAt ?? viewModel.liveChannelsCachedAt {
+                            dataFreshnessBadge(cachedAt: cachedAt)
                         }
-                        .padding(.horizontal, DesignTokens.Spacing.sm)
-                        .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(DesignTokens.Colors.chzzkGreen.opacity(0.08))
-                        .clipShape(Capsule())
-                    } else if let cachedAt = viewModel.allStatCachedAt ?? viewModel.liveChannelsCachedAt {
-                        dataFreshnessBadge(cachedAt: cachedAt)
                     }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: DesignTokens.Spacing.xs) {
+                    // 라이브 요약 카드
+                    if viewModel.totalLiveChannelCount > 0 {
+                        HStack(spacing: DesignTokens.Spacing.sm) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 5) {
+                                    Circle().fill(DesignTokens.Colors.live).frame(width: 6, height: 6)
+                                    Text("\(viewModel.totalLiveChannelCount)채널")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                                Text("시청자 \(formatLargeNumber(viewModel.totalViewers))명")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Divider().frame(height: 28)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("평균")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                                Text(formatLargeNumber(viewModel.averageViewers))
+                                    .font(.system(size: 14, weight: .bold).monospaced())
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, DesignTokens.Spacing.sm)
+                        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                                .strokeBorder(DesignTokens.Colors.live.opacity(0.2), lineWidth: 0.5)
+                        }
+                    }
+
+                    // 새로고침 버튼
+                    Button {
+                        Task { await viewModel.refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                            .background(.fill.tertiary, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
+                    .animation(viewModel.isLoading ? DesignTokens.Animation.loadingSpin : .default, value: viewModel.isLoading)
                 }
             }
 
-            Spacer()
-
-            // 통계 요약 배지
-            if viewModel.totalLiveChannelCount > 0 {
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Circle().fill(DesignTokens.Colors.live).frame(width: 5, height: 5)
-                        Text("\(viewModel.totalLiveChannelCount)채널 라이브")
-                            .font(DesignTokens.Typography.captionSemibold)
-                            .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    }
-                    Text("시청자 \(formatLargeNumber(viewModel.totalViewers))명")
-                        .font(DesignTokens.Typography.footnoteMedium)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-                }
-            }
-
-            Button {
-                Task { await viewModel.refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-                    .overlay {
-                        Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-                    }
-            }
-            .buttonStyle(.plain)
-            .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-            .animation(viewModel.isLoading ? DesignTokens.Animation.loadingSpin : .default, value: viewModel.isLoading)
+            Divider()
         }
     }
 
@@ -173,28 +183,28 @@ struct HomeView: View {
         }()
         return HStack(spacing: 4) {
             Image(systemName: isStale ? "clock.badge.exclamationmark" : "checkmark.circle.fill")
-                .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
             Text(label)
-                .font(DesignTokens.Typography.footnoteMedium)
+                .font(.system(size: 11))
         }
-        .foregroundStyle(isStale ? DesignTokens.Colors.warning : DesignTokens.Colors.chzzkGreen)
+        .foregroundStyle(isStale ? Color.orange : Color.secondary)
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, DesignTokens.Spacing.xxs)
-        .background((isStale ? DesignTokens.Colors.warning : DesignTokens.Colors.chzzkGreen).opacity(0.08))
+        .background(.fill.quaternary)
         .clipShape(Capsule())
     }
-    
+
     // MARK: - 2. Stat Cards
 
     private var statCardsGrid: some View {
         LazyVGrid(
             columns: [
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm)
+                GridItem(.flexible(), spacing: DesignTokens.Spacing.md),
+                GridItem(.flexible(), spacing: DesignTokens.Spacing.md),
+                GridItem(.flexible(), spacing: DesignTokens.Spacing.md),
+                GridItem(.flexible(), spacing: DesignTokens.Spacing.md)
             ],
-            spacing: DesignTokens.Spacing.sm
+            spacing: DesignTokens.Spacing.md
         ) {
             DashboardStatCard(
                 title: "라이브 채널",
@@ -224,7 +234,7 @@ struct HomeView: View {
                     title: "서버 수신",
                     value: formatLargeNumber(viewModel.serverTotalReceived),
                     icon: "server.rack",
-                    subtitle: "WS \(viewModel.wsClientCount)클라이언트",
+                    subtitle: "\(viewModel.serverChannelStats.count)개 채널 활성",
                     accentColor: DesignTokens.Colors.chzzkGreen
                 )
             } else {
@@ -253,22 +263,9 @@ struct HomeView: View {
     // MARK: - 4. Analytics Section (도넛차트 + 시청자 분포)
 
     private var analyticsSection: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             // 섹션 헤더
-            HStack {
-                Text("스트리밍 분석")
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-
-                if !viewModel.categoryTypeDistribution.isEmpty {
-                    Text("·  총 \(viewModel.totalLiveChannelCount)채널")
-                        .font(DesignTokens.Typography.captionMedium)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                Spacer()
-            }
+            sectionHeader(title: "스트리밍 분석", subtitle: viewModel.categoryTypeDistribution.isEmpty ? nil : "총 \(viewModel.totalLiveChannelCount)채널")
 
             HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
                 CategoryTypeDonutChart(distribution: viewModel.categoryTypeDistribution)
@@ -290,12 +287,8 @@ struct HomeView: View {
 
     // TOP 3 랭킹 채널 카드
     private var topThreeSection: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-            Text("시청자 TOP 3")
-                .font(DesignTokens.Typography.captionSemibold)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.5)
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            sectionHeader(title: "시청자 TOP 3", subtitle: nil)
 
             HStack(spacing: DesignTokens.Spacing.sm) {
                 ForEach(Array(viewModel.topThreeChannels.enumerated()), id: \.element.id) { index, channel in
@@ -303,98 +296,92 @@ struct HomeView: View {
                         .onHover { hovering in
                             if hovering { triggerPrefetch(channelId: channel.channelId) }
                         }
-                        .cursor(.pointingHand)
+                        .customCursor(.pointingHand)
                         .onTapGesture {
                             router.navigate(to: .live(channelId: channel.channelId))
                         }
                 }
             }
         }
-        .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-        }
     }
 
     private func topRankCard(rank: Int, channel: LiveChannelItem) -> some View {
         let rankColors: [Color] = [.yellow, Color(red: 0.75, green: 0.75, blue: 0.78), DesignTokens.Colors.accentOrange]
         let rankColor = rank <= 3 ? rankColors[rank - 1] : DesignTokens.Colors.textTertiary
+        let rankEmoji = rank == 1 ? "🥇" : rank == 2 ? "🥈" : "🥉"
 
-        return HStack(spacing: DesignTokens.Spacing.sm) {
-            // 순위 뱃지
-            Text("#\(rank)")
-                .font(DesignTokens.Typography.custom(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(rankColor)
-                .frame(width: 28)
+        return VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            // 상단: 순위 + 아바타
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                // 순위 뱃지 (큰 숫자)
+                Text(rankEmoji)
+                    .font(.system(size: 20))
 
-            // 채널 아바타
-            CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
-                Circle().fill(DesignTokens.Colors.surfaceElevated)
+                Spacer()
+
+                // 채널 아바타
+                CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
+                    Circle().fill(DesignTokens.Colors.surfaceElevated)
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
+                .overlay {
+                    Circle().strokeBorder(rankColor.opacity(0.6), lineWidth: 2)
+                }
+                .shadow(color: rankColor.opacity(0.3), radius: 6, x: 0, y: 2)
             }
-            .frame(width: 36, height: 36)
-            .clipShape(Circle())
-            .overlay {
-                Circle().strokeBorder(rankColor.opacity(0.5), lineWidth: 1.5)
-            }
 
-            // 채널 정보
-            VStack(alignment: .leading, spacing: 2) {
-                Text(channel.channelName)
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+            // 채널 이름
+            Text(channel.channelName)
+                .font(DesignTokens.Typography.custom(size: 13, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .lineLimit(1)
+
+            // 시청자 수
+            HStack(spacing: 4) {
+                Image(systemName: "person.fill")
+                    .font(DesignTokens.Typography.custom(size: 10))
+                Text(channel.formattedViewerCount)
+                    .font(DesignTokens.Typography.custom(size: 14, weight: .bold, design: .monospaced))
+            }
+            .foregroundStyle(rankColor)
+
+            // 카테고리
+            if let cat = channel.categoryName {
+                Text(cat)
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .lineLimit(1)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "person.fill")
-                        .font(DesignTokens.Typography.micro)
-                    Text(channel.formattedViewerCount)
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
-                }
-                .foregroundStyle(rankColor)
-
-                if let cat = channel.categoryName {
-                    Text(cat)
-                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .lineLimit(1)
-                }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(rankColor.opacity(0.1), in: Capsule())
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, DesignTokens.Spacing.sm)
-        .padding(.vertical, DesignTokens.Spacing.xs)
-        .background(rankColor.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(rankColor.opacity(0.15), lineWidth: 0.5)
+        .padding(DesignTokens.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                .fill(rankColor.opacity(0.06))
+                .overlay {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [rankColor.opacity(0.3), rankColor.opacity(0.05)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                }
         }
-        .frame(maxWidth: .infinity)
     }
     
     // MARK: - 5. Metrics Server Section
 
     private var metricsServerSection: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             // Header
             HStack {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(DesignTokens.Colors.chzzkGreen)
-                        .frame(width: 6, height: 6)
-                    Text("메트릭 서버")
-                        .font(DesignTokens.Typography.captionSemibold)
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                }
-                
-                Spacer()
-                
+                sectionHeader(title: "메트릭 서버", subtitle: nil)
                 if let lastUpdate = viewModel.serverLastUpdate {
                     Text(lastUpdate, format: .dateTime.hour().minute().second())
                         .font(DesignTokens.Typography.footnoteMedium)
@@ -405,7 +392,7 @@ struct HomeView: View {
             // Server Stats Cards Row
             HStack(spacing: DesignTokens.Spacing.sm) {
                 serverMiniStat(icon: "clock", title: "업타임", value: viewModel.formattedUptime)
-                serverMiniStat(icon: "antenna.radiowaves.left.and.right", title: "WS 클라이언트", value: "\(viewModel.wsClientCount)")
+                serverMiniStat(icon: "number", title: "총 수신", value: formatLargeNumber(viewModel.serverTotalReceived))
                 serverMiniStat(icon: "play.circle", title: "활성 채널", value: "\(viewModel.serverChannelStats.count)")
                 
                 if let webLat = viewModel.avgWebLatency {
@@ -444,26 +431,15 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DesignTokens.Spacing.sm)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-        }
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
     }
     
     // MARK: - 6. Personal Stats
 
     private var personalStatsSection: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             HStack {
-                Text("내 팔로잉")
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-
-                Spacer()
+                sectionHeader(title: "내 팔로잉", subtitle: nil)
 
                 // 라이브 비율 배지
                 if viewModel.followingChannels.count > 0 {
@@ -474,25 +450,18 @@ struct HomeView: View {
                                     .fill(DesignTokens.Colors.live)
                                     .frame(width: 6, height: 6)
                                 Text("\(viewModel.followingLiveCount)명 라이브 중")
-                                    .font(DesignTokens.Typography.captionSemibold)
+                                    .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(DesignTokens.Colors.live)
                             }
                             .padding(.horizontal, DesignTokens.Spacing.xs)
                             .padding(.vertical, DesignTokens.Spacing.xxs)
                             .background(DesignTokens.Colors.live.opacity(0.1))
                             .clipShape(Capsule())
-                            .overlay {
-                                Capsule().strokeBorder(DesignTokens.Colors.live.opacity(0.3), lineWidth: 0.5)
-                            }
                         }
 
-                        Text("\(viewModel.followingLiveRate)% 라이브율")
-                            .font(DesignTokens.Typography.footnoteMedium)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .padding(.horizontal, DesignTokens.Spacing.sm)
-                            .padding(.vertical, DesignTokens.Spacing.xxs)
-                            .background(DesignTokens.Colors.surfaceElevated)
-                            .clipShape(Capsule())
+                        Text("라이브 율 \(viewModel.followingLiveRate)%")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -513,12 +482,7 @@ struct HomeView: View {
                     Spacer()
                 }
                 .padding(.vertical, DesignTokens.Spacing.lg)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-                }
+                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             } else {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 200, maximum: 300), spacing: DesignTokens.Spacing.sm)],
@@ -529,7 +493,7 @@ struct HomeView: View {
                             .onHover { hovering in
                                 if hovering { triggerPrefetch(channelId: channel.channelId) }
                             }
-                            .cursor(.pointingHand)
+                            .customCursor(.pointingHand)
                             .onTapGesture {
                                 router.navigate(to: .live(channelId: channel.channelId))
                             }
@@ -558,22 +522,13 @@ struct HomeView: View {
             
             Spacer()
             
-            Button {
+            Button("로그인") {
                 router.presentSheet(.login)
-            } label: {
-                Text("로그인")
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(DesignTokens.Colors.onPrimary)
-                    .padding(.horizontal, DesignTokens.Spacing.sm)
-                    .padding(.vertical, DesignTokens.Spacing.xs)
-                    .background(DesignTokens.Colors.chzzkGreen)
-                    .clipShape(Capsule())
             }
-            .buttonStyle(.plain)
+            .controlSize(.small)
         }
         .padding(DesignTokens.Spacing.sm)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(Color.orange.opacity(0.3), lineWidth: 0.5)
@@ -583,15 +538,9 @@ struct HomeView: View {
     // MARK: - 7. Top Channels
 
     private var topChannelsSection: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             HStack {
-                Text("인기 채널")
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-                
-                Spacer()
+                sectionHeader(title: "인기 채널", subtitle: nil)
                 
                 Button {
                     router.navigate(to: .following)
@@ -602,7 +551,7 @@ struct HomeView: View {
                         Image(systemName: "chevron.right")
                             .font(DesignTokens.Typography.microSemibold)
                     }
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.8))
+                    .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -619,7 +568,7 @@ struct HomeView: View {
                             .onHover { hovering in
                                 if hovering { triggerPrefetch(channelId: channel.channelId) }
                             }
-                            .cursor(.pointingHand)
+                            .customCursor(.pointingHand)
                             .onTapGesture {
                                 router.navigate(to: .live(channelId: channel.channelId))
                             }
@@ -668,6 +617,23 @@ struct HomeView: View {
     
     // MARK: - Helpers
     
+    /// macOS 네이티브 섹션 헤더
+    private func sectionHeader(title: String, subtitle: String?) -> some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            if let subtitle = subtitle {
+                Text("·  \(subtitle)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer()
+        }
+    }
+
     private func formatLargeNumber(_ num: Int) -> String {
         if num >= 10_000 {
             return String(format: "%.1f만", Double(num) / 10_000.0)
@@ -708,12 +674,7 @@ struct HomeView: View {
                 }
                 .padding(DesignTokens.Spacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(DesignTokens.Colors.surfaceBase)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-                }
+                .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial, hasShadow: false)
                 .shimmer()
             }
         }
@@ -736,12 +697,7 @@ struct HomeView: View {
             }
             .padding(DesignTokens.Spacing.md)
             .frame(maxWidth: .infinity)
-            .background(DesignTokens.Colors.surfaceBase)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-            .overlay {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-            }
+            .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial, hasShadow: false)
 
             // Category chart skeleton
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
@@ -766,12 +722,7 @@ struct HomeView: View {
             }
             .padding(DesignTokens.Spacing.md)
             .frame(maxWidth: .infinity)
-            .background(DesignTokens.Colors.surfaceBase)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-            .overlay {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-            }
+            .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial, hasShadow: false)
         }
     }
 }

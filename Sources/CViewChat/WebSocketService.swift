@@ -3,6 +3,7 @@
 // Original: ChzzkChatService.swift (5,326 lines) → Split into focused actors
 
 import Foundation
+import os
 import CViewCore
 
 // MARK: - WebSocket Connection Actor
@@ -273,7 +274,16 @@ public actor WebSocketService {
         guard let ws = webSocket else { return }
         
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            // OSAllocatedUnfairLock으로 중복 resume 방지
+            // WebSocket cancel 시 pong 콜백과 cancellation 콜백이 동시에 호출될 수 있음
+            let resumed = OSAllocatedUnfairLock(initialState: false)
             ws.sendPing { error in
+                let alreadyResumed = resumed.withLock { done -> Bool in
+                    if done { return true }
+                    done = true
+                    return false
+                }
+                guard !alreadyResumed else { return }
                 if let error {
                     continuation.resume(throwing: error)
                 } else {

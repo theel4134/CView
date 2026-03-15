@@ -59,8 +59,8 @@ struct CViewApplication: App {
                     }
                 }
                 .onAppear {
-                    // Force dark mode app-wide for Glass Morphism design
-                    NSApp.appearance = NSAppearance(named: .darkAqua)
+                    // 테마 설정에 따라 NSApp.appearance 반영
+                    applyAppTheme(appState.settingsStore.appearance.theme)
 
                     // 알림 콜백 설정 (동기, MainActor)
                     NotificationService.shared.onWatchChannel = { [router] channelId in
@@ -88,6 +88,9 @@ struct CViewApplication: App {
                 } message: {
                     Text("자동으로 로그아웃되었습니다. 다시 로그인하면 채팅 및 구독 기능을 이용할 수 있어요.")
                 }
+                .onChange(of: appState.settingsStore.appearance.theme) { _, newTheme in
+                    applyAppTheme(newTheme)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
@@ -96,6 +99,7 @@ struct CViewApplication: App {
         }
 
         // Player window (for multi-window viewing)
+        // 플레이어 윈도우는 영상 위 오버레이이므로 항상 다크 테마 유지
         WindowGroup("플레이어", id: "player-window", for: String.self) { $channelId in
             if let channelId {
                 LiveStreamView(channelId: channelId, isDetachedWindow: true)
@@ -112,7 +116,7 @@ struct CViewApplication: App {
         WindowGroup("통계", id: "statistics-window") {
             StatisticsView()
                 .environment(appState)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
         }
         .defaultSize(width: 700, height: 500)
 
@@ -120,7 +124,7 @@ struct CViewApplication: App {
         WindowGroup("채팅", id: "chat-window") {
             ChatWindowWrapper()
                 .environment(appState)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
         }
         .defaultSize(width: 360, height: 600)
 
@@ -128,7 +132,7 @@ struct CViewApplication: App {
         WindowGroup("멀티채팅", id: "multi-chat-window") {
             MultiChatView()
                 .environment(appState)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
         }
         .defaultSize(width: 700, height: 550)
 
@@ -245,6 +249,20 @@ struct CViewApplication: App {
                 }
             }
             .keyboardShortcut("p", modifiers: [.command, .option])
+        }
+    }
+    
+    // MARK: - Theme
+    
+    /// 테마 설정에 따라 NSApp.appearance를 업데이트한다.
+    private func applyAppTheme(_ theme: AppTheme) {
+        switch theme {
+        case .system:
+            NSApp.appearance = nil  // 시스템 설정 따름
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
         }
     }
 }

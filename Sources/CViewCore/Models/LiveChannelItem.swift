@@ -15,6 +15,7 @@ public struct LiveChannelItem: Identifiable, Sendable, Codable, Equatable {
     public let thumbnailUrl: String?
     public let channelId: String
     public let isLive: Bool
+    public let openDate: Date?
 
     public init(
         id: String,
@@ -26,7 +27,8 @@ public struct LiveChannelItem: Identifiable, Sendable, Codable, Equatable {
         categoryType: String? = nil,
         thumbnailUrl: String?,
         channelId: String,
-        isLive: Bool = true
+        isLive: Bool = true,
+        openDate: Date? = nil
     ) {
         self.id = id
         self.channelName = channelName
@@ -38,6 +40,7 @@ public struct LiveChannelItem: Identifiable, Sendable, Codable, Equatable {
         self.thumbnailUrl = thumbnailUrl
         self.channelId = channelId
         self.isLive = isLive
+        self.openDate = openDate
     }
 
     /// Formatted viewer count (e.g., "1.5만")

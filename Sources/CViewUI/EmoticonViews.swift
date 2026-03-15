@@ -86,10 +86,22 @@ struct AnimatedGIFView: NSViewRepresentable {
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.setContentHuggingPriority(.required, for: .horizontal)
         imageView.setContentHuggingPriority(.required, for: .vertical)
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            imageView.widthAnchor.constraint(equalToConstant: size),
+            imageView.heightAnchor.constraint(equalToConstant: size),
+        ])
         return imageView
     }
 
     func updateNSView(_ nsView: NSImageView, context: Context) {
+        // 크기 제약 업데이트 (size 변경 시)
+        for constraint in nsView.constraints {
+            if constraint.firstAttribute == .width || constraint.firstAttribute == .height {
+                constraint.constant = size
+            }
+        }
+        
         context.coordinator.currentTask?.cancel()
 
         context.coordinator.currentTask = Task(priority: .utility) {
@@ -97,6 +109,8 @@ struct AnimatedGIFView: NSViewRepresentable {
             guard let data = await ImageCacheService.shared.imageData(for: url),
                   !Task.isCancelled,
                   let image = NSImage(data: data) else { return }
+            // 이미지 크기를 지정된 size에 맞게 설정
+            image.size = NSSize(width: size, height: size)
             await MainActor.run {
                 nsView.image = image
                 nsView.animates = true

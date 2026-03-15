@@ -33,7 +33,7 @@ struct ChatInputView: View {
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, DesignTokens.Spacing.sm)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(DesignTokens.Colors.border.opacity(0.15))
@@ -61,9 +61,9 @@ struct ChatInputView: View {
                         .font(DesignTokens.Typography.body)
                         .foregroundStyle(showEmoticonPicker ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
                         .frame(width: 28, height: 28)
-                        .background(.ultraThinMaterial, in: Circle())
+                        .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                         .overlay {
-                            Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                            Circle().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                         }
                 }
                 .buttonStyle(.plain)
@@ -106,11 +106,11 @@ struct ChatInputView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                         .strokeBorder(
-                            isFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : .white.opacity(DesignTokens.Glass.borderOpacityLight),
-                            lineWidth: isFocused ? 1 : 0.5
+                            isFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.55) : DesignTokens.Glass.borderColorLight,
+                            lineWidth: isFocused ? 1.5 : 0.5
                         )
                 }
-                .shadow(color: isFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.1) : .clear, radius: 6)
+                .shadow(color: isFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.18) : .clear, radius: 8)
                 .animation(DesignTokens.Animation.fast, value: isFocused)
                 .onTapGesture { if canSend { isFocused = true } }
 
@@ -125,12 +125,12 @@ struct ChatInputView: View {
                         .background(
                             canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty
                                 ? AnyShapeStyle(DesignTokens.Colors.chzzkGreen)
-                                : AnyShapeStyle(.ultraThinMaterial)
+                                : AnyShapeStyle(DesignTokens.Colors.surfaceElevated)
                         )
                         .clipShape(Circle())
                         .overlay {
                             if !(canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty) {
-                                Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                                Circle().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                             }
                         }
                         .shadow(color: canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : .clear, radius: 6)
@@ -141,7 +141,8 @@ struct ChatInputView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(.thinMaterial)
+            .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
+            .background(.ultraThinMaterial)
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(DesignTokens.Colors.border.opacity(0.15))
@@ -174,10 +175,12 @@ struct ChatInputView: View {
         let text = inputText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty, canSend else { return }
         viewModel?.dismissAutocomplete()
+        inputText = ""
         viewModel?.inputText = text
-        inputText = ""
-        Task { await viewModel?.sendMessage() }
-        inputText = ""
+        Task {
+            await viewModel?.sendMessage()
+            await MainActor.run { viewModel?.inputText = "" }
+        }
     }
 
     /// 자동완성 항목 적용

@@ -37,7 +37,7 @@ struct SearchView: View {
                     }
             }
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
     }
 }
 
@@ -115,11 +115,11 @@ struct SearchContentView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                 .strokeBorder(
-                    isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : .white.opacity(DesignTokens.Glass.borderOpacityLight),
+                    isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.borderColorLight,
                     lineWidth: isSearchBarFocused ? 1.5 : 0.5
                 )
         }
@@ -187,10 +187,10 @@ struct SearchContentView: View {
                 }
             }
         }
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
@@ -340,7 +340,8 @@ struct SearchContentView: View {
                         }
                     } else {
                         ForEach(viewModel.channelResults) { channel in
-                            SearchChannelRow(channel: channel)
+                            EquatableSearchChannelRow(channel: channel)
+                                .equatable()
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     router.navigate(to: .channelDetail(channelId: channel.channelId))
@@ -376,7 +377,8 @@ struct SearchContentView: View {
                             }
                         }
                         ForEach(viewModel.liveResults) { live in
-                            SearchLiveRow(live: live)
+                            EquatableSearchLiveRow(live: live)
+                                .equatable()
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     if let chId = live.channel?.channelId {
@@ -400,7 +402,8 @@ struct SearchContentView: View {
                         }
                     } else {
                         ForEach(viewModel.videoResults) { video in
-                            SearchVideoRow(video: video)
+                            EquatableSearchVideoRow(video: video)
+                                .equatable()
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     router.navigate(to: .vod(videoNo: video.videoNo))
@@ -422,7 +425,8 @@ struct SearchContentView: View {
                         }
                     } else {
                         ForEach(viewModel.clipResults) { clip in
-                            SearchClipRow(clip: clip)
+                            EquatableSearchClipRow(clip: clip)
+                                .equatable()
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     selectedClip = clip

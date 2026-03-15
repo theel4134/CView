@@ -316,10 +316,10 @@ public final class SearchViewModel {
                 return results
             }
             
-            // 키워드로 로컬 필터링 (제목 매칭), 결과 없으면 전체 반환
+            // 키워드로 로컬 필터링 (제목 매칭)
             let keywordLower = keyword.lowercased()
             let filtered = allClips.filter { $0.clipTitle.localizedCaseInsensitiveContains(keywordLower) }
-            let finalClips = filtered.isEmpty ? allClips : filtered
+            let finalClips = filtered
             
             if clipPage == 0 {
                 clipResults = finalClips

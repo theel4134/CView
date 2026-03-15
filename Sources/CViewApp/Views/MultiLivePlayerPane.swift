@@ -1,340 +1,507 @@
 // MARK: - MultiLivePlayerPane.swift
-// CViewApp — 멀티라이브 개별 플레이어 패널
-// 비디오 + 오버레이 컨트롤
-
 import SwiftUI
 import CViewCore
 import CViewPlayer
+import CViewPersistence
 
-struct MultiLivePlayerPane: View {
-
+// MARK: - Player Pane
+struct MLPlayerPane: View {
     let session: MultiLiveSession
-    let isSelected: Bool
-    let isCompact: Bool
+    let appState: AppState
+    /// 이 패인이 현재 활성(포그라운드) 상태인지 여부
+    /// false이면 비디오 뷰만 유지하고 오버레이/채팅 등 무거운 UI 렌더링을 생략
+    var isActive: Bool = true
+    /// 채팅 패널 고정 너비 (HSplitView 대신 순수 SwiftUI 레이아웃 사용)
+    private let chatPaneWidth: CGFloat = 300
 
-    @Environment(AppState.self) private var appState
-    @State private var isHovering = false
-    @State private var hideControlsTask: Task<Void, Never>?
-    @State private var showQualityMenu = false
+    var body: some View {
+        // ZStack으로 래핑해 크기가 항상 부모 컨테이너 범위를 지키도록 함
+        // [핵심] PlayerVideoView(NSView)를 loadState와 무관하게 항상 렌더링.
+        // VLC는 play() 호출 시 drawable이 window hierarchy에 있어야 vout을 초기화한다.
+        //
+        // [VLC 안정 컨테이너 패턴]
+        // isActive=false인 세션도 PlayerVideoView(NSView)를 뷰 계층에 유지하여
+        // VLC drawable 연결이 끊기지 않도록 한다. 오버레이/채팅 등 무거운 SwiftUI 렌더링만 생략.
+        ZStack {
+            // ── 비디오 레이어: 항상 최하위에 렌더링 (loadState 무관, isActive 무관) ──
+            // [크래시 방지] GeometryReader + 동적 .frame() 조합은 NSViewRepresentable 포함 시
+            // layout 측정→렌더→layout 피드백 루프로 constraint 재진입 크래시를 유발한다.
+            // HStack + .frame(maxWidth: .infinity) 패턴으로 대체하여 자연스러운 flex 레이아웃을 사용한다.
+            HStack(spacing: 0) {
+                if isActive {
+                    // 활성 패인: 전체 오버레이 포함 비디오 영역
+                    MLVideoArea(session: session, appState: appState, settingsStore: appState.settingsStore)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                } else {
+                    // 비활성 패인: PlayerVideoView(NSView)만 유지 → VLC drawable 연결 보존
+                    // 오버레이/hover 등 SwiftUI 렌더링 비용 제거
+                    PlayerVideoView(videoView: session.playerViewModel.currentVideoView)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black)
+                        .clipped()
+                }
+                if isActive && session.isChatVisible {
+                    ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {})
+                        .frame(width: chatPaneWidth)
+                }
+            }
 
-    private var showControls: Bool {
-        isHovering && session.loadState == .playing
+            // ── 상태 오버레이: 활성 패인에서만 비디오 위에 표시 ──
+            // 비활성 패인에서는 불필요한 SwiftUI 렌더링 방지
+            if isActive {
+                switch session.loadState {
+            case .idle:
+                Color.black.overlay(ProgressView().tint(.white))
+            case .loading:
+                // 경량 로딩 오버레이 (GPU 절감)
+                VStack(spacing: DesignTokens.Spacing.md) {
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .tint(.white)
+                    if !session.channelName.isEmpty {
+                        Text(session.channelName)
+                            .font(DesignTokens.Typography.captionSemibold)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    Text("연결 중...")
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+            case .playing:
+                // [VLC 안정성 개선] 재생 중 재버퍼링/재연결 시 소형 스피너만 표시
+                // 기존: 전체 화면 StreamLoadingOverlay → 비디오 완전 차단
+                // 개선: 반투명 소형 인디케이터 → VLC 비디오 레이어가 보이면서 상태 표시
+                // VLC 버퍼링 중에도 일부 프레임이 출력되므로 사용자 경험 크게 개선
+                if session.playerViewModel.streamPhase == .buffering
+                    || session.playerViewModel.streamPhase == .connecting
+                    || session.playerViewModel.streamPhase == .reconnecting {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .scaleEffect(1.1)
+                            .tint(.white)
+                        Text(session.playerViewModel.streamPhase == .reconnecting
+                             ? "재연결 중..." : "버퍼링 중...")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                            .fill(.ultraThinMaterial)
+                            .environment(\.colorScheme, .dark)
+                    )
+                    .transition(.opacity.animation(DesignTokens.Animation.fast))
+                }
+            case .offline:
+                MLSessionStatusOverlay(
+                    session: session,
+                    appState: appState,
+                    icon: "tv.slash",
+                    iconColor: .white.opacity(0.5),
+                    accentColor: .white,
+                    title: "방송이 종료되었습니다",
+                    subtitle: session.channelName.isEmpty ? session.channelId : session.channelName,
+                    buttonLabel: "다시 확인",
+                    blurRadius: 30,
+                    overlayOpacity: 0.65
+                )
+            case .error(let msg):
+                MLSessionStatusOverlay(
+                    session: session,
+                    appState: appState,
+                    icon: "wifi.exclamationmark",
+                    iconColor: DesignTokens.Colors.warning,
+                    accentColor: DesignTokens.Colors.warning,
+                    title: "연결 오류",
+                    subtitle: msg,
+                    buttonLabel: "재시도",
+                    blurRadius: 24,
+                    overlayOpacity: 0.68
+                )
+            }
+            } // end if isActive
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Grid Layout
+struct MLGridLayout: View {
+    let manager: MultiLiveManager
+    let appState: AppState
+    var onAdd: (() -> Void)? = nil
+
+    /// 포커스 모드: 더블클릭 시 해당 셀을 메인으로 확대
+    @State private var focusedSessionId: UUID? = nil
+
+    // ── 드래그 재정렬 상태 ──
+    @State private var dragOverIndex: Int? = nil
+    @State private var dragSourceIndex: Int? = nil
+    @State private var dragOffset: CGSize = .zero
+    @State private var isDragging: Bool = false
+
+    var body: some View {
+        let sessions = manager.sessions
+        let count = sessions.count
+        GeometryReader { geo in
+            if let focusedId = focusedSessionId,
+               let focused = sessions.first(where: { $0.id == focusedId }) {
+                // ── 포커스 모드: 메인 셀 + 하단 썸네일 스트립 ──
+                let others = sessions.filter { $0.id != focusedId }
+                VStack(spacing: 2) {
+                    MLGridCell(
+                        session: focused,
+                        manager: manager,
+                        appState: appState,
+                        focusedSessionId: $focusedSessionId,
+                        isFocused: true
+                    )
+                    if !others.isEmpty {
+                        HStack(spacing: 2) {
+                            ForEach(others) { session in
+                                MLGridCell(
+                                    session: session,
+                                    manager: manager,
+                                    appState: appState,
+                                    focusedSessionId: $focusedSessionId,
+                                    isFocused: false
+                                )
+                                .frame(height: min(geo.size.height * 0.22, 140))
+                            }
+                        }
+                        .frame(height: min(geo.size.height * 0.22, 140))
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else if manager.gridLayoutMode == .focusLeft {
+                // ── 포커스 레이아웃 (1+N) ──
+                MLFocusLeftLayout(
+                    manager: manager,
+                    appState: appState,
+                    focusedSessionId: $focusedSessionId,
+                    containerSize: geo.size,
+                    onAdd: onAdd
+                )
+                .transition(.opacity)
+            } else if manager.gridLayoutMode == .custom {
+                // ── 커스텀 레이아웃 (리사이즈 + 드래그 재정렬) ──
+                MLCustomGridLayout(
+                    manager: manager,
+                    appState: appState,
+                    focusedSessionId: $focusedSessionId,
+                    containerSize: geo.size,
+                    onAdd: onAdd
+                )
+                .transition(.opacity)
+            } else {
+                // ── 일반 프리셋 그리드 모드 (드래그 재정렬 지원) ──
+                MLPresetGridLayout(
+                    manager: manager,
+                    appState: appState,
+                    focusedSessionId: $focusedSessionId,
+                    onAdd: onAdd
+                )
+                .transition(.opacity)
+            }
+        }
+        // [60fps 최적화] .animation() 제거 — 호출부에서 withAnimation 사용 중이므로
+        // 여기서 propagation하면 viewerCount/bufferHealth 등 비관련 @Observable 변경에도
+        // spring 애니메이션이 전체 그리드에 전파되어 불필요한 레이아웃 재계산 유발
+    }
+}
+
+// NOTE: MLPresetGridLayout, MLDraggableGridCell, MLDragHandle, MLCustomGridLayout,
+// MLResizeDivider → MultiLiveGridLayouts.swift로 이동
+
+
+// MARK: - Grid Cell
+struct MLGridCell: View {
+    let session: MultiLiveSession
+    let manager: MultiLiveManager
+    let appState: AppState
+    @Binding var focusedSessionId: UUID?
+    let isFocused: Bool
+
+    @State private var showOverlay = false
+    @State private var hideTask: Task<Void, Never>?
+
+    private var isAudioActive: Bool {
+        (manager.audioSessionId ?? manager.selectedSessionId) == session.id
     }
 
     var body: some View {
         ZStack {
-            videoLayer
-
-            // 오버레이 그룹: compositingGroup으로 비디오 레이어와 렌더링 격리
-            // → 오버레이 opacity 변경 시 비디오 CALayer recomposition 방지
-            Group {
-                stateOverlay
-
-                if showControls {
-                    controlOverlay
-                        .transition(.opacity)
-                }
-
-                if isCompact && !showControls {
-                    compactBadge
-                        .transition(.opacity)
-                }
-            }
-            .compositingGroup()
-        }
-        .clipShape(RoundedRectangle(cornerRadius: isCompact ? DesignTokens.Radius.sm : 0))
-        .overlay {
-            if isSelected && isCompact {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .strokeBorder(DesignTokens.Colors.chzzkGreen, lineWidth: 2)
-            }
-        }
-        .onHover { hovering in
-            withAnimation(DesignTokens.Animation.fast) {
-                isHovering = hovering
-            }
-            scheduleHideControls()
-        }
-    }
-
-    // MARK: - 비디오 레이어
-
-    private var videoLayer: some View {
-        PlayerVideoView(videoView: session.playerViewModel.currentVideoView)
-            .background(Color.black)
-    }
-
-    // MARK: - 컴팩트 배지
-
-    private var compactBadge: some View {
-        VStack {
-            HStack {
-                HStack(spacing: 4) {
-                    if session.loadState == .playing {
-                        Circle()
-                            .fill(DesignTokens.Colors.chzzkGreen)
-                            .frame(width: 5, height: 5)
-                    }
-                    Text(session.channelName)
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(.black.opacity(0.55)))
-
-                Spacer()
-
-                if session.playerViewModel.isMuted {
-                    Image(systemName: "speaker.slash.fill")
-                        .font(DesignTokens.Typography.micro)
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
-                        .padding(4)
-                        .background(Circle().fill(.black.opacity(0.55)))
-                }
-            }
-            .padding(6)
-            Spacer()
-        }
-    }
-
-    // MARK: - 컨트롤 오버레이
-
-    private var controlOverlay: some View {
-        VStack(spacing: 0) {
-            // 상단: 채널 정보
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                AsyncImage(url: session.profileImageURL) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Image(systemName: "person.circle.fill")
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
-                }
-                .frame(width: isCompact ? 20 : 28, height: isCompact ? 20 : 28)
-                .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(session.channelName)
-                        .font(isCompact ? .caption.weight(.semibold) : .callout.weight(.semibold))
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        .lineLimit(1)
-
-                    if !isCompact {
-                        Text(session.liveTitle)
-                            .font(.caption)
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
+            // [크래시 방지] GeometryReader + 명시적 .frame(width:height:) 조합은
+            // NSViewRepresentable의 AppKit 레이아웃 사이클과 충돌하여 constraint 재진입 크래시를 유발한다.
+            // PlayerContainerView는 autoresizingMask [.width, .height]로 부모를 꽉 채우므로
+            // .frame(maxWidth: .infinity, maxHeight: .infinity)만으로 충분하다.
+            PlayerVideoView(videoView: session.playerViewModel.currentVideoView)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .clipped()
+                .overlay(alignment: .topLeading) {
+                    // 채널명 미니 배지 (오버레이 숨김 시 표시)
+                    HStack(spacing: 4) {
+                        // 오디오 활성 표시
+                        if isAudioActive && !session.isMuted {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(DesignTokens.Typography.micro)
+                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        }
+                        Text(session.channelName.isEmpty ? session.channelId : session.channelName)
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                             .lineLimit(1)
                     }
-                }
-
-                Spacer()
-
-                if session.loadState == .playing {
-                    HStack(spacing: 6) {
-                        Text("LIVE")
-                            .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(DesignTokens.Colors.live))
-
-                        HStack(spacing: 2) {
-                            Image(systemName: "person.fill")
-                                .font(DesignTokens.Typography.custom(size: 8))
-                            Text("\(session.viewerCount)")
-                                .font(DesignTokens.Typography.custom(size: 10).monospacedDigit())
-                        }
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.8))
+                    .padding(.horizontal, DesignTokens.Spacing.sm).padding(.vertical, DesignTokens.Spacing.xxs)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                     }
+                    .padding(DesignTokens.Spacing.sm)
+                    .opacity(showOverlay ? 0 : 1)
+                    .animation(DesignTokens.Animation.micro, value: showOverlay)
                 }
+                // 오디오 활성 셀 테두리 강조
+                .overlay(
+                    RoundedRectangle(cornerRadius: 0)
+                        .stroke(
+                            isAudioActive
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.65)
+                                : Color.clear,
+                            lineWidth: 2
+                        )
+                )
+
+            // 버퍼링 인디케이터
+            if session.playerViewModel.streamPhase == .buffering
+                || session.playerViewModel.streamPhase == .connecting {
+                ProgressView().scaleEffect(0.9).tint(.white)
+                    .background(Circle().fill(.ultraThinMaterial).frame(width: 38, height: 38))
             }
-            .padding(.horizontal, isCompact ? 8 : DesignTokens.Spacing.md)
-            .padding(.top, isCompact ? 8 : DesignTokens.Spacing.md)
 
-            Spacer()
-
-            // 하단: 컨트롤
-            HStack(spacing: isCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.md) {
-                // 음소거/볼륨
-                Button {
-                    session.playerViewModel.toggleMute()
-                } label: {
-                    Image(systemName: volumeIcon)
-                        .font(isCompact ? .caption : .body)
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        .frame(width: isCompact ? 24 : 32, height: isCompact ? 24 : 32)
-                        .background(Circle().fill(.white.opacity(0.15)))
-                }
-                .buttonStyle(.plain)
-
-                // 볼륨 슬라이더 (탭 모드에서만)
-                if !isCompact {
-                    Slider(
-                        value: Binding(
-                            get: { Double(session.playerViewModel.volume) },
-                            set: { session.playerViewModel.setVolume(Float($0)) }
-                        ),
-                        in: 0...1
-                    )
-                    .frame(width: 80)
-                    .tint(DesignTokens.Colors.chzzkGreen)
-                    .opacity(session.playerViewModel.isMuted ? 0.4 : 1)
-                }
-
-                Spacer()
-
-                // 화질 선택
-                if !session.playerViewModel.availableQualities.isEmpty {
-                    Menu {
-                        ForEach(session.playerViewModel.availableQualities, id: \.bandwidth) { quality in
-                            Button {
-                                Task { await session.playerViewModel.switchQuality(quality) }
-                            } label: {
-                                HStack {
-                                    Text(quality.name)
-                                    if session.playerViewModel.currentQuality?.bandwidth == quality.bandwidth {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "gearshape.fill")
-                                .font(isCompact ? .system(size: 9) : .caption)
-                            if !isCompact {
-                                Text(session.playerViewModel.currentQuality?.name ?? "자동")
-                                    .font(.caption)
-                            }
-                        }
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        .padding(.horizontal, isCompact ? 6 : 8)
-                        .padding(.vertical, isCompact ? 3 : 4)
-                        .background(Capsule().fill(.white.opacity(0.15)))
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-
-                // 세션 제거
-                Button {
-                    Task {
-                        await appState.multiLiveManager.removeSession(id: session.id)
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(isCompact ? .caption.weight(.bold) : .callout.weight(.bold))
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        .frame(width: isCompact ? 24 : 32, height: isCompact ? 24 : 32)
-                        .background(Circle().fill(.white.opacity(0.15)))
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, isCompact ? 8 : DesignTokens.Spacing.md)
-            .padding(.bottom, isCompact ? 8 : DesignTokens.Spacing.md)
-        }
-        .background(
-            // GPU 셰이더 최적화: 4-stop → 2-stop gradient (중간 clear 영역 제거)
-            VStack(spacing: 0) {
-                LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom)
-                Spacer()
-                LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
-            }
-            .allowsHitTesting(false)
-        )
-    }
-
-    // MARK: - 상태 오버레이
-
-    @ViewBuilder
-    private var stateOverlay: some View {
-        switch session.loadState {
-        case .loading:
-            ZStack {
-                Color.black.opacity(0.4)
-                VStack(spacing: DesignTokens.Spacing.md) {
-                    ProgressView()
-                        .controlSize(.regular)
-                        .tint(.white)
-                    Text("연결 중...")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.9))
-                }
-            }
-            .transition(.opacity)
-
-        case .error(let message):
-            ZStack {
-                Color.black.opacity(0.6)
-                VStack(spacing: DesignTokens.Spacing.md) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.title2)
-                        .foregroundStyle(DesignTokens.Colors.accentOrange)
-
-                    VStack(spacing: 4) {
-                        Text("연결 오류")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                            .lineLimit(3)
-                            .padding(.horizontal, DesignTokens.Spacing.xl)
-                    }
-
-                    Button {
-                        Task { await session.start() }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.counterclockwise")
-                            Text("재시도")
-                        }
-                        .font(.caption.weight(.medium))
-                    }
-                    .buttonStyle(.bordered)
+            // 세션 상태 오버레이 (loading / offline / error)
+            switch session.loadState {
+            case .loading:
+                ProgressView()
+                    .scaleEffect(0.85)
                     .tint(.white)
-                    .controlSize(.small)
+                    .background(
+                        Circle().fill(.ultraThinMaterial).frame(width: 36, height: 36)
+                    )
+            case .offline:
+                VStack(spacing: 6) {
+                    Image(systemName: "tv.slash")
+                        .font(DesignTokens.Typography.body)
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("방송 종료")
+                        .font(DesignTokens.Typography.footnoteMedium)
+                        .foregroundStyle(.white.opacity(0.6))
+                    Button {
+                        guard let api = appState.apiClient else { return }
+                        Task { await session.retry(using: api, appState: appState) }
+                    } label: {
+                        Text("다시 확인")
+                            .font(DesignTokens.Typography.micro)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(.white.opacity(0.1)))
+                    }
+                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, DesignTokens.Spacing.sm).padding(.vertical, DesignTokens.Spacing.xs)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            case .error:
+                VStack(spacing: 6) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .font(DesignTokens.Typography.body)
+                        .foregroundStyle(.orange.opacity(0.85))
+                    Text("연결 오류")
+                        .font(DesignTokens.Typography.footnoteMedium)
+                        .foregroundStyle(.orange.opacity(0.75))
+                    Button {
+                        guard let api = appState.apiClient else { return }
+                        Task { await session.retry(using: api, appState: appState) }
+                    } label: {
+                        Text("재시도")
+                            .font(DesignTokens.Typography.micro)
+                            .foregroundStyle(.orange.opacity(0.8))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(.orange.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, DesignTokens.Spacing.sm).padding(.vertical, DesignTokens.Spacing.xs)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            default:
+                EmptyView()
             }
-            .transition(.opacity)
 
-        case .idle:
-            Color.black
-
-        case .playing:
-            EmptyView()
+            // 컨트롤 오버레이 (hover 시)
+            if showOverlay {
+                MLGridControlOverlay(
+                    session: session,
+                    manager: manager,
+                    appState: appState,
+                    focusedSessionId: $focusedSessionId,
+                    isFocused: isFocused,
+                    onHideCancel: { hideTask?.cancel() },
+                    onScheduleHide: { scheduleHide() }
+                )
+                .transition(.opacity.animation(DesignTokens.Animation.fast))
+            }
         }
+        .contentShape(Rectangle())
+        .onHover { h in
+            hideTask?.cancel()
+            if h {
+                withAnimation { showOverlay = true }
+                scheduleHide()
+            } else {
+                scheduleHide()
+            }
+        }
+        .gesture(
+            TapGesture(count: 2)
+                .onEnded {
+                    // 더블클릭 → 포커스 모드 진입/해제
+                    withAnimation(DesignTokens.Animation.indicator) {
+                        focusedSessionId = (focusedSessionId == session.id) ? nil : session.id
+                    }
+                }
+                .exclusively(before:
+                    TapGesture(count: 1)
+                        .onEnded {
+                            hideTask?.cancel()
+                            withAnimation { showOverlay.toggle() }
+                            if showOverlay { scheduleHide() }
+                        }
+                )
+        )
+        .onDisappear { hideTask?.cancel(); hideTask = nil }
     }
 
-    // MARK: - Auto-hide
-
-    private func scheduleHideControls() {
-        hideControlsTask?.cancel()
-        guard isHovering else { return }
-        hideControlsTask = Task {
+    private func scheduleHide() {
+        hideTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(DesignTokens.Animation.normal) {
-                    isHovering = false
-                }
-            }
+            withAnimation { showOverlay = false }
         }
     }
+}
 
-    // MARK: - Helpers
 
-    private var volumeIcon: String {
-        if session.playerViewModel.isMuted || session.playerViewModel.volume == 0 {
-            return "speaker.slash.fill"
-        } else if session.playerViewModel.volume < 0.33 {
-            return "speaker.fill"
-        } else if session.playerViewModel.volume < 0.66 {
-            return "speaker.wave.1.fill"
-        } else {
-            return "speaker.wave.2.fill"
+// NOTE: MLGridControlOverlay, MLLoadingState, MLVideoArea, MLControlOverlay,
+// MLEmptyState, MLStatsOverlay, MLQualityPopover → MultiLiveOverlays.swift로 이동
+
+// MARK: - Session Status Overlay (offline / error 공통)
+
+/// MLPlayerPane의 `.offline`과 `.error` 상태에서 사용되는 공통 오버레이.
+/// 배경 썸네일 블러 + 중앙 아이콘/텍스트 + 재시도 버튼으로 구성.
+private struct MLSessionStatusOverlay: View {
+    let session: MultiLiveSession
+    let appState: AppState
+    var onRemove: (() -> Void)? = nil
+    let icon: String
+    let iconColor: Color
+    let accentColor: Color
+    let title: String
+    let subtitle: String
+    let buttonLabel: String
+    var blurRadius: CGFloat = 28
+    var overlayOpacity: Double = 0.65
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let url = session.thumbnailURL {
+                AsyncImage(url: url) { img in
+                    img.resizable().aspectRatio(contentMode: .fill)
+                        .blur(radius: blurRadius).opacity(0.18)
+                } placeholder: { Color.clear }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+            }
+            Color.black.opacity(overlayOpacity)
+            RadialGradient(
+                colors: [accentColor.opacity(0.04), Color.clear],
+                center: .center, startRadius: 20, endRadius: 260
+            )
+            VStack(spacing: 22) {
+                ZStack {
+                    Circle()
+                        .fill(accentColor.opacity(0.06))
+                        .frame(width: 98, height: 98)
+                    Circle()
+                        .stroke(accentColor.opacity(0.12), lineWidth: 1)
+                        .frame(width: 98, height: 98)
+                    Image(systemName: icon)
+                        .font(DesignTokens.Typography.custom(size: 34, weight: .light))
+                        .foregroundStyle(iconColor)
+                }
+                VStack(spacing: 8) {
+                    Text(title)
+                        .font(DesignTokens.Typography.title3)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    Text(subtitle)
+                        .font(DesignTokens.Typography.bodyMedium)
+                        .foregroundStyle(.white.opacity(0.42))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                }
+                HStack(spacing: DesignTokens.Spacing.md) {
+                    Button {
+                        guard let api = appState.apiClient else { return }
+                        Task { await session.retry(using: api, appState: appState) }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(DesignTokens.Typography.captionSemibold)
+                            Text(buttonLabel)
+                                .font(DesignTokens.Typography.bodySemibold)
+                        }
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.md)
+                        .background(
+                            Capsule().fill(accentColor.opacity(0.15))
+                                .overlay(Capsule().stroke(accentColor.opacity(0.25), lineWidth: 1))
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // 세션 제거 버튼
+                    if let onRemove {
+                        Button {
+                            onRemove()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "xmark")
+                                    .font(DesignTokens.Typography.captionSemibold)
+                                Text("제거")
+                                    .font(DesignTokens.Typography.bodySemibold)
+                            }
+                            .foregroundStyle(.white.opacity(0.6))
+                            .padding(.horizontal, DesignTokens.Spacing.lg)
+                            .padding(.vertical, DesignTokens.Spacing.md)
+                            .background(
+                                Capsule().fill(.white.opacity(0.08))
+                                    .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 }

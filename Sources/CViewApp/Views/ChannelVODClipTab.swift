@@ -36,9 +36,10 @@ struct ChannelVODTab: View {
                     spacing: DesignTokens.Spacing.md
                 ) {
                     ForEach(vodList) { vod in
-                        VODCard(vod: vod) {
+                        EquatableVODCard(vod: vod) {
                             router.navigate(to: .vod(videoNo: vod.videoNo))
                         }
+                        .equatable()
                         .onAppear {
                             if vod.id == vodList.last?.id { Task { await onLoadMore() } }
                         }
@@ -88,9 +89,10 @@ struct ChannelClipTab: View {
                     spacing: DesignTokens.Spacing.md
                 ) {
                     ForEach(clipList) { clip in
-                        ClipCard(clip: clip) {
+                        EquatableClipCard(clip: clip) {
                             router.navigate(to: .clip(clipUID: clip.clipUID))
                         }
+                        .equatable()
                         .onAppear {
                             if clip.id == clipList.last?.id { Task { await onLoadMore() } }
                         }

@@ -33,6 +33,7 @@ struct LiveStreamView: View {
     @State private var isStreamOffline = false
     @State private var viewerCount: Int = 0
     @State private var metricsFeedTask: Task<Void, Never>?
+    @State private var showSettings = false
 
     /// AppState의 공유 PerformanceMonitor 사용 (MetricsForwarder와 동일 인스턴스)
     private var performanceMonitor: PerformanceMonitor { appState.performanceMonitor }
@@ -41,34 +42,49 @@ struct LiveStreamView: View {
     private var chatVM: ChatViewModel? { appState.chatViewModel }
 
     var body: some View {
-        GeometryReader { geo in
-            HSplitView {
-                // Player area + overlay chat
-                ZStack {
-                    playerArea
-                        .frame(minWidth: 400)
-                        .overlay(alignment: .topTrailing) {
-                            if showDebugOverlay {
-                                PerformanceOverlayView(monitor: performanceMonitor)
-                                    .padding(DesignTokens.Spacing.xs)
+        HStack(spacing: 0) {
+            GeometryReader { geo in
+                HSplitView {
+                    // Player area + overlay chat
+                    ZStack {
+                        playerArea
+                            .frame(minWidth: 400)
+                            .overlay(alignment: .topTrailing) {
+                                if showDebugOverlay {
+                                    PerformanceOverlayView(monitor: performanceMonitor)
+                                        .padding(DesignTokens.Spacing.xs)
+                                }
                             }
+
+                        // 오버레이 모드: 플레이어 위에 반투명 채팅
+                        if chatVM?.displayMode == .overlay {
+                            ChatOverlayView(chatVM: chatVM, containerSize: geo.size)
+                                .allowsHitTesting(true)
+                                .transition(.opacity)
                         }
+                    }
 
-                    // 오버레이 모드: 플레이어 위에 반투명 채팅
-                    if chatVM?.displayMode == .overlay {
-                        ChatOverlayView(chatVM: chatVM, containerSize: geo.size)
-                            .allowsHitTesting(true)
-                            .transition(.opacity)
+                    // 사이드 모드: 기존 HSplitView 오른쪽 채팅 패널
+                    if chatVM?.displayMode == .side {
+                        ChatPanelView(chatVM: chatVM) {
+                            router.presentSheet(.chatSettings)
+                        }
+                        .frame(width: chatWidth, alignment: .trailing)
                     }
                 }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
 
-                // 사이드 모드: 기존 HSplitView 오른쪽 채팅 패널
-                if chatVM?.displayMode == .side {
-                    ChatPanelView(chatVM: chatVM) {
-                        router.presentSheet(.chatSettings)
-                    }
-                    .frame(width: chatWidth, alignment: .trailing)
-                }
+            // ── 설정 슬라이드 패널 (push 방식 — 멀티라이브와 동일) ──
+            if showSettings {
+                PlayerAdvancedSettingsView(
+                    playerVM: playerVM,
+                    settingsStore: appState.settingsStore,
+                    isPresented: $showSettings
+                )
+                .transition(.move(edge: .trailing))
+                .animation(DesignTokens.Animation.contentTransition, value: showSettings)
             }
         }
         .toolbar { streamToolbar }
@@ -98,6 +114,13 @@ struct LiveStreamView: View {
                 }
                 await performanceMonitor.stop()
             }
+        }
+        .onKeyPress(.escape) {
+            if showSettings {
+                withAnimation(DesignTokens.Animation.contentTransition) { showSettings = false }
+                return .handled
+            }
+            return .ignored
         }
         .onKeyPress(phases: .down) { press in
             handleShortcutKeyPress(press)
@@ -205,7 +228,13 @@ struct LiveStreamView: View {
                     onOpenNewWindow: { openWindow(id: "player-window", value: channelId) },
                     onScreenshot: { playerVM?.takeScreenshot() },
                     onToggleRecording: { Task { await playerVM?.toggleRecording() } },
-                    settingsStore: appState.settingsStore
+                    settingsStore: appState.settingsStore,
+                    onToggleSettings: {
+                        withAnimation(DesignTokens.Animation.snappy) {
+                            showSettings.toggle()
+                        }
+                    },
+                    isSettingsOpen: showSettings
                 )
             }
 
@@ -257,7 +286,7 @@ struct LiveStreamView: View {
             // Stream offline
             if isStreamOffline {
                 ZStack {
-                    Rectangle().fill(.thinMaterial)
+                    Rectangle().fill(DesignTokens.Colors.surfaceBase)
                     RadialGradient(
                         colors: [Color.white.opacity(0.03), Color.clear],
                         center: .center, startRadius: 20, endRadius: 260
@@ -268,7 +297,7 @@ struct LiveStreamView: View {
                                 .fill(Color.white.opacity(0.04))
                                 .frame(width: 100, height: 100)
                             Circle()
-                                .stroke(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 1)
+                                .stroke(DesignTokens.Glass.borderColor, lineWidth: 1)
                                 .frame(width: 100, height: 100)
                             Image(systemName: "tv.slash")
                                 .font(DesignTokens.Typography.custom(size: 38, weight: .light))
@@ -295,8 +324,8 @@ struct LiveStreamView: View {
                             .padding(.horizontal, DesignTokens.Spacing.xl)
                             .padding(.vertical, DesignTokens.Spacing.md)
                             .background(
-                                Capsule().fill(.ultraThinMaterial)
-                                    .overlay(Capsule().stroke(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 1))
+                                Capsule().fill(DesignTokens.Colors.surfaceElevated)
+                                    .overlay(Capsule().stroke(DesignTokens.Glass.borderColorLight, lineWidth: 1))
                             )
                         }
                         .buttonStyle(.plain)
@@ -426,6 +455,7 @@ struct LiveStreamView: View {
             let streamURL: URL
             let channelName: String
             let liveTitle: String
+            var prefetchedManifest: MasterPlaylist? = nil
 
             if let prefetched = await appState.hlsPrefetchService?.consumePrefetchedStream(channelId: channelId) {
                 // 캐시 히트: API 호출 생략 (~400ms 절약)
@@ -433,6 +463,8 @@ struct LiveStreamView: View {
                 streamURL = prefetched.streamURL
                 channelName = prefetched.channelName
                 liveTitle = prefetched.liveTitle
+                // [Opt: Single VLC] 프리페치 매니페스트도 전달 → variant 해석 네트워크 절약
+                prefetchedManifest = prefetched.masterPlaylist
             } else {
                 // 캐시 미스: 기존 경로로 liveDetail API 호출
                 let info = try await apiClient.liveDetail(channelId: channelId)
@@ -464,6 +496,7 @@ struct LiveStreamView: View {
             let ps = appState.settingsStore.player
 
             // ─── 영상 즉시 시작 + 로딩 오버레이 즉시 해제 ───
+            let _prefetchedManifest = prefetchedManifest
             Task { @MainActor in
                 // 재생 직전 최신 설정의 엔진 타입 반영 (앱 실행 중 설정 변경 대응)
                 playerVM?.preferredEngineType = ps.preferredEngine
@@ -472,7 +505,8 @@ struct LiveStreamView: View {
                     streamUrl: streamURL,
                     channelName: channelName,
                     liveTitle: liveTitle,
-                    thumbnailURL: liveInfo.liveImageURL
+                    thumbnailURL: liveInfo.liveImageURL,
+                    prefetchedManifest: _prefetchedManifest
                 )
                 playerVM?.applySettings(volume: ps.volumeLevel, lowLatency: ps.lowLatencyMode, catchupRate: ps.catchupRate)
             }
@@ -645,7 +679,9 @@ struct LiveStreamView: View {
         metricsFeedTask?.cancel()
         metricsFeedTask = Task { @MainActor in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                // [최적화] 1초 → 2초: VLC statTimer(2초)와 동기화, actor hop 50% 감소
+                // latency/buffer는 빠른 변동이 없으므로 2초 주기로 충분
+                try? await Task.sleep(for: .seconds(2))
                 guard !Task.isCancelled else { break }
                 if let vm = playerVM {
                     let latency = vm.latencyInfo?.current ?? 0
@@ -689,7 +725,7 @@ struct PlayerEngineBadge: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.xs)
         .padding(.vertical, DesignTokens.Spacing.xxs)
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceElevated)
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 1)
     }

@@ -124,7 +124,7 @@ struct ChannelInfoView: View {
                 }
             }
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
         .navigationTitle(channelInfo?.channelName ?? "채널")
         .toolbar { toolbarContent }
         .task { await loadChannelData() }
@@ -278,11 +278,7 @@ struct ChannelInfoView: View {
                         .background {
                             if selectedTab == tab {
                                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                    .fill(.ultraThinMaterial)
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                            .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
-                                    }
+                                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.12))
                             }
                         }
 
@@ -311,7 +307,7 @@ struct ChannelInfoView: View {
             VStack {
                 Spacer()
                 Rectangle()
-                    .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
+                    .fill(DesignTokens.Glass.borderColor)
                     .frame(height: 1)
             }
         }

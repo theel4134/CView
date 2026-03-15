@@ -223,7 +223,7 @@ struct ErrorBanner: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(.thinMaterial)
+            .background(DesignTokens.Colors.surfaceBase)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.sm))
             .transition(.move(edge: .top).combined(with: .opacity))
         }

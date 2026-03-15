@@ -72,7 +72,7 @@ struct StatisticsView: View {
                 .scrollContentBackground(.hidden)
             }
             .frame(minWidth: 150)
-            .background(DesignTokens.Colors.background)
+            .contentBackground()
         } detail: {
             tabContent
         }
@@ -150,7 +150,7 @@ struct SessionStatsView: View {
             }
             .padding(DesignTokens.Spacing.lg)
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
     }
     
     private var formattedLaunchTime: String {

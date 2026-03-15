@@ -240,9 +240,13 @@ public actor DataStore {
 
     /// 시청 기록 종료 (시청 종료 시 호출)
     public func endWatchRecord(channelId: String, startedAt: Date) throws {
+        // startedAt ±1초 범위로 정확한 레코드 매칭
+        let matchStart = startedAt.addingTimeInterval(-1)
+        let matchEnd = startedAt.addingTimeInterval(1)
         let descriptor = FetchDescriptor<WatchHistory>(
             predicate: #Predicate {
                 $0.channelId == channelId && $0.endedAt == nil
+                && $0.startedAt >= matchStart && $0.startedAt <= matchEnd
             },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )

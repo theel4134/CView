@@ -67,7 +67,7 @@ struct BlockedUsersView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(.ultraThinMaterial)
+            .background(DesignTokens.Colors.surfaceElevated)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             .padding(.horizontal)
             .padding(.bottom, DesignTokens.Spacing.xs)
@@ -111,7 +111,7 @@ struct BlockedUsersView: View {
                                     .foregroundStyle(DesignTokens.Colors.accentBlue)
                                     .padding(.horizontal, DesignTokens.Spacing.md)
                                     .padding(.vertical, DesignTokens.Spacing.xxs)
-                                    .background(.ultraThinMaterial)
+                                    .background(DesignTokens.Colors.surfaceElevated)
                                     .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)

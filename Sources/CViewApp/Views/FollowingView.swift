@@ -1,6 +1,6 @@
 // MARK: - FollowingView.swift
 // CViewApp - 팔로잉 채널 목록 탭
-// 정렬, 필터, 카테고리 칩, 라이브/오프라인 분리 표시
+// 글래스모피즘 + 모던 인터랙션 + 부드러운 애니메이션
 
 import SwiftUI
 import CViewCore
@@ -43,6 +43,15 @@ enum FollowingSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Preference Key for Live Grid Height
+
+private struct LiveGridHeightKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 // MARK: - Following View
 
 struct FollowingView: View {
@@ -54,35 +63,42 @@ struct FollowingView: View {
     @State private var sortOrder: FollowingSortOrder = .liveFirst
     @State private var filterLiveOnly: Bool = false
     @State private var searchText: String = ""
+    @State private var _searchDebounceTask: Task<Void, Never>?
     @State private var selectedCategory: String? = nil
-    @State private var displayedOfflineCount: Int = 10
-    @State private var showAllOffline: Bool = false
-    private let offlinePageSize = 10
-
-    // 라이브 페이징 — 한 번에 렌더링되는 카드 수 제한 → GPU 동시 로드 감소
-    @State private var displayedLiveCount: Int = 12
-    @State private var showAllLive: Bool = false
-    private let livePageSize = 12
+    // 페이징
+    @State private var livePageIndex: Int = 0
+    @State private var offlinePageIndex: Int = 0
+    private let liveColumns = 4
+    private let liveItemsPerPage = 16   // 4열 × 4행
+    private let offlineItemsPerPage = 10
 
     // 캐싱된 필터 결과 — 입력 변경 시에만 재산출 (body 중복 호출 방지)
     @State private var cachedLive: [LiveChannelItem] = []
     @State private var cachedAllOffline: [LiveChannelItem] = []
     @State private var cachedLiveCategoryCounts: [(name: String, count: Int)] = []
-
-    // 페이징된 라이브 채널 (displayedLiveCount 이하만 렌더링)
-    private var liveChannels: [LiveChannelItem] {
-        showAllLive ? cachedLive : Array(cachedLive.prefix(displayedLiveCount))
-    }
+    @State private var computedLiveGridHeight: CGFloat = 500
 
     private var totalLiveCount: Int { cachedLive.count }
-
-    private var offlineChannels: [LiveChannelItem] {
-        showAllOffline ? cachedAllOffline : Array(cachedAllOffline.prefix(displayedOfflineCount))
-    }
-
     private var totalOfflineCount: Int { cachedAllOffline.count }
     private var liveCategoryCounts: [(name: String, count: Int)] { cachedLiveCategoryCounts }
     private var liveCategories: [String] { cachedLiveCategoryCounts.map { $0.name } }
+
+    private var totalLivePages: Int { max(1, Int(ceil(Double(totalLiveCount) / Double(liveItemsPerPage)))) }
+    private var totalOfflinePages: Int { max(1, Int(ceil(Double(totalOfflineCount) / Double(offlineItemsPerPage)))) }
+
+    private func liveChannelsForPage(_ page: Int) -> [LiveChannelItem] {
+        let start = page * liveItemsPerPage
+        let end = min(start + liveItemsPerPage, totalLiveCount)
+        guard start < end else { return [] }
+        return Array(cachedLive[start..<end])
+    }
+
+    private func offlineChannelsForPage(_ page: Int) -> [LiveChannelItem] {
+        let start = page * offlineItemsPerPage
+        let end = min(start + offlineItemsPerPage, totalOfflineCount)
+        guard start < end else { return [] }
+        return Array(cachedAllOffline[start..<end])
+    }
 
     private func formatShortCount(_ n: Int) -> String {
         if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000) }
@@ -109,25 +125,30 @@ struct FollowingView: View {
         cachedLiveCategoryCounts = counts.map { ($0.key, $0.value) }.sorted { $0.count > $1.count }
     }
 
-    /// 페이지네이션 리셋 + 필터 재계산 (정렬/필터 조건 변경 시 사용)
+    /// 페이지 리셋 + 필터 재계산 (정렬/필터 조건 변경 시 사용)
     private func resetPaginationAndRecompute() {
-        displayedOfflineCount = offlinePageSize
-        displayedLiveCount = livePageSize
-        showAllOffline = false
-        showAllLive = false
+        livePageIndex = 0
+        offlinePageIndex = 0
         recomputeFiltered()
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ── 컨트롤 바 (검색 + 필터)
-            controlBar
+        ZStack {
+            DesignTokens.Colors.background
+                .ignoresSafeArea()
 
-            Rectangle()
-                .fill(DesignTokens.Colors.border.opacity(0.5))
-                .frame(height: 0.5)
+            // 라이트 모드 배경 그라디언트 효과
+            LinearGradient(
+                colors: [
+                    DesignTokens.Colors.surfaceBase.opacity(0.3),
+                    Color.clear,
+                    DesignTokens.Colors.surfaceElevated.opacity(0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-            // ── 메인 컨텐츠
             if !appState.isLoggedIn {
                 followingGateView(
                     icon: "person.crop.circle.badge.questionmark",
@@ -137,6 +158,7 @@ struct FollowingView: View {
                     buttonLabel: "로그인",
                     action: { router.presentSheet(.login) }
                 )
+                .transition(.opacity)
             } else if viewModel.needsCookieLogin {
                 followingGateView(
                     icon: "key.fill",
@@ -146,9 +168,11 @@ struct FollowingView: View {
                     buttonLabel: "네이버 로그인",
                     action: { router.presentSheet(.login) }
                 )
+                .transition(.opacity)
             } else if viewModel.followingChannels.isEmpty {
                 if viewModel.isLoadingFollowing {
                     skeletonLoadingView
+                        .transition(.opacity)
                 } else {
                     followingGateView(
                         icon: "heart",
@@ -158,32 +182,32 @@ struct FollowingView: View {
                         buttonLabel: nil,
                         action: nil
                     )
+                    .transition(.opacity)
                 }
             } else {
                 mainContent
+                    .transition(.opacity)
             }
         }
-        .background(DesignTokens.Colors.background)
-        .navigationTitle("팔로잉")
+        .navigationTitle("")
+        .toolbar(.hidden)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 sortMenuButton
-            }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    Task { await viewModel.loadFollowingChannels() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(DesignTokens.Typography.captionMedium)
-                }
-                .help("새로고침")
             }
         }
         // 필터/정렬 관련 값 변경 시 1회만 recomputeFiltered() 호출되도록 통합
         .onChange(of: sortOrder) { _, _ in resetPaginationAndRecompute() }
         .onChange(of: filterLiveOnly) { _, _ in resetPaginationAndRecompute() }
         .onChange(of: selectedCategory) { _, _ in resetPaginationAndRecompute() }
-        .onChange(of: searchText) { _, _ in recomputeFiltered() }
+        .onChange(of: searchText) { _, _ in
+            _searchDebounceTask?.cancel()
+            _searchDebounceTask = Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+                recomputeFiltered()
+            }
+        }
         .onChange(of: viewModel.followingChannels) { _, _ in recomputeFiltered() }
         .task {
             // 데이터 있고 캐시가 5분 이내면 재로드 스킵
@@ -197,199 +221,396 @@ struct FollowingView: View {
         }
     }
 
-    // MARK: - Control Bar
+    // MARK: - Header Section (v1-inspired gradient hero)
 
-    private var controlBar: some View {
-        VStack(spacing: 5) {
-            // Row 1: 검색창 + 로딩 / 업데이트 시간
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                HStack(spacing: 6) {
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
+            HStack(spacing: DesignTokens.Spacing.md) {
+                // 그라디언트 아이콘
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    DesignTokens.Colors.chzzkGreen.opacity(0.15),
+                                    DesignTokens.Colors.chzzkGreen.opacity(0.08)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 52, height: 52)
+
+
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.7)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("팔로잉")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+
+                    HStack(spacing: 6) {
+                        Text("내가 팔로우하는 채널")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                        if !viewModel.followingChannels.isEmpty {
+                            Text("•")
+                                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            Text("\(viewModel.followingChannels.count)개")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        }
+
+                        if viewModel.followingLiveCount > 0 {
+                            Text("•")
+                                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(DesignTokens.Colors.live)
+                                    .frame(width: 6, height: 6)
+                                Text("\(viewModel.followingLiveCount)개 라이브")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.Colors.live)
+                            }
+                        }
+                    }
+                }
+
+                Spacer()
+
+                // 새로고침 버튼
+                Button {
+                    Task { await viewModel.loadFollowingChannels() }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .opacity(viewModel.isLoadingFollowing ? 0.6 : 1.0)
+                        Text("새로고침")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(DesignTokens.Gradients.primary)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                        }
+                    )
+
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isLoadingFollowing)
+
+                // 업데이트 시간
+                if let cachedAt = viewModel.followingCachedAt {
+                    HStack(spacing: 3) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 8))
+                        Text(cachedAt, style: .relative)
+                            .font(.system(size: 10, weight: .regular).monospacedDigit())
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(DesignTokens.Colors.surfaceOverlay, in: Capsule())
+                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
+                }
+            }
+
+            // 핵심 통계 인라인 (라이브 채널이 있을 때)
+            if viewModel.followingLiveCount > 0 || viewModel.followingTotalViewers > 0 {
+                HStack(spacing: DesignTokens.Spacing.lg) {
+                    statIndicator(
+                        icon: "heart.fill",
+                        value: "\(viewModel.followingChannels.count)",
+                        label: "팔로잉",
+                        color: DesignTokens.Colors.accentPink
+                    )
+                    statIndicator(
+                        icon: "dot.radiowaves.left.and.right",
+                        value: "\(viewModel.followingLiveCount)",
+                        label: "라이브",
+                        color: DesignTokens.Colors.live
+                    )
+                    if viewModel.followingTotalViewers > 0 {
+                        statIndicator(
+                            icon: "eye.fill",
+                            value: formatShortCount(viewModel.followingTotalViewers),
+                            label: "시청 중",
+                            color: DesignTokens.Colors.accentBlue
+                        )
+                    }
+                    if viewModel.followingLiveRate > 0 {
+                        statIndicator(
+                            icon: "chart.bar.fill",
+                            value: "\(viewModel.followingLiveRate)%",
+                            label: "라이브율",
+                            color: DesignTokens.Colors.accentPurple
+                        )
+                    }
+                }
+            }
+        }
+        .padding(DesignTokens.Spacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(DesignTokens.Colors.surfaceBase)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                )
+        )
+    }
+
+    // MARK: - Search & Filter Card (v1-inspired)
+
+    private var searchAndFilterCard: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            Text("검색 및 필터")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+
+            VStack(spacing: DesignTokens.Spacing.md) {
+                // 검색바
+                HStack(spacing: DesignTokens.Spacing.sm) {
                     Image(systemName: "magnifyingglass")
-                        .font(DesignTokens.Typography.captionMedium)
-                        .foregroundStyle(searchText.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen)
-                    TextField("채널 검색", text: $searchText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(
+                            searchText.isEmpty
+                                ? DesignTokens.Colors.textTertiary
+                                : DesignTokens.Colors.chzzkGreen
+                        )
+
+                    TextField("채널 검색...", text: $searchText)
                         .textFieldStyle(.plain)
-                        .font(DesignTokens.Typography.caption)
+                        .font(.system(size: 13, weight: .regular))
+
                     if !searchText.isEmpty {
-                        Button { searchText = "" } label: {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { searchText = "" }
+                        } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(DesignTokens.Typography.caption)
+                                .font(.system(size: 14))
                                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                         }
                         .buttonStyle(.plain)
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(
-                    searchText.isEmpty ? DesignTokens.Colors.border : DesignTokens.Colors.chzzkGreen.opacity(0.5),
-                    lineWidth: searchText.isEmpty ? 0.5 : 1
-                ))
+                .padding(.vertical, DesignTokens.Spacing.sm + 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(DesignTokens.Colors.surfaceElevated)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            searchText.isEmpty
+                                ? DesignTokens.Glass.borderColor
+                                : DesignTokens.Colors.chzzkGreen.opacity(0.3),
+                            lineWidth: 0.5
+                        )
+                )
 
-                Spacer()
-
-                if viewModel.isLoadingFollowing {
-                    ProgressView()
-                        .scaleEffect(0.65)
-                        .tint(DesignTokens.Colors.chzzkGreen)
-                } else if let cachedAt = viewModel.followingCachedAt {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(DesignTokens.Typography.custom(size: 8))
-                        Text(cachedAt, style: .relative)
-                            .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .onTapGesture {
-                        Task { await viewModel.loadFollowingChannels() }
-                    }
-                }
-            }
-
-            // Row 2: 라이브 필터 토글 + 통계 배지
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                // 라이브만 보기 토글
-                Button {
-                    withAnimation(DesignTokens.Animation.indicator) {
-                        filterLiveOnly.toggle()
-                        if filterLiveOnly { selectedCategory = nil }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        ZStack {
-                            Circle()
-                                .fill(filterLiveOnly ? DesignTokens.Colors.live : DesignTokens.Colors.live.opacity(0.35))
-                                .frame(width: 6, height: 6)
-                        }
-                        Text("라이브 \(viewModel.followingLiveCount)")
-                            .font(DesignTokens.Typography.custom(size: 11, weight: filterLiveOnly ? .bold : .medium))
-                            .foregroundStyle(filterLiveOnly ? DesignTokens.Colors.live : DesignTokens.Colors.textSecondary)
-                    }
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                    .padding(.vertical, DesignTokens.Spacing.xs)
-                    .background {
-                        if filterLiveOnly {
-                            DesignTokens.Colors.live.opacity(0.12)
-                        } else {
-                            Rectangle().fill(.ultraThinMaterial)
+                // 필터 버튼들 (전체/라이브)
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    filterToggleButton(
+                        isActive: !filterLiveOnly,
+                        icon: "person.3.fill",
+                        title: "전체",
+                        count: viewModel.followingChannels.count
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            filterLiveOnly = false
+                            selectedCategory = nil
                         }
                     }
-                    .clipShape(Capsule())
-                    .overlay(Capsule().strokeBorder(
-                        filterLiveOnly ? DesignTokens.Colors.live.opacity(0.4) : DesignTokens.Colors.border,
-                        lineWidth: 0.5
-                    ))
-                }
-                .buttonStyle(.plain)
 
-                Spacer()
-
-                // 통계 배지
-                if !viewModel.followingChannels.isEmpty {
-                    statPill(value: "\(viewModel.followingChannels.count)", label: "팔로잉",
-                             color: DesignTokens.Colors.accentPurple)
-                    if viewModel.followingTotalViewers > 0 {
-                        statPill(value: formatShortCount(viewModel.followingTotalViewers), label: "명 시청",
-                                 color: DesignTokens.Colors.accentBlue)
-                    }
-                    if viewModel.followingLiveRate > 0 {
-                        statPill(value: "\(viewModel.followingLiveRate)%", label: "라이브율",
-                                 color: DesignTokens.Colors.chzzkGreen)
+                    filterToggleButton(
+                        isActive: filterLiveOnly,
+                        icon: "dot.radiowaves.left.and.right",
+                        title: "라이브",
+                        count: viewModel.followingLiveCount
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            filterLiveOnly = true
+                            selectedCategory = nil
+                        }
                     }
                 }
             }
         }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.background)
+        .padding(DesignTokens.Spacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(DesignTokens.Colors.surfaceBase)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                )
+        )
     }
 
-    private func statPill(value: String, label: String, color: Color) -> some View {
+    // MARK: - Filter Toggle Button
+
+    private func filterToggleButton(isActive: Bool, icon: String, title: String, count: Int, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(isActive ? DesignTokens.Colors.textOnOverlay.opacity(0.8) : DesignTokens.Colors.textTertiary)
+                }
+            }
+            .foregroundStyle(isActive ? DesignTokens.Colors.textOnOverlay : DesignTokens.Colors.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                ZStack {
+                    if isActive {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DesignTokens.Gradients.primary)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DesignTokens.Colors.surfaceElevated)
+                    }
+                }
+            )
+
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func statIndicator(icon: String, value: String, label: String, color: Color) -> some View {
         HStack(spacing: 4) {
-            Text(value)
-                .font(DesignTokens.Typography.captionSemibold)
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(color)
+            Text(value)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
             Text(label)
-                .font(DesignTokens.Typography.footnoteMedium)
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         }
-        .padding(.horizontal, DesignTokens.Spacing.xs)
-        .padding(.vertical, DesignTokens.Spacing.xxs)
-        .background(color.opacity(0.08))
-        .clipShape(Capsule())
     }
 
-    // MARK: - Main Content
+    // MARK: - Main Content (widget-style card layout)
 
     private var mainContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                // 카테고리 필터 칩
-                if !liveCategories.isEmpty && !filterLiveOnly {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: DesignTokens.Spacing.xl) {
+                // 헤더 섹션
+                headerSection
+
+                // 검색 및 필터 카드
+                searchAndFilterCard
+
+                // 카테고리 필터 칩 (라이브가 있을 때만)
+                if !liveCategories.isEmpty {
                     categoryFilterChips
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.top, DesignTokens.Spacing.sm)
-                        .padding(.bottom, DesignTokens.Spacing.xs)
                 }
 
                 // 검색 결과 없음
                 if cachedLive.isEmpty && cachedAllOffline.isEmpty {
-                    emptySearchResult
+                    widgetCard {
+                        emptySearchResult
+                    }
                 } else {
-                    // 라이브 섹션
+                    // ── 라이브 채널 카드 그리드 (위젯 카드)
                     if !cachedLive.isEmpty {
-                        sectionHeader(
-                            icon: "dot.radiowaves.left.and.right",
-                            title: "라이브 중",
-                            count: totalLiveCount,
-                            color: DesignTokens.Colors.live
-                        )
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.top, DesignTokens.Spacing.sm)
+                        widgetCard {
+                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                                sectionHeader(
+                                    icon: "dot.radiowaves.left.and.right",
+                                    title: "라이브 중",
+                                    count: totalLiveCount,
+                                    color: DesignTokens.Colors.live
+                                )
 
-                        liveGrid
-                            .padding(.horizontal, DesignTokens.Spacing.md)
-                            .padding(.top, DesignTokens.Spacing.xs)
+                                livePagingView
 
-                        // 라이브 더 보기 (페이징)
-                        if !showAllLive && displayedLiveCount < totalLiveCount {
-                            loadMoreLiveButton
-                                .padding(.top, DesignTokens.Spacing.xs)
-                                .padding(.bottom, DesignTokens.Spacing.xs)
+                                if totalLivePages > 1 {
+                                    pageNavigator(
+                                        currentPage: $livePageIndex,
+                                        totalPages: totalLivePages,
+                                        accentColor: DesignTokens.Colors.live
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // 오프라인 섹션
+                    // ── 오프라인 채널 리스트 (위젯 카드)
                     if !filterLiveOnly && totalOfflineCount > 0 {
-                        sectionHeader(
-                            icon: "moon.zzz",
-                            title: "오프라인",
-                            count: totalOfflineCount,
-                            color: DesignTokens.Colors.textTertiary
-                        )
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.top, DesignTokens.Spacing.md)
+                        widgetCard {
+                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                                sectionHeader(
+                                    icon: "moon.zzz.fill",
+                                    title: "오프라인",
+                                    count: totalOfflineCount,
+                                    color: DesignTokens.Colors.textTertiary
+                                )
 
-                        offlineList
-                            .padding(.horizontal, DesignTokens.Spacing.md)
-                            .padding(.top, DesignTokens.Spacing.xs)
+                                offlinePagingView
 
-                        // 더 보기
-                        if !showAllOffline && displayedOfflineCount < totalOfflineCount {
-                            loadMoreOfflineButton
-                                .padding(.top, DesignTokens.Spacing.xs)
-                                .padding(.bottom, DesignTokens.Spacing.sm)
+                                if totalOfflinePages > 1 {
+                                    pageNavigator(
+                                        currentPage: $offlinePageIndex,
+                                        totalPages: totalOfflinePages,
+                                        accentColor: DesignTokens.Colors.accentPurple
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
                 Spacer(minLength: DesignTokens.Spacing.xl)
             }
-            .padding(.bottom, DesignTokens.Spacing.lg)
+            .padding(DesignTokens.Spacing.xl)
         }
+    }
+
+    /// 위젯 스타일 카드 래퍼 (v1-inspired material card)
+    private func widgetCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(DesignTokens.Spacing.xl)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(DesignTokens.Colors.surfaceBase)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                    )
+            )
+            .shadow(
+                color: DesignTokens.Shadow.card.color,
+                radius: DesignTokens.Shadow.card.radius,
+                y: DesignTokens.Shadow.card.y
+            )
     }
 
     // MARK: - Category Filter Chips
@@ -417,36 +638,38 @@ struct FollowingView: View {
 
     private func categoryChip(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Text(label)
-                    .font(DesignTokens.Typography.custom(size: 11, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                    .foregroundStyle(isSelected ? DesignTokens.Colors.textOnOverlay : DesignTokens.Colors.textSecondary)
                 if count > 0 {
                     Text("\(count)")
-                        .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
-                        .foregroundStyle(isSelected ? DesignTokens.Colors.onPrimary : DesignTokens.Colors.textTertiary)
-                        .padding(.horizontal, DesignTokens.Spacing.xxs)
-                        .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceElevated)
-                        .clipShape(Capsule())
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(isSelected ? DesignTokens.Colors.textOnOverlay.opacity(0.85) : DesignTokens.Colors.textTertiary)
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
+            .padding(.vertical, DesignTokens.Spacing.xs + 1)
             .background {
                 if isSelected {
-                    DesignTokens.Colors.chzzkGreen.opacity(0.12)
+                    Capsule().fill(
+                        LinearGradient(
+                            colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                 } else {
-                    Rectangle().fill(.ultraThinMaterial)
+                    Capsule().fill(DesignTokens.Colors.surfaceElevated.opacity(0.8))
                 }
             }
-            .clipShape(Capsule())
             .overlay(
                 Capsule().strokeBorder(
-                    isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.4) : DesignTokens.Colors.border,
-                    lineWidth: isSelected ? 1 : 0.5
+                    isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.7) : DesignTokens.Glass.borderColor,
+                    lineWidth: isSelected ? 1.0 : 0.5
                 )
             )
+
         }
         .buttonStyle(.plain)
     }
@@ -454,35 +677,82 @@ struct FollowingView: View {
     // MARK: - Section Header
 
     private func sectionHeader(icon: String, title: String, count: Int, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(DesignTokens.Typography.micro)
-                .foregroundStyle(color)
-            Text(title)
-                .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
+        HStack(spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(color)
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+            }
+
             Text("\(count)")
-                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
-                .padding(.horizontal, DesignTokens.Spacing.xs)
-                .padding(.vertical, DesignTokens.Spacing.xxs)
-                .background(color.opacity(0.12))
-                .clipShape(Capsule())
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2.5)
+                .background(color.opacity(0.1), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(0.2), lineWidth: 0.5))
+
+            // 얇은 구분선
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [color.opacity(0.2), color.opacity(0.05), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 0.5)
+
             Spacer()
         }
     }
 
-    // MARK: - Live Grid (16:9 스트림 카드)
+    // MARK: - Live Paging View (슬라이딩 페이지 전환)
 
-    private var liveGrid: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 200, maximum: 320), spacing: DesignTokens.Spacing.sm)],
+    private var livePagingView: some View {
+        GeometryReader { geo in
+            let cardHeight = livecardHeight(for: geo.size.width)
+            let maxRows = Int(ceil(Double(min(liveItemsPerPage, totalLiveCount)) / Double(liveColumns)))
+            let spacing: CGFloat = DesignTokens.Spacing.sm
+            let gridHeight = CGFloat(max(maxRows, 1)) * (cardHeight + spacing) - spacing + DesignTokens.Spacing.xs * 2
+
+            // 현재 페이지만 렌더링 — 보이지 않는 페이지의 LivePulseBadge 애니메이션 제거
+            liveGridPage(livePageIndex)
+                .frame(width: geo.size.width, height: gridHeight, alignment: .top)
+                .id(livePageIndex)
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.25), value: livePageIndex)
+                .preference(key: LiveGridHeightKey.self, value: gridHeight)
+        }
+        .frame(height: computedLiveGridHeight)
+        .clipped()
+        .onPreferenceChange(LiveGridHeightKey.self) { height in
+            if abs(height - computedLiveGridHeight) > 1 {
+                computedLiveGridHeight = height
+            }
+        }
+    }
+
+    /// 실제 컨테이너 너비로 16:9 카드 높이 계산
+    private func livecardHeight(for containerWidth: CGFloat) -> CGFloat {
+        let totalSpacing = DesignTokens.Spacing.sm * CGFloat(liveColumns - 1)
+        let cardWidth = (containerWidth - totalSpacing) / CGFloat(liveColumns)
+        let imageHeight = cardWidth * (9.0 / 16.0)  // 16:9 비율
+        let infoHeight: CGFloat = 42
+        return imageHeight + infoHeight
+    }
+
+    private func liveGridPage(_ page: Int) -> some View {
+        let channels = liveChannelsForPage(page)
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: DesignTokens.Spacing.sm), count: liveColumns),
             spacing: DesignTokens.Spacing.sm
         ) {
-            ForEach(Array(liveChannels.enumerated()), id: \.element.id) { index, channel in
-                FollowingLiveCard(channel: channel, index: index) {
+            ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
+                FollowingLiveCard(channel: channel, index: page * liveItemsPerPage + index) {
                     router.navigate(to: .live(channelId: channel.channelId))
                 } onPrefetch: { channelId in
                     if let service = appState.hlsPrefetchService {
@@ -498,17 +768,36 @@ struct FollowingView: View {
                 }
             }
         }
+        .padding(.vertical, DesignTokens.Spacing.xs)
     }
 
-    // MARK: - Offline List (컴팩트 행)
+    // MARK: - Offline Paging View (슬라이딩 페이지 전환)
 
-    private var offlineList: some View {
-        // LazyVStack — 단일 열 목록에 열 수 계산 오버헤드 없음
-        // offlineChannels는 prefix(displayedOfflineCount)로 슬라이스된 배열 → 렌더링 범위 명확히 제한
-        LazyVStack(spacing: 2) {
-            ForEach(offlineChannels, id: \.id) { channel in
-                FollowingOfflineRow(channel: channel, index: 0)
-                    .equatable()  // channel 데이터 동일 시 렌더링 스킵
+    private var offlinePagingView: some View {
+        GeometryReader { geo in
+            // 현재 페이지만 렌더링
+            offlineListPage(offlinePageIndex)
+                .frame(width: geo.size.width)
+                .id(offlinePageIndex)
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.25), value: offlinePageIndex)
+        }
+        .frame(height: offlinePageHeight)
+        .clipped()
+    }
+
+    private var offlinePageHeight: CGFloat {
+        let count = min(offlineItemsPerPage, max(1, totalOfflineCount))
+        let rowHeight: CGFloat = 44
+        return CGFloat(count) * rowHeight
+    }
+
+    private func offlineListPage(_ page: Int) -> some View {
+        let channels = offlineChannelsForPage(page)
+        return LazyVStack(spacing: 2) {
+            ForEach(Array(channels.enumerated()), id: \.element.id) { idx, channel in
+                FollowingOfflineRow(channel: channel, index: idx)
+                    .equatable()
                     .onTapGesture {
                         router.navigate(to: .channelDetail(channelId: channel.channelId))
                     }
@@ -561,161 +850,219 @@ struct FollowingView: View {
         }
     }
 
-    // MARK: - Load More Live
+    // MARK: - Page Navigator
 
-    private var loadMoreLiveButton: some View {
+    private func pageNavigator(currentPage: Binding<Int>, totalPages: Int, accentColor: Color) -> some View {
         HStack(spacing: DesignTokens.Spacing.sm) {
             Spacer()
-            Button {
-                withAnimation(DesignTokens.Animation.snappy) {
-                    displayedLiveCount = min(displayedLiveCount + livePageSize, totalLiveCount)
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.down")
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    Text("\(totalLiveCount - displayedLiveCount)개 더 보기")
-                        .font(DesignTokens.Typography.captionMedium)
-                }
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
 
+            // 이전 버튼
             Button {
-                withAnimation(DesignTokens.Animation.snappy) {
-                    showAllLive = true
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    currentPage.wrappedValue = max(0, currentPage.wrappedValue - 1)
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "square.grid.2x2")
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    Text("전체 \(totalLiveCount)")
-                        .font(DesignTokens.Typography.captionSemibold)
-                }
-                .foregroundStyle(DesignTokens.Colors.live)
-                .padding(.horizontal, DesignTokens.Spacing.sm)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(DesignTokens.Colors.live.opacity(0.1))
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(DesignTokens.Colors.live.opacity(0.3), lineWidth: 0.5))
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(currentPage.wrappedValue > 0 ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.4))
+                    .frame(width: 26, height: 26)
+                    .background(
+                        currentPage.wrappedValue > 0
+                            ? AnyShapeStyle(accentColor.opacity(0.1))
+                            : AnyShapeStyle(DesignTokens.Colors.surfaceElevated.opacity(0.5)),
+                        in: Circle()
+                    )
+                    .overlay(Circle()
+                        .strokeBorder(
+                            currentPage.wrappedValue > 0
+                                ? accentColor.opacity(0.25)
+                                : DesignTokens.Glass.borderColor,
+                            lineWidth: 0.5
+                        ))
             }
             .buttonStyle(.plain)
+            .disabled(currentPage.wrappedValue == 0)
+
+            // 페이지 인디케이터
+            if totalPages <= 7 {
+                HStack(spacing: 4) {
+                    ForEach(0..<totalPages, id: \.self) { page in
+                        Capsule()
+                            .fill(page == currentPage.wrappedValue ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.3))
+                            .frame(
+                                width: page == currentPage.wrappedValue ? 16 : 5,
+                                height: 5
+                            )
+                            .animation(.easeInOut(duration: 0.2), value: currentPage.wrappedValue)
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    currentPage.wrappedValue = page
+                                }
+                            }
+                    }
+                }
+            } else {
+                Text("\(currentPage.wrappedValue + 1) / \(totalPages)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+
+            // 다음 버튼
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    currentPage.wrappedValue = min(totalPages - 1, currentPage.wrappedValue + 1)
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(currentPage.wrappedValue < totalPages - 1 ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.4))
+                    .frame(width: 26, height: 26)
+                    .background(
+                        currentPage.wrappedValue < totalPages - 1
+                            ? AnyShapeStyle(accentColor.opacity(0.1))
+                            : AnyShapeStyle(DesignTokens.Colors.surfaceElevated.opacity(0.5)),
+                        in: Circle()
+                    )
+                    .overlay(Circle()
+                        .strokeBorder(
+                            currentPage.wrappedValue < totalPages - 1
+                                ? accentColor.opacity(0.25)
+                                : DesignTokens.Glass.borderColor,
+                            lineWidth: 0.5
+                        ))
+            }
+            .buttonStyle(.plain)
+            .disabled(currentPage.wrappedValue == totalPages - 1)
+
             Spacer()
         }
-    }
-
-    // MARK: - Load More Offline
-
-    private var loadMoreOfflineButton: some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
-            Spacer()
-            Button {
-                withAnimation(DesignTokens.Animation.snappy) {
-                    displayedOfflineCount = min(displayedOfflineCount + offlinePageSize, totalOfflineCount)
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.down")
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    Text("\(totalOfflineCount - displayedOfflineCount)개 더 보기")
-                        .font(DesignTokens.Typography.captionMedium)
-                }
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                withAnimation(DesignTokens.Animation.snappy) {
-                    showAllOffline = true
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "list.bullet")
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    Text("전체 \(totalOfflineCount)")
-                        .font(DesignTokens.Typography.captionSemibold)
-                }
-                .foregroundStyle(DesignTokens.Colors.accentPurple)
-                .padding(.horizontal, DesignTokens.Spacing.sm)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(DesignTokens.Colors.accentPurple.opacity(0.1))
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(DesignTokens.Colors.accentPurple.opacity(0.3), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            Spacer()
-        }
+        .padding(.vertical, DesignTokens.Spacing.sm)
     }
 
     // MARK: - Skeleton Loading View
 
-    private var skeletonLoadingView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                sectionHeader(icon: "dot.radiowaves.left.and.right", title: "라이브 중", count: 0, color: DesignTokens.Colors.live)
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                    .padding(.top, DesignTokens.Spacing.sm)
-                    .redacted(reason: .placeholder)
+    @State private var skeletonAppeared = false
 
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 180, maximum: 280), spacing: DesignTokens.Spacing.sm)],
-                    spacing: DesignTokens.Spacing.sm
-                ) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        SkeletonLiveCard()
+    private var skeletonLoadingView: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: DesignTokens.Spacing.xl) {
+                // 스켈레톤 헤더
+                skeletonHeaderCard
+
+                // 라이브 스켈레톤 카드
+                widgetCard {
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                        sectionHeader(icon: "dot.radiowaves.left.and.right", title: "라이브 중", count: 0, color: DesignTokens.Colors.live)
+                            .redacted(reason: .placeholder)
+
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.flexible(), spacing: DesignTokens.Spacing.sm), count: liveColumns),
+                            spacing: DesignTokens.Spacing.sm
+                        ) {
+                            ForEach(0..<8, id: \.self) { idx in
+                                SkeletonLiveCard()
+                                    .opacity(skeletonAppeared ? 1 : 0)
+                                    .offset(y: skeletonAppeared ? 0 : 6)
+                                    .animation(
+                                        .easeOut(duration: 0.3).delay(Double(idx) * 0.03),
+                                        value: skeletonAppeared
+                                    )
+                            }
+                        }
                     }
                 }
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.top, DesignTokens.Spacing.xs)
-                .padding(.bottom, DesignTokens.Spacing.md)
 
-                sectionHeader(icon: "moon.zzz", title: "오프라인", count: 0, color: DesignTokens.Colors.textTertiary)
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                    .redacted(reason: .placeholder)
+                // 오프라인 스켈레톤 카드
+                widgetCard {
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                        sectionHeader(icon: "moon.zzz.fill", title: "오프라인", count: 0, color: DesignTokens.Colors.textTertiary)
+                            .redacted(reason: .placeholder)
 
-                VStack(spacing: 2) {
-                    ForEach(0..<5, id: \.self) { _ in
-                        HStack(spacing: 10) {
-                            Circle().fill(DesignTokens.Colors.surfaceElevated).frame(width: 30, height: 30).shimmer()
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).fill(DesignTokens.Colors.surfaceElevated).frame(height: 10).shimmer()
-                            Spacer()
+                        VStack(spacing: 2) {
+                            ForEach(0..<5, id: \.self) { _ in
+                                HStack(spacing: 10) {
+                                    Circle().fill(DesignTokens.Colors.surfaceElevated).frame(width: 34, height: 34).shimmer()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                                            .fill(DesignTokens.Colors.surfaceElevated)
+                                            .frame(height: 10).shimmer()
+                                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                                            .fill(DesignTokens.Colors.surfaceElevated)
+                                            .frame(width: 60, height: 8).shimmer()
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.vertical, 9)
+                            }
                         }
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.vertical, DesignTokens.Spacing.sm)
                     }
                 }
             }
+            .padding(DesignTokens.Spacing.xl)
         }
+        .onAppear { skeletonAppeared = true }
+    }
+
+    /// 스켈레톤 헤더 카드
+    private var skeletonHeaderCard: some View {
+        HStack(spacing: DesignTokens.Spacing.md) {
+            Circle()
+                .fill(DesignTokens.Colors.surfaceElevated)
+                .frame(width: 52, height: 52)
+                .shimmer()
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                    .fill(DesignTokens.Colors.surfaceElevated)
+                    .frame(width: 100, height: 20)
+                    .shimmer()
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                    .fill(DesignTokens.Colors.surfaceElevated)
+                    .frame(width: 160, height: 12)
+                    .shimmer()
+            }
+            Spacer()
+        }
+        .padding(DesignTokens.Spacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(DesignTokens.Colors.surfaceBase)
+        )
     }
 
     // MARK: - Empty Search / Gate Views
 
     private var emptySearchResult: some View {
-        VStack(spacing: DesignTokens.Spacing.md) {
-            Image(systemName: "magnifyingglass")
-                .font(DesignTokens.Typography.display)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            Text("검색 결과가 없습니다")
-                .font(DesignTokens.Typography.bodyMedium)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-            if !searchText.isEmpty {
-                Text("'\(searchText)'와 일치하는 채널이 없습니다")
-                    .font(DesignTokens.Typography.caption)
+        VStack(spacing: DesignTokens.Spacing.lg) {
+            // 아이콘 (더블 링)
+            ZStack {
+                Circle()
+                    .fill(DesignTokens.Colors.textTertiary.opacity(0.04))
+                    .frame(width: 72, height: 72)
+                Circle()
+                    .strokeBorder(DesignTokens.Colors.textTertiary.opacity(0.08), lineWidth: 1)
+                    .frame(width: 72, height: 72)
+                Circle()
+                    .strokeBorder(DesignTokens.Colors.textTertiary.opacity(0.15), lineWidth: 1.5)
+                    .frame(width: 48, height: 48)
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 20, weight: .light))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .multilineTextAlignment(.center)
             }
-            // 필터 초기화 버튼들
+
             VStack(spacing: 6) {
+                Text("검색 결과가 없습니다")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                if !searchText.isEmpty {
+                    Text("'\(searchText)'와 일치하는 채널이 없습니다")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+
+            // 필터 초기화 버튼들
+            HStack(spacing: 6) {
                 if !searchText.isEmpty {
                     filterResetButton(label: "검색 초기화", icon: "xmark.circle") {
                         searchText = ""
@@ -731,27 +1078,30 @@ struct FollowingView: View {
                         filterLiveOnly = false
                     }
                 }
-                if searchText.isEmpty == false || selectedCategory != nil || filterLiveOnly {
-                    Button {
-                        withAnimation(DesignTokens.Animation.snappy) {
-                            searchText = ""
-                            selectedCategory = nil
-                            filterLiveOnly = false
-                        }
-                    } label: {
-                        Text("모든 필터 초기화")
-                            .font(DesignTokens.Typography.captionSemibold)
-                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                            .padding(.horizontal, DesignTokens.Spacing.md)
-                            .padding(.vertical, DesignTokens.Spacing.sm)
-                            .background(DesignTokens.Colors.chzzkGreen.opacity(0.1))
-                            .clipShape(Capsule())
-                            .overlay(Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.3), lineWidth: 0.5))
-                    }
-                    .buttonStyle(.plain)
-                }
             }
-            .padding(.top, DesignTokens.Spacing.xxs)
+
+            if !searchText.isEmpty || selectedCategory != nil || filterLiveOnly {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        searchText = ""
+                        selectedCategory = nil
+                        filterLiveOnly = false
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("모든 필터 초기화")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.sm)
+                    .background(DesignTokens.Colors.surfaceOverlay, in: Capsule())
+                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 200)
         .padding(.top, DesignTokens.Spacing.xl)
@@ -759,16 +1109,15 @@ struct FollowingView: View {
 
     private func filterResetButton(label: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon).font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                Text(label).font(DesignTokens.Typography.captionMedium)
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 9, weight: .medium))
+                Text(label).font(.system(size: 10, weight: .medium))
             }
             .foregroundStyle(DesignTokens.Colors.textSecondary)
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .overlay(Capsule().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5))
+            .padding(.vertical, 5)
+            .background(DesignTokens.Colors.surfaceElevated.opacity(0.6), in: Capsule())
+            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
     }
@@ -781,37 +1130,54 @@ struct FollowingView: View {
         buttonLabel: String?,
         action: (() -> Void)?
     ) -> some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
+        VStack(spacing: DesignTokens.Spacing.xl) {
+            // 아이콘 (더블 링 + 글로우)
             ZStack {
                 Circle()
-                    .fill(iconColor.opacity(0.1))
-                    .frame(width: 72, height: 72)
+                    .fill(iconColor.opacity(0.06))
+                    .frame(width: 80, height: 80)
+                Circle()
+                    .strokeBorder(iconColor.opacity(0.1), lineWidth: 1)
+                    .frame(width: 80, height: 80)
+                Circle()
+                    .strokeBorder(iconColor.opacity(0.2), lineWidth: 1.5)
+                    .frame(width: 56, height: 56)
                 Image(systemName: icon)
-                    .font(DesignTokens.Typography.display)
+                    .font(.system(size: 26, weight: .light))
                     .foregroundStyle(iconColor)
             }
-            VStack(spacing: DesignTokens.Spacing.xs) {
+
+            VStack(spacing: DesignTokens.Spacing.sm) {
                 Text(title)
-                    .font(DesignTokens.Typography.subheadSemibold)
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Text(subtitle)
-                    .font(DesignTokens.Typography.captionMedium)
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(2)
             }
+
             if let label = buttonLabel, let action {
                 Button(action: action) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 7) {
                         Image(systemName: "arrow.right.circle.fill")
-                            .font(DesignTokens.Typography.captionMedium)
+                            .font(.system(size: 13))
                         Text(label)
-                            .font(DesignTokens.Typography.bodySemibold)
+                            .font(.system(size: 13, weight: .bold))
                     }
-                    .foregroundStyle(DesignTokens.Colors.onPrimary)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 11)
-                    .background(DesignTokens.Colors.chzzkGreen)
-                    .clipShape(Capsule())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.85)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -826,7 +1192,7 @@ struct FollowingView: View {
         Menu {
             ForEach(FollowingSortOrder.allCases) { order in
                 Button {
-                    withAnimation(DesignTokens.Animation.fast) { sortOrder = order }
+                    withAnimation(.easeInOut(duration: 0.25)) { sortOrder = order }
                 } label: {
                     HStack {
                         Label(order.rawValue, systemImage: order.icon)
@@ -835,18 +1201,20 @@ struct FollowingView: View {
                 }
             }
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(DesignTokens.Typography.captionMedium)
+            HStack(spacing: 4) {
+                Image(systemName: sortOrder.icon)
+                    .font(.system(size: 9, weight: .semibold))
                 Text(sortOrder.rawValue)
-                    .font(DesignTokens.Typography.captionMedium)
+                    .font(.system(size: 10, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             .foregroundStyle(DesignTokens.Colors.textSecondary)
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .overlay(Capsule().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(DesignTokens.Colors.surfaceElevated.opacity(0.5), in: Capsule())
+            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()

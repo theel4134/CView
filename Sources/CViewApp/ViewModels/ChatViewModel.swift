@@ -144,7 +144,7 @@ public final class ChatViewModel {
     public var unreadCount: Int = 0
 
     /// Maximum number of messages retained in the full history buffer.
-    private static let maxHistorySize = 5000
+    private static let maxHistorySize = 2500
     
     // Emoticon/highlight
     public var highlightedUsers: Set<String> = []
@@ -547,6 +547,12 @@ public final class ChatViewModel {
     /// replay mode 진입 debounce 타스크 — 빠른 연속 스크롤 시 불필요한 replay 진입/해제 반복 방지
     @ObservationIgnored private var replayDebounceTask: Task<Void, Never>?
 
+    /// 대기 중인 replay debounce 타스크 취소 — 프로그래밍적 스크롤 시 View에서 호출
+    public func cancelReplayDebounce() {
+        replayDebounceTask?.cancel()
+        replayDebounceTask = nil
+    }
+
     /// 스크롤 위치 변경 시 호출 — 치지직 방식: 하단 도달 시 즉시 해제, 이탈 시 debounce 후 진입
     /// - Parameter isNearBottom: 스크롤이 하단 근처(80px 이내)인지 여부
     public func onScrollPositionChanged(isNearBottom: Bool) {
@@ -558,12 +564,13 @@ public final class ChatViewModel {
                 exitReplayMode()
             }
         } else {
-            // 하단에서 벗어나면 debounce(150ms) 후 리플레이 모드 진입
+            // 하단에서 벗어나면 debounce(300ms) 후 리플레이 모드 진입
+            // — 메시지 배치 flush(100ms)로 인한 일시적 geometry 변경을 충분히 걸러냄
             guard !isReplayMode else { return }
             guard messages.count > 3 else { return }
             guard replayDebounceTask == nil else { return }
             replayDebounceTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 150_000_000)
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 guard !Task.isCancelled, let self, !self.isReplayMode else { return }
                 self.enterReplayMode()
                 self.replayDebounceTask = nil

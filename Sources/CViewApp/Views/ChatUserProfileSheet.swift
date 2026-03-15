@@ -25,7 +25,7 @@ struct ChatUserProfileSheet: View {
                     .frame(width: 56, height: 56)
                     .clipShape(Circle())
                     .overlay {
-                        Circle().strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
+                        Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                     }
                 } else {
                     ZStack {

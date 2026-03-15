@@ -47,7 +47,7 @@ public enum ImageCacheDefaults {
 
 public enum ResponseCacheDefaults {
     /// 응답 캐시 최대 항목 수
-    public static let maxEntries = 200
+    public static let maxEntries = 100
     /// 기본 캐시 TTL (초)
     public static let defaultTTL: TimeInterval = 300
 }

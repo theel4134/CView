@@ -139,12 +139,12 @@ private struct ShortcutBindingRow: View {
                 .padding(.vertical, DesignTokens.Spacing.xs)
                 .background(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(isRecording ? DesignTokens.Colors.accentOrange.opacity(0.12) : .white.opacity(DesignTokens.Glass.borderOpacityLight))
+                        .fill(isRecording ? DesignTokens.Colors.accentOrange.opacity(0.12) : DesignTokens.Glass.borderColorLight)
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                         .strokeBorder(
-                            isRecording ? DesignTokens.Colors.accentOrange : .white.opacity(DesignTokens.Glass.borderOpacity),
+                            isRecording ? DesignTokens.Colors.accentOrange : DesignTokens.Glass.borderColor,
                             lineWidth: 1
                         )
                 }
@@ -383,7 +383,7 @@ private struct ThemeCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .strokeBorder(
-                        isSelected ? DesignTokens.Colors.chzzkGreen : .white.opacity(DesignTokens.Glass.borderOpacity),
+                        isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Glass.borderColor,
                         lineWidth: isSelected ? 2 : 1
                     )
             }

@@ -8,10 +8,36 @@ import CViewPersistence
 struct NetworkSettingsTab: View {
     @Bindable var settings: SettingsStore
     @Environment(AppState.self) private var appState
+    @State private var selectedPreset: NetworkPreset = .balanced
 
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
+
+                // MARK: - 네트워크 프리셋
+                SettingsSection(title: "네트워크 프리셋", icon: "wand.and.stars", color: DesignTokens.Colors.chzzkGreen) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            ForEach(NetworkPreset.allCases, id: \.self) { preset in
+                                PresetButton(
+                                    preset: preset,
+                                    isSelected: selectedPreset == preset,
+                                    action: { applyPreset(preset) }
+                                )
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            Image(systemName: selectedPreset.icon)
+                                .font(.system(size: 11))
+                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            Text(selectedPreset.description)
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+                        .padding(.top, 2)
+                    }
+                    .padding(.vertical, 4)
+                }
 
                 // MARK: - 연결 타임아웃
                 SettingsSection(title: "연결 타임아웃", icon: "timer", color: DesignTokens.Colors.accentBlue) {
@@ -101,7 +127,51 @@ struct NetworkSettingsTab: View {
                 await settings.save()
                 await appState.apiClient?.updateRetryCount(newValue.retryCount)
             }
+            // 수동 변경 시 프리셋 자동 감지
+            let detected = newValue.matchingPreset()
+            if selectedPreset != detected {
+                selectedPreset = detected
+            }
         }
+        .onAppear {
+            selectedPreset = settings.network.matchingPreset()
+        }
+    }
+
+    private func applyPreset(_ preset: NetworkPreset) {
+        selectedPreset = preset
+        guard preset != .custom else { return }
+        settings.network = preset.settings
+    }
+}
+
+/// 프리셋 선택 버튼
+private struct PresetButton: View {
+    let preset: NetworkPreset
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: preset.icon)
+                    .font(.system(size: 14))
+                Text(preset.displayName)
+                    .font(DesignTokens.Typography.caption)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.2) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Glass.borderColor, lineWidth: 1)
+            )
+            .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+        }
+        .buttonStyle(.plain)
     }
 }
 

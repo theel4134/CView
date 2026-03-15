@@ -1,379 +1,204 @@
 // MARK: - MultiLiveView.swift
-// CViewApp — 멀티라이브 메인 뷰
-// AVPlayer 기반 최대 4채널 동시 시청 + 오른쪽 채팅 패널
-
 import SwiftUI
 import CViewCore
 import CViewPlayer
-import CViewChat
+import CViewNetworking
+import CViewUI
 
 struct MultiLiveView: View {
-
     @Environment(AppState.self) private var appState
-    @Namespace private var layoutNamespace
-    @State private var showChatSettings = false
-
-    private var manager: MultiLiveManager {
-        appState.multiLiveManager
-    }
+    /// AppState에서 공유된 매니저 — 화면 전환 시에도 채널 목록 유지
+    private var manager: MultiLiveManager { appState.multiLiveManager }
+    @State private var showAddChannel = false
+    @State private var showSettings = false
+    @State private var addError: String?
+    // isGridLayout은 뷰 재생성 시 초기화 방지를 위해 manager에서 관리
 
     var body: some View {
-        ZStack {
-            if manager.sessions.isEmpty {
-                emptyStateView
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            } else {
-                HStack(spacing: 0) {
-                    // 왼쪽: 탭바 + 비디오 영역
-                    VStack(spacing: 0) {
-                        MultiLiveTabBar(manager: manager)
-
-                        ZStack {
-                            if manager.isGridLayout {
-                                gridLayout
-                                    .transition(.opacity)
-                            } else {
-                                tabLayout
-                                    .transition(.opacity)
-                            }
-                        }
-                        .animation(DesignTokens.Animation.contentTransition, value: manager.isGridLayout)
-                    }
-
-                    // 오른쪽: 채팅 패널 — 탭 전환 시 즉시 교체 (애니메이션 없음)
-                    if manager.showChat, let selected = manager.selectedSession {
-                        multiLiveChatPanel(session: selected)
-                            .id(selected.id)
-                            .frame(width: 320)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
-                }
-                .animation(DesignTokens.Animation.smooth, value: manager.showChat)
-                .transition(.opacity)
-            }
-        }
-        .background(Color.black)
-        .animation(DesignTokens.Animation.contentTransition, value: manager.sessions.isEmpty)
-        .sheet(isPresented: Binding(
-            get: { manager.showAddSheet },
-            set: { manager.showAddSheet = $0 }
-        )) {
-            MultiLiveAddSheet(manager: manager)
-        }
-        .toolbar {
-            toolbarContent
-        }
-    }
-
-    // MARK: - 탭 레이아웃 (선택 세션 전체 화면)
-
-    @ViewBuilder
-    private var tabLayout: some View {
-        if let selected = manager.selectedSession {
-            MultiLivePlayerPane(session: selected, isSelected: true, isCompact: false)
-                .id(selected.id)
-                .transition(.opacity)
-        }
-    }
-
-    // MARK: - 그리드 레이아웃 (동적 배치)
-
-    private var gridLayout: some View {
-        GeometryReader { geo in
-            let count = manager.sessions.count
-            let cols = count <= 2 ? count : 2
-            let rows = count <= 2 ? 1 : 2
-            let gap: CGFloat = 2
-            let cellHeight = (geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(max(rows, 1))
-
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: gap), count: max(cols, 1)),
-                spacing: gap
-            ) {
-                ForEach(manager.sessions, id: \.id) { session in
-                    MultiLivePlayerPane(
-                        session: session,
-                        isSelected: session.id == manager.selectedSessionId,
-                        isCompact: true
-                    )
-                    .frame(height: cellHeight)
-                    .onTapGesture {
-                        withAnimation(DesignTokens.Animation.snappy) {
-                            manager.selectSession(id: session.id)
-                        }
-                    }
-                    .transition(.opacity)
-                }
-            }
-            .animation(DesignTokens.Animation.contentTransition, value: manager.sessions.count)
-            .padding(gap)
-        }
-    }
-
-    // MARK: - 빈 상태 뷰
-
-    private var emptyStateView: some View {
-        VStack(spacing: DesignTokens.Spacing.xl) {
-            multiLiveIcon
-                .padding(.bottom, DesignTokens.Spacing.sm)
-
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                Text("멀티라이브")
-                    .font(.title.weight(.bold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-
-                Text("최대 4개 채널을 동시에 시청하세요")
-                    .font(.body)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-
-            Button {
-                withAnimation(DesignTokens.Animation.spring) {
-                    manager.showAddSheet = true
-                }
-            } label: {
-                HStack(spacing: DesignTokens.Spacing.xs) {
-                    Image(systemName: "plus.circle.fill")
-                    Text("채널 추가")
-                }
-                .font(.body.weight(.semibold))
-                .padding(.horizontal, DesignTokens.Spacing.xl)
-                .padding(.vertical, DesignTokens.Spacing.sm)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(DesignTokens.Colors.chzzkGreen)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var multiLiveIcon: some View {
-        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-            GridRow {
-                iconCell(delay: 0)
-                iconCell(delay: 0.15)
-            }
-            GridRow {
-                iconCell(delay: 0.3)
-                iconCell(delay: 0.45)
-            }
-        }
-    }
-
-    private func iconCell(delay: Double) -> some View {
-        RoundedRectangle(cornerRadius: 6)
-            .fill(
-                LinearGradient(
-                    colors: [DesignTokens.Colors.chzzkGreen.opacity(0.3), DesignTokens.Colors.chzzkGreen.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+        HStack(spacing: 0) {
+            // ── 메인 콘텐츠 (push 방식: 패널 열리면 자동 축소) ──
+            VStack(spacing: 0) {
+                MLTabBar(
+                    manager: manager,
+                    isGridLayout: Binding(
+                        get: { manager.isGridLayout },
+                        set: { manager.isGridLayout = $0 }
+                    ),
+                    onAdd: { withAnimation(DesignTokens.Animation.snappy) {
+                        showAddChannel.toggle()
+                        if showAddChannel { showSettings = false }
+                    }},
+                    isAddPanelOpen: showAddChannel,
+                    onSettings: { withAnimation(DesignTokens.Animation.snappy) {
+                        showSettings.toggle()
+                        if showSettings { showAddChannel = false }
+                    }},
+                    isSettingsPanelOpen: showSettings
                 )
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.3), lineWidth: 1)
-            }
-            .overlay {
-                Image(systemName: "play.fill")
-                    .font(DesignTokens.Typography.custom(size: 14))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.6))
-            }
-            .frame(width: 48, height: 36)
-    }
-
-    // MARK: - 채팅 패널
-
-    private func multiLiveChatPanel(session: MultiLiveSession) -> some View {
-        VStack(spacing: 0) {
-            // 채팅 헤더
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                Circle()
-                    .fill(DesignTokens.Colors.chzzkGreen)
-                    .frame(width: 6, height: 6)
-                Text(session.channelName)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Button {
-                    withAnimation(DesignTokens.Animation.spring) {
-                        manager.showChat = false
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(.white.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(.black.opacity(0.5))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
-                    .frame(height: 0.5)
-            }
-
-            // 채팅 콘텐츠
-            ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {
-                showChatSettings = true
-            })
-            .sheet(isPresented: $showChatSettings) {
-                MultiLiveChatSettingsView(chatVM: session.chatViewModel)
-            }
-        }
-        .background(DesignTokens.Colors.surfaceOverlay)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
-                .frame(width: 0.5)
-        }
-    }
-
-    // MARK: - 툴바
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .automatic) {
-            if !manager.sessions.isEmpty {
-                // 채팅 토글
-                Button {
-                    withAnimation(DesignTokens.Animation.spring) {
-                        manager.showChat.toggle()
-                    }
-                } label: {
-                    Image(systemName: manager.showChat ? "message.fill" : "message")
-                }
-                .help(manager.showChat ? "채팅 숨기기" : "채팅 보기")
-
-                // 그리드/탭 토글
-                Button {
-                    withAnimation(DesignTokens.Animation.contentTransition) {
-                        manager.isGridLayout.toggle()
-                    }
-                } label: {
-                    Image(systemName: manager.isGridLayout ? "rectangle.split.1x2" : "rectangle.split.2x2")
-                }
-                .help(manager.isGridLayout ? "탭 모드" : "그리드 모드")
-
-                // 전체 종료
-                Button {
-                    Task {
-                        await manager.removeAllSessions()
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle")
-                }
-                .help("모든 세션 종료")
-            }
-
-            Button {
-                manager.showAddSheet = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            .help("채널 추가")
-            .disabled(!manager.canAddSession)
-        }
-    }
-}
-
-// MARK: - MultiLive 채팅 설정 뷰
-
-private struct MultiLiveChatSettingsView: View {
-    let chatVM: ChatViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label("채팅 설정", systemImage: "bubble.left.and.bubble.right.fill")
-                    .font(.headline)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(DesignTokens.Typography.subhead)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.sm)
-
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 14) {
-                    // 글꼴 크기
-                    settingsRow(label: "글꼴 크기", icon: "textformat") {
-                        HStack(spacing: 6) {
-                            Text("가").font(DesignTokens.Typography.custom(size: 10)).foregroundStyle(DesignTokens.Colors.textTertiary)
-                            Slider(value: Binding(
-                                get: { chatVM.fontSize },
-                                set: { chatVM.fontSize = $0 }
-                            ), in: 10...24, step: 1)
-                            .tint(DesignTokens.Colors.chzzkGreen)
-                            .frame(width: 110)
-                            Text("가").font(DesignTokens.Typography.custom(size: 17)).foregroundStyle(DesignTokens.Colors.textTertiary)
-                            Text("\(Int(chatVM.fontSize))pt")
-                                .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                                .frame(width: 34)
+                ZStack {
+                    if manager.sessions.isEmpty {
+                        MLEmptyState(onAdd: {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                showAddChannel = true
+                            }
+                        })
+                    } else if manager.isGridLayout && manager.sessions.count >= 2 {
+                        // 그리드 모드: MLGridLayout이 모든 세션의 PlayerVideoView를 이미 렌더링
+                        MLGridLayout(manager: manager, appState: appState, onAdd: {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                showAddChannel = true
+                            }
+                        })
+                    } else {
+                        // ── [VLC 충돌 방지] 안정 컨테이너 패턴 ──
+                        // 기존: .id(selected.id)로 탭 전환 시 MLPlayerPane 완전 파괴→재생성
+                        //   → VLC drawable 끊김 → 0.3초 refreshDrawable() 불안정
+                        // 개선: ForEach로 모든 세션의 PlayerVideoView를 항상 살려두고
+                        //   opacity/zIndex/allowsHitTesting으로 가시성만 전환
+                        //   → VLC drawable 연결 유지 → 즉시 화면 전환
+                        ForEach(manager.sessions) { session in
+                            let isActive = session.id == manager.selectedSessionId
+                            MLPlayerPane(session: session, appState: appState, isActive: isActive)
+                                .opacity(isActive ? 1 : 0)
+                                .zIndex(isActive ? 1 : 0)
+                                .allowsHitTesting(isActive)
+                                .transaction { $0.animation = nil }
                         }
-                    }
-
-                    // 뱃지 표시
-                    settingsRow(label: "뱃지 표시", icon: "shield.fill") {
-                        Toggle("", isOn: Binding(
-                            get: { chatVM.showBadge },
-                            set: { chatVM.showBadge = $0 }
-                        ))
-                        .toggleStyle(.switch)
-                        .tint(DesignTokens.Colors.chzzkGreen)
-                    }
-
-                    // 후원 메시지만 표시
-                    settingsRow(label: "후원 메시지만", icon: "gift.fill") {
-                        Toggle("", isOn: Binding(
-                            get: { chatVM.showDonationsOnly },
-                            set: { chatVM.showDonationsOnly = $0 }
-                        ))
-                        .toggleStyle(.switch)
-                        .tint(DesignTokens.Colors.chzzkGreen)
-                    }
-
-                    // 타임스탬프 표시
-                    settingsRow(label: "타임스탬프 표시", icon: "clock") {
-                        Toggle("", isOn: Binding(
-                            get: { chatVM.showTimestamp },
-                            set: { chatVM.showTimestamp = $0 }
-                        ))
-                        .toggleStyle(.switch)
-                        .tint(DesignTokens.Colors.chzzkGreen)
+                        .animation(nil, value: manager.sessions.count)
                     }
                 }
-                .padding(DesignTokens.Spacing.md)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
+            // ── 채널 추가 슬라이드 패널 (push 방식) ──────────────
+            // 세션 추가 등 다른 상태 변경에 애니메이션이 전파되지 않도록
+            // 패널 자체에만 애니메이션 콘텍스트 부여
+            if showAddChannel {
+                MLAddChannelPanel(
+                    manager: manager,
+                    appState: appState,
+                    isPresented: $showAddChannel,
+                    onError: { addError = $0 }
+                )
+                .environment(appState)
+                .transition(.move(edge: .trailing))
+                .animation(DesignTokens.Animation.contentTransition, value: showAddChannel)
+            }
+
+            // ── 설정 슬라이드 패널 (push 방식) ──────────────
+            if showSettings {
+                MLSettingsPanel(
+                    manager: manager,
+                    settingsStore: appState.settingsStore,
+                    isPresented: $showSettings
+                )
+                .transition(.move(edge: .trailing))
+                .animation(DesignTokens.Animation.contentTransition, value: showSettings)
             }
         }
-        .frame(width: 380, height: 350)
+        .background(manager.sessions.isEmpty ? DesignTokens.Colors.background : Color.black)
+        // 전체 HStack에는 애니메이션 제거 — 세션 추가 시 비디오가 확장되는 현상 방지
+        .clipped()
+        .frame(minWidth: 740, minHeight: 520)
+        .task {
+            // 저장된 세션 복원 (최초 진입 시, 세션이 비어있을 때만)
+            if manager.sessions.isEmpty {
+                await manager.restoreState(appState: appState)
+            }
+        }
+        .onKeyPress(phases: .down) { press in
+            handleMultiLiveShortcut(press)
+        }
+        .onKeyPress(.escape) {
+            if showAddChannel {
+                withAnimation(DesignTokens.Animation.contentTransition) { showAddChannel = false }
+                return .handled
+            }
+            if showSettings {
+                withAnimation(DesignTokens.Animation.contentTransition) { showSettings = false }
+                return .handled
+            }
+            return .ignored
+        }
+        .alert("채널 추가 실패", isPresented: Binding(
+            get: { addError != nil },
+            set: { if !$0 { addError = nil } }
+        )) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(addError ?? "")
+        }
     }
 
-    @ViewBuilder
-    private func settingsRow<Control: View>(label: String, icon: String, @ViewBuilder control: () -> Control) -> some View {
-        HStack {
-            Label(label, systemImage: icon)
-                .font(DesignTokens.Typography.bodySemibold)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-            Spacer()
-            control()
+    // MARK: - Keyboard Shortcuts
+
+    /// 활성 세션의 PlayerViewModel에 키보드 단축키를 적용
+    private func handleMultiLiveShortcut(_ press: KeyPress) -> KeyPress.Result {
+        let shortcuts = appState.settingsStore.keyboard
+
+        // 활성 세션 결정: 탭 모드 → 선택된 세션, 그리드 모드 → 오디오 활성 세션
+        let activeSession: MultiLiveSession? = if !manager.isGridLayout {
+            manager.selectedSession
+        } else {
+            manager.sessions.first { $0.id == (manager.audioSessionId ?? manager.selectedSessionId) }
         }
-        .padding(DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.surfaceBase)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        guard let session = activeSession else { return .ignored }
+        let vm = session.playerViewModel
+
+        for action in ShortcutAction.allCases {
+            let binding = shortcuts.binding(for: action)
+            guard matchesBinding(press, binding) else { continue }
+
+            switch action {
+            case .togglePlay:
+                Task { await vm.togglePlayPause() }
+            case .toggleMute:
+                session.setMuted(!session.isMuted)
+            case .toggleFullscreen:
+                NSApp.keyWindow?.toggleFullScreen(nil)
+            case .toggleChat:
+                withAnimation(DesignTokens.Animation.snappy) { session.isChatVisible.toggle() }
+            case .togglePiP:
+                if let vlcEngine = vm.playerEngine as? VLCPlayerEngine {
+                    PiPController.shared.startPiP(vlcEngine: vlcEngine)
+                }
+            case .screenshot:
+                vm.takeScreenshot()
+            case .volumeUp:
+                vm.setVolume(min(1.0, vm.volume + 0.05))
+                if session.isMuted { session.setMuted(false) }
+            case .volumeDown:
+                vm.setVolume(max(0.0, vm.volume - 0.05))
+            }
+            return .handled
+        }
+        return .ignored
+    }
+
+    /// KeyPress가 KeyBinding과 일치하는지 확인
+    private func matchesBinding(_ press: KeyPress, _ binding: KeyBinding) -> Bool {
+        let mods = binding.modifiers
+        if mods.contains(.command)  != press.modifiers.contains(.command)  { return false }
+        if mods.contains(.shift)    != press.modifiers.contains(.shift)    { return false }
+        if mods.contains(.option)   != press.modifiers.contains(.option)   { return false }
+        if mods.contains(.control)  != press.modifiers.contains(.control)  { return false }
+
+        switch binding.key {
+        case "space":      return press.key == .space
+        case "upArrow":    return press.key == .upArrow
+        case "downArrow":  return press.key == .downArrow
+        case "leftArrow":  return press.key == .leftArrow
+        case "rightArrow": return press.key == .rightArrow
+        case "return":     return press.key == .return
+        case "escape":     return press.key == .escape
+        case "tab":        return press.key == .tab
+        case "delete":     return press.key == .delete
+        default:
+            return press.characters.lowercased() == binding.key.lowercased()
+        }
     }
 }
+

@@ -109,6 +109,9 @@ public actor LowLatencyController {
     private var _latencyHistory: [TimeInterval] = []
     private var syncTask: Task<Void, Never>?
     
+    // M1 fix: 버퍼링 중 rate 조정 일시 중지
+    private var _isPausedForBuffering: Bool = false
+    
     // Callbacks
     private var onRateChange: (@Sendable (Double) -> Void)?
     private var onSeekRequired: (@Sendable (TimeInterval) -> Void)?
@@ -136,6 +139,26 @@ public actor LowLatencyController {
     /// Set callback for seek requirements
     public func setOnSeekRequired(_ handler: @escaping @Sendable (TimeInterval) -> Void) {
         self.onSeekRequired = handler
+    }
+    
+    // MARK: - Buffering Pause (M1 fix)
+    
+    /// 버퍼링 시작 시 호출 — rate를 1.0으로 리셋하고 조정 일시 중지
+    public func pauseForBuffering() {
+        guard !_isPausedForBuffering else { return }
+        _isPausedForBuffering = true
+        if _currentRate != 1.0 {
+            _currentRate = 1.0
+            onRateChange?(1.0)
+            logger.info("LowLatency: 버퍼링 감지 — rate 1.0으로 리셋, 조정 일시 중지")
+        }
+    }
+    
+    /// 버퍼링 종료(재생 재개) 시 호출 — rate 조정 재개
+    public func resumeFromBuffering() {
+        guard _isPausedForBuffering else { return }
+        _isPausedForBuffering = false
+        logger.info("LowLatency: 재생 재개 — rate 조정 재개")
     }
     
     // MARK: - Sync Control
@@ -168,10 +191,16 @@ public actor LowLatencyController {
         _state = .idle
         _currentRate = 1.0
         pidController.reset()
+        // 재연결 시 이전 세션의 stale EWMA/히스토리가 PID를 오염하지 않도록 리셋
+        latencyEWMA = EWMACalculator(alpha: 0.3)
+        _latencyHistory.removeAll()
     }
     
     /// Process a single latency measurement
     public func processLatency(_ currentLatency: TimeInterval) {
+        // M1 fix: 버퍼링 중에는 rate 조정 스킵 (rate는 이미 1.0으로 리셋됨)
+        guard !_isPausedForBuffering else { return }
+        
         let smoothedLatency = latencyEWMA.update(currentLatency)
         
         _latencyHistory.append(smoothedLatency)

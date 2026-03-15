@@ -77,7 +77,9 @@ public struct LiveBadge: View {
             Circle()
                 .fill(Color.white)
                 .frame(width: compact ? 5 : 6, height: compact ? 5 : 6)
-                .shadow(color: .white.opacity(0.6), radius: isPulsing ? 4 : 1)
+                // shadow radius 보간 제거 — 매 프레임 GPU blur 재계산 방지
+                // opacity toggle (2-state)로 교체: Core Animation이 alpha만 보간
+                .opacity(isPulsing ? 1.0 : 0.5)
             Text("LIVE")
                 .font(compact
                     ? DesignTokens.Typography.custom(size: 8, weight: .bold)
@@ -99,12 +101,11 @@ public struct LiveBadge: View {
         )
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .clipShape(Capsule())
-        // Metal 3: gradient+shadow+pulse 다중 레이어 → GPU 단일 텍스처
-        .drawingGroup(opaque: false)
+        // drawingGroup 제거 — opaque:false는 offscreen Metal pass 추가 비용 발생
         .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 6, y: 2)
         .onAppear {
-            if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) {
-                withAnimation(anim) {
+            if DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) != nil {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     isPulsing = true
                 }
             }
@@ -135,10 +136,10 @@ public struct ViewerCountBadge: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, DesignTokens.Spacing.xs)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
         .overlay {
             Capsule()
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 
@@ -184,7 +185,7 @@ public struct UserAvatar: View {
             .overlay {
                 Circle()
                     .strokeBorder(
-                        isLive ? DesignTokens.Colors.chzzkGreen : .white.opacity(0.08),
+                        isLive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Glass.borderColor,
                         lineWidth: isLive ? 2 : 0.5
                     )
             }
@@ -225,7 +226,7 @@ public struct CViewButtonStyle: ButtonStyle {
             .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
             .onHover { isHovered = $0 }
             .animation(DesignTokens.Animation.fast, value: isHovered)
-            .cursor(.pointingHand)
+            .customCursor(.pointingHand)
     }
 }
 

@@ -62,15 +62,15 @@ public enum DesignTokens {
     // MARK: - Typography (Streamlined Presets)
 
     public enum Typography {
-        // ── 사이즈 토큰 (8 sizes) ──
-        public static let displaySize: CGFloat = 32
-        public static let titleSize: CGFloat = 24
+        // ── 사이즈 토큰 (Retina 최적화 — 2x 밀도 기준) ──
+        public static let displaySize: CGFloat = 34
+        public static let titleSize: CGFloat = 26
         public static let headlineSize: CGFloat = 20
         public static let subheadSize: CGFloat = 16
         public static let bodySize: CGFloat = 14
-        public static let captionSize: CGFloat = 12
-        public static let footnoteSize: CGFloat = 11
-        public static let microSize: CGFloat = 9
+        public static let captionSize: CGFloat = 13
+        public static let footnoteSize: CGFloat = 12
+        public static let microSize: CGFloat = 10
 
         // ── 프리셋 폰트 (핵심 16개) ──
         public static let display = Font.system(size: displaySize, weight: .bold)
@@ -93,6 +93,10 @@ public enum DesignTokens {
         public static let micro = Font.system(size: microSize, weight: .medium)
         public static let microSemibold = Font.system(size: microSize, weight: .semibold)
         public static let mono = Font.system(size: 13, weight: .regular, design: .monospaced)
+
+        // ── Retina 전용 모노스페이스 (숫자, 시청자 수 등) ──
+        public static let monoMedium = Font.system(size: 13, weight: .medium, design: .monospaced)
+        public static let monoSemibold = Font.system(size: 13, weight: .semibold, design: .monospaced)
 
         /// 커스텀 사이즈 + weight 조합용 헬퍼
         public static func custom(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
@@ -182,8 +186,8 @@ public enum DesignTokens {
         }
 
         // ── Accent ──
-        /// 치지직 그린 — 유일한 브랜드 액센트 (양 모드 동일)
-        public static let primary       = Color(hex: 0x00FFA3)
+        /// 치지직 그린 — 유일한 브랜드 액센트 (라이트 WCAG AA 4.6:1+)
+        public static let primary       = adaptive(dark: 0x00FFA3, light: 0x00875A)
         public static let chzzkGreen    = primary
 
         // ── 4-Layer Surface Stack (Raycast-inspired, 6-8pt luminance steps) ──
@@ -192,11 +196,11 @@ public enum DesignTokens {
         /// 기본 표면 — 카드, 패널
         public static let surfaceBase        = adaptive(dark: 0x1C1C1E, light: 0xFFFFFF)
         /// 상승 표면 — 호버, 활성 패널
-        public static let surfaceElevated    = adaptive(dark: 0x242426, light: 0xF0F0F5)
+        public static let surfaceElevated    = adaptive(dark: 0x242426, light: 0xE8E8EF)
         /// 오버레이 표면 — 드롭다운, 툴팁
-        public static let surfaceOverlay     = adaptive(dark: 0x2C2C2E, light: 0xEAEAF0)
+        public static let surfaceOverlay     = adaptive(dark: 0x2C2C2E, light: 0xDCDCE4)
         /// 팝오버 표면 — 커맨드 팔레트, 팝오버
-        public static let surfacePopover     = adaptive(dark: 0x3A3A3C, light: 0xE0E0E8)
+        public static let surfacePopover     = adaptive(dark: 0x3A3A3C, light: 0xD2D2DC)
 
         // ── Text ──
         public static let textPrimary   = adaptive(dark: 0xF5F5F7, light: 0x1D1D1F)
@@ -213,14 +217,14 @@ public enum DesignTokens {
         public static let donation     = Color(hex: 0xFFD700)
         public static let donationEnd  = Color(hex: 0xFFA500)
         public static let error        = Color(hex: 0xFF453A)
-        public static let success      = Color(hex: 0x00FFA3)
+        public static let success      = adaptive(dark: 0x00FFA3, light: 0x00875A)
         public static let warning      = Color(hex: 0xFFAA00)
 
-        // ── Accent Palette ──
-        public static let accentBlue   = Color(hex: 0x5BA3FF)
-        public static let accentPurple = Color(hex: 0xBF5FFF)
-        public static let accentPink   = Color(hex: 0xFF5FA0)
-        public static let accentOrange = Color(hex: 0xFF9F0A)
+        // ── Accent Palette (라이트 WCAG AA 4.5:1+) ──
+        public static let accentBlue   = adaptive(dark: 0x5BA3FF, light: 0x2E6BC6)
+        public static let accentPurple = adaptive(dark: 0xBF5FFF, light: 0x7B3FA6)
+        public static let accentPink   = adaptive(dark: 0xFF5FA0, light: 0xC93570)
+        public static let accentOrange = adaptive(dark: 0xFF9F0A, light: 0xCC7A00)
 
         // ── On-surface ──
         public static let onPrimary    = adaptive(dark: 0x0A0A0A, light: 0x0A0A0A)
@@ -254,18 +258,47 @@ public enum DesignTokens {
         public static let regular: Material = .thinMaterial
         /// 두꺼운 유리 — 모달, 팝오버, 커맨드 팔레트
         public static let thick: Material = .regularMaterial
-        /// Glass 테두리 기본 투명도
-        public static let borderOpacity: Double = 0.12
+        /// macOS 사이드바 — 얇은 Material을 sidebar 역할로 사용
+        public static let sidebar: Material = .ultraThinMaterial
+        /// macOS 툴바/타이틀바 — 얇은 Material을 bar 역할로 사용
+        public static let bar: Material = .ultraThinMaterial
+        /// Glass 테두리 기본 투명도 (Retina: 더 선명하게)
+        public static let borderOpacity: Double = 0.10
         /// Glass 테두리 밝은 투명도
         public static let borderOpacityLight: Double = 0.18
+        
+        // ── Adaptive Glass Border Colors (Light/Dark) ──
+        /// Glass 테두리 색상 — 다크: white 0.10, 라이트: black 0.12
+        public static let borderColor: Color = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark ? NSColor.white.withAlphaComponent(0.10) : NSColor.black.withAlphaComponent(0.12)
+        })
+        /// Glass 테두리 밝은 색상 — 다크: white 0.18, 라이트: black 0.18
+        public static let borderColorLight: Color = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark ? NSColor.white.withAlphaComponent(0.18) : NSColor.black.withAlphaComponent(0.18)
+        })
+        /// Glass 구분선 색상 — 다크: white 0.22, 라이트: black 0.12
+        public static let dividerColor: Color = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark ? NSColor.white.withAlphaComponent(0.22) : NSColor.black.withAlphaComponent(0.12)
+        })
+        /// macOS 구분선 투명도 — System separator에 맞춤
+        public static let dividerOpacity: Double = 0.22
+        /// 선택 배경 투명도 — macOS list selection 수준
+        public static let selectionOpacity: Double = 0.14
+        /// 컨텐츠 테두리 투명도 — 카드/패널 테두리에 사용
+        public static let contentBorder: Double = 0.38
+        /// 썸네일 오버레이 — 강화된 그라데이션 (Retina)
+        public static let thumbnailGradientOpacity: Double = 0.60
     }
 
     // MARK: - Gradients (Real gradients, not flat fills)
 
     public enum Gradients {
-        /// 프라이머리 — 미묘한 그린 그라데이션
+        /// 프라이머리 — 미묘한 그린 그라데이션 (적응형)
         public static let primary = LinearGradient(
-            colors: [Color(hex: 0x00FFA3), Color(hex: 0x00E08E)],
+            colors: [Colors.chzzkGreen, Colors.chzzkGreen.opacity(0.85)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -305,9 +338,9 @@ public enum DesignTokens {
             startPoint: .top,
             endPoint: .bottom
         )
-        /// 사이드바 선택 — 그린 틴트
+        /// 사이드바 선택 — macOS 네이티브 느낌의 미묘한 그린 틴트
         public static let sidebarActive = LinearGradient(
-            colors: [Colors.chzzkGreen.opacity(0.13), Colors.chzzkGreen.opacity(0.04)],
+            colors: [Colors.chzzkGreen.opacity(0.10), Colors.chzzkGreen.opacity(0.03)],
             startPoint: .leading,
             endPoint: .trailing
         )
@@ -325,6 +358,24 @@ public enum DesignTokens {
         )
         public static let statPurple = LinearGradient(
             colors: [Colors.accentPurple.opacity(0.08), Colors.surfaceBase],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        /// 메인 콘텐츠 배경 — 라이트: 미묘한 쿨 그라디언트, 다크: 투명 (기존 배경 유지)
+        public static let contentBackground = LinearGradient(
+            colors: [
+                Colors.background,
+                Colors.background.opacity(0.97),
+                Colors.background
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        /// 섹션 카드 배경 — 라이트: surfaceBase → 미묘한 그림자 느낌, 다크: 동일
+        public static let sectionCard = LinearGradient(
+            colors: [Colors.surfaceBase, Colors.surfaceBase.opacity(0.92)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -369,21 +420,39 @@ public enum DesignTokens {
 
     public typealias CornerRadius = Radius
 
-    // MARK: - Shadows (Glass-friendly)
+    // MARK: - Shadows (Retina-tuned — 라이트 모드에서 강화된 깊이감)
 
     public enum Shadow {
-        /// 작은 그림자 — 배지, 작은 요소
-        public static let sm = ShadowStyle(color: .black.opacity(0.10), radius: 3, x: 0, y: 1)
-        /// 중간 그림자 — 카드, 패널
-        public static let md = ShadowStyle(color: .black.opacity(0.15), radius: 8, x: 0, y: 3)
-        /// 큰 그림자 — 모달, 팝오버
-        public static let lg = ShadowStyle(color: .black.opacity(0.22), radius: 16, x: 0, y: 6)
+        // MARK: Adaptive shadow helper
+        private static func adaptiveShadow(
+            darkOpacity: Double, lightOpacity: Double,
+            darkRadius: CGFloat, lightRadius: CGFloat,
+            y: CGFloat
+        ) -> ShadowStyle {
+            let color = Color(nsColor: NSColor(name: nil) { appearance in
+                let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                return NSColor.black.withAlphaComponent(isDark ? darkOpacity : lightOpacity)
+            })
+            // 라이트 모드 radius를 약간 키워 더 소프트한 그림자 생성
+            return ShadowStyle(color: color, radius: lightRadius, x: 0, y: y)
+        }
+
+        /// 작은 그림자 — 배지, 작은 요소 (라이트: 강화)
+        public static let sm = adaptiveShadow(darkOpacity: 0.14, lightOpacity: 0.10, darkRadius: 4, lightRadius: 5, y: 1.5)
+        /// 중간 그림자 — 카드, 패널 (라이트: 강화)
+        public static let md = adaptiveShadow(darkOpacity: 0.18, lightOpacity: 0.12, darkRadius: 10, lightRadius: 12, y: 4)
+        /// 큰 그림자 — 모달, 팝오버 (라이트: 강화)
+        public static let lg = adaptiveShadow(darkOpacity: 0.26, lightOpacity: 0.18, darkRadius: 20, lightRadius: 24, y: 8)
         /// 액센트 글로우 — 브랜드 하이라이트
-        public static let glow = ShadowStyle(color: Colors.chzzkGreen.opacity(0.25), radius: 12, x: 0, y: 0)
-        /// 호버 카드 — 부유 효과
-        public static let cardHover = ShadowStyle(color: .black.opacity(0.28), radius: 16, x: 0, y: 8)
-        /// Glass 그림자 — 유리 패널 하단
-        public static let glass = ShadowStyle(color: .black.opacity(0.12), radius: 20, x: 0, y: 4)
+        public static let glow = ShadowStyle(color: Colors.chzzkGreen.opacity(0.30), radius: 16, x: 0, y: 0)
+        /// 호버 카드 — 부유 효과 (라이트: 부드러운 elevation)
+        public static let cardHover = adaptiveShadow(darkOpacity: 0.32, lightOpacity: 0.20, darkRadius: 22, lightRadius: 26, y: 10)
+        /// Glass 그림자 — 유리 패널 하단 (라이트: 강화)
+        public static let glass = adaptiveShadow(darkOpacity: 0.16, lightOpacity: 0.10, darkRadius: 24, lightRadius: 28, y: 6)
+        /// 사이드바 행 선택 — 미세 elevation
+        public static let rowSelected = adaptiveShadow(darkOpacity: 0.10, lightOpacity: 0.08, darkRadius: 6, lightRadius: 8, y: 2)
+        /// 카드 기본 — 라이트 모드에서 플로팅 느낌 (다크: 없음)
+        public static let card = adaptiveShadow(darkOpacity: 0.0, lightOpacity: 0.08, darkRadius: 0, lightRadius: 10, y: 3)
     }
 
     // MARK: - Animation (Spring-first, 60fps)
@@ -438,16 +507,25 @@ public enum DesignTokens {
         }
     }
 
-    // MARK: - Layout
+    // MARK: - Layout (Retina Display 최적화)
 
     public enum Layout {
-        public static let sidebarMinWidth: CGFloat = 200
+        public static let sidebarMinWidth: CGFloat = 220
         public static let sidebarDefaultWidth: CGFloat = 260
-        public static let sidebarMaxWidth: CGFloat = 350
-        public static let minWindowWidth: CGFloat = 900
-        public static let minWindowHeight: CGFloat = 600
+        public static let sidebarMaxWidth: CGFloat = 320
+        /// Retina: 최소 1280px 권장 (원래 900)
+        public static let minWindowWidth: CGFloat = 1000
+        public static let minWindowHeight: CGFloat = 660
         public static let chatPanelWidth: CGFloat = 340
-        public static let playerMinHeight: CGFloat = 400
+        public static let playerMinHeight: CGFloat = 420
+        /// 카드 그리드 — 기본 컬럼 최소 폭
+        public static let gridCardMinWidth: CGFloat = 220
+        /// 카드 그리드 — 이상적 컬럼 폭
+        public static let gridCardIdealWidth: CGFloat = 260
+        /// 썸네일 오프라인 행 아바타 크기
+        public static let offlineAvatarSize: CGFloat = 36
+        /// 온라인 카드 아바타 배지 크기
+        public static let liveAvatarSize: CGFloat = 28
     }
 }
 
@@ -511,13 +589,13 @@ public struct GlassCardModifier: ViewModifier {
             .background(material, in: RoundedRectangle(cornerRadius: cornerRadius))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(.white.opacity(borderOpacity), lineWidth: 0.5)
+                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .shadow(
-                color: hasShadow ? .black.opacity(0.12) : .clear,
-                radius: hasShadow ? 12 : 0,
-                y: hasShadow ? 4 : 0
+                color: hasShadow ? DesignTokens.Shadow.card.color : .clear,
+                radius: hasShadow ? DesignTokens.Shadow.card.radius : 0,
+                y: hasShadow ? DesignTokens.Shadow.card.y : 0
             )
     }
 }
@@ -555,6 +633,11 @@ public struct SurfaceCardModifier: ViewModifier {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .shadow(
+                color: DesignTokens.Shadow.card.color,
+                radius: DesignTokens.Shadow.card.radius,
+                y: DesignTokens.Shadow.card.y
+            )
     }
 }
 
@@ -577,9 +660,9 @@ public struct HoverCardModifier: ViewModifier {
         content
             .scaleEffect(isHovered ? scaleEffect : 1.0)
             .shadow(
-                color: isHovered ? .black.opacity(0.22) : .clear,
-                radius: isHovered ? 12 : 0,
-                y: isHovered ? 6 : 0
+                color: isHovered ? DesignTokens.Shadow.cardHover.color : .clear,
+                radius: isHovered ? DesignTokens.Shadow.cardHover.radius : 0,
+                y: isHovered ? DesignTokens.Shadow.cardHover.y : 0
             )
             .animation(DesignTokens.Animation.micro, value: isHovered)
             .onHover { hovering in
@@ -656,7 +739,7 @@ public struct PillButtonStyle: ButtonStyle {
             .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
             .onHover { isHovered = $0 }
             .animation(DesignTokens.Animation.fast, value: isHovered)
-            .cursor(.pointingHand)
+            .customCursor(.pointingHand)
     }
 }
 
@@ -692,7 +775,7 @@ public struct GhostPillButtonStyle: ButtonStyle {
             .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
             .onHover { isHovered = $0 }
             .animation(DesignTokens.Animation.fast, value: isHovered)
-            .cursor(.pointingHand)
+            .customCursor(.pointingHand)
     }
 }
 
@@ -789,6 +872,26 @@ extension View {
         material: Material = .thinMaterial
     ) -> some View {
         self.background(material, in: RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    /// 메인 콘텐츠 배경 — 라이트 모드에서 미묘한 깊이감 그라디언트 + 배경색
+    public func contentBackground() -> some View {
+        self.background {
+            ZStack {
+                DesignTokens.Colors.background
+                // 라이트 모드에서 미묘한 쿨 그라디언트 효과
+                LinearGradient(
+                    colors: [
+                        DesignTokens.Colors.surfaceBase.opacity(0.3),
+                        Color.clear,
+                        DesignTokens.Colors.surfaceElevated.opacity(0.15)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+            .ignoresSafeArea()
+        }
     }
 
     /// 커서 변경 — 인터랙티브 요소에 포인팅 핸드 등 커서 표시

@@ -146,7 +146,7 @@ private struct PiPControlsSwiftUIView: View {
                 .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(isDestructive ? .red : .white)
                 .frame(width: 28, height: 28)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(Circle())
                 .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
         }

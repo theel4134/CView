@@ -103,7 +103,7 @@ public final class PlayerContainerView: NSView {
         // 다음 RunLoop 사이클로 지연시키되 즉시 async 처리하여 1프레임 블랙 화면 최소화.
         if isLayingOut {
             pendingVideoView = videoView
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self, let pending = self.pendingVideoView else { return }
                 self.pendingVideoView = nil
                 self.attachVideoView(pending)
@@ -117,7 +117,10 @@ public final class PlayerContainerView: NSView {
     private func attachVideoView(_ videoView: NSView) {
         guard videoView !== currentSubview else { return }
 
-        currentSubview?.removeFromSuperview()
+        // [크리티컬] currentSubview가 이미 다른 컨테이너로 옮겨졌을 수 있음.
+        if let old = currentSubview, old.superview === self {
+            old.removeFromSuperview()
+        }
         currentSubview = nil
 
         addSubview(videoView)
@@ -133,18 +136,50 @@ public final class PlayerContainerView: NSView {
         // 새 비디오 뷰에 현재 fill 모드 반영
         applyFillMode(to: videoView)
 
-        // bounds가 유효한 경우 즉시 needsLayout을 예약하여
-        // 다음 layout 패스에서 videoView.frame = bounds 가 적용되도록 한다.
-        // makeNSView 시 bounds == .zero이면 layout() 에서 자동 처리됨.
-        if bounds.size != .zero {
-            needsLayout = true
+        // CA 암묵적 애니메이션 없이 레이아웃을 즉시 플러시하여
+        // VLC가 올바른 프레임 크기를 빠르게 인식하도록 한다.
+        // 멀티라이브 탭 전환 시 1프레임 블랙 화면 최소화.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.layoutSubtreeIfNeeded()
+        CATransaction.commit()
+
+        // [VLC vout 복구] SwiftUI가 뷰 계층을 재구성할 때(세션 추가로 그리드 레이아웃 변경 등)
+        // playerView가 새 PlayerContainerView에 마운트된다. VLC의 Metal 렌더링 서피스는
+        // 이전 레이어 계층에 바인딩되어 있으므로, drawable을 재설정하여 새 레이어 계층에서
+        // vout을 재생성시킨다.
+        // [멀티라이브 그리드 안정화] 세션이 순차 추가되면 그리드 레이아웃이 여러 번 변경되어
+        // PlayerContainerView가 반복 재생성된다. progressive retry로 최종 레이아웃 안정 후
+        // drawable이 올바르게 바인딩되도록 보장.
+        if let vlcView = videoView as? VLCLayerHostView,
+           let player = vlcView.boundPlayer {
+            // 뷰가 새 컨테이너로 이동 시 drawable 즉시 재바인딩
+            // VLC가 새 레이어 계층에서 vout을 재생성하도록 함
+            // 200ms/800ms 지연 복구는 초기 vout 생성을 방해하므로 제거
+            DispatchQueue.main.asyncAfter(deadline: .now()) { [weak vlcView, weak player] in
+                guard let vlcView, let player, vlcView.window != nil else { return }
+                let state = player.state
+                guard state != .stopped && state != .stopping else { return }
+                player.drawable = nil
+                player.drawable = vlcView
+            }
         }
     }
 
     public func clearVideoView() {
         pendingVideoView = nil
-        currentSubview?.removeFromSuperview()
+        let subview = currentSubview
         currentSubview = nil
+        // [크리티컬] superview === self 체크: 그리드 재배치로 이미 다른 컨테이너에
+        // 옮겨진 VLC 뷰를 제거하지 않도록 보호
+        if let subview, subview.superview === self {
+            DispatchQueue.main.async {
+                // async 시점에도 아직 이 컨테이너에 있는지 재확인
+                if subview.superview === self {
+                    subview.removeFromSuperview()
+                }
+            }
+        }
     }
 
     /// 비디오 화면 채움 모드 설정 (true: aspect-fill, false: aspect-fit)

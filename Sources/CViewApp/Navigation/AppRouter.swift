@@ -71,6 +71,7 @@ public final class AppRouter {
         case multiChat = "멀티채팅"
         case multiLive = "멀티라이브"
         case recentFavorites = "최근/즐겨찾기"
+        case metrics = "메트릭"
         case settings = "설정"
         
         public var id: String { rawValue }
@@ -85,6 +86,7 @@ public final class AppRouter {
             case .multiChat: "bubble.left.and.bubble.right.fill"
             case .multiLive: "rectangle.split.2x2.fill"
             case .recentFavorites: "clock.arrow.circlepath"
+            case .metrics: "chart.bar.xaxis"
             case .settings: "gearshape.fill"
             }
         }

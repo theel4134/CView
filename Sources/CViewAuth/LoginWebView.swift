@@ -111,7 +111,7 @@ public struct LoginWebView: NSViewRepresentable {
 
                     Log.auth.info("Login cookies acquired: \(foundCookies.map(\.name).joined(separator: ", "), privacy: .private)")
 
-                    DispatchQueue.main.async {
+                    Task { @MainActor in
                         self.parent.onLoginSuccess()
                     }
                 }

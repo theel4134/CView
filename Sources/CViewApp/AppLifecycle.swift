@@ -57,14 +57,45 @@ extension AppState {
                 self?.handleWindowRestored()
             }
         }
+
+        // 앱 종료 시 멀티라이브 세션 상태 제거 — 재시작 시 빈 메인 화면으로 시작
+        nc.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil, queue: .main
+        ) { _ in
+            MultiLivePersistedState.clear()
+        }
     }
 
     /// 앱 포커스 복귀 — 폴링 주기를 정상(30s)으로 복구 & 즉시 1회 갱신
+    /// 백그라운드에서 재생이 멈춘 경우 자동 복구를 시도한다.
     func handleAppBecameActive() {
         guard !isAppActive else { return }
         isAppActive = true
         homeViewModel?.resumeMetricsPolling()
-        logger.info("App became active – resumed metrics polling")
+
+        // 백그라운드 체류 시간 계산
+        let backgroundDuration: TimeInterval
+        if let entry = _backgroundEntryTime {
+            backgroundDuration = Date().timeIntervalSince(entry)
+            _backgroundEntryTime = nil
+        } else {
+            backgroundDuration = 0
+        }
+
+        // 5초 이상 백그라운드에 있었으면 재생 복구 시도
+        if backgroundDuration > 5 {
+            // 메인 플레이어 복구
+            playerViewModel?.recoverFromBackground()
+
+            // 멀티라이브 세션 복구
+            for session in multiLiveManager.sessions {
+                session.playerViewModel.recoverFromBackground()
+            }
+            logger.info("App became active — stream recovery triggered (background \(String(format: "%.0f", backgroundDuration))s)")
+        } else {
+            logger.info("App became active – resumed metrics polling")
+        }
     }
 
     /// 앱 포커스 이탈 — 메트릭 폴링 주기 느리게 (2분)
@@ -72,6 +103,7 @@ extension AppState {
     func handleAppResignedActive() {
         guard isAppActive else { return }
         isAppActive = false
+        _backgroundEntryTime = Date()
         homeViewModel?.pauseMetricsPolling()
 
         // 백그라운드 재생 유지: 활성 스트림이 있으면 App Nap 방지 activity 시작
@@ -131,13 +163,22 @@ extension AppState {
         }
     }
 
-    /// 창 최소화에서 복원 시 VLC drawable 컨텍스트를 재설정
+    /// 창 최소화에서 복원 시 플레이어 렌더링 상태를 복구
     /// VLC 렌더링 서피스는 창 최소화 중 무효화될 수 있다.
+    /// AVPlayer는 최소화 중 macOS에 의해 일시정지될 수 있다.
     func handleWindowRestored() {
         if let vlcEngine = playerViewModel?.mediaPlayer,
            case .playing = playerViewModel?.streamPhase {
             vlcEngine.refreshDrawable()
             logger.info("Window restored — VLC drawable refreshed")
+        }
+        // 멀티라이브 세션 복구 (AVPlayer 기반)
+        for session in multiLiveManager.sessions {
+            if let vlcEngine = session.playerViewModel.mediaPlayer {
+                vlcEngine.refreshDrawable()
+            }
+            // AVPlayer 세션: 최소화 중 일시정지된 경우 재개
+            session.playerViewModel.recoverFromBackground()
         }
     }
 }

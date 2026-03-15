@@ -222,17 +222,17 @@ public actor MetricsAPIClient {
         try await request(.postPDTSync(payload), as: PDTSyncResponse.self)
     }
     
-    /// 채널 활성화
+    /// 채널 활성화 (서버에 채널 등록)
     public func activateChannel(_ payload: ChannelActivatePayload) async throws -> ChannelActivateResponse {
-        try await request(.activateChannel(payload), as: ChannelActivateResponse.self)
+        try await request(.addChannel(payload), as: ChannelActivateResponse.self)
     }
     
-    /// 채널 비활성화
+    /// 채널 비활성화 (서버에서 채널 제거)
     public func deactivateChannel(channelId: String) async throws {
-        try await postIgnoringResponse(.deactivateChannel(channelId: channelId))
+        try await postIgnoringResponse(.removeChannel(channelId: channelId))
     }
     
-    /// 채널 핑 (활성 유지)
+    /// 채널 핑 (활성 유지 — 간단 메트릭 전송으로 대체)
     public func pingChannel(channelId: String) async throws {
         try await postIgnoringResponse(.pingChannel(channelId: channelId))
     }

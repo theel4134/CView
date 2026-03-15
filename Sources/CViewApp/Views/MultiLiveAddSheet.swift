@@ -10,7 +10,7 @@ struct MultiLiveAddSheet: View {
 
     @Bindable var manager: MultiLiveManager
     @Environment(AppState.self) private var appState
-    @Environment(\.dismiss) private var dismiss
+    var isPresented: Binding<Bool>?
 
     // 검색 상태
     @State private var searchQuery = ""
@@ -19,6 +19,7 @@ struct MultiLiveAddSheet: View {
     @State private var isSearching = false
     @State private var hasSearched = false
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var recentSearches: [String] = []
 
     // 팔로잉 상태
     @State private var followingChannels: [LiveChannelItem] = []
@@ -46,7 +47,6 @@ struct MultiLiveAddSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
             tabPicker
 
             Group {
@@ -65,8 +65,6 @@ struct MultiLiveAddSheet: View {
                 errorBanner(error)
             }
         }
-        .frame(width: 480, height: 560)
-        .background(DesignTokens.Colors.backgroundElevated)
         .onChange(of: searchQuery) { debounceSearch() }
         .task { await loadFollowingChannels() }
     }
@@ -83,7 +81,7 @@ struct MultiLiveAddSheet: View {
                 Text("채널 추가")
                     .font(.headline)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Text("최대 \(MultiLiveManager.maxSessions)개 채널 동시 시청")
+                Text("최대 \(manager.effectiveMaxSessions)개 채널 동시 시청")
                     .font(.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
@@ -93,7 +91,9 @@ struct MultiLiveAddSheet: View {
             sessionCounter
 
             Button {
-                dismiss()
+                withAnimation(DesignTokens.Animation.snappy) {
+                    isPresented?.wrappedValue = false
+                }
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
@@ -107,15 +107,15 @@ struct MultiLiveAddSheet: View {
 
     private var sessionCounter: some View {
         HStack(spacing: 4) {
-            ForEach(0..<MultiLiveManager.maxSessions, id: \.self) { i in
+            ForEach(0..<manager.effectiveMaxSessions, id: \.self) { i in
                 Circle()
-                    .fill(i < manager.sessions.count ? DesignTokens.Colors.chzzkGreen : .white.opacity(0.1))
+                    .fill(i < manager.sessions.count ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary.opacity(0.3))
                     .frame(width: 6, height: 6)
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(Capsule().fill(.white.opacity(0.06)))
+        .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.6)))
     }
 
     // MARK: - 탭 피커
@@ -136,7 +136,7 @@ struct MultiLiveAddSheet: View {
                                 .foregroundStyle(selectedTab == tab ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
-                                .background(Capsule().fill(.white.opacity(0.08)))
+                                .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.6)))
                         }
                     }
                     .font(.subheadline.weight(selectedTab == tab ? .semibold : .regular))
@@ -159,10 +159,10 @@ struct MultiLiveAddSheet: View {
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
         }
-        .background(.white.opacity(0.03))
+        .background(DesignTokens.Colors.surfaceElevated.opacity(0.5))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(.white.opacity(DesignTokens.Glass.borderOpacity))
+                .fill(DesignTokens.Glass.borderColor)
                 .frame(height: 0.5)
         }
     }
@@ -186,7 +186,11 @@ struct MultiLiveAddSheet: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(.white.opacity(0.05))
+                        .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 )
 
                 // 라이브/전체 필터
@@ -251,7 +255,11 @@ struct MultiLiveAddSheet: View {
             let query = followingSearchText.lowercased()
             channels = channels.filter { $0.channelName.lowercased().contains(query) }
         }
-        return channels
+        // 라이브 채널 상단 정렬 (라이브 우선, 시청자 수 내림차순)
+        return channels.sorted { a, b in
+            if a.isLive != b.isLive { return a.isLive }
+            return a.viewerCount > b.viewerCount
+        }
     }
 
     private var followingList: some View {
@@ -344,7 +352,11 @@ struct MultiLiveAddSheet: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.white.opacity(0.03))
+                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
             )
             .contentShape(Rectangle())
         }
@@ -426,11 +438,11 @@ struct MultiLiveAddSheet: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .fill(.white.opacity(0.05))
+                .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
         )
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 
@@ -469,20 +481,57 @@ struct MultiLiveAddSheet: View {
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
-                .background(Capsule().fill(.white.opacity(0.06)))
+                .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5)))
             Spacer()
         }
         .padding(.vertical, 4)
     }
 
     private var searchPromptView: some View {
-        VStack(spacing: DesignTokens.Spacing.sm) {
+        VStack(spacing: DesignTokens.Spacing.md) {
             Image(systemName: "tv")
                 .font(DesignTokens.Typography.custom(size: 28, weight: .light))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
             Text("채널명 또는 방송 제목으로 검색하세요")
                 .font(.caption)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
+
+            // 최근 검색어
+            if !recentSearches.isEmpty {
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                    HStack {
+                        Text("최근 검색")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        Spacer()
+                        Button {
+                            withAnimation(DesignTokens.Animation.fast) { recentSearches.removeAll() }
+                        } label: {
+                            Text("지우기")
+                                .font(.caption2)
+                                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    HStack(spacing: 6) {
+                        ForEach(recentSearches, id: \.self) { query in
+                            Button {
+                                searchQuery = query
+                            } label: {
+                                Text(query)
+                                    .font(.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5)))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, DesignTokens.Spacing.lg)
+                .padding(.top, DesignTokens.Spacing.md)
+            }
         }
     }
 
@@ -519,7 +568,7 @@ struct MultiLiveAddSheet: View {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     default:
-                        Rectangle().fill(.white.opacity(0.06))
+                        Rectangle().fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
                             .overlay {
                                 Image(systemName: "play.rectangle.fill")
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
@@ -575,7 +624,11 @@ struct MultiLiveAddSheet: View {
             .padding(.vertical, DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.white.opacity(0.03))
+                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
             )
             .contentShape(Rectangle())
         }
@@ -628,7 +681,11 @@ struct MultiLiveAddSheet: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.white.opacity(0.03))
+                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
             )
             .contentShape(Rectangle())
         }
@@ -652,7 +709,7 @@ struct MultiLiveAddSheet: View {
         } else {
             Text("추가")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(Capsule().fill(DesignTokens.Colors.chzzkGreen))
@@ -692,11 +749,11 @@ struct MultiLiveAddSheet: View {
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .fill(.white.opacity(0.05))
+                        .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 }
 
                 Button {
@@ -750,7 +807,11 @@ struct MultiLiveAddSheet: View {
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .fill(.white.opacity(0.03))
+                                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                         )
                     }
                 }
@@ -779,6 +840,10 @@ struct MultiLiveAddSheet: View {
                 .foregroundStyle(.orange)
         case .idle:
             Text("대기")
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+        case .offline:
+            Image(systemName: "tv.slash")
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
         }
@@ -854,6 +919,12 @@ struct MultiLiveAddSheet: View {
         isSearching = true
         addError = nil
 
+        // 최근 검색어 추가 (최대 5개)
+        if !recentSearches.contains(query) {
+            recentSearches.insert(query, at: 0)
+            if recentSearches.count > 5 { recentSearches.removeLast() }
+        }
+
         Task {
             do {
                 async let livesTask = apiClient.searchLives(keyword: query, size: 10)
@@ -881,7 +952,7 @@ struct MultiLiveAddSheet: View {
         addError = nil
 
         Task {
-            await manager.addSession(channelId: channelId)
+            await manager.addSession(channelId: channelId, preferredEngine: appState.settingsStore.player.preferredEngine)
             withAnimation(DesignTokens.Animation.snappy) {
                 recentlyAddedIds.insert(channelId)
                 addingChannelId = nil
@@ -890,7 +961,9 @@ struct MultiLiveAddSheet: View {
 
             if !manager.canAddSession {
                 try? await Task.sleep(for: .milliseconds(300))
-                dismiss()
+                withAnimation(DesignTokens.Animation.snappy) {
+                    isPresented?.wrappedValue = false
+                }
             }
         }
     }

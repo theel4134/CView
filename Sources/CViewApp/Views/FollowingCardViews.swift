@@ -1,12 +1,12 @@
 // MARK: - FollowingCardViews.swift
 // CViewApp - 팔로잉 채널 카드 컴포넌트
-// 라이브 카드 + 오프라인 행 + 스켈레톤 카드
+// 치지직 스타일 라이브 카드 + 모던 오프라인 카드 + 스켈레톤
 
 import SwiftUI
 import CViewCore
 import CViewUI
 
-// MARK: - Live Channel Card (라이브 전용)
+// MARK: - Live Channel Card (Chzzk-Style Rich Card)
 
 @MainActor
 struct FollowingLiveCard: View, Equatable {
@@ -17,7 +17,6 @@ struct FollowingLiveCard: View, Equatable {
     let channel: LiveChannelItem
     let index: Int
     let onPlay: () -> Void
-    /// 호버 시 HLS 매니페스트 프리페치를 요청하는 콜백 (channelId 전달)
     var onPrefetch: ((String) -> Void)? = nil
 
     @State private var isHovered = false
@@ -25,167 +24,255 @@ struct FollowingLiveCard: View, Equatable {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── 이미지 영역 ──────────────────────────────────────────
-            // overlay 패턴: 베이스 뷰가 크기를 결정, 배지/hover는 합성만
-            // ZStack 내 조건부 분기 제거 → isHovered 토글 시 ZStack 전체 재평가 없음
-            imageBase
+            // ── 썸네일 영역 (16:9)
+            thumbnailArea
                 .frame(maxWidth: .infinity)
-                .aspectRatio(16/9, contentMode: .fit)  // 16:9 스트림 썸네일 비율
+                .aspectRatio(16/9, contentMode: .fit)
                 .clipped()
-                .overlay(alignment: .top) { badgeBar }          // LIVE 배지 + 시청자수 (상단)
-                .overlay { if isHovered { hoverLayer } }        // hover 레이어 (독립)
-                .overlay(alignment: .bottomLeading) { avatarBadge } // 채널 아바타 (좌하단)
 
-            // ── 정보 영역 ────────────────────────────────────────────
+            // ── 정보 영역
             infoArea
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(
-                    isHovered ? DesignTokens.Colors.live.opacity(0.5) : DesignTokens.Colors.live.opacity(0.12),
-                    lineWidth: 0.5
+                    isHovered
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
+                        : DesignTokens.Glass.borderColor,
+                    lineWidth: isHovered ? 1.2 : 0.5
                 )
         }
-        // scaleEffect 제거 — 전체 카드 재합성 유발
-        // shadow(radius:14) 제거 — macOS 고비용 blur 패스
+        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
         .opacity(appeared ? 1 : 0)
-        .animation(DesignTokens.Animation.micro, value: isHovered)
+        .animation(.easeOut(duration: 0.2), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
             if hovering { onPrefetch?(channel.channelId) }
         }
-        .onAppear { withAnimation(DesignTokens.Animation.fast) { appeared = true } }
+        .onAppear {
+            if !appeared { appeared = true }
+        }
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 
-    // MARK: - Sub-views (분리로 body 재평가 범위 최소화)
+    // MARK: - Thumbnail Area
+
+    private var thumbnailURL: URL? {
+        if let thumb = channel.thumbnailUrl, !thumb.isEmpty {
+            return URL(string: thumb)
+        }
+        return nil
+    }
+
+    private var profileURL: URL? { URL(string: channel.channelImageUrl ?? "") }
 
     @ViewBuilder
-    private var imageBase: some View {
-        // 스트림 썸네일(16:9) 우선, 없으면 채널 프로필 이미지 폴백
-        let url = [channel.thumbnailUrl, channel.channelImageUrl]
-            .lazy.compactMap { $0.flatMap(URL.init) }.first
-        if let url {
-            CachedAsyncImage(url: url) {
-                thumbnailPlaceholder
-            }
-        } else {
-            thumbnailPlaceholder
-        }
-    }
-
-    private var thumbnailPlaceholder: some View {
-        LinearGradient(
-            colors: [DesignTokens.Colors.surfaceElevated, DesignTokens.Colors.surfaceBase],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-    }
-
-    // 채널 아바타 (썸네일 좌하단 고정) — infoArea 공간 절약
-    private var avatarBadge: some View {
-        CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
-            ZStack {
-                Circle().fill(DesignTokens.Colors.surfaceElevated)
-                Image(systemName: "person.fill")
-                    .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-        }
-        .frame(width: 26, height: 26)
-        .clipShape(Circle())
-        .overlay(Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 1.5))
-        .drawingGroup(opaque: false)  // 아바타 원형 클립+스트로크 단일 Metal 패스
-        .padding(.leading, DesignTokens.Spacing.sm)
-        .padding(.bottom, DesignTokens.Spacing.xs)
-    }
-
-    private var badgeBar: some View {
-        HStack(alignment: .center) {
-            LivePulseBadge()
-            Spacer()
-            HStack(spacing: 3) {
-                Image(systemName: "person.fill").font(DesignTokens.Typography.custom(size: 8))
-                Text(channel.formattedViewerCount)
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
-            }
-            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-            .padding(.horizontal, DesignTokens.Spacing.xs)
-            .padding(.vertical, DesignTokens.Spacing.xxs)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-        }
-        .padding(.horizontal, DesignTokens.Spacing.xs)
-        .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(
-            LinearGradient(
-                colors: [.black.opacity(0.4), .clear],
-                startPoint: .top, endPoint: .bottom
-            )
-        )
-    }
-
-    private var hoverLayer: some View {
+    private var thumbnailArea: some View {
         ZStack {
-            Color.black.opacity(0.22)
-            Button(action: onPlay) {
-                HStack(spacing: 5) {
-                    Image(systemName: "play.fill").font(DesignTokens.Typography.custom(size: 11, weight: .bold))
-                    Text("바로 시청").font(DesignTokens.Typography.captionSemibold)
+            DesignTokens.Colors.surfaceElevated
+
+            // 메인 이미지 (썸네일 우선, 없으면 프로필)
+            if let url = thumbnailURL ?? profileURL {
+                CachedAsyncImage(url: url) {
+                    thumbnailFallback
                 }
-                .foregroundStyle(DesignTokens.Colors.onPrimary)
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(DesignTokens.Colors.chzzkGreen)
-                .clipShape(Capsule())
+                .scaledToFill()
+                .clipped()
+            } else {
+                thumbnailFallback
             }
-            .buttonStyle(.plain)
+
+            // 하단 그라디언트 (단순화 — 2 stop)
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            // ── 오버레이 배지 레이아웃
+            VStack(spacing: 0) {
+                // 상단: LIVE + 시청자 + 방송 시간
+                HStack(alignment: .top, spacing: 4) {
+                    LivePulseBadge()
+
+                    if let openDate = channel.openDate {
+                        uptimeBadge(since: openDate)
+                    }
+
+                    Spacer()
+
+                    viewerBadge
+                }
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.top, DesignTokens.Spacing.sm)
+
+                Spacer()
+
+                // 하단: 방송 제목 + 카테고리 (썸네일 위에 직접 표시)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(channel.liveTitle)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    if let cat = channel.categoryName {
+                        categoryTag(cat)
+                    }
+                }
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.bottom, DesignTokens.Spacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // ── 호버 오버레이
+            if isHovered { hoverOverlay }
         }
-        .transition(.opacity.animation(DesignTokens.Animation.micro))
     }
+
+    private var thumbnailFallback: some View {
+        ZStack {
+            DesignTokens.Colors.surfaceElevated
+            Image(systemName: "play.tv")
+                .font(.system(size: 28, weight: .ultraLight))
+                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.35))
+        }
+    }
+
+    // MARK: - Viewer Badge (Glass Pill)
+
+    private var viewerBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 7))
+            Text(channel.formattedViewerCount)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(.black.opacity(0.5), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+    }
+
+    // MARK: - Uptime Badge
+
+    private func uptimeBadge(since date: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 60)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(date)
+            let hours = Int(elapsed) / 3600
+            let minutes = (Int(elapsed) % 3600) / 60
+            let text = hours > 0 ? "\(hours)시간 \(minutes)분" : "\(minutes)분"
+
+            HStack(spacing: 2) {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 6))
+                Text(text)
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+            }
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2.5)
+            .background(.black.opacity(0.45), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.1), lineWidth: 0.5))
+        }
+    }
+
+    // MARK: - Category Tag
+
+    private func categoryTag(_ name: String) -> some View {
+        Text(name)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(.white.opacity(0.95))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(.black.opacity(0.4), in: Capsule())
+    }
+
+    // MARK: - Hover Overlay
+
+    private var hoverOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+
+            VStack(spacing: 8) {
+                Button(action: onPlay) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("시청하기")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 9)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                    )
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.2), radius: 3, y: 1)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity.animation(.easeOut(duration: 0.15)))
+    }
+
+    // MARK: - Info Area (채널 정보 - 심플 하단 바)
 
     private var infoArea: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(channel.channelName)
-                .font(DesignTokens.Typography.captionSemibold)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .lineLimit(1)
-            Text(channel.liveTitle)
-                .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            if let cat = channel.categoryName {
-                HStack {
-                    Text(cat)
-                        .font(DesignTokens.Typography.microSemibold)
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, DesignTokens.Spacing.xs)
-                        .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(categoryColor(for: channel.categoryType).opacity(0.75))
-                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
-                    Spacer()
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            // 프로필 아바타 (라이브 링)
+            ZStack(alignment: .bottomTrailing) {
+                if let url = profileURL {
+                    CachedAsyncImage(url: url) {
+                        Circle().fill(DesignTokens.Colors.surfaceElevated)
+                    }
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle().strokeBorder(
+                            DesignTokens.Colors.chzzkGreen.opacity(isHovered ? 0.6 : 0.35),
+                            lineWidth: 1.5
+                        )
+                    )
                 }
-            }
-        }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.xs)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DesignTokens.Colors.surfaceBase)
-        .drawingGroup(opaque: false)  // 정보 영역 텍스트+뱃지 레이어 단일 Metal 패스
-    }
 
-    private func categoryColor(for type: String?) -> Color {
-        switch type?.uppercased() {
-        case "GAME":   return DesignTokens.Colors.accentPurple
-        case "SPORTS": return DesignTokens.Colors.accentBlue
-        default:       return DesignTokens.Colors.surfaceElevated
+                // 라이브 점
+                Circle()
+                    .fill(DesignTokens.Colors.live)
+                    .frame(width: 7, height: 7)
+                    .overlay(Circle().strokeBorder(DesignTokens.Colors.surfaceBase, lineWidth: 1.5))
+                    .offset(x: 1, y: 1)
+            }
+
+            // 채널명
+            Text(channel.channelName)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(
+                    isHovered
+                        ? DesignTokens.Colors.chzzkGreen
+                        : DesignTokens.Colors.textPrimary
+                )
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, DesignTokens.Spacing.sm + 2)
+        .padding(.vertical, DesignTokens.Spacing.sm)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(DesignTokens.Colors.surfaceBase)
     }
 }
 
-// MARK: - Offline Channel Row (컴팩트)
+// MARK: - Offline Channel Row (Modern Compact Card)
 
 struct FollowingOfflineRow: View, Equatable {
     nonisolated static func == (lhs: FollowingOfflineRow, rhs: FollowingOfflineRow) -> Bool {
@@ -199,110 +286,164 @@ struct FollowingOfflineRow: View, Equatable {
     @State private var appeared = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            // 아바타 (오프라인 — saturation 제거: GPU ColorSpace 변환 패스 절감)
-            CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
-                ZStack {
-                    Circle().fill(DesignTokens.Colors.surfaceElevated)
-                    Image(systemName: "person.fill")
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+        HStack(spacing: DesignTokens.Spacing.md) {
+            // 프로필 아바타 (오프라인 링 + 상태 점)
+            ZStack(alignment: .bottomTrailing) {
+                CachedAsyncImage(url: URL(string: channel.channelImageUrl ?? "")) {
+                    ZStack {
+                        Circle().fill(DesignTokens.Colors.surfaceElevated)
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    }
                 }
-            }
-            .frame(width: 30, height: 30)
-            .clipShape(Circle())
-            .opacity(0.5)  // saturation(0.25) 제거 — opacity만으로 오프라인 dim 표현
+                .frame(width: 34, height: 34)
+                .clipShape(Circle())
+                .overlay(
+                    Circle().strokeBorder(
+                        isHovered
+                            ? DesignTokens.Colors.textSecondary.opacity(0.5)
+                            : DesignTokens.Colors.border.opacity(0.35),
+                        lineWidth: 1
+                    )
+                )
+                .saturation(isHovered ? 0.9 : 0.35)
+                .opacity(isHovered ? 0.95 : 0.55)
 
-            VStack(alignment: .leading, spacing: 1) {
+                // 오프라인 상태 점
+                Circle()
+                    .fill(DesignTokens.Colors.textTertiary.opacity(0.5))
+                    .frame(width: 8, height: 8)
+                    .overlay(Circle().strokeBorder(DesignTokens.Colors.surfaceBase, lineWidth: 1.5))
+                    .offset(x: 1, y: 1)
+            }
+
+            // 채널 정보
+            VStack(alignment: .leading, spacing: 2) {
                 Text(channel.channelName)
-                    .font(DesignTokens.Typography.captionMedium)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(
+                        isHovered
+                            ? DesignTokens.Colors.textPrimary
+                            : DesignTokens.Colors.textSecondary
+                    )
                     .lineLimit(1)
-                if let cat = channel.categoryName, !isHovered {
+
+                if let cat = channel.categoryName, !cat.isEmpty {
                     Text(cat)
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                        .font(.system(size: 10, weight: .regular))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                         .lineLimit(1)
-                        .transition(.opacity)
                 }
             }
 
             Spacer()
 
-            if isHovered {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.right.circle.fill").font(DesignTokens.Typography.caption)
-                    Text("채널 보기").font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+            // 호버: 채널 보기 / 기본: 오프라인 텍스트
+            Group {
+                if isHovered {
+                    HStack(spacing: 4) {
+                        Text("채널 보기")
+                            .font(.system(size: 10, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                        removal: .opacity
+                    ))
+                } else {
+                    Text("오프라인")
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                        .transition(.opacity)
                 }
-                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                .transition(.opacity)  // scale 제거 — geometry 재계산 없이 alpha만
-            } else {
-                Text("오프라인")
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .transition(.opacity)
             }
+            .animation(.easeOut(duration: 0.2), value: isHovered)
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.sm)
+        .padding(.vertical, 9)
         .background {
-            if isHovered {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.ultraThinMaterial)
-            }
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .fill(
+                    isHovered
+                        ? DesignTokens.Colors.surfaceElevated.opacity(0.5)
+                        : Color.clear
+                )
         }
         .overlay {
             if isHovered {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
             }
         }
-        // offset 진입 애니메이션 제거 — geometry 재계산 없이 alpha만 변경
         .opacity(appeared ? 1 : 0)
-        .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
-        .onAppear { withAnimation(DesignTokens.Animation.fast) { appeared = true } }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.25).delay(Double(index) * 0.015)) {
+                appeared = true
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 }
 
-// MARK: - Skeleton Loading Card
+// MARK: - Skeleton Loading Card (Modern Shimmer)
 
 struct SkeletonLiveCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RoundedRectangle(cornerRadius: 0)
-                .fill(DesignTokens.Colors.surfaceElevated)
-                .aspectRatio(16/9, contentMode: .fill)
-                .shimmer()
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: DesignTokens.Radius.md, topTrailingRadius: DesignTokens.Radius.md))
+            // 썸네일 영역 (16:9)
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(DesignTokens.Colors.surfaceElevated)
+                    .aspectRatio(16/9, contentMode: .fit)
+                    .shimmer()
 
-            HStack(spacing: 10) {
+                // 가짜 배지 위치
+                HStack {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                        .fill(DesignTokens.Colors.surfaceOverlay)
+                        .frame(width: 38, height: 14)
+                        .shimmer()
+                    Spacer()
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.full)
+                        .fill(DesignTokens.Colors.surfaceOverlay)
+                        .frame(width: 42, height: 14)
+                        .shimmer()
+                }
+                .padding(DesignTokens.Spacing.sm)
+            }
+
+            // 정보 영역
+            HStack(spacing: DesignTokens.Spacing.sm) {
                 Circle()
                     .fill(DesignTokens.Colors.surfaceElevated)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 28, height: 28)
                     .shimmer()
+
                 VStack(alignment: .leading, spacing: 4) {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                         .fill(DesignTokens.Colors.surfaceElevated)
-                        .frame(height: 10)
+                        .frame(height: 11)
                         .shimmer()
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
                         .fill(DesignTokens.Colors.surfaceElevated)
-                        .frame(width: 80, height: 8)
+                        .frame(width: 60, height: 8)
                         .shimmer()
                 }
-                Spacer()
             }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
+            .padding(.horizontal, DesignTokens.Spacing.sm + 2)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .background(DesignTokens.Colors.surfaceBase)
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: DesignTokens.Radius.md, bottomTrailingRadius: DesignTokens.Radius.md))
         }
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Colors.border.opacity(0.5), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 }

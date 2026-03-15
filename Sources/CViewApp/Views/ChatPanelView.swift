@@ -79,7 +79,7 @@ struct ChatPanelView: View {
             .background(.ultraThinMaterial, in: Capsule())
             .overlay {
                 Capsule()
-                    .strokeBorder(connectionColor.opacity(0.25), lineWidth: 0.5)
+                    .strokeBorder(connectionColor.opacity(0.35), lineWidth: 0.5)
             }
 
             // Chat export — Glass circle
@@ -92,7 +92,7 @@ struct ChatPanelView: View {
                     .frame(width: 28, height: 28)
                     .background(.ultraThinMaterial, in: Circle())
                     .overlay {
-                        Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                        Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                     }
             }
             .buttonStyle(.plain)
@@ -107,14 +107,14 @@ struct ChatPanelView: View {
                     .frame(width: 28, height: 28)
                     .background(.ultraThinMaterial, in: Circle())
                     .overlay {
-                        Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                        Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                     }
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(.thinMaterial)
+        .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(DesignTokens.Colors.border.opacity(0.15))
@@ -141,9 +141,9 @@ struct ChatPanelView: View {
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(width: 28, height: 28)
-                .background(.ultraThinMaterial, in: Circle())
+                .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                 .overlay {
-                    Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                    Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
                 }
         }
         .menuStyle(.borderlessButton)
@@ -194,6 +194,8 @@ struct ChatMessagesView: View {
             }
 
             ScrollViewReader { proxy in
+                // 렌더링 설정값을 값 타입으로 스냅샷 — config 미변경 시 기존 행 재렌더링 방지
+                let renderConfig = viewModel.map(ChatRenderConfig.init(from:)) ?? .default
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if let viewModel {
@@ -201,7 +203,8 @@ struct ChatMessagesView: View {
                                 chatEmptyState
                             } else {
                                 ForEach(viewModel.messages) { message in
-                                    EquatableChatMessageRow(message: message, chatVM: viewModel)
+                                    EquatableChatMessageRow(message: message, config: renderConfig, chatVM: viewModel)
+                                        .equatable()
                                         .id(message.id)
                                 }
                             }
@@ -217,7 +220,9 @@ struct ChatMessagesView: View {
                     guard maxScrollY > 0 else { return true }
                     let distanceFromBottom = maxScrollY - geometry.contentOffset.y
                     return distanceFromBottom <= 80
-                } action: { _, isNearBottom in
+                } action: { oldValue, isNearBottom in
+                    // oldValue == newValue → contentSize 변경에 의한 재계산, 실제 스크롤 아님
+                    guard oldValue != isNearBottom else { return }
                     guard isScrollViewVisible, !isScrollSuppressed else { return }
                     viewModel?.onScrollPositionChanged(isNearBottom: isNearBottom)
                 }
@@ -230,7 +235,8 @@ struct ChatMessagesView: View {
                 }
                 // 새 메시지 도착 시 자동 스크롤 — isAutoScrollEnabled 기반 (shouldScrollToLatest 레이스컨디션 제거)
                 .onChange(of: viewModel?.messages.last?.id) { _, _ in
-                    guard viewModel?.isAutoScrollEnabled == true else { return }
+                    guard viewModel?.isAutoScrollEnabled == true,
+                          viewModel?.isReplayMode != true else { return }
                     scrollToLatest(proxy: proxy)
                 }
                 // 앱이 다시 포그라운드로 돌아올 때 자동 스크롤 복원
@@ -258,10 +264,13 @@ struct ChatMessagesView: View {
     /// 최하단으로 프로그래밍적 스크롤 — 억제 카운터로 onScrollGeometryChange 오탐 방지
     private func scrollToLatest(proxy: ScrollViewProxy) {
         guard let lastId = viewModel?.messages.last?.id else { return }
+        // replay mode debounce 타스크가 대기 중이면 취소 — 프로그래밍적 스크롤 중 잘못된 진입 방지
+        viewModel?.cancelReplayDebounce()
         scrollSuppressionCount += 1
         proxy.scrollTo(lastId, anchor: .bottom)
         // 스크롤 완료 후 억제 해제 — 배치 간격(100ms) + 렌더링 여유 충분히 확보
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
             self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }
     }
@@ -334,14 +343,14 @@ struct ChatMessagesView: View {
                         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
                 } else {
                     Capsule()
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Colors.surfaceElevated)
                         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
                 }
             }
             .overlay {
                 if vm.unreadCount == 0 {
                     Capsule()
-                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                        .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                 }
             }
         }

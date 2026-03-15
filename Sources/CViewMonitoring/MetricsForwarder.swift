@@ -12,6 +12,24 @@ import CViewNetworking
 /// - 설정에서 활성화/비활성화 제어 가능
 public actor MetricsForwarder {
 
+    // MARK: - Snapshot (뷰에서 폴링용)
+
+    /// 포워더 상태 스냅샷 — 설정 패널에 메트릭 전송 현황 표시용
+    public struct Snapshot: Sendable {
+        public let isEnabled: Bool
+        public let channelId: String?
+        public let channelName: String?
+        public let totalSent: Int
+        public let totalErrors: Int
+        public let totalPings: Int
+        public let lastSentAt: Date?
+        public let lastErrorAt: Date?
+        public let lastErrorMessage: String?
+        public let forwardInterval: TimeInterval
+        public let pingInterval: TimeInterval
+        public let isForwarding: Bool
+    }
+
     // MARK: - State
 
     private let apiClient: MetricsAPIClient
@@ -29,6 +47,15 @@ public actor MetricsForwarder {
     private var isEnabled: Bool
     private var forwardInterval: TimeInterval
     private var pingInterval: TimeInterval
+
+    // MARK: - Stats Tracking
+
+    private var totalSent: Int = 0
+    private var totalErrors: Int = 0
+    private var totalPings: Int = 0
+    private var lastSentAt: Date?
+    private var lastErrorAt: Date?
+    private var lastErrorMessage: String?
 
     // MARK: - Init
 
@@ -146,20 +173,40 @@ public actor MetricsForwarder {
     /// 현재 활성 채널 ID
     public var currentChannelId: String? { activeChannelId }
 
+    /// 뷰 표시용 상태 스냅샷
+    public var snapshot: Snapshot {
+        Snapshot(
+            isEnabled: isEnabled,
+            channelId: activeChannelId,
+            channelName: activeChannelName,
+            totalSent: totalSent,
+            totalErrors: totalErrors,
+            totalPings: totalPings,
+            lastSentAt: lastSentAt,
+            lastErrorAt: lastErrorAt,
+            lastErrorMessage: lastErrorMessage,
+            forwardInterval: forwardInterval,
+            pingInterval: pingInterval,
+            isForwarding: forwardingTask != nil
+        )
+    }
+
     // MARK: - VLC Metrics
 
     /// VLCPlayerEngine.onVLCMetrics 콜백에서 호출합니다.
     /// PerformanceMonitor를 업데이트하고 최신 VLC 통계를 캐싱합니다.
+    /// [최적화] 7개 개별 actor hop → 1회 일괄 호출로 통합하여 Swift concurrency 오버헤드 제거
     public func updateVLCMetrics(_ metrics: VLCLiveMetrics) async {
         latestVLCMetrics = metrics
-        // PerformanceMonitor에도 반영하여 기존 로직과 동기화
-        await monitor.updateFPS(metrics.fps)
-        await monitor.updateDroppedFrames(metrics.droppedFramesDelta)
-        await monitor.updateNetworkBytes(metrics.networkBytesPerSec)
-        await monitor.updateBufferHealth(metrics.bufferHealth * 100)  // 0-1 → 0-100%
-        await monitor.updateResolution(metrics.resolution)
-        await monitor.updateInputBitrate(metrics.inputBitrateKbps)
-        await monitor.updateNetworkSpeed(metrics.networkBytesPerSec)
+        await monitor.updateVLCMetricsBatch(
+            fps: metrics.fps,
+            droppedFrames: metrics.droppedFramesDelta,
+            networkBytes: metrics.networkBytesPerSec,
+            bufferHealth: metrics.bufferHealth * 100,  // 0-1 → 0-100%
+            resolution: metrics.resolution,
+            inputBitrateKbps: metrics.inputBitrateKbps,
+            networkSpeedBytesPerSec: metrics.networkBytesPerSec
+        )
     }
 
     // MARK: - Metrics Forwarding
@@ -206,8 +253,12 @@ public actor MetricsForwarder {
 
         do {
             _ = try await apiClient.sendAppLatency(payload)
+            totalSent += 1
+            lastSentAt = Date()
         } catch {
-            // 전송 실패 시 무시 (다음 주기에 재시도)
+            totalErrors += 1
+            lastErrorAt = Date()
+            lastErrorMessage = error.localizedDescription
         }
     }
     
@@ -233,6 +284,7 @@ public actor MetricsForwarder {
         guard isEnabled, let channelId = activeChannelId else { return }
         do {
             try await apiClient.pingChannel(channelId: channelId)
+            totalPings += 1
         } catch {
             // 핑 실패 무시
         }

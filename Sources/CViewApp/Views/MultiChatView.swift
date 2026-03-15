@@ -69,7 +69,7 @@ struct MultiChatView: View {
                 .buttonStyle(.plain)
             }
             .padding(DesignTokens.Spacing.sm)
-            .background(DesignTokens.Colors.background)
+            .contentBackground()
 
             Divider()
 
@@ -174,7 +174,7 @@ struct MultiChatView: View {
             .padding(.vertical, DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.ultraThinMaterial)
+                    .fill(DesignTokens.Colors.surfaceElevated)
                     .overlay(
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)

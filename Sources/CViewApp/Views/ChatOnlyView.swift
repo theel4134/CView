@@ -56,8 +56,8 @@ struct ChatOnlyView: View {
                 router.presentSheet(.chatSettings)
             }
         }
-        .background(DesignTokens.Colors.background)
-        .background(.ultraThinMaterial)
+        .contentBackground()
+        .background(DesignTokens.Colors.surfaceElevated)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -106,7 +106,7 @@ struct ChatOnlyView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(.thinMaterial)
+        .background(DesignTokens.Colors.surfaceBase)
     }
     
     // MARK: - Connect

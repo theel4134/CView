@@ -17,8 +17,10 @@ public final class SettingsStore {
     public var metrics: MetricsSettings
     public var keyboard: KeyboardShortcutSettings
     public var channelNotifications: ChannelNotificationSettings
+    public var multiLive: MultiLiveSettings
 
     private var dataStore: DataStore?
+    private var _saveDebounceTask: Task<Void, Never>?
 
     public init(dataStore: DataStore? = nil) {
         self.dataStore = dataStore
@@ -30,6 +32,7 @@ public final class SettingsStore {
         self.metrics = .default
         self.keyboard = .default
         self.channelNotifications = .default
+        self.multiLive = .default
     }
 
     /// DataStore 연결 후 설정 로드 (객체 교체 없이 in-place 업데이트)
@@ -51,6 +54,7 @@ public final class SettingsStore {
         async let m = try? store.loadSetting(key: "metrics", as: MetricsSettings.self)
         async let k = try? store.loadSetting(key: "keyboard", as: KeyboardShortcutSettings.self)
         async let cn = try? store.loadSetting(key: "channelNotifications", as: ChannelNotificationSettings.self)
+        async let ml = try? store.loadSetting(key: "multiLive", as: MultiLiveSettings.self)
 
         // Equality 체크 — 동일 값 할당으로 인한 @Observable 재평가 방지
         if let val = await p, val != self.player { self.player = val }
@@ -61,6 +65,7 @@ public final class SettingsStore {
         if let val = await m, val != self.metrics { self.metrics = val }
         if let val = await k, val != self.keyboard { self.keyboard = val }
         if let val = await cn, val != self.channelNotifications { self.channelNotifications = val }
+        if let val = await ml, val != self.multiLive { self.multiLive = val }
 
         Log.persistence.info("Settings loaded")
     }
@@ -79,19 +84,18 @@ public final class SettingsStore {
             let metricsVal = self.metrics
             let keyboardVal = self.keyboard
             let channelNotificationsVal = self.channelNotifications
+            let multiLiveVal = self.multiLive
 
-            // TaskGroup으로 병렬 저장 — 각 항목의 I/O 대기가 겹침
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask { try await store.saveSetting(key: "player", value: playerVal) }
-                group.addTask { try await store.saveSetting(key: "chat", value: chatVal) }
-                group.addTask { try await store.saveSetting(key: "general", value: generalVal) }
-                group.addTask { try await store.saveSetting(key: "appearance", value: appearanceVal) }
-                group.addTask { try await store.saveSetting(key: "network", value: networkVal) }
-                group.addTask { try await store.saveSetting(key: "metrics", value: metricsVal) }
-                group.addTask { try await store.saveSetting(key: "keyboard", value: keyboardVal) }
-                group.addTask { try await store.saveSetting(key: "channelNotifications", value: channelNotificationsVal) }
-                try await group.waitForAll()
-            }
+            // DataStore는 actor이므로 순차 실행됨 — TaskGroup 오버헤드 없이 직접 호출
+            try await store.saveSetting(key: "player", value: playerVal)
+            try await store.saveSetting(key: "chat", value: chatVal)
+            try await store.saveSetting(key: "general", value: generalVal)
+            try await store.saveSetting(key: "appearance", value: appearanceVal)
+            try await store.saveSetting(key: "network", value: networkVal)
+            try await store.saveSetting(key: "metrics", value: metricsVal)
+            try await store.saveSetting(key: "keyboard", value: keyboardVal)
+            try await store.saveSetting(key: "channelNotifications", value: channelNotificationsVal)
+            try await store.saveSetting(key: "multiLive", value: multiLiveVal)
             Log.persistence.info("Settings saved")
         } catch {
             Log.persistence.error("Failed to save settings: \(error.localizedDescription)")
@@ -108,6 +112,7 @@ public final class SettingsStore {
         metrics = .default
         keyboard = .default
         channelNotifications = .default
+        multiLive = .default
         await save()
     }
 
@@ -118,10 +123,20 @@ public final class SettingsStore {
         channelNotifications.setting(for: channelId, channelName: channelName)
     }
 
-    /// 채널별 알림 설정 업데이트 및 저장
-    public func updateChannelNotification(_ setting: ChannelNotificationSetting) async {
+    /// 채널별 알림 설정 업데이트 및 저장 (0.5초 디바운스)
+    public func updateChannelNotification(_ setting: ChannelNotificationSetting) {
         channelNotifications.update(setting)
-        await save()
+        scheduleDebouncedSave()
+    }
+
+    /// 0.5초 디바운스 — 연속 변경 시 마지막 1회만 저장
+    public func scheduleDebouncedSave() {
+        _saveDebounceTask?.cancel()
+        _saveDebounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await save()
+        }
     }
 
     /// 채널별 알림 설정을 Sendable 스냅샷으로 반환 (cross-actor 전달용)

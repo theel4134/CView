@@ -338,6 +338,108 @@ public struct NetworkSettings: Codable, Sendable, Equatable {
     }
 
     public static let `default` = NetworkSettings()
+
+    /// 프리셋에 정의된 값과 현재 값이 같은지 비교하여 프리셋 자동 감지
+    public func matchingPreset() -> NetworkPreset {
+        for preset in NetworkPreset.allCases where preset != .custom {
+            if self == preset.settings { return preset }
+        }
+        return .custom
+    }
+}
+
+// MARK: - 네트워크 프리셋
+/// 네트워크 설정을 용도에 맞게 최적화하는 프리셋
+public enum NetworkPreset: String, Codable, Sendable, CaseIterable {
+    case balanced    // 밸런스 (기본)
+    case stability   // 안정 우선
+    case lowLatency  // 저지연 우선
+    case performance // 고성능 (멀티라이브 최적)
+    case custom      // 커스텀
+
+    public var displayName: String {
+        switch self {
+        case .balanced:    return "밸런스"
+        case .stability:   return "안정 우선"
+        case .lowLatency:  return "저지연 우선"
+        case .performance: return "고성능"
+        case .custom:      return "커스텀"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .balanced:
+            return "일반 시청에 적합한 기본 설정"
+        case .stability:
+            return "느린 네트워크에서도 끊김 없는 안정적인 연결"
+        case .lowLatency:
+            return "빠른 응답 우선. 불안정한 네트워크에서 끊김 가능"
+        case .performance:
+            return "멀티라이브 등 다수 동시 스트림에 최적화"
+        case .custom:
+            return "수동으로 각 항목을 직접 조정"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .balanced:    return "scale.3d"
+        case .stability:   return "shield.checkered"
+        case .lowLatency:  return "bolt.fill"
+        case .performance: return "gauge.with.dots.needle.67percent"
+        case .custom:      return "slider.horizontal.3"
+        }
+    }
+
+    /// 프리셋별 최적 NetworkSettings 반환
+    public var settings: NetworkSettings {
+        switch self {
+        case .balanced:
+            return NetworkSettings() // 기본값 그대로
+        case .stability:
+            return NetworkSettings(
+                requestRateLimit: 5,
+                cacheExpiry: 600,
+                retryCount: 5,
+                maxReconnectAttempts: 20,
+                autoReconnect: true,
+                connectionTimeout: 30,
+                streamConnectionTimeout: 20,
+                reconnectBaseDelay: 2.0,
+                maxConnectionsPerHost: 4,
+                forceStreamProxy: true
+            )
+        case .lowLatency:
+            return NetworkSettings(
+                requestRateLimit: 20,
+                cacheExpiry: 60,
+                retryCount: 2,
+                maxReconnectAttempts: 5,
+                autoReconnect: true,
+                connectionTimeout: 8,
+                streamConnectionTimeout: 5,
+                reconnectBaseDelay: 0.5,
+                maxConnectionsPerHost: 10,
+                forceStreamProxy: true
+            )
+        case .performance:
+            return NetworkSettings(
+                requestRateLimit: 15,
+                cacheExpiry: 600,
+                retryCount: 3,
+                maxReconnectAttempts: 15,
+                autoReconnect: true,
+                connectionTimeout: 20,
+                streamConnectionTimeout: 15,
+                reconnectBaseDelay: 1.5,
+                maxConnectionsPerHost: 16,
+                forceStreamProxy: true
+            )
+        case .custom:
+            return NetworkSettings() // 커스텀은 현재 값 유지
+        }
+    }
 }
 
 /// 앱 테마
@@ -573,4 +675,77 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
     }
 
     public static let `default` = MetricsSettings()
+}
+
+// MARK: - MultiLive Layout Mode
+
+/// 멀티라이브 레이아웃 모드
+public enum MultiLiveLayoutMode: String, Codable, Sendable, CaseIterable, Identifiable, Equatable {
+    /// 균등 분할 (2×2 그리드)
+    case preset = "preset"
+    /// 선택된 채널 포커스 + 나머지 작게
+    case focus = "focus"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .preset: "균등 분할"
+        case .focus:  "포커스 모드"
+        }
+    }
+}
+
+/// 멀티라이브 설정
+public struct MultiLiveSettings: Codable, Sendable, Equatable {
+    /// 최대 동시 세션 수 (2~6)
+    public var maxConcurrentSessions: Int
+    /// 멀티라이브 기본 엔진
+    public var preferredEngine: PlayerEngineType
+    /// 레이아웃 모드
+    public var defaultLayoutMode: MultiLiveLayoutMode
+    /// 멀티오디오 활성화
+    public var multiAudioEnabled: Bool
+    /// 보조 스트림 볼륨 (0~1)
+    public var secondaryVolume: Float
+    /// 백그라운드 세션 품질 자동 저하
+    public var backgroundQualityReduction: Bool
+    /// 자동 재연결
+    public var autoReconnect: Bool
+    /// 자동 재연결 최대 시도 횟수
+    public var autoReconnectMaxRetries: Int
+    /// 그리드 모드에서 채팅 오버레이 표시
+    public var chatOverlayInGrid: Bool
+    /// 채팅 오버레이 투명도 (0~1)
+    public var chatOverlayOpacity: Double
+    /// 채팅 오버레이 글꼴 크기 (8~24)
+    public var chatOverlayFontSize: Double
+
+    public init(
+        maxConcurrentSessions: Int = 4,
+        preferredEngine: PlayerEngineType = .vlc,
+        defaultLayoutMode: MultiLiveLayoutMode = .preset,
+        multiAudioEnabled: Bool = false,
+        secondaryVolume: Float = 0.3,
+        backgroundQualityReduction: Bool = true,
+        autoReconnect: Bool = true,
+        autoReconnectMaxRetries: Int = 10,
+        chatOverlayInGrid: Bool = false,
+        chatOverlayOpacity: Double = 0.5,
+        chatOverlayFontSize: Double = 12
+    ) {
+        self.maxConcurrentSessions = maxConcurrentSessions
+        self.preferredEngine = preferredEngine
+        self.defaultLayoutMode = defaultLayoutMode
+        self.multiAudioEnabled = multiAudioEnabled
+        self.secondaryVolume = secondaryVolume
+        self.backgroundQualityReduction = backgroundQualityReduction
+        self.autoReconnect = autoReconnect
+        self.autoReconnectMaxRetries = autoReconnectMaxRetries
+        self.chatOverlayInGrid = chatOverlayInGrid
+        self.chatOverlayOpacity = chatOverlayOpacity
+        self.chatOverlayFontSize = chatOverlayFontSize
+    }
+
+    public static let `default` = MultiLiveSettings()
 }

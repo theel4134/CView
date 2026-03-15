@@ -35,6 +35,14 @@ public actor HLSPrefetchService {
     private let apiClient: ChzzkAPIClient
     private let hlsParser = HLSManifestParser()
     private let logger = AppLogger.player
+    // 전용 HLS 세션 — ephemeral(쿠키 격리) + 캐시 비활성화
+    private nonisolated let hlsSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 5
+        return URLSession(configuration: config)
+    }()
 
     // MARK: - State
 
@@ -45,6 +53,10 @@ public actor HLSPrefetchService {
 
     public init(apiClient: ChzzkAPIClient) {
         self.apiClient = apiClient
+    }
+    
+    deinit {
+        hlsSession.invalidateAndCancel()
     }
 
     // MARK: - Public API
@@ -162,7 +174,7 @@ public actor HLSPrefetchService {
             // 프리페치는 경량이어야 하므로 타임아웃 짧게 설정
             request.timeoutInterval = 5
 
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await hlsSession.data(for: request)
             let content = String(data: data, encoding: .utf8) ?? ""
 
             if content.contains("#EXT-X-STREAM-INF") {

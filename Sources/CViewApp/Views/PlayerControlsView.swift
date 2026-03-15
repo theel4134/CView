@@ -18,6 +18,8 @@ struct PlayerOverlayView: View {
     var onScreenshot: (() -> Void)? = nil
     var onToggleRecording: (() -> Void)? = nil
     var settingsStore: SettingsStore? = nil
+    var onToggleSettings: (() -> Void)? = nil
+    var isSettingsOpen: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,7 +40,9 @@ struct PlayerOverlayView: View {
                     onOpenNewWindow: onOpenNewWindow,
                     onScreenshot: onScreenshot,
                     onToggleRecording: onToggleRecording,
-                    settingsStore: settingsStore
+                    settingsStore: settingsStore,
+                    onToggleSettings: onToggleSettings,
+                    isSettingsOpen: isSettingsOpen
                 )
             }
         }
@@ -117,8 +121,11 @@ struct PlayerProgressSection: View {
                                 .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                                 .padding(.horizontal, DesignTokens.Spacing.xs)
                                 .padding(.vertical, DesignTokens.Spacing.xxs)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                                        .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
+                                }
                                 .offset(x: max(20, min(width - 50, hoverPosition - 25)), y: -24)
                         }
                     }
@@ -182,10 +189,11 @@ struct LiveBadge: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            // shadow radius 고정 — opacity 변화만으로 펄스 표현 (GPU blur 재계산 방지)
             Circle()
                 .fill(DesignTokens.Colors.textOnOverlay)
                 .frame(width: 7, height: 7)
-                .shadow(color: DesignTokens.Colors.textOnOverlay.opacity(0.6), radius: isPulsing ? 4 : 1)
+                .opacity(isPulsing ? 1.0 : 0.5)
 
             Text("LIVE")
                 .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
@@ -266,9 +274,10 @@ struct PlayerControlsBar: View {
     var onScreenshot: (() -> Void)? = nil
     var onToggleRecording: (() -> Void)? = nil
     var settingsStore: SettingsStore? = nil
+    var onToggleSettings: (() -> Void)? = nil
+    var isSettingsOpen: Bool = false
     @State private var isVolumeHovered = false
     @State private var showQualityPopover = false
-    @State private var showAdvancedSettings = false
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.xl) {
@@ -320,11 +329,15 @@ struct PlayerControlsBar: View {
 
             // VLC 4.0 고급 설정 (이퀄라이저, 비디오 필터, 화면 비율, 자막, 오디오)
             PlayerButton(icon: "slider.horizontal.3", size: 14) {
-                showAdvancedSettings.toggle()
+                onToggleSettings?()
             }
             .help("고급 설정")
-            .popover(isPresented: $showAdvancedSettings, arrowEdge: .top) {
-                PlayerAdvancedSettingsView(playerVM: playerVM, settingsStore: settingsStore)
+            .overlay {
+                if isSettingsOpen {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                        .fill(DesignTokens.Colors.chzzkGreen.opacity(0.25))
+                        .allowsHitTesting(false)
+                }
             }
 
             // Audio-only mode
@@ -360,8 +373,8 @@ struct PlayerControlsBar: View {
                 .foregroundStyle(.white.opacity(0.9))
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay { Capsule().strokeBorder(.white.opacity(0.1), lineWidth: 0.5) }
             }
             .buttonStyle(.plain)
 
@@ -445,14 +458,16 @@ struct QualitySelector: View {
             .foregroundStyle(.white.opacity(isHovered ? 1.0 : 0.9))
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(isHovered ? .ultraThickMaterial : .ultraThinMaterial)
-            .clipShape(Capsule())
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(.white.opacity(isHovered ? 0.2 : 0.08), lineWidth: 0.5)
+            }
         }
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
         }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .popover(isPresented: $showPopover, arrowEdge: .top) {
             QualityPopoverContent(
                 qualities: qualities,
@@ -541,7 +556,7 @@ struct QualityRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .accessibilityLabel(quality.name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -575,7 +590,7 @@ struct PlayerButton: View {
         .buttonStyle(.plain)
         .focusable()
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -599,11 +614,10 @@ struct InfoBadge: View {
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .padding(.horizontal, DesignTokens.Spacing.xs)
         .padding(.vertical, DesignTokens.Spacing.xxs)
-        .background(.ultraThinMaterial)
+        .background(.ultraThinMaterial, in: Capsule())
         .overlay {
-            Capsule().strokeBorder(color.opacity(0.4), lineWidth: 0.5)
+            Capsule().strokeBorder(color.opacity(0.5), lineWidth: 0.5)
         }
-        .clipShape(Capsule())
     }
 }
 
@@ -621,13 +635,12 @@ struct RecordButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                // 빨간 원 (녹화 중: 펄싱)
+                // 빨간 원 (녹화 중: 펄싱) — drawingGroup으로 shadow+scale 오프스크린 격리
                 Circle()
                     .fill(isRecording ? DesignTokens.Colors.live : DesignTokens.Colors.live.opacity(0.8))
                     .frame(width: isRecording ? 10 : 8, height: isRecording ? 10 : 8)
                     .scaleEffect(isRecording && isPulsing ? 1.3 : 1.0)
                     .opacity(isRecording && isPulsing ? 0.6 : 1.0)
-                    .shadow(color: isRecording ? DesignTokens.Colors.live.opacity(0.6) : .clear, radius: 4)
 
                 // 녹화 중이면 경과 시간 표시
                 if isRecording {
@@ -655,7 +668,7 @@ struct RecordButton: View {
         .buttonStyle(.plain)
         .focusable()
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .help(isRecording ? "녹화 중지 (⌘R)" : "녹화 시작 (⌘R)")
         .accessibilityLabel(isRecording ? "녹화 중지" : "녹화 시작")
         .accessibilityValue(isRecording ? recordingDuration : "")

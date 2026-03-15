@@ -37,7 +37,7 @@ extension AppState {
         playerViewModel = PlayerViewModel(engineType: settingsStore.player.preferredEngine)
 
         // 멀티라이브 매니저 API 클라이언트 + 사용자 정보 주입
-        multiLiveManager.configure(apiClient: apiClient, userUid: userChannelId, userNickname: userNickname)
+        multiLiveManager.configure(apiClient: apiClient, settingsStore: settingsStore, userUid: userChannelId, userNickname: userNickname, metricsForwarder: nil)
 
         // 재생 상태 변경 시 App Nap 방지 관리 콜백 연결
         playerViewModel?.onPlaybackStateChanged = { [weak self] in
@@ -69,6 +69,8 @@ extension AppState {
                 monitor: performanceMonitor,
                 isEnabled: false
             )
+            // 멀티라이브 매니저에 메트릭 포워더 주입
+            multiLiveManager.metricsForwarder = self.metricsForwarder
         }
 
         // 5. DataStore/Settings 초기화 (디스크 I/O, 비차단) — 살짝 지연

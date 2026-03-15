@@ -23,6 +23,7 @@ struct SettingsView: View {
         case network  = "네트워크"
         case performance = "성능"
         case metrics  = "메트릭"
+        case multiLive = "멀티라이브"
 
         var id: String { rawValue }
 
@@ -34,17 +35,19 @@ struct SettingsView: View {
             case .network:      "network"
             case .performance:  "gauge.with.dots.needle.33percent"
             case .metrics:      "chart.line.uptrend.xyaxis"
+            case .multiLive:    "square.grid.2x2.fill"
             }
         }
 
         var color: Color {
             switch self {
             case .general:      DesignTokens.Colors.textSecondary
-            case .player:       DesignTokens.Colors.chzzkGreen
+            case .player:       Color.green
             case .chat:         DesignTokens.Colors.accentPurple
             case .network:      DesignTokens.Colors.accentBlue
             case .performance:  DesignTokens.Colors.accentOrange
             case .metrics:      Color(red: 0.2, green: 0.8, blue: 0.9)
+            case .multiLive:    Color.green
             }
         }
     }
@@ -54,7 +57,6 @@ struct SettingsView: View {
             settingsSidebar
 
             Divider()
-                .background(.white.opacity(DesignTokens.Glass.borderOpacityLight))
 
             ZStack {
                 DesignTokens.Colors.background.ignoresSafeArea()
@@ -66,12 +68,13 @@ struct SettingsView: View {
                 case .network:      NetworkSettingsTab(settings: appState.settingsStore)
                 case .performance:  PerformanceSettingsTab(settings: appState.settingsStore)
                 case .metrics:      MetricsSettingsTab(settings: appState.settingsStore)
+                case .multiLive:    MultiLiveSettingsTab(settings: appState.settingsStore)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
         .onChange(of: appState.settingsStore.chat) { _, newSettings in
             appState.chatViewModel?.applySettings(newSettings)
         }
@@ -83,20 +86,19 @@ struct SettingsView: View {
         VStack(spacing: 2) {
             VStack(spacing: 4) {
                 Image(systemName: "c.square.fill")
-                    .font(DesignTokens.Typography.custom(size: 26))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    .font(DesignTokens.Typography.custom(size: 24))
+                    .foregroundStyle(.accent)
                 Text("CView")
                     .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Text("v2.0")
                     .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    .foregroundStyle(.secondary)
             }
             .padding(.top, DesignTokens.Spacing.lg)
             .padding(.bottom, DesignTokens.Spacing.md)
 
             Divider()
-                .overlay(.white.opacity(DesignTokens.Glass.borderOpacityLight))
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.bottom, DesignTokens.Spacing.xs)
 
@@ -110,8 +112,7 @@ struct SettingsView: View {
         }
         .frame(width: 190)
         .frame(maxHeight: .infinity)
-        .background(.thinMaterial)
-        .background(DesignTokens.Colors.surfaceBase.opacity(0.5))
+        .background(DesignTokens.Glass.sidebar)
     }
 }
 
@@ -128,11 +129,11 @@ private struct SidebarTabButton: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(isSelected ? tab.color : tab.color.opacity(0.18))
+                        .fill(isSelected ? tab.color : tab.color.opacity(0.15))
                         .frame(width: 28, height: 28)
                     Image(systemName: tab.icon)
                         .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                        .foregroundStyle(isSelected ? DesignTokens.Colors.background : tab.color)
+                        .foregroundStyle(isSelected ? .white : tab.color)
                 }
                 Text(tab.rawValue)
                     .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
@@ -145,18 +146,10 @@ private struct SidebarTabButton: View {
                 Group {
                     if isSelected {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .fill(.ultraThinMaterial)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                    .fill(tab.color.opacity(0.08))
-                            }
-                            .overlay {
-                                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                    .strokeBorder(tab.color.opacity(0.2), lineWidth: 0.5)
-                            }
+                            .fill(Color.primary.opacity(0.1))
                     } else if isHovered {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .fill(.ultraThinMaterial)
+                            .fill(Color.primary.opacity(0.06))
                     }
                 }
             )
@@ -164,7 +157,7 @@ private struct SidebarTabButton: View {
         .buttonStyle(.plain)
         .padding(.horizontal, DesignTokens.Spacing.xs)
         .onHover { isHovered = $0 }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.indicator, value: isSelected)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }

@@ -24,11 +24,13 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     case activeAppChannels
     case activeWebLatency
     
-    // MARK: - POST
+    // MARK: - POST / Channel Management
     case postAppLatency(AppLatencyPayload)
+    case postMetrics(AppLatencyPayload)
     case postPDTSync(PDTSyncPayload)
-    case activateChannel(ChannelActivatePayload)
-    case deactivateChannel(channelId: String)
+    case addChannel(ChannelActivatePayload)
+    case removeChannel(channelId: String)
+    case channelCleanup
     case pingChannel(channelId: String)
     
     // MARK: - EndpointProtocol
@@ -54,26 +56,32 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         case .channelWebPlayerInfo(let id):
             "/api/channel/\(id)/web-player-info"
         case .activeAppChannels:
-            "/api/app/channels/active"
+            "/api/channels"
         case .activeWebLatency:
             "/api/web-latency/active"
         case .postAppLatency:
             "/api/app-latency"
+        case .postMetrics:
+            "/api/metrics"
         case .postPDTSync:
             "/api/pdt-sync"
-        case .activateChannel:
-            "/api/app/channel/activate"
-        case .deactivateChannel:
-            "/api/app/channel/deactivate"
+        case .addChannel:
+            "/api/channels"
+        case .removeChannel(let channelId):
+            "/api/channels/\(channelId)"
+        case .channelCleanup:
+            "/api/channels/cleanup"
         case .pingChannel:
-            "/api/app/channel/ping"
+            "/api/metrics/app"
         }
     }
     
     public var method: HTTPMethod {
         switch self {
-        case .postAppLatency, .postPDTSync, .activateChannel, .deactivateChannel, .pingChannel:
+        case .postAppLatency, .postMetrics, .postPDTSync, .addChannel, .channelCleanup, .pingChannel:
             .post
+        case .removeChannel:
+            .delete
         default:
             .get
         }
@@ -95,14 +103,18 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         switch self {
         case .postAppLatency(let payload):
             try? JSONEncoder().encode(payload)
+        case .postMetrics(let payload):
+            try? JSONEncoder().encode(payload)
         case .postPDTSync(let payload):
             try? JSONEncoder().encode(payload)
-        case .activateChannel(let payload):
+        case .addChannel(let payload):
             try? JSONEncoder().encode(payload)
-        case .deactivateChannel(let channelId):
-            try? JSONEncoder().encode(["channelId": channelId])
+        case .removeChannel:
+            nil
+        case .channelCleanup:
+            nil
         case .pingChannel(let channelId):
-            try? JSONEncoder().encode(["channelId": channelId])
+            try? JSONEncoder().encode(["channelId": channelId, "source": "VLC", "platform": "app"])
         default:
             nil
         }

@@ -29,18 +29,18 @@ struct ChannelMemoSheet: View {
             }
             .padding(DesignTokens.Spacing.lg)
 
-            Divider().background(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+            Divider().background(DesignTokens.Glass.borderColorLight)
 
             TextEditor(text: $editedMemo)
                 .font(DesignTokens.Typography.body)
                 .scrollContentBackground(.hidden)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(DesignTokens.Spacing.sm)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .stroke(focused ? Color.orange.opacity(0.6) : .white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 1)
+                        .stroke(focused ? Color.orange.opacity(0.6) : DesignTokens.Glass.borderColor, lineWidth: 1)
                 )
                 .focused($focused)
                 .padding(DesignTokens.Spacing.lg)
@@ -54,7 +54,7 @@ struct ChannelMemoSheet: View {
             .padding(.horizontal, DesignTokens.Spacing.lg)
             .padding(.bottom, DesignTokens.Spacing.xs)
 
-            Divider().background(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+            Divider().background(DesignTokens.Glass.borderColorLight)
 
             HStack(spacing: DesignTokens.Spacing.sm) {
                 Button("취소") { dismiss() }

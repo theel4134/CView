@@ -41,7 +41,7 @@ struct ClipPlayerView: View {
                 // Loading (초기 로딩만 표시 — .buffering은 재생 중 버퍼링이므로 오버레이 미표시)
                 if viewModel.playbackState == .loading {
                     ZStack {
-                        Rectangle().fill(.ultraThinMaterial)
+                        Rectangle().fill(DesignTokens.Colors.surfaceElevated)
                         VStack(spacing: 14) {
                             ProgressView()
                                 .controlSize(.large)
@@ -150,9 +150,9 @@ struct ClipPlayerView: View {
             Button { viewModel.togglePlayPause() } label: {
                 ZStack {
                     Circle()
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Colors.surfaceElevated)
                         .frame(width: 60, height: 60)
-                        .overlay { Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+                        .overlay { Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
                     Image(systemName: viewModel.playbackState == .playing ? "pause.fill" : "play.fill")
                         .font(DesignTokens.Typography.custom(size: 24, weight: .semibold))
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
@@ -227,13 +227,13 @@ struct ClipPlayerView: View {
                 if let thumbURL = clipInfo.thumbnailImageURL {
                     CachedAsyncImage(url: thumbURL) {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                            .fill(.ultraThinMaterial)
+                            .fill(DesignTokens.Colors.surfaceElevated)
                     }
                     .frame(width: 56, height: 32)
                     .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     .overlay(
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                            .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                            .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                     )
                 }
 
@@ -246,7 +246,7 @@ struct ClipPlayerView: View {
                         if let channel = clipInfo.channel {
                             if let avatarURL = channel.channelImageURL {
                                 CachedAsyncImage(url: avatarURL) {
-                                    Circle().fill(.ultraThinMaterial)
+                                    Circle().fill(DesignTokens.Colors.surfaceElevated)
                                 }
                                 .frame(width: 16, height: 16)
                                 .clipShape(Circle())
@@ -302,7 +302,7 @@ struct ClipPlayerView: View {
     @ViewBuilder
     private func errorOverlay(_ message: String) -> some View {
         ZStack {
-            Rectangle().fill(.thinMaterial)
+            Rectangle().fill(DesignTokens.Colors.surfaceBase)
             VStack(spacing: 16) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(DesignTokens.Typography.custom(size: 40))
@@ -331,7 +331,7 @@ struct ClipPlayerView: View {
 
     private var endedOverlay: some View {
         ZStack {
-            Rectangle().fill(.ultraThinMaterial)
+            Rectangle().fill(DesignTokens.Colors.surfaceElevated)
             VStack(spacing: 14) {
                 Image(systemName: "arrow.counterclockwise.circle.fill")
                     .font(DesignTokens.Typography.custom(size: 48))
@@ -621,7 +621,7 @@ private struct ClipEmbedWebView: NSViewRepresentable {
                   let url = URL(string: urlString) else { return }
             urlReported = true
             pollTask?.cancel()
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 self?.onVideoURLExtracted?(url)
             }
         }

@@ -69,10 +69,10 @@ struct ViewerTrendChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
     
@@ -137,10 +137,10 @@ struct CategoryBarChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
     
@@ -239,10 +239,10 @@ struct LatencyComparisonChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
     
@@ -342,10 +342,10 @@ struct CategoryTypeDonutChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 }
@@ -441,10 +441,10 @@ struct ViewerDistributionChart: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 
@@ -491,10 +491,10 @@ struct ServerChannelStatsView: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
     
@@ -535,6 +535,6 @@ struct ServerChannelStatsView: View {
         }
         .padding(.vertical, DesignTokens.Spacing.xxs)
         .padding(.horizontal, DesignTokens.Spacing.xs)
-        .background(.white.opacity(0.03), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+        .background(DesignTokens.Glass.borderColor.opacity(0.3), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
     }
 }

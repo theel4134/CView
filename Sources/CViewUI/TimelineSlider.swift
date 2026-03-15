@@ -62,7 +62,7 @@ public struct TimelineSlider: View {
                             .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
                             .padding(.horizontal, DesignTokens.Spacing.xs)
                             .padding(.vertical, DesignTokens.Spacing.xxs)
-                            .background(.ultraThinMaterial)
+                            .background(DesignTokens.Colors.surfaceElevated)
                             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                             .offset(x: max(20, min(width - 50, hoverPosition - 25)), y: -24)
                     }

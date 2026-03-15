@@ -35,6 +35,11 @@ public final class PlayerViewModel {
     public var errorMessage: String?
     public var isLiveStream: Bool = true
 
+    // MARK: - 네트워크 메트릭
+
+    public var latestMetrics: VLCLiveMetrics?
+    public var showNetworkMetrics: Bool = false
+
     // MARK: - 녹화 상태
 
     public var isRecording: Bool = false
@@ -55,7 +60,8 @@ public final class PlayerViewModel {
 
     private var streamCoordinator: StreamCoordinator?
     public private(set) var playerEngine: (any PlayerEngineProtocol)?
-    private let isPreallocated: Bool
+    private var isPreallocated: Bool
+    public var isMultiLive: Bool = false
     private var eventTask: Task<Void, Never>?
     private var controlHideTask: Task<Void, Never>?
     private var uptimeTask: Task<Void, Never>?
@@ -100,10 +106,30 @@ public final class PlayerViewModel {
 
     // MARK: - Init
 
-    public init(engineType: PlayerEngineType = .vlc) {
+    public init(engineType: PlayerEngineType = .vlc, isPreallocated: Bool = false) {
         self.preferredEngineType = engineType
         self.currentEngineType = engineType
-        self.isPreallocated = false
+        self.isPreallocated = isPreallocated
+    }
+
+    /// 외부에서 미리 생성된 엔진 주입 (멀티라이브 엔진 풀용)
+    public func injectEngine(_ engine: any PlayerEngineProtocol) {
+        self.playerEngine = engine
+        self.isPreallocated = true
+        if let vlc = engine as? VLCPlayerEngine {
+            self.currentEngineType = .vlc
+            vlc.streamingProfile = .multiLive
+        } else {
+            self.currentEngineType = .avPlayer
+        }
+    }
+
+    /// 주입된 엔진 분리 (풀 반환용) — 엔진 참조만 해제, stop은 호출하지 않음
+    public func detachEngine() -> (any PlayerEngineProtocol)? {
+        let engine = playerEngine
+        playerEngine = nil
+        isPreallocated = false
+        return engine
     }
 
     /// 엔진 팩토리
@@ -138,13 +164,40 @@ public final class PlayerViewModel {
         }
     }
 
+    /// 싱글 플레이어 네트워크 탭용 자체 메트릭 수집 활성화
+    public func enableSelfMetrics(_ enabled: Bool) {
+        showNetworkMetrics = enabled
+        guard let vlc = playerEngine as? VLCPlayerEngine else { return }
+        if enabled {
+            let coordinator = self.streamCoordinator
+            vlc.onVLCMetrics = { [weak self, weak coordinator] metrics in
+                Task { @MainActor in
+                    self?.latestMetrics = metrics
+                }
+                if metrics.networkBytesPerSec > 0 {
+                    let bytes = Int(metrics.networkBytesPerSec * 2)
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0) }
+                }
+            }
+        } else {
+            vlc.onVLCMetrics = nil
+            latestMetrics = nil
+        }
+    }
+
     // MARK: - 설정 적용
 
     public func applySettings(volume: Float, lowLatency: Bool, catchupRate: Double) {
         self.volume = volume
         playerEngine?.setVolume(isMuted ? 0 : volume)
+        // multiLive 프로파일은 MultiLiveManager가 injectEngine()으로 설정하므로
+        // lowLatency 설정이 활성화되어도 multiLive를 덮어쓰지 않는다.
+        // multiLive 세션에서 lowLatency로 변경하면 재연결 시 잘못된 VLC 옵션이 적용됨.
         if lowLatency {
-            (playerEngine as? VLCPlayerEngine)?.streamingProfile = .lowLatency
+            if let vlc = playerEngine as? VLCPlayerEngine,
+               vlc.streamingProfile != .multiLive {
+                vlc.streamingProfile = .lowLatency
+            }
         }
     }
 
@@ -152,12 +205,65 @@ public final class PlayerViewModel {
     
     /// 멀티라이브 비활성 세션의 CPU 사용 감소
     /// AVPlayerEngine: catchupLoop + stallWatchdog 건너뜀
-    /// VLCPlayerEngine: statsTimer 건너뜀
+    /// 멀티라이브 제약 조건 적용 (패인 수에 따라 CPU 최적화)
+    public func applyMultiLiveConstraints(paneCount: Int) {
+        // 패인이 2개 이상이면 배경 모드 최적화 적용
+        if paneCount > 1 {
+            if let vlcEngine = playerEngine as? VLCPlayerEngine {
+                vlcEngine.setTimeUpdateMode(background: false)
+            }
+        }
+    }
+
+    /// VLC 백그라운드 모드: statsTimer 주기 조절 (비디오 트랙은 유지)
+    ///
+    /// [VLC macOS 안정성] deselectAllVideoTracks() → selectTrack() 방식은
+    /// VLC vout 모듈을 파괴 후 재생성하는데, macOS layer-backed 뷰에서
+    /// 다중 인스턴스 vout 재생성 시 데드락이 발생하는 알려진 VLC 버그가 있다.
+    /// (VLC #19596: Multiple instances of macOS vouts hang using layer backing)
+    /// (VLC #28793: Video and UI deadlock when disabling and reenabling video track)
+    /// 따라서 비디오 트랙을 토글하지 않고 vout을 항상 살려두며,
+    /// SwiftUI opacity:0 로 화면 숨기기만 한다. (최대 4세션 → CPU 부하 수용 가능)
     public func setBackgroundMode(_ enabled: Bool) {
         if let avEngine = playerEngine as? AVPlayerEngine {
             avEngine.isBackgroundMode = enabled
         } else if let vlcEngine = playerEngine as? VLCPlayerEngine {
             vlcEngine.setTimeUpdateMode(background: enabled)
+        }
+    }
+
+    // MARK: - 백그라운드 복귀 재생 복구
+
+    /// 앱이 백그라운드에서 포그라운드로 복귀 시 재생 상태를 확인하고 복구합니다.
+    /// - VLC: drawable 재설정 + 재생 정체 시 재연결
+    /// - AVPlayer: 재생 정체 시 재연결
+    public func recoverFromBackground() {
+        guard streamPhase == .playing || streamPhase == .buffering else { return }
+        guard let engine = playerEngine else { return }
+
+        // VLC: drawable 재바인딩 (NSView 계층 변경 대응)
+        // 비디오 트랙은 항상 활성 상태이므로 vout은 살아있다.
+        // 탭 전환 시 NSView가 다른 PlayerContainerView로 이동할 수 있으므로
+        // drawable만 재바인딩하여 렌더링 서피스를 갱신한다.
+        if let vlcEngine = engine as? VLCPlayerEngine {
+            Task { @MainActor [weak vlcEngine] in
+                guard let vlcEngine else { return }
+                vlcEngine.refreshDrawable()
+                vlcEngine.setTimeUpdateMode(background: false)
+            }
+        }
+
+        // AVPlayer: 백그라운드에서 macOS가 자동 일시정지한 경우 재개
+        if let avEngine = engine as? AVPlayerEngine {
+            avEngine.isBackgroundMode = false
+            if !avEngine.isPlaying && !avEngine.isInErrorState {
+                avEngine.resume()
+            }
+        }
+
+        // StreamCoordinator를 통한 재생 복구 (엔진 상태 체크 + 매니페스트 갱신)
+        if let coordinator = streamCoordinator {
+            Task { await coordinator.recoverFromBackground() }
         }
     }
 
@@ -168,16 +274,23 @@ public final class PlayerViewModel {
         streamUrl: URL,
         channelName: String = "",
         liveTitle: String = "",
-        thumbnailURL: URL? = nil
+        thumbnailURL: URL? = nil,
+        prefetchedManifest: MasterPlaylist? = nil
     ) async {
         self.channelName = channelName
         self.liveTitle = liveTitle
         self.thumbnailURL = thumbnailURL
         self.currentChannelId = channelId
 
-        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: true, enableABR: true)
+        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, abrConfig: isMultiLive ? .multiLive : .default)
         let coordinator = StreamCoordinator(configuration: config)
         streamCoordinator = coordinator
+        
+        // [Opt: Single VLC] 프리페치 매니페스트가 있으면 coordinator에 주입
+        // startStream()에서 resolveHighestQualityVariant() 네트워크 요청 건너뜀 (~200-400ms)
+        if let manifest = prefetchedManifest {
+            await coordinator.setPrefetchedManifest(manifest)
+        }
 
         let engine: any PlayerEngineProtocol
         if isPreallocated, let existing = playerEngine {
@@ -225,6 +338,9 @@ public final class PlayerViewModel {
                 vlc.onVLCMetrics = nil
                 vlc.onPlaybackStalled = nil
             }
+            // eventTask 정리 — coordinator 이벤트 리스닝 중단
+            eventTask?.cancel()
+            eventTask = nil
             errorMessage = "스트림 시작 실패: \(error.localizedDescription)"
             logger.error("스트림 시작 실패: \(error.localizedDescription, privacy: .public)")
         }
@@ -243,6 +359,7 @@ public final class PlayerViewModel {
         uptimeTask?.cancel(); uptimeTask = nil
         eventTask?.cancel(); eventTask = nil
         controlHideTask?.cancel(); controlHideTask = nil
+        _bufferingDebounceTask?.cancel(); _bufferingDebounceTask = nil
 
         await streamCoordinator?.stopStream()
         streamCoordinator = nil
@@ -294,7 +411,7 @@ public final class PlayerViewModel {
 
     public func toggleFullscreen() {
         isFullscreen.toggle()
-        NSApp.mainWindow?.toggleFullScreen(nil)
+        (NSApp.keyWindow ?? NSApp.mainWindow)?.toggleFullScreen(nil)
     }
 
     public func toggleAudioOnly() {
@@ -520,7 +637,7 @@ public final class PlayerViewModel {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             panel.directoryURL = dir
         }
-        let response = await panel.beginSheetModal(for: NSApp.mainWindow ?? NSApp.keyWindow ?? NSWindow())
+        let response = await panel.beginSheetModal(for: NSApp.keyWindow ?? NSApp.mainWindow ?? NSPanel())
         guard response == .OK, let url = panel.url else { return }
         await startRecording(to: url)
     }
@@ -610,13 +727,13 @@ public final class PlayerViewModel {
             // 정상 재생 중에도 버퍼링 스피너가 계속 표시된다.
             if phase == .buffering && streamPhase == .playing {
                 // 이미 재생 중이면 디바운스 적용 (VLC _handleVLCPhase와 동일 로직)
-                // 안티플리커: 재생 시작 후 5초 이내면 버퍼링 전환 억제
+                // [Fix 16h-opt3] 안티플리커: 5→3초, 디바운스: 3→2초
                 if let lastPlaying = _lastPlayingTime,
-                   Date().timeIntervalSince(lastPlaying) < 5.0 {
+                   Date().timeIntervalSince(lastPlaying) < 3.0 {
                     // 쿨다운 중 — 무시
                 } else if _bufferingDebounceTask == nil {
                     _bufferingDebounceTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 3_000_000_000) // 3초
+                        try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
                         guard !Task.isCancelled, let self else { return }
                         self.streamPhase = .buffering
                         self._bufferingDebounceTask = nil
@@ -670,6 +787,12 @@ public final class PlayerViewModel {
     /// VLC 상태 변경 처리
     @MainActor
     private func _handleVLCPhase(_ phase: PlayerState.Phase, coordinator: StreamCoordinator?) {
+        // StreamCoordinator에 VLC 상태 전달 — watchdog + lowLatency 제어
+        // (이전에는 configureEngineCallbacks에서 설정했으나 이 핸들러가 덮어써서 작동 안 됐음)
+        if let coord = coordinator {
+            Task { await coord.handleVLCEngineState(phase) }
+        }
+
         switch phase {
         case .error:
             logger.warning("VLC → ERROR: StreamCoordinator 재연결 트리거")
@@ -691,6 +814,16 @@ public final class PlayerViewModel {
             onPlaybackStateChanged?()
             // 재생 시작 시 고급 설정 적용 (설정이 기본값이 아닐 경우만)
             _applyVLCAdvancedSettingsIfNeeded()
+            // VLC → playing 전환 시 drawable 재바인딩: vout이 올바른 레이어에서 렌더링되도록 보장
+            // 멀티라이브에서 여러 세션이 동시 시작될 때 SwiftUI 뷰 마운트 타이밍으로
+            // drawable이 올바르게 설정되지 않는 경우를 대비
+            if let vlcEngine = playerEngine as? VLCPlayerEngine {
+                Task { @MainActor [weak vlcEngine] in
+                    // 200ms 후 drawable 재바인딩 — VLC vout 초기화 완료 대기
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    vlcEngine?.refreshDrawable()
+                }
+            }
         case .buffering:
             // [VLC 버퍼링 디바운스] VLC는 라이브 HLS 중 네트워크 버퍼를 채울 때
             // 수시로 .buffering 상태를 보고한다 (수백ms 이내 .playing으로 복귀).
@@ -702,14 +835,14 @@ public final class PlayerViewModel {
             // 해결 2: 안티플리커 쿨다운 — 재생 시작 후 5초 이내 버퍼링은 무시.
             //         VLC가 재생 초반에 버퍼를 정리하는 과정에서 발생하는 순간 버퍼링 방지.
             if streamPhase == .playing {
-                // 안티플리커: 재생 시작 후 5초 이내면 버퍼링 전환 억제
+                // 안티플리커: 재생 시작 후 3초 이내면 버퍼링 전환 억제
                 if let lastPlaying = _lastPlayingTime,
-                   Date().timeIntervalSince(lastPlaying) < 5.0 {
+                   Date().timeIntervalSince(lastPlaying) < 3.0 {
                     break
                 }
                 if _bufferingDebounceTask == nil {
                     _bufferingDebounceTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 3_000_000_000) // 3초
+                        try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
                         guard !Task.isCancelled, let self else { return }
                         self.streamPhase = .buffering
                         self._bufferingDebounceTask = nil

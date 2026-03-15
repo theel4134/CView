@@ -204,7 +204,7 @@ struct PopularClipsView: View {
             // 탭 바
             tabBar
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
     }
     
     // 전체 인기클립 탭 컨트롤
@@ -231,8 +231,8 @@ struct PopularClipsView: View {
                 }
             }
             .padding(DesignTokens.Spacing.xxs)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
             
             // 정렬 순서
             HStack(spacing: 2) {
@@ -257,8 +257,8 @@ struct PopularClipsView: View {
                 }
             }
             .padding(DesignTokens.Spacing.xxs)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
         }
     }
     
@@ -286,10 +286,10 @@ struct PopularClipsView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             .overlay(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .strokeBorder(isSearchFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : .white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 1)
+                    .strokeBorder(isSearchFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.borderColor, lineWidth: 1)
             )
             
             // 정렬
@@ -315,8 +315,8 @@ struct PopularClipsView: View {
                 }
             }
             .padding(DesignTokens.Spacing.xxs)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
         }
     }
     
@@ -358,7 +358,7 @@ struct PopularClipsView: View {
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
     }
     
     // MARK: - 전체 인기클립 컨텐츠
@@ -444,9 +444,10 @@ struct PopularClipsView: View {
                         GridItem(.adaptive(minimum: 220, maximum: 300), spacing: DesignTokens.Spacing.md)
                     ], spacing: DesignTokens.Spacing.md) {
                         ForEach(clips) { clip in
-                            ClipGridCard(clip: clip, showChannel: showChannelBadge) {
+                            EquatableClipGridCard(clip: clip, showChannel: showChannelBadge) {
                                 selectedClip = clip
                             }
+                            .equatable()
                         }
                     }
                     .padding(DesignTokens.Spacing.md)
@@ -455,9 +456,10 @@ struct PopularClipsView: View {
                 ScrollView {
                     LazyVStack(spacing: 1) {
                         ForEach(clips) { clip in
-                            ClipListRow(clip: clip) {
+                            EquatableClipListRow(clip: clip) {
                                 selectedClip = clip
                             }
+                            .equatable()
                         }
                     }
                     .padding(DesignTokens.Spacing.sm)
@@ -476,9 +478,10 @@ struct PopularClipsView: View {
                         GridItem(.adaptive(minimum: 220, maximum: 300), spacing: DesignTokens.Spacing.md)
                     ], spacing: DesignTokens.Spacing.md) {
                         ForEach(clips) { clip in
-                            ClipGridCard(clip: clip, showChannel: showChannelBadge) {
+                            EquatableClipGridCard(clip: clip, showChannel: showChannelBadge) {
                                 selectedClip = clip
                             }
+                            .equatable()
                             .onAppear {
                                 if clip.id == clips.last?.id && channelHasMore && !channelIsLoading {
                                     loadMoreChannelClips()
@@ -506,9 +509,10 @@ struct PopularClipsView: View {
                 ScrollView {
                     LazyVStack(spacing: 1) {
                         ForEach(clips) { clip in
-                            ClipListRow(clip: clip) {
+                            EquatableClipListRow(clip: clip) {
                                 selectedClip = clip
                             }
+                            .equatable()
                             .onAppear {
                                 if clip.id == clips.last?.id && channelHasMore && !channelIsLoading {
                                     loadMoreChannelClips()

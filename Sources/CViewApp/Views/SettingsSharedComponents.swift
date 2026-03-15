@@ -20,7 +20,7 @@ struct SettingsSection<Content: View>: View {
                     .foregroundStyle(color)
                 Text(title)
                     .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                     .tracking(0.6)
             }
@@ -31,10 +31,10 @@ struct SettingsSection<Content: View>: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                    .strokeBorder(DesignTokens.Colors.border.opacity(DesignTokens.Glass.contentBorder), lineWidth: 0.5)
             }
         }
     }
@@ -90,9 +90,7 @@ struct SettingsRow<Control: View>: View {
 
 struct RowDivider: View {
     var body: some View {
-        Rectangle()
-            .fill(.white.opacity(DesignTokens.Glass.borderOpacityLight))
-            .frame(height: 0.5)
+        Divider()
             .padding(.leading, 42)
     }
 }

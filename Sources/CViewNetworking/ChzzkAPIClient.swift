@@ -126,8 +126,9 @@ public actor ChzzkAPIClient: APIClientProtocol {
                     case .timedOut, .networkConnectionLost:
                         lastError = .networkError(urlError.localizedDescription)
                         if attempt < maxRetries - 1 {
-                            let delay = Double(attempt + 1) * 2.0
-                            try await Task.sleep(for: .seconds(delay))
+                            let baseDelay = min(Double(attempt + 1) * 0.5, 3.0)
+                            let jitter = Double.random(in: 0...0.3) * baseDelay
+                            try await Task.sleep(for: .seconds(baseDelay + jitter))
                             continue
                         }
                         throw APIError.networkError("Request timed out")
@@ -165,8 +166,9 @@ public actor ChzzkAPIClient: APIClientProtocol {
                 case 500...599:
                     lastError = .httpError(statusCode: httpResponse.statusCode)
                     if attempt < maxRetries - 1 {
-                        let delay = Double(attempt + 1) * 2.0
-                        try await Task.sleep(for: .seconds(delay))
+                        let baseDelay = min(Double(attempt + 1) * 0.5, 3.0)
+                        let jitter = Double.random(in: 0...0.3) * baseDelay
+                        try await Task.sleep(for: .seconds(baseDelay + jitter))
                         continue
                     }
                     throw APIError.httpError(statusCode: httpResponse.statusCode)
@@ -687,7 +689,8 @@ public actor ChzzkAPIClient: APIClientProtocol {
                                 categoryName: liveInfo.liveCategoryValue,
                                 thumbnailUrl: liveInfo.resolvedLiveImageURL?.absoluteString,
                                 channelId: baseItem.channelId,
-                                isLive: true
+                                isLive: true,
+                                openDate: liveInfo.openDate
                             )
                         } catch {
                             Log.api.warning("라이브 상세 조회 실패: \(baseItem.channelId) — \(error)")

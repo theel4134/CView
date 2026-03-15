@@ -71,7 +71,7 @@ struct CategoryBrowseView: View {
             }
         }
         .animation(DesignTokens.Animation.contentTransition, value: selectedCategory)
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
@@ -210,8 +210,8 @@ struct CategoryBrowseView: View {
                         value: isRefreshing
                     )
                     .frame(width: 34, height: 34)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay { Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5) }
+                    .background(DesignTokens.Colors.surfaceElevated, in: Circle())
+                    .overlay { Circle().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5) }
             }
             .buttonStyle(.plain)
         }
@@ -267,8 +267,8 @@ struct CategoryBrowseView: View {
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .padding(.vertical, DesignTokens.Spacing.xs)
                     .padding(.horizontal, DesignTokens.Spacing.md)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay { Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5) }
+                    .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                    .overlay { Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5) }
                 }
                 .buttonStyle(.plain)
                 HStack(spacing: 8) {
@@ -318,11 +318,11 @@ struct CategoryBrowseView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(
-                    channelSearchText.isEmpty ? .white.opacity(DesignTokens.Glass.borderOpacity) : DesignTokens.Colors.chzzkGreen.opacity(0.4),
+                    channelSearchText.isEmpty ? DesignTokens.Glass.borderColor : DesignTokens.Colors.chzzkGreen.opacity(0.4),
                     lineWidth: 0.75
                 )
         }
@@ -361,13 +361,13 @@ struct CategoryBrowseView: View {
                 if isSelected {
                     Capsule().fill(DesignTokens.Colors.chzzkGreen)
                 } else {
-                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().fill(DesignTokens.Colors.surfaceElevated)
                 }
             }
             .overlay {
                 Capsule()
                     .strokeBorder(
-                        isSelected ? DesignTokens.Colors.chzzkGreen : .white.opacity(DesignTokens.Glass.borderOpacityLight),
+                        isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Glass.borderColorLight,
                         lineWidth: 0.75
                     )
             }
@@ -390,7 +390,7 @@ struct CategoryBrowseView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceElevated)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(DesignTokens.Colors.chzzkGreen.opacity(0.25))
@@ -518,8 +518,8 @@ private struct CategoryGridCard: View {
                         }
                         .padding(.horizontal, DesignTokens.Spacing.xs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay { Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+                        .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                        .overlay { Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
                     }
                     Spacer()
                 }
@@ -534,8 +534,7 @@ private struct CategoryGridCard: View {
                         lineWidth: isHovered ? 1.5 : 0.75
                     )
             }
-            // Metal 3: 카드 내부 5+ 레이어 → 단일 Metal 텍스처 합성
-            .drawingGroup(opaque: false)
+            // Metal 3: 카드 내부 5+ 레이어
         }
         .buttonStyle(.plain)
         // Metal 3: scaleEffect 제거 (GPU texture scale 연산 제거)
@@ -543,7 +542,7 @@ private struct CategoryGridCard: View {
         .shadow(color: .black.opacity(0.14), radius: 5, x: 0, y: 3)
         .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 }
 
@@ -555,10 +554,12 @@ private struct CategoryChannelCard: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            // 썸네일 — LiveThumbnailView (45초 자동 갱신)
+            // 썸네일 — 카테고리 목록에서는 정적 이미지 사용 (isLive:false — 자동갱신 비활성화)
+            // 카테고리 목록에 채널 수십 개 × 45초 타이머 Task = 불필요한 네트워크+CPU 부하
             LiveThumbnailView(
                 channelId: channel.channelId,
-                thumbnailUrl: URL(string: channel.thumbnailUrl ?? "")
+                thumbnailUrl: URL(string: channel.thumbnailUrl ?? ""),
+                isLive: false
             )
             .frame(maxWidth: .infinity)
             .aspectRatio(16/9, contentMode: .fill)
@@ -579,7 +580,7 @@ private struct CategoryChannelCard: View {
                     }
                     .frame(width: 22, height: 22)
                     .clipShape(Circle())
-                    .overlay { Circle().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5) }
+                    .overlay { Circle().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5) }
 
                     Text(channel.channelName)
                         .font(DesignTokens.Typography.captionSemibold)
@@ -615,8 +616,8 @@ private struct CategoryChannelCard: View {
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     .padding(.horizontal, DesignTokens.Spacing.xs)
                     .padding(.vertical, DesignTokens.Spacing.xxs)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay { Capsule().strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+                    .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                    .overlay { Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
                     Spacer()
                 }
                 Spacer()
@@ -631,12 +632,11 @@ private struct CategoryChannelCard: View {
                     lineWidth: isHovered ? 1.5 : 0.75
                 )
         }
-        // Metal 3: 카드 비디오+배지+텍스트 레이어 → 단일 Metal 텍스처
-        .drawingGroup(opaque: false)
+        // Metal 3: 카드 비디오+뼉지+텍스트 레이어
         // Metal 3: scaleEffect 제거, 동적 shadow → 정적
         .shadow(color: .black.opacity(0.14), radius: 5, x: 0, y: 3)
         .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 }

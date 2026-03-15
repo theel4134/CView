@@ -134,6 +134,9 @@ struct CommandPaletteView: View {
             CommandItem(id: "nav-recent", title: "최근/즐겨찾기", subtitle: "최근 본 채널 & 즐겨찾기", icon: "clock.arrow.circlepath", category: .navigation) { [router] in
                 router.selectSidebar(.recentFavorites)
             },
+            CommandItem(id: "nav-metrics", title: "메트릭 대시보드", subtitle: "서버 메트릭 & 채널 통계", icon: "chart.bar.xaxis", category: .navigation) { [router] in
+                router.selectSidebar(.metrics)
+            },
         ])
 
         // ── Actions ──
@@ -226,7 +229,7 @@ struct CommandPaletteView: View {
             searchField
 
             Rectangle()
-                .fill(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+                .fill(DesignTokens.Glass.borderColorLight)
                 .frame(height: 0.5)
 
             // Results
@@ -237,7 +240,7 @@ struct CommandPaletteView: View {
             }
         }
         .frame(width: 560, height: min(CGFloat(filteredCommands.count) * 44 + 64, 480))
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceElevated)
         .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
         .overlay {
@@ -286,10 +289,10 @@ struct CommandPaletteView: View {
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xxs)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                        .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                 }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)

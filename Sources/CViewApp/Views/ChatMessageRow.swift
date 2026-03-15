@@ -7,12 +7,57 @@ import CViewCore
 import CViewChat
 import CViewUI
 
+// MARK: - Chat Render Config (값 타입 — EquatableChatMessageRow 재렌더링 최소화)
+
+/// ChatViewModel의 렌더링 실정값들을 값 타입으로 스냅샷.
+/// EquatableChatMessageRow는 message + config 두 값이 같으면 재렌더링을 건너뜀.
+struct ChatRenderConfig: Equatable, Sendable {
+    let fontSize: CGFloat
+    let showTimestamp: Bool
+    let showBadge: Bool
+    let emoticonEnabled: Bool
+    let lineSpacing: CGFloat
+    let highlightMentions: Bool
+    let currentUserNickname: String
+
+    @MainActor
+    init(from vm: ChatViewModel) {
+        self.fontSize = vm.fontSize
+        self.showTimestamp = vm.showTimestamp
+        self.showBadge = vm.showBadge
+        self.emoticonEnabled = vm.emoticonEnabled
+        self.lineSpacing = vm.lineSpacing
+        self.highlightMentions = vm.highlightMentions
+        self.currentUserNickname = vm.currentUserNickname ?? ""
+    }
+
+    static let `default` = ChatRenderConfig(
+        fontSize: 13, showTimestamp: true, showBadge: true,
+        emoticonEnabled: true, lineSpacing: 2.0, highlightMentions: true,
+        currentUserNickname: ""
+    )
+
+    init(
+        fontSize: CGFloat, showTimestamp: Bool, showBadge: Bool,
+        emoticonEnabled: Bool, lineSpacing: CGFloat, highlightMentions: Bool,
+        currentUserNickname: String
+    ) {
+        self.fontSize = fontSize
+        self.showTimestamp = showTimestamp
+        self.showBadge = showBadge
+        self.emoticonEnabled = emoticonEnabled
+        self.lineSpacing = lineSpacing
+        self.highlightMentions = highlightMentions
+        self.currentUserNickname = currentUserNickname
+    }
+}
+
 // MARK: - Chat Message Row (Premium)
 
 struct ChatMessageRow: View {
     let message: ChatMessageItem
+    let config: ChatRenderConfig
     var chatVM: ChatViewModel?
-    @Environment(AppState.self) private var appState
     @State private var isHovered = false
     @State private var showProfile = false
 
@@ -33,13 +78,13 @@ struct ChatMessageRow: View {
     }
 
     private var normalMessageView: some View {
-        let messageFontSize = chatVM?.fontSize ?? appState.settingsStore.chat.fontSize
-        let showTS          = chatVM?.showTimestamp ?? appState.settingsStore.chat.showTimestamp
-        let showBadge       = chatVM?.showBadge ?? true
-        let emojiEnabled    = chatVM?.emoticonEnabled ?? appState.settingsStore.chat.emoticonEnabled
-        let spacing         = chatVM?.lineSpacing ?? 2.0
-        let myNickname      = chatVM?.currentUserNickname ?? ""
-        let isMentioned     = chatVM?.highlightMentions == true
+        let messageFontSize = config.fontSize
+        let showTS          = config.showTimestamp
+        let showBadge       = config.showBadge
+        let emojiEnabled    = config.emoticonEnabled
+        let spacing         = config.lineSpacing
+        let myNickname      = config.currentUserNickname
+        let isMentioned     = config.highlightMentions
             && !myNickname.isEmpty
             && message.content.localizedCaseInsensitiveContains(myNickname)
 
@@ -118,7 +163,7 @@ struct ChatMessageRow: View {
         )
         .contentShape(Rectangle())
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .popover(isPresented: $showProfile) {
             ChatUserProfileSheet(message: message, chatVM: chatVM)
         }
@@ -219,7 +264,7 @@ struct ChatMessageRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(DesignTokens.Colors.surfaceElevated)
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .fill(
@@ -359,7 +404,7 @@ struct ChatMessageRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(DesignTokens.Colors.surfaceElevated)
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .fill(
@@ -488,16 +533,18 @@ struct ChatMessageRow: View {
 // MARK: - EquatableChatMessageRow (prevents unnecessary re-renders)
 
 /// Wraps `ChatMessageRow` with equatable check so SwiftUI skips re-rendering when
-/// the underlying `ChatMessageItem` hasn't changed (Equatable identity).
+/// neither the message nor the render config has changed.
+/// chatVM은 moderation 액션 전용으로만 보유 — Observable 읽기를 이 뷰에서 수행하지 않음.
 struct EquatableChatMessageRow: View, @preconcurrency Equatable {
     let message: ChatMessageItem
+    let config: ChatRenderConfig
     var chatVM: ChatViewModel?
 
     var body: some View {
-        ChatMessageRow(message: message, chatVM: chatVM)
+        ChatMessageRow(message: message, config: config, chatVM: chatVM)
     }
 
     nonisolated static func == (lhs: EquatableChatMessageRow, rhs: EquatableChatMessageRow) -> Bool {
-        lhs.message == rhs.message
+        lhs.message == rhs.message && lhs.config == rhs.config
     }
 }

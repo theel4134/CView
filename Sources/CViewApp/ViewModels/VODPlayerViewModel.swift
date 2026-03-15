@@ -183,9 +183,7 @@ public final class VODPlayerViewModel {
     /// 전체화면 토글
     func toggleFullscreen() {
         isFullscreen.toggle()
-        if let window = NSApp.mainWindow {
-            window.toggleFullScreen(nil)
-        }
+        (NSApp.keyWindow ?? NSApp.mainWindow)?.toggleFullScreen(nil)
     }
     
     /// 정지 및 정리

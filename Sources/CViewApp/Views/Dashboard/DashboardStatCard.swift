@@ -50,11 +50,8 @@ struct DashboardStatCard: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
-        }
+        .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial)
+        .hoverCard(cornerRadius: DesignTokens.Radius.md, scale: 1.015)
     }
     
     @ViewBuilder
@@ -113,7 +110,7 @@ struct MiniChannelCard: View {
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     .padding(.horizontal, DesignTokens.Spacing.xs)
                     .padding(.vertical, DesignTokens.Spacing.xxs)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
                 }
                 .padding(DesignTokens.Spacing.xs)
             }
@@ -154,14 +151,14 @@ struct MiniChannelCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(
-                    isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : .white.opacity(DesignTokens.Glass.borderOpacity),
-                    lineWidth: 0.5
+                    isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : DesignTokens.Glass.borderColor,
+                    lineWidth: isHovered ? 1.0 : 0.5
                 )
         }
+        .shadow(color: isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.12) : .black.opacity(0.1), radius: isHovered ? 14 : 6, y: isHovered ? 6 : 2)
         // Metal 3: hover scaleEffect 제거 — GPU texture scale 연산 방지
-        .drawingGroup(opaque: false)  // 카드 내부 레이어 단일 Metal 패스
         .animation(DesignTokens.Animation.fast, value: isHovered)
         .onHover { isHovered = $0 }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 }

@@ -117,10 +117,10 @@ struct StreamingStatsView: View {
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         }
                         .padding(DesignTokens.Spacing.sm)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+                        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
                         .overlay {
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                         }
                     }
                 }
@@ -163,7 +163,7 @@ struct StreamingStatsView: View {
             }
             .padding(DesignTokens.Spacing.lg)
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
     }
     
     private func statsSection(_ title: String, icon: String, color: Color, @ViewBuilder content: () -> some View) -> some View {
@@ -306,7 +306,7 @@ struct ChatStatsView: View {
                                         .lineLimit(1)
                                     Text(msg.content)
                                         .font(DesignTokens.Typography.caption)
-                                        .foregroundStyle(.white.opacity(0.8))
+                                        .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.8))
                                         .lineLimit(1)
                                     Spacer()
                                 }
@@ -315,17 +315,17 @@ struct ChatStatsView: View {
                             }
                         }
                         .padding(DesignTokens.Spacing.sm)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                         .overlay {
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                         }
                     }
                 }
             }
             .padding(DesignTokens.Spacing.lg)
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
     }
     
     private var connectionStatusText: String {
@@ -457,7 +457,7 @@ struct WatchHistoryStatsView: View {
             }
             .padding(DesignTokens.Spacing.lg)
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
         .task { await loadHistory() }
         .refreshable { await loadHistory() }
     }
@@ -506,10 +506,10 @@ struct WatchHistoryStatsView: View {
         }
         .padding(.vertical, DesignTokens.Spacing.xxs)
         .padding(.horizontal, DesignTokens.Spacing.sm)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 
@@ -574,10 +574,10 @@ struct WatchHistoryStatsView: View {
             }
         }
         .padding(DesignTokens.Spacing.xs)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
     }
 
@@ -662,19 +662,19 @@ struct StatCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(DesignTokens.Spacing.md)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(
-                    isHovered ? color.opacity(0.3) : .white.opacity(DesignTokens.Glass.borderOpacity),
+                    isHovered ? color.opacity(0.3) : DesignTokens.Glass.borderColor,
                     lineWidth: isHovered ? 1 : 0.5
                 )
         }
         // Metal 3: hover scaleEffect 제거 — GPU texture scale 연산 방지
         // 바닥색+테두리 변경으로만 hover 표현
-        .drawingGroup(opaque: false)  // 카드 컨텐츠 단일 Metal 텍스처
+
         .animation(DesignTokens.Animation.smooth, value: isHovered)
         .onHover { hovering in isHovered = hovering }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 }

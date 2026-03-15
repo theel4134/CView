@@ -83,6 +83,9 @@ final class AppState {
     /// App Nap 방지 activity 토큰 — 재생 중 시스템 절전 및 스로틀링 방지
     var playbackActivity: NSObjectProtocol?
 
+    /// 백그라운드 진입 시각 — 포그라운드 복귀 시 체류 시간 산출용
+    var _backgroundEntryTime: Date?
+
     // MARK: - Detached Channels
 
     func registerDetachedChannel(_ channelId: String) {

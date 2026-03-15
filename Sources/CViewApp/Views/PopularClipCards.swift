@@ -56,7 +56,7 @@ struct ClipGridCard: View {
                     // Play overlay on hover
                     if isHovered {
                         ZStack {
-                            Rectangle().fill(.ultraThinMaterial)
+                            Rectangle().fill(DesignTokens.Colors.surfaceElevated)
                             Image(systemName: "play.fill")
                                 .font(DesignTokens.Typography.custom(size: 26))
                                 .foregroundStyle(DesignTokens.Colors.textOnOverlay)
@@ -70,8 +70,8 @@ struct ClipGridCard: View {
                         .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, DesignTokens.Spacing.xs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
-                        .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+                        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                        .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .padding(DesignTokens.Spacing.xs)
                 }
@@ -124,7 +124,7 @@ struct ClipGridCard: View {
             .padding(DesignTokens.Spacing.xs)
             .background {
                 if isHovered {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md).fill(DesignTokens.Colors.surfaceElevated)
                 } else {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md).fill(DesignTokens.Colors.surfaceBase.opacity(0.3))
                 }
@@ -134,7 +134,7 @@ struct ClipGridCard: View {
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
         }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         // Metal 3: hover scaleEffect+동적 shadow 제거 — GPU blur+scale 연산 방지
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -184,8 +184,8 @@ struct ClipListRow: View {
                         .font(DesignTokens.Typography.custom(size: 9, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, DesignTokens.Spacing.xxs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
-                        .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5) }
+                        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                        .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.xs).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .padding(DesignTokens.Spacing.xxs)
                 }
@@ -240,7 +240,7 @@ struct ClipListRow: View {
             .padding(.vertical, DesignTokens.Spacing.xs)
             .background {
                 if isHovered {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).fill(DesignTokens.Colors.surfaceElevated)
                 }
             }
         }
@@ -248,7 +248,7 @@ struct ClipListRow: View {
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.indicator) { isHovered = hovering }
         }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
     
     private var thumbnailPlaceholder: some View {
@@ -265,5 +265,39 @@ struct ClipListRow: View {
         let minutes = clip.duration / 60
         let seconds = clip.duration % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Equatable Wrappers (re-render 방지)
+
+/// ClipGridCard — clip.id + readCount가 동일하면 re-render 스킵
+struct EquatableClipGridCard: View, @preconcurrency Equatable {
+    let clip: ClipInfo
+    let showChannel: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        ClipGridCard(clip: clip, showChannel: showChannel, onTap: onTap)
+    }
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.clip.id == rhs.clip.id &&
+        lhs.clip.readCount == rhs.clip.readCount &&
+        lhs.showChannel == rhs.showChannel
+    }
+}
+
+/// ClipListRow — clip.id + readCount가 동일하면 re-render 스킵
+struct EquatableClipListRow: View, @preconcurrency Equatable {
+    let clip: ClipInfo
+    let onTap: () -> Void
+
+    var body: some View {
+        ClipListRow(clip: clip, onTap: onTap)
+    }
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.clip.id == rhs.clip.id &&
+        lhs.clip.readCount == rhs.clip.readCount
     }
 }

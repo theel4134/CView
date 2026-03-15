@@ -41,13 +41,15 @@ struct ChatOverlayView: View {
         }
         .frame(width: overlayWidth, height: overlayHeight)
         .background(.black.opacity(bgOpacity * chatOpacity))
-        .background(.ultraThinMaterial.opacity(bgOpacity * 0.6 * chatOpacity))
+        .background(DesignTokens.Colors.surfaceBase.opacity(bgOpacity * 0.6 * chatOpacity))
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(.white.opacity(isHovering ? 0.2 : 0.08), lineWidth: 0.5)
         }
+        // shadow를 drawingGroup 내부로 격리 — 드래그 중 GPU blur 패스 재계산 방지
         .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+        .drawingGroup(opaque: false)
         .opacity(chatOpacity)
         .position(currentPosition)
         .gesture(dragGesture)
@@ -157,6 +159,8 @@ struct ChatOverlayView: View {
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { value in
+                // 드래그 시작 시 hover 숨기기 — hover 레이어 재렌더 방지
+                if isHovering { isHovering = false }
                 dragOffset = value.translation
             }
             .onEnded { value in
@@ -210,7 +214,8 @@ struct ChatOverlayMessagesView: View {
                 guard maxScrollY > 0 else { return true }
                 let distanceFromBottom = maxScrollY - geometry.contentOffset.y
                 return distanceFromBottom <= 80
-            } action: { _, isNearBottom in
+            } action: { oldValue, isNearBottom in
+                guard oldValue != isNearBottom else { return }
                 guard isScrollViewVisible, !isScrollSuppressed else { return }
                 viewModel?.onScrollPositionChanged(isNearBottom: isNearBottom)
             }
@@ -218,9 +223,11 @@ struct ChatOverlayMessagesView: View {
                 isScrollViewVisible = true
                 if viewModel?.isAutoScrollEnabled == true,
                    let lastId = viewModel?.messages.last?.id {
+                    viewModel?.cancelReplayDebounce()
                     scrollSuppressionCount += 1
                     proxy.scrollTo(lastId, anchor: .bottom)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
                         self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
                     }
                 }
@@ -229,11 +236,14 @@ struct ChatOverlayMessagesView: View {
                 isScrollViewVisible = false
             }
             .onChange(of: viewModel?.messages.last?.id) { _, _ in
-                guard viewModel?.isAutoScrollEnabled == true else { return }
+                guard viewModel?.isAutoScrollEnabled == true,
+                      viewModel?.isReplayMode != true else { return }
                 if let lastId = viewModel?.messages.last?.id {
+                    viewModel?.cancelReplayDebounce()
                     scrollSuppressionCount += 1
                     proxy.scrollTo(lastId, anchor: .bottom)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
                         self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
                     }
                 }
@@ -246,7 +256,8 @@ struct ChatOverlayMessagesView: View {
                         if let lastId = vm.messages.last?.id {
                             scrollSuppressionCount += 1
                             proxy.scrollTo(lastId, anchor: .bottom)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(300))
                                 self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
                             }
                         }

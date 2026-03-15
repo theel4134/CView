@@ -27,6 +27,14 @@ public actor PDTLatencyProvider {
     private var _isReady = false
     private let parser = HLSManifestParser()
     private let logger = Logger(subsystem: "com.cview", category: "PDTLatency")
+    // 전용 폴링 세션 — ephemeral(쿠키 격리) + 캐시 비활성화(라이브 플레이리스트)
+    private nonisolated let hlsSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 5
+        return URLSession(configuration: config)
+    }()
     
     // MARK: - Configuration
     
@@ -37,11 +45,19 @@ public actor PDTLatencyProvider {
     private var ewmaLatency: TimeInterval?
     private let ewmaAlpha: TimeInterval = 0.3   // 빠른 반응 / 노이즈 억제 균형
     
+    /// 연속 범위 초과 카운터 — 15회 연속 실패 시 폴링 자동 중지 (30초간 유효 데이터 없음)
+    private var _consecutiveOutOfRange: Int = 0
+    private let _maxConsecutiveOutOfRange = 15
+    
     // MARK: - Init
     
     public init(playlistURL: URL, pollInterval: TimeInterval = 2.0) {
         self.playlistURL = playlistURL
         self.pollInterval = pollInterval
+    }
+    
+    deinit {
+        hlsSession.invalidateAndCancel()
     }
     
     // MARK: - Public API
@@ -93,7 +109,7 @@ public actor PDTLatencyProvider {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await hlsSession.data(for: request)
             guard let content = String(data: data, encoding: .utf8) else { return }
             
             // 미디어 플레이리스트 파싱
@@ -114,13 +130,30 @@ public actor PDTLatencyProvider {
             // 비현실적인 값 필터링 (60초 초과)
             // 시계 편차(clock skew)로 인한 소폭 음수(-2s 이내)는 0으로 클램핑
             guard rawLatency < 60 else {
-                logger.warning("PDT latency out of range: \(rawLatency, format: .fixed(precision: 2))s – skipped")
+                self._consecutiveOutOfRange += 1
+                if self._consecutiveOutOfRange >= self._maxConsecutiveOutOfRange {
+                    self.logger.warning("PDT latency \(self._consecutiveOutOfRange)회 연속 범위 초과 — 폴링 자동 중지 (VLC buffer fallback)")
+                    self.stop()
+                    return
+                }
+                // 첫 3회만 로그, 이후 억제
+                if self._consecutiveOutOfRange <= 3 {
+                    self.logger.warning("PDT latency out of range: \(rawLatency, format: .fixed(precision: 2))s – skipped (\(self._consecutiveOutOfRange)/\(self._maxConsecutiveOutOfRange))")
+                }
                 return
             }
             guard rawLatency >= -2.0 else {
-                logger.warning("PDT latency too negative: \(rawLatency, format: .fixed(precision: 2))s – skipped")
+                self._consecutiveOutOfRange += 1
+                if self._consecutiveOutOfRange >= self._maxConsecutiveOutOfRange {
+                    self.logger.warning("PDT latency \(self._consecutiveOutOfRange)회 연속 범위 초과 — 폴링 자동 중지")
+                    self.stop()
+                    return
+                }
                 return
             }
+            
+            // 유효 값 → 연속 실패 카운터 리셋
+            self._consecutiveOutOfRange = 0
             let clampedLatency = max(0, rawLatency)
             
             // EWMA로 노이즈 제거 (클램핑된 값 사용)

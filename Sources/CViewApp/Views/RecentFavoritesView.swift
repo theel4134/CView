@@ -48,7 +48,7 @@ struct RecentFavoritesView: View {
         VStack(spacing: 0) {
             // 탭 바 + 요약 배지
             tabHeaderBar
-            Divider().overlay(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+            Divider().overlay(DesignTokens.Glass.borderColorLight)
 
             ScrollView {
                 LazyVStack(spacing: DesignTokens.Spacing.xs) {
@@ -97,7 +97,7 @@ struct RecentFavoritesView: View {
                 .padding(.vertical, DesignTokens.Spacing.sm)
             }
         }
-        .background(DesignTokens.Colors.background)
+        .contentBackground()
         .task { await loadData() }
         .refreshable { await loadData() }
         .overlay {
@@ -147,7 +147,7 @@ struct RecentFavoritesView: View {
                                     if isSelected {
                                         tab.color
                                     } else {
-                                        Rectangle().fill(.ultraThinMaterial)
+                                        Rectangle().fill(DesignTokens.Colors.surfaceElevated)
                                     }
                                 }
                                 .clipShape(Capsule())
@@ -177,7 +177,7 @@ struct RecentFavoritesView: View {
             }
             .buttonStyle(.plain)
         }
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
     }
     
     // MARK: - Data Loading
@@ -256,7 +256,6 @@ struct PremiumChannelRow: View {
     let onToggleFavorite: () async -> Void
 
     @State private var isHovered = false
-    // Metal 3: @State pulseScale 제거 — TimelineView로 스코프 삽내 GPU 직접 제어
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.md) {
@@ -282,24 +281,13 @@ struct PremiumChannelRow: View {
                 )
 
                 if isLive {
-                    // Metal 3: TimelineView sin 파형 — easeInOut repeatForever @State 루프 제거
-                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-                        let t = timeline.date.timeIntervalSinceReferenceDate
-                        let pulse = 1.175 + sin(t * .pi / 0.9) * 0.175  // 1.0 ~ 1.35
-                        Circle()
-                            .fill(DesignTokens.Colors.live)
-                            .frame(width: 10, height: 10)
-                            .scaleEffect(pulse)
-                            .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                            .offset(x: 2, y: 2)
-                    }
+                    Circle()
+                        .fill(DesignTokens.Colors.live)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                        .offset(x: 2, y: 2)
                 }
             }
-            .onAppear {
-                // Metal 3: TimelineView 사용으로 onAppear @State 애니메이션 뛸 필요 없음
-            }
-            // pulse Circle 합성을 Metal로 오프로드
-            .drawingGroup(opaque: false)
 
             // 채널 정보
             VStack(alignment: .leading, spacing: 3) {
@@ -361,11 +349,12 @@ struct PremiumChannelRow: View {
                         .fill(isLive ? DesignTokens.Colors.live.opacity(0.07) : DesignTokens.Colors.surfaceOverlay)
                 } else {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Colors.surfaceElevated)
                 }
             }
+            // 동적 shadow opacity 제거 — hover마다 GPU blur 패스 재계산 방지
             .shadow(
-                color: isLive ? DesignTokens.Colors.live.opacity(isHovered ? 0.18 : 0) : .clear,
+                color: isLive ? DesignTokens.Colors.live.opacity(0.12) : .clear,
                 radius: 6
             )
         }
@@ -376,7 +365,7 @@ struct PremiumChannelRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 
     private var avatarPlaceholder: some View {
@@ -384,7 +373,7 @@ struct PremiumChannelRow: View {
             .fill(DesignTokens.Colors.surfaceBase)
             .overlay {
                 Image(systemName: "person.fill")
-                    .font(DesignTokens.Typography.title3)
+                    .font(DesignTokens.Typography.subhead)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
     }
@@ -467,7 +456,7 @@ struct SimpleChannelRow: View {
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
         }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
     
     private var channelPlaceholder: some View {

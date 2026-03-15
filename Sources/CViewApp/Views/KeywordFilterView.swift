@@ -373,7 +373,7 @@ struct ChatExportView: View {
                     .font(.caption)
                     .foregroundStyle(DesignTokens.Colors.success)
                     .padding(DesignTokens.Spacing.xs)
-                    .background(.thinMaterial)
+                    .background(DesignTokens.Colors.surfaceBase)
                     .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             }
             
@@ -418,7 +418,7 @@ struct ChatExportView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(DesignTokens.Spacing.xs)
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
     }
     

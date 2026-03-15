@@ -158,8 +158,6 @@ struct MenuBarChannelRow: View {
     let channel: OnlineChannel
     @Environment(\.openWindow) private var openWindow
     @State private var isHovered = false
-    @State private var pulseScale: CGFloat = 1.0
-    @State private var pulseOpacity: Double = 0.5
 
     var body: some View {
         Button {
@@ -168,27 +166,9 @@ struct MenuBarChannelRow: View {
         } label: {
             HStack(spacing: DesignTokens.Spacing.xs) {
                 // Live indicator with pulse animation
-                ZStack {
-                    Circle()
-                        .fill(DesignTokens.Colors.live.opacity(pulseOpacity))
-                        .frame(width: 16, height: 16)
-                        .scaleEffect(pulseScale)
-
-                    Circle()
-                        .fill(DesignTokens.Colors.live)
-                        .frame(width: 7, height: 7)
-                        .shadow(color: DesignTokens.Colors.live.opacity(0.7), radius: 3)
-                }
-                .onAppear {
-                    if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.menuPulse) {
-                        withAnimation(anim) {
-                            pulseScale = 1.6
-                            pulseOpacity = 0.0
-                        }
-                    }
-                }
-                // pulse 레이어를 Metal 오프스크린으로 합성
-                .drawingGroup(opaque: false)
+                Circle()
+                    .fill(DesignTokens.Colors.live)
+                    .frame(width: 7, height: 7)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(channel.channelName)
@@ -214,7 +194,7 @@ struct MenuBarChannelRow: View {
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xxs)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(Capsule())
             }
             .padding(.horizontal, DesignTokens.Spacing.xs)
@@ -222,7 +202,7 @@ struct MenuBarChannelRow: View {
             .background {
                 if isHovered {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Colors.surfaceElevated)
                 }
             }
             .contentShape(Rectangle())
@@ -231,6 +211,6 @@ struct MenuBarChannelRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
     }
 }

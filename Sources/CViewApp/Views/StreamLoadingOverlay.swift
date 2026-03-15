@@ -73,11 +73,10 @@ struct StreamLoadingOverlay: View {
             withAnimation(DesignTokens.Animation.normal) {
                 contentOpacity = 1.0
             }
-            if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) {
-                withAnimation(anim) {
-                    ringScale = 1.0
-                    ringOpacity = 1.0
-                }
+            // 링 펄스: 단발 애니메이션으로 변경 (repeatForever 제거)
+            withAnimation(.easeOut(duration: 0.6)) {
+                ringScale = 1.0
+                ringOpacity = 1.0
             }
             if let anim = DesignTokens.Animation.motionSafe(DesignTokens.Animation.loadingSpin) {
                 withAnimation(anim) {
@@ -100,8 +99,9 @@ struct StreamLoadingOverlay: View {
                             .aspectRatio(contentMode: .fill)
                             .frame(width: geo.size.width, height: geo.size.height)
                             .clipped()
-                            .blur(radius: 24, opaque: true)
-                            .scaleEffect(1.08)
+                            .blur(radius: 12, opaque: true)
+                            .scaleEffect(1.04)
+                            .drawingGroup(opaque: true)
                     }
                 }
             }

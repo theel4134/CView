@@ -32,7 +32,12 @@ public actor KeychainService {
     /// 데이터 저장
     public func save(key: String, data: Data) throws {
         let fileURL = fileURL(for: key)
-        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        try data.write(to: fileURL, options: [.atomic])
+        // macOS에서 .completeFileProtection은 무효 — POSIX 파일 퍼미션으로 소유자만 읽기/쓰기
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: fileURL.path
+        )
         Log.auth.debug("Auth store saved: \(key, privacy: .private)")
     }
 

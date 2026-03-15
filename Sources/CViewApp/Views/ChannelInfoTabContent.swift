@@ -132,7 +132,7 @@ struct ChannelInfoTabContent: View {
                             .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                             .padding(.horizontal, DesignTokens.Spacing.xs)
                             .padding(.vertical, DesignTokens.Spacing.xxs)
-                            .background(.ultraThinMaterial)
+                            .background(.black.opacity(0.45))
                             .clipShape(Capsule())
                         }
                         .padding(DesignTokens.Spacing.xs)
@@ -140,7 +140,7 @@ struct ChannelInfoTabContent: View {
                         // 재생 버튼 오버레이
                         ZStack {
                             Circle()
-                                .fill(.ultraThinMaterial)
+                                .fill(.black.opacity(0.4))
                                 .frame(width: 52, height: 52)
                             Image(systemName: "play.fill")
                                 .font(DesignTokens.Typography.headline)
@@ -190,7 +190,7 @@ struct ChannelInfoTabContent: View {
                                             .foregroundStyle(DesignTokens.Colors.textSecondary)
                                             .padding(.horizontal, DesignTokens.Spacing.sm)
                                             .padding(.vertical, DesignTokens.Spacing.xxs)
-                                            .background(.ultraThinMaterial)
+                                            .background(DesignTokens.Colors.surfaceElevated)
                                             .clipShape(Capsule())
                                     }
                                 }
@@ -198,13 +198,13 @@ struct ChannelInfoTabContent: View {
                         }
                     }
                     .padding(DesignTokens.Spacing.sm)
-                    .background(.ultraThinMaterial)
+                    .background(DesignTokens.Colors.surfaceBase)
                 }
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceBase)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                        .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
                 }
             }
             .buttonStyle(.plain)
@@ -308,11 +308,11 @@ struct ChannelInfoTabContent: View {
         }
         .padding(DesignTokens.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
         }
     }
 
@@ -347,7 +347,7 @@ struct ChannelInfoTabContent: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(DesignTokens.Spacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         }
     }
@@ -380,11 +380,11 @@ struct ChannelInfoTabContent: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(DesignTokens.Spacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial)
+                .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                        .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
                 }
         }
     }
@@ -413,7 +413,8 @@ struct ChannelInfoTabContent: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
                     withAnimation(DesignTokens.Animation.fast) { urlCopied = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(2))
                         withAnimation(DesignTokens.Animation.fast) { urlCopied = false }
                     }
                 } label: {
@@ -430,7 +431,7 @@ struct ChannelInfoTabContent: View {
                         if urlCopied {
                             Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.12))
                         } else {
-                            Capsule().fill(.ultraThinMaterial)
+                            Capsule().fill(DesignTokens.Colors.surfaceElevated)
                         }
                     }
                     .clipShape(Capsule())
@@ -438,7 +439,7 @@ struct ChannelInfoTabContent: View {
                 .buttonStyle(.plain)
             }
             .padding(DesignTokens.Spacing.sm)
-            .background(.ultraThinMaterial)
+            .background(DesignTokens.Colors.surfaceElevated)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         }
     }
@@ -468,9 +469,10 @@ struct ChannelInfoTabContent: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     ForEach(clipList.prefix(5)) { clip in
-                        CompactClipCard(clip: clip) {
+                        EquatableCompactClipCard(clip: clip) {
                             router.navigate(to: .clip(clipUID: clip.clipUID))
                         }
+                        .equatable()
                         .frame(width: 200)
                     }
                 }
@@ -503,9 +505,10 @@ struct ChannelInfoTabContent: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     ForEach(vodList.prefix(5)) { vod in
-                        CompactVODCard(vod: vod) {
+                        EquatableCompactVODCard(vod: vod) {
                             router.navigate(to: .vod(videoNo: vod.videoNo))
                         }
+                        .equatable()
                         .frame(width: 200)
                     }
                 }

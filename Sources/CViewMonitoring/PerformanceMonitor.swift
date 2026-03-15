@@ -93,11 +93,13 @@ public actor PerformanceMonitor {
     /// 메모리 증가 추세 경고 임계치 (MB/분) — 이 이상이면 누수 의심
     private let memoryGrowthWarningThreshold: Double = 50.0
     
-    /// CPU/GPU 캐시 — IOKit+task_threads 커널 호출을 매초→3초로 줄임
+    /// CPU/GPU 캐시 — IOKit+task_threads 커널 호출을 매초→5초로 줄임
+    /// [GPU/CPU 최적화] IORegistryEntryCreateCFProperties + task_threads 는 무거운 커널 호출.
+    /// 3초 → 5초로 늘려 호출 빈도를 40% 줄임. 성능 오버레이는 참고 지표이므로 5초 지연 허용.
     private var _cachedCPU: Double = 0
     private var _cachedGPU: (usage: Double, renderer: Double, memMB: Double) = (0, 0, 0)
     private var _kernelSampleCounter: Int = 0
-    private let kernelSampleInterval = 3  // 3초마다 커널 호출
+    private let kernelSampleInterval = 5  // 5초마다 커널 호출
     
     public var currentMetrics: Metrics? { metricsHistory.last }
     
@@ -110,7 +112,9 @@ public actor PerformanceMonitor {
     // MARK: - Control
     
     /// Start collecting metrics
-    public func start(interval: TimeInterval = 1.0) {
+    /// interval 기본값 2.0: VLC statTimer(2초)와 동기화하여 actor wakeup 횟수 50% 감소.
+    /// 오버레이 업데이트가 2초 주기여도 라이브 스트림 QoS 지표로는 충분함.
+    public func start(interval: TimeInterval = 2.0) {
         guard !isRunning else { return }
         isRunning = true
         
@@ -186,7 +190,27 @@ public actor PerformanceMonitor {
     public func updateNetworkSpeed(_ bytesPerSec: Int) {
         _networkSpeedBytesPerSec = bytesPerSec
     }
-    
+
+    /// VLC 메트릭 일괄 업데이트 — 7개 개별 actor hop → 1회 호출로 통합
+    /// MetricsForwarder.updateVLCMetrics() 에서 단일 호출로 사용.
+    public func updateVLCMetricsBatch(
+        fps: Double,
+        droppedFrames: Int,
+        networkBytes: Int,
+        bufferHealth: Double,
+        resolution: String?,
+        inputBitrateKbps: Double,
+        networkSpeedBytesPerSec: Int
+    ) {
+        _currentFPS = fps
+        _droppedFrames = droppedFrames
+        _networkBytes = networkBytes
+        _bufferHealth = bufferHealth
+        _resolution = resolution
+        _inputBitrateKbps = inputBitrateKbps
+        _networkSpeedBytesPerSec = networkSpeedBytesPerSec
+    }
+
     // MARK: - Private
     
     private func collectMetrics() {
@@ -253,7 +277,7 @@ public actor PerformanceMonitor {
     
     /// macOS 메모리 압력 이벤트 감시 — DispatchSourceMemoryPressure 기반
     /// 시스템이 메모리 압력을 감지하면 캐시 정리 콜백을 자동 호출
-    private nonisolated func startMemoryPressureMonitor() {
+    private func startMemoryPressureMonitor() {
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.warning, .critical],
             queue: .global(qos: .utility)
@@ -273,10 +297,6 @@ public actor PerformanceMonitor {
             }
         }
         source.resume()
-        Task { await self.setMemoryPressureSource(source) }
-    }
-    
-    private func setMemoryPressureSource(_ source: DispatchSourceMemoryPressure) {
         memoryPressureSource = source
     }
     

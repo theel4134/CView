@@ -34,7 +34,7 @@ struct CompactVODCard: View {
                         .font(DesignTokens.Typography.custom(size: 9, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, DesignTokens.Spacing.xxs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(.ultraThinMaterial)
+                        .background(.black.opacity(0.5))
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                         .padding(DesignTokens.Spacing.xs)
@@ -61,15 +61,18 @@ struct CompactVODCard: View {
             .padding(DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.ultraThinMaterial)
+                    .fill(DesignTokens.Colors.surfaceElevated)
             )
-            // Metal 3: material+thumbnail 레이어 → GPU 단일 텍스처
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(isHovered ? 1 : 0), lineWidth: 0.5)
+            }
+            // scaleEffect 제거 — compositingGroup 후 scale은 전체 레이어 재합성 유발
             .compositingGroup()
-            .scaleEffect(isHovered ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -112,11 +115,11 @@ struct CompactClipCard: View {
                         .font(DesignTokens.Typography.custom(size: 9, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, DesignTokens.Spacing.xxs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(.ultraThinMaterial)
+                        .background(.black.opacity(0.5))
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                         .padding(DesignTokens.Spacing.xs)
-                }
+                    }
 
                 Text(clip.clipTitle)
                     .font(DesignTokens.Typography.captionMedium)
@@ -140,15 +143,18 @@ struct CompactClipCard: View {
             .padding(DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(.ultraThinMaterial)
+                    .fill(DesignTokens.Colors.surfaceElevated)
             )
-            // Metal 3: material+thumbnail 레이어 → GPU 단일 텍스처
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(isHovered ? 1 : 0), lineWidth: 0.5)
+            }
+            // scaleEffect 제거 — compositingGroup 후 scale은 전체 레이어 재합성 유발
             .compositingGroup()
-            .scaleEffect(isHovered ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .cursor(.pointingHand)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -181,7 +187,7 @@ struct VODCard: View {
                         .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, DesignTokens.Spacing.xs)
                         .padding(.vertical, DesignTokens.Spacing.xxs)
-                        .background(.ultraThinMaterial)
+                        .background(.black.opacity(0.5))
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                         .padding(DesignTokens.Spacing.xs)
@@ -213,14 +219,13 @@ struct VODCard: View {
             .padding(DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .fill(.ultraThinMaterial)
+                    .fill(DesignTokens.Colors.surfaceElevated)
                     .opacity(isHovered ? 1 : 0)
             )
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
-        .cursor(.pointingHand)
-        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
@@ -233,6 +238,7 @@ struct ClipCard: View {
     @State private var isHovered = false
 
     private var formattedDuration: String {
+
         let total = clip.duration
         let m = total / 60
         let s = total % 60
@@ -263,7 +269,7 @@ struct ClipCard: View {
                             .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
                             .padding(.horizontal, DesignTokens.Spacing.xs)
                             .padding(.vertical, DesignTokens.Spacing.xxs)
-                            .background(.ultraThinMaterial)
+                            .background(.black.opacity(0.5))
                             .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                             .padding(DesignTokens.Spacing.xs)
@@ -274,7 +280,7 @@ struct ClipCard: View {
                             .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
                             .foregroundStyle(DesignTokens.Colors.accentOrange)
                             .padding(DesignTokens.Spacing.xs)
-                            .background(.ultraThinMaterial)
+                            .background(.black.opacity(0.5))
                             .clipShape(Circle())
                             .padding(DesignTokens.Spacing.xs)
                     }
@@ -306,14 +312,44 @@ struct ClipCard: View {
             .padding(DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .fill(.ultraThinMaterial)
+                    .fill(DesignTokens.Colors.surfaceElevated)
                     .opacity(isHovered ? 1 : 0)
             )
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
-        .cursor(.pointingHand)
-        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
+}
+
+
+// MARK: - Equatable Wrappers (re-render 방지)
+
+struct EquatableCompactVODCard: View, @preconcurrency Equatable {
+    let vod: VODInfo
+    let onTap: () -> Void
+    var body: some View { CompactVODCard(vod: vod, onTap: onTap) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.vod == rhs.vod }
+}
+
+struct EquatableCompactClipCard: View, @preconcurrency Equatable {
+    let clip: ClipInfo
+    let onTap: () -> Void
+    var body: some View { CompactClipCard(clip: clip, onTap: onTap) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.clip == rhs.clip }
+}
+
+struct EquatableVODCard: View, @preconcurrency Equatable {
+    let vod: VODInfo
+    let onTap: () -> Void
+    var body: some View { VODCard(vod: vod, onTap: onTap) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.vod == rhs.vod }
+}
+
+struct EquatableClipCard: View, @preconcurrency Equatable {
+    let clip: ClipInfo
+    let onTap: () -> Void
+    var body: some View { ClipCard(clip: clip, onTap: onTap) }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.clip == rhs.clip }
 }

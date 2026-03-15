@@ -35,10 +35,10 @@ struct ChatAutocompleteView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(.ultraThinMaterial)
+            .background(DesignTokens.Colors.surfaceElevated)
 
             Rectangle()
-                .fill(.white.opacity(DesignTokens.Glass.borderOpacityLight))
+                .fill(DesignTokens.Glass.borderColorLight)
                 .frame(height: 0.5)
 
             // 제안 목록
@@ -68,10 +68,10 @@ struct ChatAutocompleteView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(maxHeight: min(CGFloat(totalCount) * 36 + 32, 220))
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .shadow(color: .black.opacity(0.3), radius: 16, y: -6)

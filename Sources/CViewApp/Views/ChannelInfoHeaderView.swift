@@ -218,14 +218,14 @@ struct ChannelInfoQuickActionBar: View {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).fill(color)
                 case .outlined:
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Colors.surfaceElevated)
                         .overlay {
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(.white.opacity(DesignTokens.Glass.borderOpacity), lineWidth: 0.5)
+                                .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
                         }
                 case .tinted:
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(.ultraThinMaterial)
+                        .fill(color.opacity(0.12))
                         .overlay {
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                                 .strokeBorder(color.opacity(0.4), lineWidth: 0.5)

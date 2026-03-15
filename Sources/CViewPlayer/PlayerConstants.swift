@@ -71,19 +71,22 @@ public enum LatencyDefaults {
 
 public enum ProxyDefaults {
     /// Keep-Alive 타임아웃 (초)
-    public static let keepAliveTimeout: TimeInterval = 30.0
+    /// 15초: 멀티라이브 4세션 시 stale 연결 빠른 회수 (30→15s)
+    public static let keepAliveTimeout: TimeInterval = 15.0
     /// 프록시 요청 타임아웃 (초)
     public static let requestTimeout: TimeInterval = 15
     /// 프록시 리소스 타임아웃 (초)
     public static let resourceTimeout: TimeInterval = 30
     /// 호스트당 최대 연결 수
-    public static let maxConnectionsPerHost = 12
+    /// 24: VLC HLS 모듈의 동시 세그먼트/매니페스트 요청 수용 (18→24)
+    public static let maxConnectionsPerHost = 24
     /// 소켓 최대 수신 크기 (바이트)
     public static let maxReceiveLength = 65536
     /// 업스트림 요청 타임아웃 (초)
     public static let upstreamRequestTimeout: TimeInterval = 15
     /// 최대 동시 활성 연결 수
-    public static let maxActiveConnections = 50
+    /// 80: 멀티라이브 4세션 × ~12-15 연결/세션 = ~60 여유분 포함 (50→80)
+    public static let maxActiveConnections = 80
 }
 
 // MARK: - Multi-Pane Quality

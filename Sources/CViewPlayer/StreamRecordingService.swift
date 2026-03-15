@@ -37,6 +37,12 @@ public actor StreamRecordingService {
     private var totalBytesWritten: Int64 = 0
     private var startDate: Date?
     
+    deinit {
+        recordingTask?.cancel()
+        try? outputFileHandle?.close()
+        session.invalidateAndCancel()
+    }
+    
     /// URLSession for downloading segments
     private let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral

@@ -28,6 +28,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
         var isRunning = false
         var port: UInt16 = 0
         var targetHost: String = ""
+        var isStarting = false // 동시 start() 호출 경쟁 조건 방지
     }
     private let proxyState = Mutex(ProxyState())
     
@@ -43,9 +44,78 @@ public final class LocalStreamProxy: @unchecked Sendable {
     }()
     
     /// 활성 NWConnection 수 추적 — 연결 누수 감지 및 제한용
-    private var activeConnectionCount: Int = 0
-    private let connectionCountLock = NSLock()
+    private let activeConnectionCount = Mutex<Int>(0)
     private let maxActiveConnections = ProxyDefaults.maxActiveConnections
+    
+    /// CDN 인증 실패(403) 연속 카운터 — 토큰 만료 감지용
+    private let _consecutive403Count = Mutex<Int>(0)
+    private let _consecutive403Threshold = 3
+    
+    /// CDN 인증 실패 콜백 — 연속 403 감지 시 StreamCoordinator에 통보
+    public var onUpstreamAuthFailure: (@Sendable () -> Void)?
+
+    // MARK: - Network Stats (실시간 모니터링용)
+
+    /// 누적 통계 카운터 — Mutex로 스레드 안전 보장
+    private struct _NetworkCounters: Sendable {
+        var totalRequests: Int = 0
+        var cacheHits: Int = 0
+        var cacheMisses: Int = 0
+        var errorCount: Int = 0
+        var totalBytesReceived: Int64 = 0
+        var totalBytesServed: Int64 = 0
+    }
+    private let _netCounters = Mutex(_NetworkCounters())
+
+    /// CDN 응답 시간 슬라이딩 윈도우 (최근 20개)
+    private let _responseTimes = Mutex<[Double]>([])
+    private let _responseTimeWindowSize = 20
+
+    /// 네트워크 통계 스냅샷 생성
+    public func networkStats() -> ProxyNetworkStats {
+        let counters = _netCounters.withLock { $0 }
+        let (avg, max_) = _responseTimes.withLock { times -> (Double, Double) in
+            guard !times.isEmpty else { return (0, 0) }
+            let sum = times.reduce(0, +)
+            return (sum / Double(times.count), times.max() ?? 0)
+        }
+        let active = activeConnectionCount.withLock { $0 }
+        let c403 = _consecutive403Count.withLock { $0 }
+
+        return ProxyNetworkStats(
+            totalRequests: counters.totalRequests,
+            cacheHits: counters.cacheHits,
+            cacheMisses: counters.cacheMisses,
+            errorCount: counters.errorCount,
+            totalBytesReceived: counters.totalBytesReceived,
+            totalBytesServed: counters.totalBytesServed,
+            activeConnections: active,
+            consecutive403Count: c403,
+            avgResponseTime: avg,
+            maxResponseTime: max_
+        )
+    }
+
+    /// 통계 리셋 (세션 종료 시)
+    public func resetNetworkStats() {
+        _netCounters.withLock { $0 = _NetworkCounters() }
+        _responseTimes.withLock { $0.removeAll() }
+    }
+
+    // MARK: - M3U8 Response Cache
+    // VLC adaptive 모듈은 M3U8를 ~1ms 간격으로 폴링 (39K+ 회/35초)
+    // CDN에 매번 요청하면 프록시 과부하 → 세그먼트 응답 지연 → 버퍼링 고착
+    // 1초 TTL 캐싱으로 동일 M3U8 반복 요청을 즉시 응답 → CDN 요청 ~1000배 감소
+    private struct M3U8CacheEntry: Sendable {
+        let data: Data
+        let contentType: String
+        let statusCode: Int
+        let timestamp: Date
+    }
+    private let _m3u8Cache = Mutex<[String: M3U8CacheEntry]>([:])
+    // [Fix 16h-opt3] 0.5→0.3초: 새 세그먼트 감지 속도 40% 향상 → 초기 버퍼링 단축
+    private let _m3u8CacheTTL: TimeInterval = 0.3
+    private let _m3u8DebugCount = Mutex<Int>(0)
 
     private let queue = DispatchQueue(label: "com.cview.streamproxy", qos: .userInteractive, attributes: .concurrent)
     private let logger = AppLogger.player
@@ -72,13 +142,34 @@ public final class LocalStreamProxy: @unchecked Sendable {
     
     @discardableResult
     public func start(for host: String) async throws -> UInt16 {
-        // Mutex로 읽기/쓰기 경쟁 방지 (NSLock 대비 cooperative thread 안전)
-        let alreadyRunning = proxyState.withLock { $0.isRunning && $0.targetHost == host && $0.port > 0 }
-        if alreadyRunning {
-            let p = proxyState.withLock { $0.port }
-            logger.info("Proxy already running: localhost:\(p) → \(host)")
-            return p
+        // 동시 start() 호출 경쟁 조건 방지:
+        // 멀티라이브 복원 시 여러 세션이 동시에 start() 호출 가능
+        // → 이미 시작 중이면 시작 완료될 때까지 대기 후 기존 포트 반환
+        let state = proxyState.withLock { s -> (running: Bool, starting: Bool, port: UInt16, sameHost: Bool) in
+            (s.isRunning, s.isStarting, s.port, s.targetHost == host)
         }
+        
+        if state.running && state.sameHost && state.port > 0 {
+            logger.info("Proxy already running: localhost:\(state.port) → \(host)")
+            return state.port
+        }
+        
+        if state.starting && state.sameHost {
+            // 다른 호출이 시작 중 — 완료 대기 (최대 5초)
+            for _ in 0..<50 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1초
+                let current = proxyState.withLock { ($0.isRunning, $0.port) }
+                if current.0 && current.1 > 0 {
+                    logger.info("Proxy start wait complete: localhost:\(current.1) → \(host)")
+                    return current.1
+                }
+            }
+            // 타임아웃 — 이전 시작이 실패했을 수 있으므로 새로 시작
+        }
+        
+        // isStarting 플래그 설정
+        proxyState.withLock { $0.isStarting = true }
+        defer { proxyState.withLock { $0.isStarting = false } }
         
         stop()
         proxyState.withLock { $0.targetHost = host }
@@ -145,8 +236,22 @@ public final class LocalStreamProxy: @unchecked Sendable {
             $0.port = 0
             $0.targetHost = ""
         }
-        connectionCountLock.withLock { activeConnectionCount = 0 }
+        activeConnectionCount.withLock { $0 = 0 }
+        _consecutive403Count.withLock { $0 = 0 }
+        _m3u8Cache.withLock { $0.removeAll() }
+        resetNetworkStats()
+        onUpstreamAuthFailure = nil
         logger.info("Proxy stopped, session invalidated")
+    }
+    
+    /// 프록시 세션만 리셋 — stale 연결 풀 + M3U8 캐시 정리 (재연결 시 사용)
+    public func resetSession() {
+        _proxySession?.invalidateAndCancel()
+        _proxySession = nil
+        _consecutive403Count.withLock { $0 = 0 }
+        // 재연결 시 stale 매니페스트 캐시 제거 — 새 CDN 토큰이 반영된 URL 사용 보장
+        _m3u8Cache.withLock { $0.removeAll() }
+        logger.info("Proxy session reset — stale connections + M3U8 cache cleared")
     }
     
     // MARK: - URL Transformation
@@ -194,13 +299,13 @@ public final class LocalStreamProxy: @unchecked Sendable {
     
     private func handleConnection(_ connection: NWConnection) {
         // 활성 연결 수 제한 — 연결 누수 시 시스템 자원 고갈 방지
-        let count = connectionCountLock.withLock {
-            activeConnectionCount += 1
-            return activeConnectionCount
+        let count = activeConnectionCount.withLock { count -> Int in
+            count += 1
+            return count
         }
         if count > maxActiveConnections {
             logger.warning("Proxy: max connections (\(self.maxActiveConnections)) exceeded, rejecting")
-            connectionCountLock.withLock { activeConnectionCount -= 1 }
+            activeConnectionCount.withLock { $0 -= 1 }
             connection.cancel()
             return
         }
@@ -208,11 +313,11 @@ public final class LocalStreamProxy: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .cancelled:
-                self?.connectionCountLock.withLock { self?.activeConnectionCount -= 1 }
+                self?.activeConnectionCount.withLock { $0 -= 1 }
             case .failed:
                 // cancel() 전에 handler를 nil로 설정하여 .cancelled 재진입 방지 → 이중 decrement 방지
                 connection.stateUpdateHandler = nil
-                self?.connectionCountLock.withLock { self?.activeConnectionCount -= 1 }
+                self?.activeConnectionCount.withLock { $0 -= 1 }
                 connection.cancel()
             default:
                 break
@@ -253,6 +358,12 @@ public final class LocalStreamProxy: @unchecked Sendable {
             }
             
             let reqNum = requestCount + 1
+            
+            // [Fix 16d] 프록시 요청 로깅 (debug 레벨로 전환 — CPU 절약)
+            if reqNum <= 10 {
+                let pathSuffix = String(path.suffix(120))
+                self.logger.debug("[PROXY-REQ] #\(reqNum, privacy: .public) GET \(pathSuffix, privacy: .public)")
+            }
 
             // [멀티CDN 지원] /_p_/HOST/path 형식이면 해당 CDN 호스트로 직접 라우팅
             // M3U8 URL 재작성 시 크로스CDN 절대 URL을 이 형식으로 인코딩함
@@ -291,6 +402,27 @@ public final class LocalStreamProxy: @unchecked Sendable {
             return
         }
         
+        // [Fix 16] M3U8 캐시 히트 체크 — VLC의 초고속 M3U8 폴링을 CDN 요청 없이 즉시 응답
+        let isLikelyM3U8 = targetURL.contains(".m3u8") || targetURL.contains("chunklist") || targetURL.contains("mpegurl")
+        if isLikelyM3U8 {
+            let cached = _m3u8Cache.withLock { cache -> M3U8CacheEntry? in
+                guard let entry = cache[targetURL],
+                      Date().timeIntervalSince(entry.timestamp) < self._m3u8CacheTTL else { return nil }
+                return entry
+            }
+            if let cached {
+                // [Fix 16h] M3U8도 keep-alive 유지 — http-continuous 제거로
+                // VLC가 Content-Length 존중하여 응답 완료 인식
+                self._netCounters.withLock { c in
+                    c.totalRequests += 1
+                    c.cacheHits += 1
+                    c.totalBytesServed += Int64(cached.data.count)
+                }
+                sendResponse(to: connection, status: cached.statusCode, contentType: cached.contentType, data: cached.data, requestNum: requestNum)
+                return
+            }
+        }
+        
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = ProxyDefaults.upstreamRequestTimeout
@@ -304,24 +436,65 @@ public final class LocalStreamProxy: @unchecked Sendable {
         request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
         request.setValue(CommonHeaders.chzzkOrigin, forHTTPHeaderField: "Origin")
         
+        let requestStart = CFAbsoluteTimeGetCurrent()
         proxySession.dataTask(with: request) { [weak self] data, response, error in
             guard let self else {
                 connection.cancel()
                 return
             }
+            let elapsed = CFAbsoluteTimeGetCurrent() - requestStart
             
             guard let data, let httpResponse = response as? HTTPURLResponse else {
+                self._netCounters.withLock { c in
+                    c.totalRequests += 1
+                    c.cacheMisses += 1
+                    c.errorCount += 1
+                }
                 self.sendError(to: connection, status: 502, message: "Bad Gateway", keepAlive: true)
                 return
             }
             
+            // 응답 시간 기록 (슬라이딩 윈도우)
+            self._responseTimes.withLock { times in
+                times.append(elapsed)
+                if times.count > self._responseTimeWindowSize {
+                    times.removeFirst(times.count - self._responseTimeWindowSize)
+                }
+            }
+
             // Content-Type 수정 (fMP4 → mp4)
             var contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream"
 
             // 에러 응답만 로그 (정상 세그먼트 로그 억제 — 초당 수십 건 발생)
             if httpResponse.statusCode >= 400 {
+                self._netCounters.withLock { c in
+                    c.totalRequests += 1
+                    c.cacheMisses += 1
+                    c.errorCount += 1
+                    c.totalBytesReceived += Int64(data.count)
+                }
                 let urlSuffix = String(targetURL.suffix(80))
                 self.logger.warning("Proxy → CDN res#\(requestNum, privacy: .public): HTTP \(httpResponse.statusCode, privacy: .public) [\(urlSuffix, privacy: .public)]")
+                
+                // CDN 토큰 만료 감지: 403 연속 발생 시 상위에 통보
+                if httpResponse.statusCode == 403 {
+                    let count = self._consecutive403Count.withLock { c -> Int in
+                        c += 1
+                        return c
+                    }
+                    if count == self._consecutive403Threshold {
+                        self.logger.warning("Proxy: CDN 403 \(count)회 연속 — 토큰 만료 의심, 상위 통보")
+                        self.onUpstreamAuthFailure?()
+                    }
+                }
+            } else {
+                // 정상 응답(2xx/3xx) 시 403 카운터 리셋
+                self._consecutive403Count.withLock { $0 = 0 }
+                self._netCounters.withLock { c in
+                    c.totalRequests += 1
+                    c.cacheMisses += 1
+                    c.totalBytesReceived += Int64(data.count)
+                }
             }
 
             // fMP4/CMAF 세그먼트에 대한 Content-Type 강제 수정
@@ -344,11 +517,29 @@ public final class LocalStreamProxy: @unchecked Sendable {
             
             if isM3U8 {
                 if let m3u8Content = String(data: data, encoding: .utf8) {
-                    // 단일 패스 URL 재작성 — 정규식 1회 스캔으로 sameHost + crossCDN 동시 처리
-                    // 기존: replacingOccurrences × (1 + N_크로스호스트) + regex 스캔 1회
-                    // 개선: regex 1회 스캔 → 매치 역순 치환 (String 1회 복사)
+                    // [Fix 16d] M3U8 내용 디버그 로깅 (최초 5회만, %문자 안전 처리)
+                    let debugCount = self._m3u8DebugCount.withLock { c -> Int in
+                        c += 1
+                        return c
+                    }
+                    if debugCount <= 3 {
+                        self.logger.debug("[PROXY-M3U8] #\(debugCount, privacy: .public) CDN target: \(String(targetURL.suffix(80)), privacy: .public)")
+                    }
+                    
+                    // 1단계: 절대 CDN URL → 프록시 URL (기존 로직)
                     let proxyBase = "http://127.0.0.1:\(self.port)"
-                    let rewritten = self.rewriteM3U8URLs(m3u8Content, proxyBase: proxyBase)
+                    var rewritten = self.rewriteM3U8URLs(m3u8Content, proxyBase: proxyBase)
+                    
+                    // [Fix 16d] 2단계: 모든 상대 URL → 절대 프록시 URL
+                    // master playlist의 variant URL + chunklist의 segment URL 모두 처리
+                    // VLC가 %2f 포함 경로에서 상대 URL 해석 실패 → 전부 절대 URL로 변환
+                    let basePath = self.extractDirectoryPath(from: targetURL)
+                    rewritten = self.makeRelativeURLsAbsolute(rewritten, proxyBase: proxyBase, basePath: basePath)
+                    
+                    if debugCount <= 3 {
+                        let rewrittenPreview = String(rewritten.prefix(400))
+                        self.logger.debug("[PROXY-M3U8] #\(debugCount, privacy: .public) REWRITTEN (basePath=\(basePath, privacy: .public)):\n\(rewrittenPreview, privacy: .public)")
+                    }
                     
                     responseData = rewritten.data(using: .utf8) ?? data
                     
@@ -358,18 +549,37 @@ public final class LocalStreamProxy: @unchecked Sendable {
                 }
             }
             
+            // [Fix 16] M3U8 응답 캐싱 — URL 재작성 후 최종 데이터를 캐시
+            if isM3U8 {
+                self._m3u8Cache.withLock { cache in
+                    cache[targetURL] = M3U8CacheEntry(
+                        data: responseData,
+                        contentType: contentType,
+                        statusCode: httpResponse.statusCode,
+                        timestamp: Date()
+                    )
+                }
+            }
+            
+            // [Fix 16h] 모든 응답 keep-alive — http-continuous 제거로
+            // VLC HTTP 모듈이 Content-Length 기반 응답 완료 올바르게 인식
+            self._netCounters.withLock { $0.totalBytesServed += Int64(responseData.count) }
             self.sendResponse(to: connection, status: httpResponse.statusCode, contentType: contentType, data: responseData, requestNum: requestNum)
         }.resume()
     }
     
     // MARK: - HTTP Response Helpers (Keep-Alive)
     
-    private func sendResponse(to connection: NWConnection, status: Int, contentType: String, data: Data, requestNum: Int) {
+    private func sendResponse(to connection: NWConnection, status: Int, contentType: String, data: Data, requestNum: Int, keepAlive: Bool = true) {
         var header = "HTTP/1.1 \(status) OK\r\n"
         header += "Content-Type: \(contentType)\r\n"
         header += "Content-Length: \(data.count)\r\n"
-        header += "Connection: keep-alive\r\n"
-        header += "Keep-Alive: timeout=\(Int(keepAliveTimeout))\r\n"
+        if keepAlive {
+            header += "Connection: keep-alive\r\n"
+            header += "Keep-Alive: timeout=\(Int(keepAliveTimeout))\r\n"
+        } else {
+            header += "Connection: close\r\n"
+        }
         header += "Access-Control-Allow-Origin: *\r\n"
         header += "Cache-Control: no-cache\r\n"
         header += "\r\n"
@@ -377,13 +587,17 @@ public final class LocalStreamProxy: @unchecked Sendable {
         var fullResponse = Data(header.utf8)
         fullResponse.append(data)
         
-        connection.send(content: fullResponse, contentContext: .defaultMessage, isComplete: false, completion: .contentProcessed { [weak self] error in
+        connection.send(content: fullResponse, contentContext: .defaultMessage, isComplete: !keepAlive, completion: .contentProcessed { [weak self] error in
             if let error {
                 self?.logger.debug("Proxy response send: \(error.localizedDescription, privacy: .public)")
                 connection.cancel()
                 return
             }
-            self?.readHTTPRequest(from: connection, requestCount: requestNum)
+            if keepAlive {
+                self?.readHTTPRequest(from: connection, requestCount: requestNum)
+            } else {
+                connection.cancel()
+            }
         })
     }
     
@@ -444,6 +658,61 @@ public final class LocalStreamProxy: @unchecked Sendable {
         
         return result
     }
+    
+    // MARK: - [Fix 16d] M3U8 URL Absolutization
+    
+    /// CDN URL에서 디렉토리 경로 추출 (percent-encoding 보존)
+    /// "https://host/path/to/file.m3u8?q=v" → "/path/to/"
+    private func extractDirectoryPath(from urlString: String) -> String {
+        guard let protEnd = urlString.range(of: "://") else { return "/" }
+        let rest = urlString[protEnd.upperBound...]
+        guard let pathStart = rest.firstIndex(of: "/") else { return "/" }
+        var path = String(rest[pathStart...])
+        // 쿼리 스트링 제거
+        if let qIdx = path.firstIndex(of: "?") {
+            path = String(path[..<qIdx])
+        }
+        // 마지막 '/' 까지가 디렉토리 (% 인코딩된 %2f는 무시 — 실제 '/'만 기준)
+        if let lastSlash = path.lastIndex(of: "/") {
+            return String(path[...lastSlash])
+        }
+        return "/"
+    }
+    
+    /// M3U8 내 모든 상대 URL을 절대 프록시 URL로 변환
+    /// master playlist의 variant URL + chunklist의 segment URL 모두 처리
+    /// VLC가 %2f 포함 경로에서 상대 URL 해석 실패 → 절대 URL로 우회
+    private func makeRelativeURLsAbsolute(_ content: String, proxyBase: String, basePath: String) -> String {
+        content.split(separator: "\n", omittingEmptySubsequences: false).map { line in
+            let lineStr = String(line)
+            let trimmed = lineStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // #EXT-X-MAP:URI="..." → 절대 URL로 변환
+            if trimmed.hasPrefix("#EXT-X-MAP:") {
+                if let uriStart = lineStr.range(of: "URI=\""),
+                   let closingQuote = lineStr[uriStart.upperBound...].firstIndex(of: "\"") {
+                    let uri = String(lineStr[uriStart.upperBound..<closingQuote])
+                    if !uri.hasPrefix("http") {
+                        let absolute = "\(proxyBase)\(basePath)\(uri)"
+                        return lineStr.replacingCharacters(in: uriStart.upperBound..<closingQuote, with: absolute)
+                    }
+                }
+                return lineStr
+            }
+            
+            // 빈 줄, 주석 줄 → 그대로 통과
+            if trimmed.isEmpty || trimmed.hasPrefix("#") {
+                return lineStr
+            }
+            
+            // 비-# 줄 = URI (variant 또는 segment) → 상대이면 절대로 변환
+            if !trimmed.hasPrefix("http") {
+                return "\(proxyBase)\(basePath)\(trimmed)"
+            }
+            
+            return lineStr
+        }.joined(separator: "\n")
+    }
 }
 
 // MARK: - Proxy Error
@@ -465,26 +734,25 @@ public enum ProxyError: Error, LocalizedError, Sendable {
 /// CheckedContinuation을 정확히 한 번만 resume하도록 보장하는 스레드 안전 래퍼.
 /// Swift 6 strict concurrency에서 var 캡처가 불가하므로 클래스 기반으로 구현.
 private final class _ProxyContinuationGuard: @unchecked Sendable {
-    private var continuation: CheckedContinuation<UInt16, any Error>?
-    private let lock = NSLock()
+    private let state = Mutex<CheckedContinuation<UInt16, any Error>?>(nil)
     
     init(continuation: CheckedContinuation<UInt16, any Error>) {
-        self.continuation = continuation
+        state.withLock { $0 = continuation }
     }
     
     func resumeOnce(returning value: UInt16) {
-        lock.withLock {
-            guard let cont = continuation else { return }
-            continuation = nil
-            cont.resume(returning: value)
+        state.withLock { cont in
+            guard let c = cont else { return }
+            cont = nil
+            c.resume(returning: value)
         }
     }
     
     func resumeOnce(throwing error: any Error) {
-        lock.withLock {
-            guard let cont = continuation else { return }
-            continuation = nil
-            cont.resume(throwing: error)
+        state.withLock { cont in
+            guard let c = cont else { return }
+            cont = nil
+            c.resume(throwing: error)
         }
     }
 }

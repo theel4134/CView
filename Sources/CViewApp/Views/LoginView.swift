@@ -25,10 +25,8 @@ struct LoginView: View {
             // Branded header
             loginHeader
             
-            // Separator with accent
-            Rectangle()
-                .fill(DesignTokens.Colors.chzzkGreen.opacity(0.3))
-                .frame(height: 1)
+            // Separator
+            Divider()
             
             // Login method picker
             Picker("", selection: $selectedMethod) {
@@ -53,8 +51,8 @@ struct LoginView: View {
                 errorBar(error)
             }
         }
-        .frame(width: 480, height: 640)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .frame(width: 500, height: 660)
+        .background(DesignTokens.Colors.background)
     }
     
     // MARK: - Header
@@ -66,15 +64,16 @@ struct LoginView: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .fill(DesignTokens.Gradients.primary)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 28, height: 28)
                         
                         Text("C")
-                            .font(DesignTokens.Typography.custom(size: 14, weight: .black))
+                            .font(DesignTokens.Typography.custom(size: 15, weight: .black))
                             .foregroundStyle(DesignTokens.Colors.onPrimary)
                     }
+                    .shadow(color: Color.accentColor.opacity(0.35), radius: 5, y: 2)
                     
                     Text("CView 로그인")
-                        .font(DesignTokens.Typography.bodySemibold)
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                 }
                 
@@ -87,7 +86,7 @@ struct LoginView: View {
                         .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .frame(width: 28, height: 28)
-                        .background(.ultraThinMaterial)
+                        .background(DesignTokens.Colors.surfaceElevated)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -263,7 +262,7 @@ struct LoginView: View {
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial)
+        .background(DesignTokens.Colors.surfaceBase)
     }
     
     // MARK: - OAuth Actions
