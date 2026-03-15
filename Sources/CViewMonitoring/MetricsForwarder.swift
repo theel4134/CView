@@ -108,9 +108,15 @@ public actor MetricsForwarder {
                 }
                 lastSyncData = response.syncData
             } else {
-                // 폴백
-                let payload = ChannelActivatePayload(channelId: channelId, channelName: channelName, source: "VLC")
-                try? await apiClient.activateChannel(payload)
+                // CView API 미지원 서버 — /api/metrics 폴백
+                let payload = AppLatencyPayload(
+                    channelId: channelId,
+                    channelName: channelName,
+                    latency: 0,
+                    engine: "VLC",
+                    latencySource: "native"
+                )
+                try? await apiClient.sendMetrics(payload)
             }
             await monitor.start()
             startForwarding()
@@ -178,14 +184,15 @@ public actor MetricsForwarder {
             // 초기 동기화 데이터 저장
             lastSyncData = response.syncData
         } catch {
-            // 서버 연결 실패 시 레거시 API 폴백
-            let legacyPayload = ChannelActivatePayload(
+            // CView API 미지원 서버 — /api/metrics 폴백으로 첫 메트릭 전송
+            let legacyPayload = AppLatencyPayload(
                 channelId: channelId,
                 channelName: channelName,
-                streamUrl: streamUrl,
-                source: "VLC"
+                latency: 0,
+                engine: "VLC",
+                latencySource: "native"
             )
-            try? await apiClient.activateChannel(legacyPayload)
+            try? await apiClient.sendMetrics(legacyPayload)
         }
 
         await monitor.start()
@@ -207,14 +214,9 @@ public actor MetricsForwarder {
             return
         }
 
-        // CView 통합 연결 해제 API 사용
+        // CView 통합 연결 해제 API 사용 (서버 미지원 시 무시)
         let payload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
-        do {
-            try await apiClient.cviewDisconnect(payload)
-        } catch {
-            // 폴백: 레거시 API
-            try? await apiClient.deactivateChannel(channelId: channelId)
-        }
+        try? await apiClient.cviewDisconnect(payload)
 
         activeChannelId = nil
         activeChannelName = nil
@@ -316,7 +318,7 @@ public actor MetricsForwarder {
             lastSyncData = response.syncData
             lastRecommendation = response.recommendation
         } catch {
-            // CView API 실패 시 레거시 폴백
+            // CView API 미지원 서버 — /api/metrics 폴백
             let legacyPayload = AppLatencyPayload(
                 channelId: channelId,
                 channelName: channelName,
@@ -332,7 +334,7 @@ public actor MetricsForwarder {
                 latencySource: "native"
             )
             do {
-                _ = try await apiClient.sendAppLatency(legacyPayload)
+                try await apiClient.sendMetrics(legacyPayload)
                 totalSent += 1
                 lastSentAt = Date()
             } catch {
@@ -362,9 +364,19 @@ public actor MetricsForwarder {
     }
     
     private func sendPing() async {
-        guard isEnabled, let channelId = activeChannelId else { return }
+        guard isEnabled,
+              let channelId = activeChannelId,
+              let channelName = activeChannelName else { return }
         do {
-            try await apiClient.pingChannel(channelId: channelId)
+            // /api/metrics 로 간단 핑 전송 (서버 호환)
+            let payload = AppLatencyPayload(
+                channelId: channelId,
+                channelName: channelName,
+                latency: 0,
+                engine: "VLC",
+                latencySource: "ping"
+            )
+            try await apiClient.sendMetrics(payload)
             totalPings += 1
         } catch {
             // 핑 실패 무시

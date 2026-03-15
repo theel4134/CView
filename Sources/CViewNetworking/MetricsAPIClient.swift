@@ -237,6 +237,11 @@ public actor MetricsAPIClient {
         try await postIgnoringResponse(.pingChannel(channelId: channelId))
     }
     
+    /// 범용 메트릭 전송 (/api/metrics — 서버 v3 호환)
+    public func sendMetrics(_ payload: AppLatencyPayload) async throws {
+        try await postIgnoringResponse(.postMetrics(payload))
+    }
+    
     // MARK: - CView App Integration
     
     /// CView 앱 연결 등록 — 서버에 클라이언트 등록 및 초기 동기화 데이터 수신

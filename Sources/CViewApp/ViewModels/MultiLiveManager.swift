@@ -188,7 +188,7 @@ public final class MultiLiveManager {
                 // 추가 세션은 음소거 + 백그라운드 모드로 시작
                 session.playerViewModel.toggleMute()
                 session.chatViewModel.isBackgroundMode = true
-                session.playerViewModel.setBackgroundMode(true)
+                session.setBackgroundMode(true)
                 // [P0: 적응형 해상도] 비선택 세션은 720p로 시작
                 if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
                     vlc.isSelectedSession = false

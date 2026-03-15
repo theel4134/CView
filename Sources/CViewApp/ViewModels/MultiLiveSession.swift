@@ -154,8 +154,14 @@ final class MultiLiveSession: Identifiable {
 
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
             let _forwarder = metricsForwarder
+            let sessionChannelId = channelId
             playerViewModel.setVLCMetricsCallback { [weak self] metrics in
-                Task { await _forwarder?.updateVLCMetrics(metrics) }
+                Task {
+                    // 선택된 세션(활성 채널)의 메트릭만 서버로 전송
+                    if await _forwarder?.currentChannelId == sessionChannelId {
+                        await _forwarder?.updateVLCMetrics(metrics)
+                    }
+                }
                 Task { @MainActor [weak self] in
                     guard let self, self.showStats || self.showNetworkMetrics else { return }
                     self.latestMetrics = metrics
@@ -252,8 +258,14 @@ final class MultiLiveSession: Identifiable {
 
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
             let _forwarder2 = metricsForwarder ?? appState.metricsForwarder
+            let sessionChannelId2 = channelId
             playerViewModel.setVLCMetricsCallback { [weak self] metrics in
-                Task { await _forwarder2?.updateVLCMetrics(metrics) }
+                Task {
+                    // 선택된 세션(활성 채널)의 메트릭만 서버로 전송
+                    if await _forwarder2?.currentChannelId == sessionChannelId2 {
+                        await _forwarder2?.updateVLCMetrics(metrics)
+                    }
+                }
                 Task { @MainActor [weak self] in
                     guard let self, self.showStats || self.showNetworkMetrics else { return }
                     self.latestMetrics = metrics
@@ -316,8 +328,10 @@ final class MultiLiveSession: Identifiable {
         refreshTask?.cancel(); refreshTask = nil
         offlineRetryTask?.cancel(); offlineRetryTask = nil
         chatConnectionTask?.cancel(); chatConnectionTask = nil
-        // 메트릭 포워더 채널 비활성화
-        await metricsForwarder?.deactivateCurrentChannel()
+        // 메트릭 포워더 채널 비활성화 — 이 세션이 활성 채널인 경우에만
+        if await metricsForwarder?.currentChannelId == channelId {
+            await metricsForwarder?.deactivateCurrentChannel()
+        }
         await playerViewModel.stopStream()
         await chatViewModel.disconnect()
         loadState = .idle
