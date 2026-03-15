@@ -3,6 +3,7 @@
 
 import Foundation
 import CViewCore
+import CViewNetworking
 
 /// 통합 인증 관리자 (actor 기반)
 /// 쿠키 기반 네이버 로그인과 치지직 OAuth 토큰 인증을 모두 지원합니다.
@@ -154,6 +155,7 @@ public actor AuthManager: AuthTokenProvider {
         } catch {
             Log.auth.warning("키체인 쿠키 저장 실패 (로그인은 계속 진행): \(error.localizedDescription)")
         }
+        await syncNidCookiesToServer()
         updateState(.loggedIn(userId: "cookie"))
     }
     
@@ -177,6 +179,7 @@ public actor AuthManager: AuthTokenProvider {
                 } catch {
                     Log.auth.error("OAuth login: keychain save failed: \(error.localizedDescription)")
                 }
+                await syncNidCookiesToServer()
             } else {
                 Log.auth.warning("OAuth login: no NID cookies — 팔로잉 조회는 네이버 로그인 필요")
             }
@@ -187,6 +190,28 @@ public actor AuthManager: AuthTokenProvider {
         } catch {
             updateState(.error(error.localizedDescription))
             throw error
+        }
+    }
+    
+    // MARK: - NID Cookie Server Sync
+    
+    /// NID 쿠키를 대시보드 서버에 동기화 (실패해도 로그인은 유지)
+    private func syncNidCookiesToServer() async {
+        let cookies = await cookieManager.authCookies
+        guard let nidAut = cookies.first(where: { $0.name == "NID_AUT" })?.value,
+              let nidSes = cookies.first(where: { $0.name == "NID_SES" })?.value else {
+            return
+        }
+        do {
+            let payload = AuthCookieSyncPayload(nidAut: nidAut, nidSes: nidSes)
+            let response = try await MetricsAPIClient().syncAuthCookies(payload)
+            if response.success {
+                Log.auth.info("NID 쿠키 서버 동기화 성공 (userIdHash: \(response.userIdHash?.prefix(8) ?? "nil"))")
+            } else {
+                Log.auth.warning("NID 쿠키 서버 동기화 실패: \(response.message ?? "unknown")")
+            }
+        } catch {
+            Log.auth.warning("NID 쿠키 서버 동기화 오류 (로그인은 유지): \(error.localizedDescription)")
         }
     }
     

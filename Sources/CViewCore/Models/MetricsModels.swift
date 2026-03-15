@@ -693,3 +693,25 @@ public struct CViewLatencyDetail: Codable, Sendable {
     public let appLast: Double?
     public let appSamples: Int?
 }
+
+// MARK: - Auth Cookie Sync
+
+/// NID 쿠키 서버 동기화 페이로드
+public struct AuthCookieSyncPayload: Codable, Sendable {
+    public let NID_AUT: String
+    public let NID_SES: String
+    public let source: String
+
+    public init(nidAut: String, nidSes: String, source: String = "app") {
+        self.NID_AUT = nidAut
+        self.NID_SES = nidSes
+        self.source = source
+    }
+}
+
+/// NID 쿠키 서버 동기화 응답
+public struct AuthCookieSyncResponse: Codable, Sendable {
+    public let success: Bool
+    public let message: String?
+    public let userIdHash: String?
+}

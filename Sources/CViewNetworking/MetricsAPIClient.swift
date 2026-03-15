@@ -268,4 +268,11 @@ public actor MetricsAPIClient {
     public func cviewRelayChatMessage(_ payload: CViewChatRelayPayload) async throws -> CViewChatRelayResponse {
         try await request(.cviewChatRelay(payload), as: CViewChatRelayResponse.self)
     }
+    
+    // MARK: - Auth Cookie Sync
+    
+    /// NID 쿠키를 대시보드 서버에 동기화
+    public func syncAuthCookies(_ payload: AuthCookieSyncPayload) async throws -> AuthCookieSyncResponse {
+        try await request(.syncAuthCookies(payload), as: AuthCookieSyncResponse.self)
+    }
 }

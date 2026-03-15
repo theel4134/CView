@@ -41,6 +41,9 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     case cviewChatRelay(CViewChatRelayPayload)
     case cviewSyncStatus(channelId: String)
     
+    // MARK: - Auth Cookie Sync
+    case syncAuthCookies(AuthCookieSyncPayload)
+    
     // MARK: - EndpointProtocol
     
     public var path: String {
@@ -93,13 +96,16 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             "/api/cview/chat-relay"
         case .cviewSyncStatus(let id):
             "/api/cview/sync-status/\(id)"
+        case .syncAuthCookies:
+            "/api/auth/cookies"
         }
     }
     
     public var method: HTTPMethod {
         switch self {
         case .postAppLatency, .postMetrics, .postPDTSync, .addChannel, .channelCleanup, .pingChannel,
-             .cviewConnect, .cviewDisconnect, .cviewHeartbeat, .cviewChatRelay:
+             .cviewConnect, .cviewDisconnect, .cviewHeartbeat, .cviewChatRelay,
+             .syncAuthCookies:
             .post
         case .removeChannel:
             .delete
@@ -143,6 +149,8 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         case .cviewHeartbeat(let payload):
             try? JSONEncoder().encode(payload)
         case .cviewChatRelay(let payload):
+            try? JSONEncoder().encode(payload)
+        case .syncAuthCookies(let payload):
             try? JSONEncoder().encode(payload)
         default:
             nil
