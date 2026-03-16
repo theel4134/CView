@@ -1173,6 +1173,11 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         let lateDelta = Int(stats.latePictures) - Int(prev.latePictures)
         let demuxCorruptDelta = Int(stats.demuxCorrupted) - Int(prev.demuxCorrupted)
         let demuxDiscDelta = Int(stats.demuxDiscontinuity) - Int(prev.demuxDiscontinuity)
+        let decodedAudioDelta = Int(stats.decodedAudio) - Int(prev.decodedAudio)
+        let displayedDelta = Int(stats.displayedPictures) - Int(prev.displayedPictures)
+        let playedAudioDelta = Int(stats.playedAudioBuffers) - Int(prev.playedAudioBuffers)
+        let readBytesDelta = Int(stats.readBytes) - Int(prev.readBytes)
+        let demuxReadBytesDelta = Int(stats.demuxReadBytes) - Int(prev.demuxReadBytes)
 
         let rawInputKbps = Double(stats.inputBitrate) * 8.0
         let inputKbps = rawInputKbps.isFinite && rawInputKbps >= 0 ? rawInputKbps : 0.0
@@ -1205,6 +1210,11 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
             playbackRate: player.rate,
             bufferHealth: bufferHealth().currentLevel,
             lostAudioBuffersDelta: max(0, audioLostDelta),
+            decodedAudioDelta: max(0, decodedAudioDelta),
+            playedAudioBuffersDelta: max(0, playedAudioDelta),
+            readBytesDelta: max(0, readBytesDelta),
+            demuxReadBytesDelta: max(0, demuxReadBytesDelta),
+            displayedPicturesDelta: max(0, displayedDelta),
             latePicturesDelta: max(0, lateDelta),
             demuxCorruptedDelta: max(0, demuxCorruptDelta),
             demuxDiscontinuityDelta: max(0, demuxDiscDelta)

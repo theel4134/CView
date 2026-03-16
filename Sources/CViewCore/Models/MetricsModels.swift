@@ -524,6 +524,12 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
     public let healthScore: Double?
     public let engine: String
     public let vlcMetrics: CViewVLCMetrics?
+    // 서버 정밀 분석용 확장 필드
+    public let targetLatency: Double?
+    public let connectionState: String?
+    public let connectionQuality: String?
+    public let isBuffering: Bool?
+    public let latePictures: Int?
     
     public init(
         clientId: String,
@@ -538,7 +544,12 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
         droppedFrames: Int? = nil,
         healthScore: Double? = nil,
         engine: String = "VLC",
-        vlcMetrics: CViewVLCMetrics? = nil
+        vlcMetrics: CViewVLCMetrics? = nil,
+        targetLatency: Double? = nil,
+        connectionState: String? = nil,
+        connectionQuality: String? = nil,
+        isBuffering: Bool? = nil,
+        latePictures: Int? = nil
     ) {
         self.clientId = clientId
         self.channelId = channelId
@@ -553,6 +564,11 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
         self.healthScore = healthScore
         self.engine = engine
         self.vlcMetrics = vlcMetrics
+        self.targetLatency = targetLatency
+        self.connectionState = connectionState
+        self.connectionQuality = connectionQuality
+        self.isBuffering = isBuffering
+        self.latePictures = latePictures
     }
 }
 
@@ -571,19 +587,23 @@ public struct CViewVLCMetrics: Codable, Sendable {
     public let readBytes: Int?
     public let demuxReadBytes: Int?
     
+    /// 지연 렌더링된 프레임 수
+    public let latePictures: Int?
+    
     public init(from vlcMetrics: VLCLiveMetrics) {
         self.inputBitrate = vlcMetrics.inputBitrateKbps
         self.demuxBitrate = vlcMetrics.demuxBitrateKbps
         self.demuxCorrupted = vlcMetrics.demuxCorruptedDelta
         self.demuxDiscontinuity = vlcMetrics.demuxDiscontinuityDelta
         self.decodedVideo = vlcMetrics.decodedFramesDelta
-        self.decodedAudio = nil
-        self.displayedPictures = nil
+        self.decodedAudio = vlcMetrics.decodedAudioDelta
+        self.latePictures = vlcMetrics.latePicturesDelta
+        self.displayedPictures = vlcMetrics.displayedPicturesDelta
         self.lostPictures = vlcMetrics.droppedFramesDelta
-        self.playedAudioBuffers = nil
+        self.playedAudioBuffers = vlcMetrics.playedAudioBuffersDelta
         self.lostAudioBuffers = vlcMetrics.lostAudioBuffersDelta
-        self.readBytes = nil
-        self.demuxReadBytes = nil
+        self.readBytes = vlcMetrics.readBytesDelta
+        self.demuxReadBytes = vlcMetrics.demuxReadBytesDelta
     }
 }
 

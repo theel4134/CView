@@ -172,6 +172,17 @@ final class MultiLiveSession: Identifiable {
             // 메트릭 채널 활성화 (포그라운드 세션만)
             if !isBackground {
                 Task { await _forwarder?.activateChannel(channelId: channelId, channelName: channelName, streamUrl: streamURL.absoluteString) }
+                // 서버 동기화 추천 → 재생 속도 적용 콜백
+                let _playerVM = playerViewModel
+                Task {
+                    await _forwarder?.setSyncSpeedCallback { [weak _playerVM] speed in
+                        _playerVM?.applySyncSpeed(speed)
+                    }
+                    // VLC 엔진의 liveCaching 값을 targetLatency로 전달
+                    if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {
+                        await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
+                    }
+                }
             }
 
             // 채팅 연결

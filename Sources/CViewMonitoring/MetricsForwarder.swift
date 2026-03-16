@@ -47,6 +47,13 @@ public actor MetricsForwarder {
     /// VLCPlayerEngine에서 주기적으로 전달받는 최신 VLC 통계 (nil = 아직 수신 전)
     private var latestVLCMetrics: VLCLiveMetrics?
 
+    /// 서버 동기화 추천에 따른 재생 속도 변경 콜백
+    /// MetricsForwarder → 외부 PlayerEngine 연결용
+    private var onSyncSpeedChange: (@Sendable (Float) -> Void)?
+
+    /// 플레이어 목표 지연시간 (ms) — VLC liveCaching 또는 AVPlayer targetLatency
+    private var targetLatencyMs: Double?
+
     /// 메트릭 전송 활성화 여부 (설정과 연동)
     private var isEnabled: Bool
     private var forwardInterval: TimeInterval
@@ -306,7 +313,12 @@ public actor MetricsForwarder {
             playbackRate: vlc.map { Double($0.playbackRate) },
             droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
             healthScore: vlc.map { $0.healthScore },
-            vlcMetrics: vlcPayload
+            vlcMetrics: vlcPayload,
+            targetLatency: targetLatencyMs,
+            connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
+            connectionQuality: deriveConnectionQuality(vlc: vlc, metrics: metrics),
+            isBuffering: vlc.map { $0.bufferHealth < 0.3 },
+            latePictures: vlc.map { $0.latePicturesDelta }
         )
 
         do {
@@ -317,6 +329,18 @@ public actor MetricsForwarder {
             // 양방향: 서버 응답에서 동기화 데이터 저장
             lastSyncData = response.syncData
             lastRecommendation = response.recommendation
+            
+            // 서버 동기화 추천 → 재생 속도 적용 (confidence 50% 이상, hold 아닌 경우)
+            if let rec = response.recommendation,
+               let speed = rec.suggestedSpeed,
+               let confidence = rec.confidence, confidence >= 0.5,
+               let action = rec.action, action != "hold" && action != "waiting",
+               abs(speed - 1.0) > 0.001 {
+                onSyncSpeedChange?(Float(speed))
+            } else if let action = response.recommendation?.action, action == "hold" {
+                // hold → 정상 속도 복원
+                onSyncSpeedChange?(1.0)
+            }
         } catch {
             // CView API 미지원 서버 — /api/metrics 폴백
             let legacyPayload = AppLatencyPayload(
@@ -397,4 +421,35 @@ public actor MetricsForwarder {
     
     /// 가장 최근 서버 동기화 데이터 (외부에서 조회용)
     public var currentSyncData: CViewSyncData? { lastSyncData }
+    
+    /// 서버 동기화 추천에 따른 재생 속도 변경 콜백 등록
+    /// - Parameter handler: 서버 추천 속도(Float)를 받아 PlayerEngine.setRate()를 호출
+    public func setSyncSpeedCallback(_ handler: @escaping @Sendable (Float) -> Void) {
+        onSyncSpeedChange = handler
+    }
+
+    /// 플레이어 목표 지연시간 설정 (ms) — VLC liveCaching 또는 AVPlayer targetLatency 기반
+    public func setTargetLatency(_ ms: Double) {
+        targetLatencyMs = ms
+    }
+    
+    // MARK: - Connection State Derivation
+    
+    /// VLC 메트릭 + 시스템 메트릭에서 연결 상태 추론
+    private func deriveConnectionState(vlc: VLCLiveMetrics?, metrics: PerformanceMonitor.Metrics?) -> String {
+        guard let vlc else { return "unknown" }
+        if vlc.bufferHealth < 0.1 { return "poor" }
+        if vlc.demuxCorruptedDelta > 0 || vlc.demuxDiscontinuityDelta > 0 { return "degraded" }
+        return "connected"
+    }
+    
+    /// VLC 메트릭 + 시스템 메트릭에서 연결 품질 추론
+    private func deriveConnectionQuality(vlc: VLCLiveMetrics?, metrics: PerformanceMonitor.Metrics?) -> String {
+        guard let vlc else { return "unknown" }
+        let health = vlc.healthScore
+        if health >= 0.9 { return "excellent" }
+        if health >= 0.7 { return "good" }
+        if health >= 0.5 { return "fair" }
+        return "poor"
+    }
 }

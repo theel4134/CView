@@ -138,6 +138,43 @@ struct MetricsForwardingStatusView: View {
                             miniStat(icon: "number", label: "총 수신", value: formatLargeNumber(vm.serverTotalReceived))
                             miniStat(icon: "dot.radiowaves.left.and.right", label: "활성 채널", value: "\(vm.serverChannelStats.count)")
                         }
+
+                        // CView 통합 품질 요약
+                        if let version = vm.serverVersion {
+                            HStack(spacing: 4) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                Text("서버 v\(version)")
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                if vm.cviewConnectedClients > 0 {
+                                    Spacer()
+                                    Text("클라이언트 \(vm.cviewConnectedClients)")
+                                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                }
+                            }
+                        }
+
+                        if let agg = vm.cviewAggregate {
+                            HStack(spacing: DesignTokens.Spacing.sm) {
+                                if let grade = agg.qualityGrade, grade != "-" {
+                                    Text(grade)
+                                        .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
+                                        .foregroundStyle(qualityGradeColor(grade))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(qualityGradeColor(grade).opacity(0.15)))
+                                }
+                                if let rate = agg.syncRate {
+                                    miniStat(icon: "arrow.triangle.2.circlepath", label: "동기화율", value: String(format: "%.0f%%", rate))
+                                }
+                                if let avgDelta = agg.avgDeltaAbs {
+                                    miniStat(icon: "arrow.left.and.right", label: "평균 델타", value: String(format: "%.0fms", avgDelta))
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -158,12 +195,30 @@ struct MetricsForwardingStatusView: View {
                                     .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
                                     .foregroundStyle(syncActionColor(action))
                                 Spacer()
+                                if let tier = rec.tier {
+                                    Text(tier)
+                                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                                        .foregroundStyle(syncActionColor(action))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(syncActionColor(action).opacity(0.12)))
+                                }
                                 Text(String(format: "%.4fx", rec.suggestedSpeed ?? 1.0))
                                     .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
                                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(syncActionColor(action).opacity(0.12)))
+                            }
+
+                            // Confidence & trend
+                            HStack(spacing: DesignTokens.Spacing.md) {
+                                if let confidence = rec.confidence {
+                                    miniStat(icon: "waveform.path.ecg", label: "신뢰도", value: String(format: "%.0f%%", confidence * 100))
+                                }
+                                if let trend = rec.trend {
+                                    miniStat(icon: trend == "improving" ? "arrow.up.right" : (trend == "degrading" ? "arrow.down.right" : "arrow.right"), label: "추세", value: trendLabel(trend))
+                                }
                             }
 
                             if let reason = rec.reason {
@@ -300,6 +355,26 @@ struct MetricsForwardingStatusView: View {
         case "slow_down": return "감속 필요"
         case "waiting": return "대기 중"
         default: return action
+        }
+    }
+
+    private func qualityGradeColor(_ grade: String) -> Color {
+        switch grade {
+        case "S": return .green
+        case "A": return .cyan
+        case "B": return .orange
+        case "C": return .orange
+        case "D": return .red
+        default: return .gray
+        }
+    }
+
+    private func trendLabel(_ trend: String) -> String {
+        switch trend {
+        case "improving": return "개선 중"
+        case "degrading": return "악화 중"
+        case "stable": return "안정"
+        default: return trend
         }
     }
 

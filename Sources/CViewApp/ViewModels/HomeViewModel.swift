@@ -103,6 +103,26 @@ public final class HomeViewModel {
         return vals.reduce(0, +) / Double(vals.count)
     }
     
+    /// CView 전체 통계 집계 (품질 등급, 동기화율 등)
+    public var cviewAggregate: CViewAggregate? {
+        serverStats?.cviewSummary?.aggregate
+    }
+    
+    /// CView 연결 클라이언트 수
+    public var cviewConnectedClients: Int {
+        serverStats?.cviewSummary?.connectedClients ?? 0
+    }
+    
+    /// CView 동기화 채널 목록
+    public var cviewSyncChannels: [CViewStatsSyncChannel] {
+        serverStats?.cviewSummary?.syncChannels ?? []
+    }
+
+    /// 서버 버전
+    public var serverVersion: String? {
+        serverStats?.serverVersion
+    }
+    
     /// 서버 포맷 업타임
     public var formattedUptime: String {
         let hours = Int(serverUptime) / 3600

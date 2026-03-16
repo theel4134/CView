@@ -523,6 +523,18 @@ struct LiveStreamView: View {
                 Task { await _forwarder?.updateVLCMetrics(metrics) }
             }
 
+            // 서버 동기화 추천 → VLC 재생 속도 적용 콜백
+            let _playerVM = playerVM
+            Task {
+                await _forwarder?.setSyncSpeedCallback { [weak _playerVM] speed in
+                    _playerVM?.applySyncSpeed(speed)
+                }
+                // VLC 엔진의 liveCaching 값을 targetLatency로 전달
+                if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {
+                    await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
+                }
+            }
+
             Task { await recordWatch(channelName: _channelName, thumbnailURL: liveInfo.liveImageURL?.absoluteString, categoryName: liveInfo.liveCategoryValue) }
 
             // ─── 채팅 준비: 백그라운드에서 병렬 로드 (영상과 동시 진행) ───

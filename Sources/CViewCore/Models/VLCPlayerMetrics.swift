@@ -53,6 +53,23 @@ public struct VLCLiveMetrics: Sendable {
     /// 해당 구간에서 손실된 오디오 버퍼 수
     public let lostAudioBuffersDelta: Int
 
+    /// 해당 구간에서 디코딩된 오디오 샘플 수
+    public let decodedAudioDelta: Int
+
+    /// 해당 구간에서 재생된 오디오 버퍼 수
+    public let playedAudioBuffersDelta: Int
+
+    // MARK: - I/O
+
+    /// 해당 구간에서 입력에서 읽은 바이트 수
+    public let readBytesDelta: Int
+
+    /// 해당 구간에서 디먹서가 읽은 바이트 수
+    public let demuxReadBytesDelta: Int
+
+    /// 해당 구간에서 화면에 표시된 프레임 수
+    public let displayedPicturesDelta: Int
+
     // MARK: - 스트림 품질 (VLCKit 4.0)
 
     /// 해당 구간에서 지연 렌더링된 프레임 수 (디코딩은 됐으나 표시 시점 초과)
@@ -109,6 +126,11 @@ public struct VLCLiveMetrics: Sendable {
         playbackRate: Float,
         bufferHealth: Double,
         lostAudioBuffersDelta: Int,
+        decodedAudioDelta: Int = 0,
+        playedAudioBuffersDelta: Int = 0,
+        readBytesDelta: Int = 0,
+        demuxReadBytesDelta: Int = 0,
+        displayedPicturesDelta: Int = 0,
         latePicturesDelta: Int = 0,
         demuxCorruptedDelta: Int = 0,
         demuxDiscontinuityDelta: Int = 0,
@@ -126,6 +148,11 @@ public struct VLCLiveMetrics: Sendable {
         self.playbackRate = playbackRate
         self.bufferHealth = bufferHealth
         self.lostAudioBuffersDelta = lostAudioBuffersDelta
+        self.decodedAudioDelta = decodedAudioDelta
+        self.playedAudioBuffersDelta = playedAudioBuffersDelta
+        self.readBytesDelta = readBytesDelta
+        self.demuxReadBytesDelta = demuxReadBytesDelta
+        self.displayedPicturesDelta = displayedPicturesDelta
         self.latePicturesDelta = latePicturesDelta
         self.demuxCorruptedDelta = demuxCorruptedDelta
         self.demuxDiscontinuityDelta = demuxDiscontinuityDelta

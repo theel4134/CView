@@ -187,6 +187,17 @@ public final class PlayerViewModel {
 
     // MARK: - 설정 적용
 
+    /// 서버 동기화 추천에 따른 재생 속도 적용
+    /// MetricsForwarder 콜백에서 호출 (백그라운드 스레드 → Main Actor)
+    public func applySyncSpeed(_ speed: Float) {
+        Task { @MainActor [weak self] in
+            guard let self, let engine = self.playerEngine else { return }
+            // 동기화 속도는 0.95~1.05 범위 내에서만 적용 (안전 범위)
+            let clamped = max(0.95, min(1.05, speed))
+            engine.setRate(clamped)
+        }
+    }
+
     public func applySettings(volume: Float, lowLatency: Bool, catchupRate: Double) {
         self.volume = volume
         playerEngine?.setVolume(isMuted ? 0 : volume)
