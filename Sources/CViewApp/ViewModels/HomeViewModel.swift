@@ -518,21 +518,36 @@ public final class HomeViewModel {
     public func loadServerStats() async {
         guard let client = metricsClient else { return }
         do {
-            let stats = try await client.fetchStats()
-            serverStats = stats
+            // v4.5 overview API 우선 시도
+            let overview = try await client.fetchOverview()
             isMetricsServerOnline = true
-            serverChannelStats = stats.channelStats ?? []
-            serverUptime = stats.resolvedUptime
-            serverTotalReceived = stats.resolvedTotalReceived
+            serverTotalReceived = overview.data?.totalMetrics ?? 0
+            activeAppChannelCount = overview.data?.activeChannels ?? 0
             serverLastUpdate = Date()
             
-            // 레이턴시 스냅샷 기록
-            recordLatencySnapshot()
+            // health에서 uptime 보완
+            if let health = try? await client.fetchHealth() {
+                serverUptime = health.uptime ?? 0
+            }
             
-            logger.info("메트릭 서버 통계 로드: \(self.serverChannelStats.count) 채널")
+            recordLatencySnapshot()
+            logger.info("메트릭 서버 통계 로드 (v4.5): 활성 \(overview.data?.activeChannels ?? 0)채널, 라이브 \(overview.data?.liveCount ?? 0)")
         } catch {
-            isMetricsServerOnline = false
-            logger.debug("메트릭 서버 연결 실패: \(error.localizedDescription)")
+            // v4.5 실패 시 legacy /api/stats 폴백
+            do {
+                let stats = try await client.fetchStats()
+                serverStats = stats
+                isMetricsServerOnline = true
+                serverChannelStats = stats.channelStats ?? []
+                serverUptime = stats.resolvedUptime
+                serverTotalReceived = stats.resolvedTotalReceived
+                serverLastUpdate = Date()
+                recordLatencySnapshot()
+                logger.info("메트릭 서버 통계 로드 (legacy): \(self.serverChannelStats.count) 채널")
+            } catch {
+                isMetricsServerOnline = false
+                logger.debug("메트릭 서버 연결 실패: \(error.localizedDescription)")
+            }
         }
     }
     

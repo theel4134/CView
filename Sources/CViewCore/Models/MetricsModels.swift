@@ -4,7 +4,7 @@
 
 import Foundation
 
-// MARK: - Server Stats (GET /api/stats)
+// MARK: - Server Stats (GET /api/stats — legacy v4.0.3)
 
 public struct MetricsServerStats: Codable, Sendable {
     // v4.0.3 nested format
@@ -44,6 +44,96 @@ public struct MetricsServerStats: Codable, Sendable {
     public var resolvedSources: [String: Int] {
         stats?.sources ?? sources ?? [:]
     }
+}
+
+// MARK: - Stats Overview (GET /api/stats/overview — v4.5+)
+
+/// 서버 v4.5+ overview 응답: {"data": {...}, "status": "ok"}
+public struct MetricsOverviewResponse: Codable, Sendable {
+    public let status: String?
+    public let data: MetricsOverviewData?
+}
+
+public struct MetricsOverviewData: Codable, Sendable {
+    public let activeChannels: Int?
+    public let avgBitrate: Double?
+    public let avgFps: Double?
+    public let avgHealthScore: Double?
+    public let avgLatency: Double?
+    public let liveCount: Int?
+    public let totalChannels: Int?
+    public let totalMetrics: Int?
+}
+
+// MARK: - Stats System (GET /api/stats/system — v4.5+)
+
+public struct MetricsSystemResponse: Codable, Sendable {
+    public let status: String?
+    public let data: MetricsSystemData?
+}
+
+public struct MetricsSystemData: Codable, Sendable {
+    public let checkedAt: String?
+    public let influxdb: InfluxDBStatus?
+    public let postgres: String?
+    public let recordCounts: RecordCounts?
+    public let redis: RedisStatus?
+}
+
+public struct InfluxDBStatus: Codable, Sendable {
+    public let status: String?
+    public let version: String?
+}
+
+public struct RedisStatus: Codable, Sendable {
+    public let status: String?
+    public let usedMemory: String?
+}
+
+public struct RecordCounts: Codable, Sendable {
+    public let channels: Int?
+    public let dailyStats: Int?
+    public let hourlyStats: Int?
+    public let vlcMetrics: Int?
+    public let webMetrics: Int?
+}
+
+// MARK: - Stats Categories (GET /api/stats/categories — v4.5+)
+
+public struct MetricsCategoriesResponse: Codable, Sendable {
+    public let status: String?
+    public let data: [MetricsCategoryItem]?
+}
+
+public struct MetricsCategoryItem: Codable, Sendable, Identifiable {
+    public var id: String { category }
+    public let avgViewers: String?
+    public let category: String
+    public let liveCount: Int?
+    public let totalViewers: Int?
+}
+
+// MARK: - Stats Channel Ranking (GET /api/stats/channels/ranking — v4.5+)
+
+public struct MetricsChannelRankingResponse: Codable, Sendable {
+    public let status: String?
+    public let data: [MetricsRankedChannel]?
+    public let meta: RankingMeta?
+}
+
+public struct MetricsRankedChannel: Codable, Sendable, Identifiable {
+    public var id: String { channelId }
+    public let category: String?
+    public let channelId: String
+    public let channelName: String?
+    public let imageUrl: String?
+    public let rank: Int?
+    public let title: String?
+    public let viewers: Int?
+}
+
+public struct RankingMeta: Codable, Sendable {
+    public let sort: String?
 }
 
 public struct ServerStatsDetail: Codable, Sendable {

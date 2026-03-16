@@ -11,6 +11,12 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     case stats
     case health
     
+    // MARK: - Dashboard Stats (v4.5+)
+    case statsOverview
+    case statsSystem
+    case statsCategories
+    case statsChannelRanking(sort: String, limit: Int)
+    
     // MARK: - Channel
     case channelStats(channelId: String)
     case channelRealLatency(channelId: String)
@@ -52,6 +58,14 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             "/api/stats"
         case .health:
             "/health"
+        case .statsOverview:
+            "/api/stats/overview"
+        case .statsSystem:
+            "/api/stats/system"
+        case .statsCategories:
+            "/api/stats/categories"
+        case .statsChannelRanking:
+            "/api/stats/channels/ranking"
         case .channelStats(let id):
             "/api/channel/\(id)/stats"
         case .channelRealLatency(let id):
@@ -121,6 +135,8 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
                 return [URLQueryItem(name: "appLatency", value: "\(Int(lat))")]
             }
             return nil
+        case .statsChannelRanking(let sort, let limit):
+            return [URLQueryItem(name: "sort", value: sort), URLQueryItem(name: "limit", value: "\(limit)")]
         default:
             return nil
         }
@@ -161,10 +177,12 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     
     public var cachePolicy: CachePolicy {
         switch self {
-        case .stats:
+        case .stats, .statsOverview:
             .returnCacheElseLoad(ttl: 10)
         case .health:
             .reloadIgnoringCache
+        case .statsSystem, .statsCategories, .statsChannelRanking:
+            .returnCacheElseLoad(ttl: 10)
         case .channelStats, .channelRealLatency, .channelWebLatency, .channelAppLatency:
             .returnCacheElseLoad(ttl: 5)
         case .channelSyncRecommendation, .channelPDTSync, .channelWebPlayerInfo:

@@ -175,9 +175,29 @@ public actor MetricsAPIClient {
     
     // MARK: - Convenience Methods (GET)
     
-    /// 서버 전체 통계
+    /// 서버 전체 통계 (legacy /api/stats)
     public func fetchStats() async throws -> MetricsServerStats {
         try await request(.stats, as: MetricsServerStats.self)
+    }
+    
+    /// 서버 통계 개요 (v4.5+ /api/stats/overview)
+    public func fetchOverview() async throws -> MetricsOverviewResponse {
+        try await request(.statsOverview, as: MetricsOverviewResponse.self)
+    }
+    
+    /// 서버 시스템 정보 (v4.5+ /api/stats/system)
+    public func fetchSystem() async throws -> MetricsSystemResponse {
+        try await request(.statsSystem, as: MetricsSystemResponse.self)
+    }
+    
+    /// 카테고리별 통계 (v4.5+ /api/stats/categories)
+    public func fetchCategories() async throws -> MetricsCategoriesResponse {
+        try await request(.statsCategories, as: MetricsCategoriesResponse.self)
+    }
+    
+    /// 채널 랭킹 (v4.5+ /api/stats/channels/ranking)
+    public func fetchChannelRanking(sort: String = "viewers", limit: Int = 10) async throws -> MetricsChannelRankingResponse {
+        try await request(.statsChannelRanking(sort: sort, limit: limit), as: MetricsChannelRankingResponse.self)
     }
     
     /// 서버 헬스체크
