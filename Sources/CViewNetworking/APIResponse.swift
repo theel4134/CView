@@ -79,6 +79,14 @@ public struct PagedContent<T: Decodable & Sendable>: Decodable, Sendable {
     }
 }
 
+/// 전체 라이브 수집 진행률
+public struct AllLivesProgress: Sendable {
+    public let currentCount: Int
+    public let estimatedTotal: Int?
+    public let currentPage: Int
+    public let deduplicatedCount: Int
+}
+
 /// 라이브 목록 커서 페이지네이션 정보
 public struct LivePageInfo: Decodable, Sendable {
     public let next: LivePageCursor?

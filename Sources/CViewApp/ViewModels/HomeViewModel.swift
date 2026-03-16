@@ -27,6 +27,11 @@ public final class HomeViewModel {
     public var errorMessage: String?
     public var searchQuery = ""
     
+    // 통계 수집 진행률
+    public var statsCollectionProgress: Double = 0
+    public var statsCollectedCount: Int = 0
+    public var statsEstimatedTotal: Int? = nil
+    
     /// 팔로잉 조회 시 NID 쿠키 부재로 인증 실패했을 때 true
     public var needsCookieLogin = false
     
@@ -60,6 +65,7 @@ public final class HomeViewModel {
     
     private var metricsPollingTask: Task<Void, Never>?
     private var wsStreamTask: Task<Void, Never>?
+    private var autoRefreshTask: Task<Void, Never>?
     
     // MARK: - Cached Stats (데이터 변경 시 1회 계산, body 접근 시 O(1))
     
@@ -107,7 +113,11 @@ public final class HomeViewModel {
 
     /// statsSource 변경 시 1회 호출 — O(N) ~ O(N log N) 연산을 body 밖에서 수행
     private func recomputeStats() {
-        let source = allStatChannels.isEmpty ? liveChannels : allStatChannels
+        let raw = allStatChannels.isEmpty ? liveChannels : allStatChannels
+        
+        // 방어적 channelId 중복 제거
+        var seen = Set<String>()
+        let source = raw.filter { seen.insert($0.id).inserted }
 
         totalLiveChannelCount = source.count
         totalViewers = source.reduce(0) { $0 + $1.viewerCount }
@@ -256,6 +266,28 @@ public final class HomeViewModel {
         startWebSocketStream()
     }
     
+    // MARK: - Auto Refresh (홈 화면 표시 중 90초 주기)
+    
+    /// 홈 화면 표시 시 90초 주기 경량 자동 갱신 시작
+    /// - 라이브 채널 첫 페이지 + 팔로잉만 갱신 (가벼운 API 2회)
+    /// - 전체 통계(allStatsChannels)는 수동 새로고침 시에만 수행 (무거운 전체 페이지 순회)
+    /// - 메트릭 서버는 별도 30초 폴링으로 관리
+    public func startAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = Task { [weak self] in
+            for await _ in AsyncTimerSequence(interval: .seconds(90), tolerance: .seconds(10)) {
+                guard !Task.isCancelled else { break }
+                await self?.lightRefresh()
+            }
+        }
+    }
+    
+    /// 홈 화면 이탈 시 자동 갱신 중지
+    public func stopAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+    }
+    
     /// 메트릭 폴링 중지
     public func stopMetrics() {
         metricsPollingTask?.cancel()
@@ -338,13 +370,27 @@ public final class HomeViewModel {
         isLoading = false
     }
     
-    /// 통계 집계용 전체 라이브 채널 수집 (1페이지 ~ 끝페이지 커서 순회)
+    /// 통계 집계용 전체 라이브 채널 수집 (진행률 + 중복 제거 + 에러 탄력성)
     public func loadAllStatsChannels() async {
         guard !isLoadingStats else { return }
         isLoadingStats = true
+        statsCollectionProgress = 0
+        statsCollectedCount = 0
+        statsEstimatedTotal = nil
         
         do {
-            let all = try await apiClient.allLiveChannels(batchSize: 50)
+            let all = try await apiClient.allLiveChannelsProgressive(batchSize: 50) { [weak self] progress in
+                guard let self else { return }
+                self.statsCollectedCount = progress.currentCount
+                self.statsEstimatedTotal = progress.estimatedTotal
+                if let total = progress.estimatedTotal, total > 0 {
+                    self.statsCollectionProgress = min(Double(progress.currentCount) / Double(total), 1.0)
+                }
+                // 매 5페이지마다 중간 통계 갱신
+                if progress.currentPage % 5 == 0 {
+                    self.updateStatsFromPartial(all: nil)
+                }
+            }
             let items = all.map { info in
                 LiveChannelItem(
                     id: info.channel?.channelId ?? "\(info.liveId)",
@@ -359,6 +405,8 @@ public final class HomeViewModel {
                 )
             }
             allStatChannels = items
+            statsCollectionProgress = 1.0
+            statsCollectedCount = items.count
             recomputeStats()
             recordViewerSnapshot()
             logger.info("» 전체 라이브 통계 수집 완료: \(items.count)개 채널, 총 \(items.reduce(0) { $0 + $1.viewerCount })명")
@@ -375,6 +423,14 @@ public final class HomeViewModel {
         }
         
         isLoadingStats = false
+    }
+    
+    /// 부분 수집 중 중간 통계 갱신
+    private func updateStatsFromPartial(all: [LiveChannelItem]?) {
+        if let all {
+            allStatChannels = all
+        }
+        recomputeStats()
     }
     
     /// Load more channels (커서 기반 페이지네이션)
@@ -438,13 +494,21 @@ public final class HomeViewModel {
         }
     }
     
-    /// Refresh all data
+    /// 전체 새로고침 (수동 새로고침 시 사용)
     public func refresh() async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadLiveChannels() }       // UI용 첫 페이지 (빠름)
-            group.addTask { await self.loadAllStatsChannels() }   // 통계용 전체 (븱그라운드)
+            group.addTask { await self.loadAllStatsChannels() }   // 통계용 전체 (백그라운드)
             group.addTask { await self.loadFollowingChannels() }
             group.addTask { await self.loadServerStats() }
+        }
+    }
+    
+    /// 경량 갱신 (자동 갱신용 — 무거운 전체 통계 제외)
+    public func lightRefresh() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadLiveChannels() }
+            group.addTask { await self.loadFollowingChannels() }
         }
     }
     

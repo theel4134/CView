@@ -17,6 +17,9 @@ public struct MetricsServerStats: Codable, Sendable {
     // CView 앱 요약 (from /api/stats)
     public let cviewSummary: CViewStatsSummary?
 
+    // 서버 버전 (v4.0.3+)
+    public let serverVersion: String?
+
     // v3.0.0 flat format fallback
     public let totalReceived: Int?
     public let uptime: Double?

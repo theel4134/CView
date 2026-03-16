@@ -380,6 +380,78 @@ public actor ChzzkAPIClient: APIClientProtocol {
         return all
     }
 
+    /// 전체 라이브 수집 (진행률 콜백 + 중복 제거 + 에러 탄력성)
+    /// - Parameters:
+    ///   - batchSize: 페이지당 항목 수 (최대 50)
+    ///   - onProgress: 페이지마다 호출되는 진행률 콜백
+    /// - Returns: 중복 제거된 전체 LiveInfo 배열
+    public func allLiveChannelsProgressive(
+        batchSize: Int = 50,
+        onProgress: @Sendable @MainActor (AllLivesProgress) -> Void = { _ in }
+    ) async throws -> [CViewCore.LiveInfo] {
+        var all: [CViewCore.LiveInfo] = []
+        var seenIds = Set<Int>()
+        var cursor: LivePageCursor? = nil
+        let maxPages = APIDefaults.allLivesMaxPages
+        var page = 0
+        var estimatedTotal: Int? = nil
+
+        repeat {
+            let response: PagedContent<CViewCore.LiveInfo>
+            do {
+                response = try await topLives(
+                    size: batchSize,
+                    concurrentUserCount: cursor?.concurrentUserCount,
+                    liveId: cursor?.liveId
+                )
+            } catch {
+                // 중간 페이지 실패: 1회 재시도
+                do {
+                    try await Task.sleep(for: .milliseconds(300))
+                    response = try await topLives(
+                        size: batchSize,
+                        concurrentUserCount: cursor?.concurrentUserCount,
+                        liveId: cursor?.liveId
+                    )
+                } catch {
+                    // 재시도도 실패 → 수집된 부분 결과 반환
+                    break
+                }
+            }
+
+            // 첫 페이지에서 totalCount 추출
+            if page == 0, let total = response.totalCount {
+                estimatedTotal = total
+            }
+
+            // liveId 기반 중복 제거
+            for info in response.data {
+                if seenIds.insert(info.liveId).inserted {
+                    all.append(info)
+                }
+            }
+
+            cursor = response.page?.next
+            page += 1
+
+            // 진행률 콜백
+            let progress = AllLivesProgress(
+                currentCount: all.count,
+                estimatedTotal: estimatedTotal,
+                currentPage: page,
+                deduplicatedCount: (page * batchSize) - all.count
+            )
+            await onProgress(progress)
+
+            // API 부하 방지용 딜레이
+            if cursor != nil {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        } while cursor != nil && page < maxPages
+
+        return all
+    }
+
     // MARK: - Search Methods
 
     /// 채널 검색

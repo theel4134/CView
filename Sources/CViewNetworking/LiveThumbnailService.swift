@@ -15,7 +15,7 @@ public actor LiveThumbnailService {
     public static let shared = LiveThumbnailService()
 
     /// 라이브 썸네일 캐시 유지 시간 (초)
-    public static let liveThumbnailTTL: TimeInterval = 45
+    public static let liveThumbnailTTL: TimeInterval = 90
 
     private let imageCache = ImageCacheService.shared
     private let metricsBaseURL = URL(string: "https://cv.dododo.app")!

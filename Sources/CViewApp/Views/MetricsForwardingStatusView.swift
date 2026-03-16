@@ -149,20 +149,21 @@ struct MetricsForwardingStatusView: View {
                         sectionHeader("동기화 추천", icon: "arrow.triangle.2.circlepath", color: .purple)
 
                         if let rec = snap.lastRecommendation {
+                            let action = rec.action ?? "hold"
                             HStack(spacing: DesignTokens.Spacing.sm) {
-                                Image(systemName: syncActionIcon(rec.action))
+                                Image(systemName: syncActionIcon(action))
                                     .font(.system(size: 11))
-                                    .foregroundStyle(syncActionColor(rec.action))
-                                Text(syncActionLabel(rec.action))
+                                    .foregroundStyle(syncActionColor(action))
+                                Text(syncActionLabel(action))
                                     .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
-                                    .foregroundStyle(syncActionColor(rec.action))
+                                    .foregroundStyle(syncActionColor(action))
                                 Spacer()
-                                Text(String(format: "%.4fx", rec.suggestedSpeed))
+                                Text(String(format: "%.4fx", rec.suggestedSpeed ?? 1.0))
                                     .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
                                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Capsule().fill(syncActionColor(rec.action).opacity(0.12)))
+                                    .background(Capsule().fill(syncActionColor(action).opacity(0.12)))
                             }
 
                             if let reason = rec.reason {

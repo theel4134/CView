@@ -105,7 +105,7 @@ public struct LiveBadge: View {
         .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 6, y: 2)
         .onAppear {
             if DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) != nil {
-                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
                     isPulsing = true
                 }
             }

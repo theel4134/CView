@@ -50,7 +50,7 @@ struct DashboardStatCard: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial)
+        .surfaceCard(cornerRadius: DesignTokens.Radius.md, fillColor: DesignTokens.Colors.surfaceElevated)
         .hoverCard(cornerRadius: DesignTokens.Radius.md, scale: 1.015)
     }
     
@@ -147,7 +147,7 @@ struct MiniChannelCard: View {
             .padding(.horizontal, DesignTokens.Spacing.xs)
             .padding(.vertical, DesignTokens.Spacing.xs)
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(
@@ -155,8 +155,7 @@ struct MiniChannelCard: View {
                     lineWidth: isHovered ? 1.0 : 0.5
                 )
         }
-        .shadow(color: isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.12) : .black.opacity(0.1), radius: isHovered ? 14 : 6, y: isHovered ? 6 : 2)
-        // Metal 3: hover scaleEffect 제거 — GPU texture scale 연산 방지
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
         .animation(DesignTokens.Animation.fast, value: isHovered)
         .onHover { isHovered = $0 }
         .customCursor(.pointingHand)

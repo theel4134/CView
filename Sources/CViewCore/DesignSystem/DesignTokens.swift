@@ -659,11 +659,7 @@ public struct HoverCardModifier: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .scaleEffect(isHovered ? scaleEffect : 1.0)
-            .shadow(
-                color: isHovered ? DesignTokens.Shadow.cardHover.color : .clear,
-                radius: isHovered ? DesignTokens.Shadow.cardHover.radius : 0,
-                y: isHovered ? DesignTokens.Shadow.cardHover.y : 0
-            )
+            // shadow 제거 — GPU blur 재계산 방지 (기본 카드에 이미 shadow 존재)
             .animation(DesignTokens.Animation.micro, value: isHovered)
             .onHover { hovering in
                 isHovered = hovering

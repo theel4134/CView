@@ -15,8 +15,10 @@ struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     
+    /// 캐시 시각 기준 인사말 (뷰 갱신 시에만 재계산, Date() 직접 호출 방지)
     private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let referenceDate = viewModel.liveChannelsCachedAt ?? Date()
+        let hour = Calendar.current.component(.hour, from: referenceDate)
         let timeGreeting: String
         switch hour {
         case 5..<12: timeGreeting = "좋은 아침이에요"
@@ -74,6 +76,12 @@ struct HomeView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        .onAppear {
+            viewModel.startAutoRefresh()
+        }
+        .onDisappear {
+            viewModel.stopAutoRefresh()
+        }
     }
 
     // MARK: - Prefetch Helper
@@ -97,17 +105,24 @@ struct HomeView: View {
                         .foregroundStyle(.primary)
 
                     HStack(spacing: 8) {
-                        Text(Date(), format: .dateTime.year().month().day().weekday(.wide))
+                        Text(viewModel.liveChannelsCachedAt ?? Date(), format: .dateTime.year().month().day().weekday(.wide))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
 
                         if viewModel.isLoadingStats {
                             HStack(spacing: 4) {
-                                ProgressView()
+                                ProgressView(value: viewModel.statsCollectionProgress)
+                                    .frame(width: 40)
                                     .controlSize(.mini)
-                                Text("수집 중")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
+                                if let total = viewModel.statsEstimatedTotal, total > 0 {
+                                    Text("수집 중 \(viewModel.statsCollectedCount)/\(total) (\(Int(viewModel.statsCollectionProgress * 100))%)")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("수집 중 \(viewModel.statsCollectedCount)개")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         } else if let cachedAt = viewModel.allStatCachedAt ?? viewModel.liveChannelsCachedAt {
                             dataFreshnessBadge(cachedAt: cachedAt)
@@ -165,7 +180,7 @@ struct HomeView: View {
                     }
                     .buttonStyle(.plain)
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                    .animation(viewModel.isLoading ? DesignTokens.Animation.loadingSpin : .default, value: viewModel.isLoading)
+                    .animation(viewModel.isLoading ? .linear(duration: 0.6) : .default, value: viewModel.isLoading)
                 }
             }
 
@@ -674,7 +689,7 @@ struct HomeView: View {
                 }
                 .padding(DesignTokens.Spacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial, hasShadow: false)
+                .surfaceCard(cornerRadius: DesignTokens.Radius.md, fillColor: DesignTokens.Colors.surfaceElevated, border: false)
                 .shimmer()
             }
         }
@@ -697,7 +712,7 @@ struct HomeView: View {
             }
             .padding(DesignTokens.Spacing.md)
             .frame(maxWidth: .infinity)
-            .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial, hasShadow: false)
+            .surfaceCard(cornerRadius: DesignTokens.Radius.md, fillColor: DesignTokens.Colors.surfaceElevated, border: false)
 
             // Category chart skeleton
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
@@ -722,7 +737,7 @@ struct HomeView: View {
             }
             .padding(DesignTokens.Spacing.md)
             .frame(maxWidth: .infinity)
-            .glassCard(cornerRadius: DesignTokens.Radius.md, material: .ultraThinMaterial, hasShadow: false)
+            .surfaceCard(cornerRadius: DesignTokens.Radius.md, fillColor: DesignTokens.Colors.surfaceElevated, border: false)
         }
     }
 }
