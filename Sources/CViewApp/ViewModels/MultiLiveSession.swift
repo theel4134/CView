@@ -176,10 +176,12 @@ final class MultiLiveSession: Identifiable {
                 let _playerVM = playerViewModel
                 Task {
                     await _forwarder?.setSyncSpeedCallback { [weak _playerVM] speed in
-                        _playerVM?.applySyncSpeed(speed)
+                        Task { @MainActor in
+                            _playerVM?.applySyncSpeed(speed)
+                        }
                     }
                     // VLC 엔진의 liveCaching 값을 targetLatency로 전달
-                    if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {
+                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
                         await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
                     }
                 }

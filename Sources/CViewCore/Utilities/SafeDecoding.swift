@@ -162,3 +162,18 @@ private struct AnyCodable: Decodable {
         // 어떤 타입으로도 디코딩 불가 → 그냥 넘어감
     }
 }
+
+// MARK: - JSON 안전 인코딩용 Float 방어
+
+extension Double {
+    /// NaN/Infinity → 0 으로 치환하여 JSON 인코딩 실패를 방지
+    public var safeForJSON: Double { isFinite ? self : 0 }
+}
+
+extension Optional where Wrapped == Double {
+    /// NaN/Infinity → nil 로 치환하여 JSON 인코딩 실패를 방지
+    public var safeForJSON: Double? {
+        guard let v = self, v.isFinite else { return nil }
+        return v
+    }
+}

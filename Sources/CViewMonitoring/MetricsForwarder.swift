@@ -301,18 +301,19 @@ public actor MetricsForwarder {
         // VLC 통계가 있으면 CView 하트비트에 포함
         let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
 
+        // NaN/Infinity 방어: finite 값만 전송, 비유한 값은 기본값으로 대체
         let payload = CViewHeartbeatPayload(
             clientId: clientId,
             channelId: channelId,
             channelName: channelName,
-            latency: metrics?.latencyMs ?? 0,
+            latency: (metrics?.latencyMs ?? 0).safeForJSON,
             resolution: vlc?.resolution,
-            bitrate: vlc.map { Int($0.demuxBitrateKbps) },
-            fps: vlc.map { $0.fps } ?? metrics?.fps,
-            bufferHealth: vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent,
-            playbackRate: vlc.map { Double($0.playbackRate) },
+            bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
+            fps: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
+            bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
+            playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
             droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
-            healthScore: vlc.map { $0.healthScore },
+            healthScore: vlc.map { $0.healthScore.safeForJSON },
             vlcMetrics: vlcPayload,
             targetLatency: targetLatencyMs,
             connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
@@ -341,20 +342,24 @@ public actor MetricsForwarder {
                 // hold → 정상 속도 복원
                 onSyncSpeedChange?(1.0)
             }
+        } catch is DecodingError {
+            // HTTP 200 성공했으나 서버 응답 형식 불일치 — 전송은 완료된 상태
+            totalSent += 1
+            lastSentAt = Date()
         } catch {
-            // CView API 미지원 서버 — /api/metrics 폴백
+            // HTTP 오류 또는 네트워크 오류 — /api/metrics 폴백
             let legacyPayload = AppLatencyPayload(
                 channelId: channelId,
                 channelName: channelName,
-                latency: metrics?.latencyMs ?? 0,
-                bitrate: vlc.map { Int($0.demuxBitrateKbps) },
+                latency: (metrics?.latencyMs ?? 0).safeForJSON,
+                bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
                 resolution: vlc?.resolution,
-                frameRate: vlc.map { $0.fps } ?? metrics?.fps,
+                frameRate: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
                 droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
-                bufferHealth: vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent,
-                playbackRate: vlc.map { Double($0.playbackRate) },
+                bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
+                playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
                 engine: "VLC",
-                healthScore: vlc.map { $0.healthScore },
+                healthScore: vlc.map { $0.healthScore.safeForJSON },
                 latencySource: "native"
             )
             do {

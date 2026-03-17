@@ -142,32 +142,41 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         }
     }
     
+    /// NaN/Infinity 안전한 JSON 인코더
+    private static let safeEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN"
+        )
+        return encoder
+    }()
+
     public var body: Data? {
         switch self {
         case .postAppLatency(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .postMetrics(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .postPDTSync(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .addChannel(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .removeChannel:
             nil
         case .channelCleanup:
             nil
         case .pingChannel(let channelId):
-            try? JSONEncoder().encode(["channelId": channelId, "source": "VLC", "platform": "app"])
+            try? Self.safeEncoder.encode(["channelId": channelId, "source": "VLC", "platform": "app"])
         case .cviewConnect(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .cviewDisconnect(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .cviewHeartbeat(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .cviewChatRelay(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         case .syncAuthCookies(let payload):
-            try? JSONEncoder().encode(payload)
+            try? Self.safeEncoder.encode(payload)
         default:
             nil
         }

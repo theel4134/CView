@@ -591,8 +591,8 @@ public struct CViewVLCMetrics: Codable, Sendable {
     public let latePictures: Int?
     
     public init(from vlcMetrics: VLCLiveMetrics) {
-        self.inputBitrate = vlcMetrics.inputBitrateKbps
-        self.demuxBitrate = vlcMetrics.demuxBitrateKbps
+        self.inputBitrate = vlcMetrics.inputBitrateKbps.safeForJSON
+        self.demuxBitrate = vlcMetrics.demuxBitrateKbps.safeForJSON
         self.demuxCorrupted = vlcMetrics.demuxCorruptedDelta
         self.demuxDiscontinuity = vlcMetrics.demuxDiscontinuityDelta
         self.decodedVideo = vlcMetrics.decodedFramesDelta

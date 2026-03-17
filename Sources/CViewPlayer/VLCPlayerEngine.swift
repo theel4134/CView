@@ -82,7 +82,7 @@ public enum VLCStreamingProfile: Sendable {
         case .multiLive: return 1000   // 2000→1000ms: 4스트림 동시 버퍼 경합 방지
         }
     }
-    var liveCaching: Int {
+    public var liveCaching: Int {
         switch self {
         case .ultraLow: return 300
         case .lowLatency: return 500   // network-caching과 동일
