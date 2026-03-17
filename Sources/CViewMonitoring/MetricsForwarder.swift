@@ -54,6 +54,15 @@ public actor MetricsForwarder {
     /// 플레이어 목표 지연시간 (ms) — VLC liveCaching 또는 AVPlayer targetLatency
     private var targetLatencyMs: Double?
 
+    /// 현재 VLC 재생 위치 조회 콜백 (seconds)
+    private var currentTimeCallback: (@Sendable () -> Double)?
+
+    /// PDT 기반 레이턴시 조회 콜백 (seconds, nil = PDT 미지원)
+    private var pdtLatencyCallback: (@Sendable () async -> Double?)?
+
+    /// 동기화 상태 조회 Task (ping 주기와 동일)
+    private var syncStatusTask: Task<Void, Never>?
+
     /// 메트릭 전송 활성화 여부 (설정과 연동)
     private var isEnabled: Bool
     private var forwardInterval: TimeInterval
@@ -128,12 +137,14 @@ public actor MetricsForwarder {
             await monitor.start()
             startForwarding()
             startPing()
+            startSyncStatusPolling()
         }
 
         // 비활성화 → 포워딩·핑 중단, 서버에 비활성화 알림
         if !enabled && wasEnabled {
             stopForwarding()
             stopPing()
+            stopSyncStatusPolling()
             await monitor.stop()
             if let channelId = activeChannelId {
                 let disconnectPayload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
@@ -205,12 +216,14 @@ public actor MetricsForwarder {
         await monitor.start()
         startForwarding()
         startPing()
+        startSyncStatusPolling()
     }
 
     /// 채널 시청 종료 시 호출
     public func deactivateCurrentChannel() async {
         stopForwarding()
         stopPing()
+        stopSyncStatusPolling()
         await monitor.stop()
 
         guard let channelId = activeChannelId, isEnabled else {
@@ -301,6 +314,13 @@ public actor MetricsForwarder {
         // VLC 통계가 있으면 CView 하트비트에 포함
         let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
 
+        // 재생 위치 수집 (seconds)
+        let playbackTime = currentTimeCallback?()
+        // PDT 레이턴시 수집 (seconds → ms)
+        let pdtLat = await pdtLatencyCallback?()
+        let pdtLatMs = pdtLat.map { $0 * 1000.0 }
+        let pdtTimestampMs = pdtLat.map { _ in Date().timeIntervalSince1970 * 1000.0 }
+
         // NaN/Infinity 방어: finite 값만 전송, 비유한 값은 기본값으로 대체
         let payload = CViewHeartbeatPayload(
             clientId: clientId,
@@ -319,7 +339,11 @@ public actor MetricsForwarder {
             connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
             connectionQuality: deriveConnectionQuality(vlc: vlc, metrics: metrics),
             isBuffering: vlc.map { $0.bufferHealth < 0.3 },
-            latePictures: vlc.map { $0.latePicturesDelta }
+            latePictures: vlc.map { $0.latePicturesDelta },
+            currentTime: playbackTime?.safeForJSON,
+            pdtTimestamp: pdtTimestampMs?.safeForJSON,
+            pdtLatency: pdtLatMs?.safeForJSON,
+            latencyUnit: "ms"
         )
 
         do {
@@ -331,10 +355,26 @@ public actor MetricsForwarder {
             lastSyncData = response.syncData
             lastRecommendation = response.recommendation
             
-            // 서버 동기화 추천 → 재생 속도 적용 (confidence 50% 이상, hold 아닌 경우)
+            // PDT 또는 position 데이터가 있으면 hybrid-heartbeat도 전송
+            if pdtLatMs != nil || playbackTime != nil {
+                let hybridPayload = HybridHeartbeatPayload(
+                    channelId: channelId,
+                    clientId: clientId,
+                    clientType: "vlc",
+                    engine: "VLC",
+                    vlcPosition: playbackTime?.safeForJSON,
+                    pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                    latencyMs: pdtLatMs?.safeForJSON ?? (metrics?.latencyMs ?? 0).safeForJSON
+                )
+                Task { [apiClient] in
+                    _ = try? await apiClient.hybridHeartbeat(hybridPayload)
+                }
+            }
+            
+            // 서버 동기화 추천 → 재생 속도 적용 (confidence 30% 이상, hold 아닌 경우)
             if let rec = response.recommendation,
                let speed = rec.suggestedSpeed,
-               let confidence = rec.confidence, confidence >= 0.5,
+               let confidence = rec.confidence, confidence >= 0.3,
                let action = rec.action, action != "hold" && action != "waiting",
                abs(speed - 1.0) > 0.001 {
                 onSyncSpeedChange?(Float(speed))
@@ -360,7 +400,8 @@ public actor MetricsForwarder {
                 playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
                 engine: "VLC",
                 healthScore: vlc.map { $0.healthScore.safeForJSON },
-                latencySource: "native"
+                latencySource: "native",
+                latencyUnit: "ms"
             )
             do {
                 try await apiClient.sendMetrics(legacyPayload)
@@ -418,6 +459,34 @@ public actor MetricsForwarder {
     public func shutdown() async {
         await deactivateCurrentChannel()
     }
+
+    // MARK: - Sync Status Polling
+
+    private func startSyncStatusPolling() {
+        syncStatusTask?.cancel()
+        syncStatusTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(self.pingInterval))
+                guard !Task.isCancelled else { break }
+                await self.fetchSyncStatus()
+            }
+        }
+    }
+
+    private func stopSyncStatusPolling() {
+        syncStatusTask?.cancel()
+        syncStatusTask = nil
+    }
+
+    private func fetchSyncStatus() async {
+        guard isEnabled, let channelId = activeChannelId else { return }
+        if let response = try? await apiClient.cviewSyncStatus(channelId: channelId) {
+            lastSyncData = response.syncData
+            if let rec = response.recommendation {
+                lastRecommendation = rec
+            }
+        }
+    }
     
     // MARK: - Sync Data Access
     
@@ -436,6 +505,16 @@ public actor MetricsForwarder {
     /// 플레이어 목표 지연시간 설정 (ms) — VLC liveCaching 또는 AVPlayer targetLatency 기반
     public func setTargetLatency(_ ms: Double) {
         targetLatencyMs = ms
+    }
+
+    /// VLC 재생 위치 콜백 등록 (currentTime in seconds)
+    public func setCurrentTimeCallback(_ callback: @escaping @Sendable () -> Double) {
+        currentTimeCallback = callback
+    }
+
+    /// PDT 레이턴시 콜백 등록 (seconds, nil = 미지원)
+    public func setPDTLatencyCallback(_ callback: @escaping @Sendable () async -> Double?) {
+        pdtLatencyCallback = callback
     }
     
     // MARK: - Connection State Derivation

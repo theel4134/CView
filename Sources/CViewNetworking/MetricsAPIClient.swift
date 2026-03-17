@@ -299,6 +299,13 @@ public actor MetricsAPIClient {
         try await request(.cviewChatRelay(payload), as: CViewChatRelayResponse.self)
     }
     
+    // MARK: - Hybrid Sync
+    
+    /// 하이브리드 동기화 하트비트 전송
+    public func hybridHeartbeat(_ payload: HybridHeartbeatPayload) async throws -> HybridHeartbeatResponse {
+        try await request(.hybridHeartbeat(payload), as: HybridHeartbeatResponse.self)
+    }
+    
     // MARK: - Auth Cookie Sync
     
     /// NID 쿠키를 대시보드 서버에 동기화

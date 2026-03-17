@@ -47,6 +47,9 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     case cviewChatRelay(CViewChatRelayPayload)
     case cviewSyncStatus(channelId: String)
     
+    // MARK: - Hybrid Sync
+    case hybridHeartbeat(HybridHeartbeatPayload)
+    
     // MARK: - Auth Cookie Sync
     case syncAuthCookies(AuthCookieSyncPayload)
     
@@ -110,6 +113,8 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             "/api/cview/chat-relay"
         case .cviewSyncStatus(let id):
             "/api/cview/sync-status/\(id)"
+        case .hybridHeartbeat:
+            "/api/sync/hybrid-heartbeat"
         case .syncAuthCookies:
             "/api/auth/cookies"
         }
@@ -119,7 +124,7 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         switch self {
         case .postAppLatency, .postMetrics, .postPDTSync, .addChannel, .channelCleanup, .pingChannel,
              .cviewConnect, .cviewDisconnect, .cviewHeartbeat, .cviewChatRelay,
-             .syncAuthCookies:
+             .hybridHeartbeat, .syncAuthCookies:
             .post
         case .removeChannel:
             .delete
@@ -174,6 +179,8 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         case .cviewHeartbeat(let payload):
             try? Self.safeEncoder.encode(payload)
         case .cviewChatRelay(let payload):
+            try? Self.safeEncoder.encode(payload)
+        case .hybridHeartbeat(let payload):
             try? Self.safeEncoder.encode(payload)
         case .syncAuthCookies(let payload):
             try? Self.safeEncoder.encode(payload)

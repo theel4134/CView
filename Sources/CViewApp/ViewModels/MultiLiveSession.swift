@@ -184,6 +184,15 @@ final class MultiLiveSession: Identifiable {
                     if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
                         await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
                     }
+                    // 재생 위치(currentTime) 콜백 연결
+                    await _forwarder?.setCurrentTimeCallback { [weak _playerVM] in
+                        await MainActor.run { _playerVM?.currentTime ?? 0 }
+                    }
+                    // PDT 기반 레이턴시 콜백 연결 (초 → 밀리초 변환)
+                    await _forwarder?.setPDTLatencyCallback { [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return info.map { $0.current * 1000 }
+                    }
                 }
             }
 

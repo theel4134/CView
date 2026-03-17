@@ -333,13 +333,15 @@ public struct AppLatencyPayload: Codable, Sendable {
     public let healthScore: Double?
     public let latencySource: String?
     public let isBroadcastBased: Bool?
+    public let latencyUnit: String?
     
     public init(
         channelId: String, channelName: String, latency: Double,
         targetLatency: Double? = nil, bitrate: Int? = nil, resolution: String? = nil,
         frameRate: Double? = nil, droppedFrames: Int? = nil, bufferHealth: Double? = nil,
         playbackRate: Double? = nil, engine: String = "VLC", healthScore: Double? = nil,
-        latencySource: String? = "native", isBroadcastBased: Bool? = false
+        latencySource: String? = "native", isBroadcastBased: Bool? = false,
+        latencyUnit: String? = "ms"
     ) {
         self.channelId = channelId
         self.channelName = channelName
@@ -355,6 +357,7 @@ public struct AppLatencyPayload: Codable, Sendable {
         self.healthScore = healthScore
         self.latencySource = latencySource
         self.isBroadcastBased = isBroadcastBased
+        self.latencyUnit = latencyUnit
     }
 }
 
@@ -530,6 +533,11 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
     public let connectionQuality: String?
     public let isBuffering: Bool?
     public let latePictures: Int?
+    // 정밀 동기화용 위치/PDT 필드
+    public let currentTime: Double?
+    public let pdtTimestamp: Double?
+    public let pdtLatency: Double?
+    public let latencyUnit: String?
     
     public init(
         clientId: String,
@@ -549,7 +557,11 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
         connectionState: String? = nil,
         connectionQuality: String? = nil,
         isBuffering: Bool? = nil,
-        latePictures: Int? = nil
+        latePictures: Int? = nil,
+        currentTime: Double? = nil,
+        pdtTimestamp: Double? = nil,
+        pdtLatency: Double? = nil,
+        latencyUnit: String? = "ms"
     ) {
         self.clientId = clientId
         self.channelId = channelId
@@ -569,6 +581,10 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
         self.connectionQuality = connectionQuality
         self.isBuffering = isBuffering
         self.latePictures = latePictures
+        self.currentTime = currentTime
+        self.pdtTimestamp = pdtTimestamp
+        self.pdtLatency = pdtLatency
+        self.latencyUnit = latencyUnit
     }
 }
 
@@ -700,6 +716,65 @@ public struct CViewHybridSyncInfo: Codable, Sendable {
     public let webClients: Int?
     public let lastVlcPDT: Double?
     public let lastWebPDT: Double?
+}
+
+/// POST /api/sync/hybrid-heartbeat 요청
+public struct HybridHeartbeatPayload: Codable, Sendable {
+    public let channelId: String
+    public let clientId: String
+    public let clientType: String
+    public let engine: String
+    public let vlcPosition: Double?
+    public let pdtTimestamp: Double?
+    public let localTimestamp: Int?
+    public let latencyMs: Double?
+    
+    enum CodingKeys: String, CodingKey {
+        case channelId = "channel_id"
+        case clientId = "client_id"
+        case clientType = "client_type"
+        case engine
+        case vlcPosition = "vlc_position"
+        case pdtTimestamp = "pdt_timestamp"
+        case localTimestamp = "local_timestamp"
+        case latencyMs = "latency_ms"
+    }
+    
+    public init(
+        channelId: String,
+        clientId: String,
+        clientType: String = "vlc",
+        engine: String = "VLC",
+        vlcPosition: Double? = nil,
+        pdtTimestamp: Double? = nil,
+        localTimestamp: Int? = nil,
+        latencyMs: Double? = nil
+    ) {
+        self.channelId = channelId
+        self.clientId = clientId
+        self.clientType = clientType
+        self.engine = engine
+        self.vlcPosition = vlcPosition
+        self.pdtTimestamp = pdtTimestamp
+        self.localTimestamp = localTimestamp ?? Int(Date().timeIntervalSince1970 * 1000)
+        self.latencyMs = latencyMs
+    }
+}
+
+/// POST /api/sync/hybrid-heartbeat 응답
+public struct HybridHeartbeatResponse: Codable, Sendable {
+    public let success: Bool
+    public let mode: String?
+    public let adjustment: Double?
+    public let syncQuality: Int?
+    public let targetLatency: Double?
+    public let currentLatency: Double?
+    public let targetPdtMs: Double?
+    public let currentPdtMs: Double?
+    public let clientCount: Int?
+    public let engine: String?
+    public let timestamp: Int?
+    public let reason: String?
 }
 
 /// CView 활성 채널 정보 (서버 응답)
