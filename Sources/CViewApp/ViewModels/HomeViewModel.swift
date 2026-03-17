@@ -550,6 +550,12 @@ public final class HomeViewModel {
                 serverUptime = health.uptime ?? 0
             }
             
+            // legacy /api/stats에서 채널 상세·CView 요약 등 대시보드 전용 데이터 로드
+            if let stats = try? await client.fetchStats() {
+                serverStats = stats
+                serverChannelStats = stats.channelStats ?? []
+            }
+            
             recordLatencySnapshot()
             logger.info("메트릭 서버 통계 로드 (v4.5): 활성 \(overview.data?.activeChannels ?? 0)채널, 라이브 \(overview.data?.liveCount ?? 0)")
         } catch {

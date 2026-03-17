@@ -166,6 +166,13 @@ struct MetricsForwardingStatusView: View {
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
                                         .background(Capsule().fill(qualityGradeColor(grade).opacity(0.15)))
+                                } else if (agg.waitingChannels ?? 0) > 0 {
+                                    Text("대기")
+                                        .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
+                                        .foregroundStyle(.gray)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(Color.gray.opacity(0.15)))
                                 }
                                 if let rate = agg.syncRate {
                                     miniStat(icon: "arrow.triangle.2.circlepath", label: "동기화율", value: String(format: "%.0f%%", rate))

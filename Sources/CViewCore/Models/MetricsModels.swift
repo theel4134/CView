@@ -766,6 +766,7 @@ public struct CViewAggregate: Codable, Sendable {
     public let syncRate: Double?
     public let syncedChannels: Int?
     public let totalSyncChannels: Int?
+    public let waitingChannels: Int?
     public let qualityGrade: String?   // S, A, B, C, D, -
 }
 

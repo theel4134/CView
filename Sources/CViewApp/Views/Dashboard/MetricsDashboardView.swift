@@ -168,6 +168,14 @@ struct MetricsDashboardView: View {
                         subtitle: cviewAggregateSubtitle(cview),
                         accentColor: gradeColor(grade)
                     )
+                } else if let agg = cview.aggregate, (agg.waitingChannels ?? 0) > 0 {
+                    DashboardStatCard(
+                        title: "동기화 품질",
+                        value: "–",
+                        icon: "gauge.with.needle",
+                        subtitle: "웹 데이터 대기 중 (\(agg.waitingChannels ?? 0)채널)",
+                        accentColor: .gray
+                    )
                 }
             }
         }
