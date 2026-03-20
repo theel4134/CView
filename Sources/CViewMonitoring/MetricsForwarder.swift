@@ -55,7 +55,7 @@ public actor MetricsForwarder {
     private var targetLatencyMs: Double?
 
     /// 현재 VLC 재생 위치 조회 콜백 (seconds)
-    private var currentTimeCallback: (@Sendable () -> Double)?
+    private var currentTimeCallback: (@Sendable () async -> Double)?
 
     /// PDT 기반 레이턴시 조회 콜백 (seconds, nil = PDT 미지원)
     private var pdtLatencyCallback: (@Sendable () async -> Double?)?
@@ -315,7 +315,7 @@ public actor MetricsForwarder {
         let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
 
         // 재생 위치 수집 (seconds)
-        let playbackTime = currentTimeCallback?()
+        let playbackTime = await currentTimeCallback?()
         // PDT 레이턴시 수집 (seconds → ms)
         let pdtLat = await pdtLatencyCallback?()
         let pdtLatMs = pdtLat.map { $0 * 1000.0 }
@@ -508,7 +508,7 @@ public actor MetricsForwarder {
     }
 
     /// VLC 재생 위치 콜백 등록 (currentTime in seconds)
-    public func setCurrentTimeCallback(_ callback: @escaping @Sendable () -> Double) {
+    public func setCurrentTimeCallback(_ callback: @escaping @Sendable () async -> Double) {
         currentTimeCallback = callback
     }
 
