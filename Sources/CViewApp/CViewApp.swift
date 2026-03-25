@@ -128,11 +128,17 @@ struct CViewApplication: App {
         }
         .defaultSize(width: 360, height: 600)
 
-        // Multi-chat window
+        // Multi-chat window (팔로잉에 통합됨)
         WindowGroup("멀티채팅", id: "multi-chat-window") {
-            MultiChatView()
-                .environment(appState)
-                .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
+            if let vm = appState.homeViewModel {
+                FollowingView(viewModel: vm)
+                    .environment(appState)
+                    .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
+            } else {
+                ProgressView()
+                    .environment(appState)
+                    .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
+            }
         }
         .defaultSize(width: 700, height: 550)
 

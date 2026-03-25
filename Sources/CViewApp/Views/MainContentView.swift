@@ -100,9 +100,6 @@ struct MainContentView: View {
         case .recentFavorites:
             RecentFavoritesView()
             
-        case .multiChat:
-            MultiChatView()
-            
         case .metrics:
             if let vm = appState.homeViewModel {
                 MetricsDashboardView(viewModel: vm)
@@ -150,8 +147,6 @@ struct MainContentView: View {
             ClipLookupView(clipUID: clipUID)
         case .popularClips:
             PopularClipsView()
-        case .multiChat:
-            MultiChatView()
         case .multiLive:
             // 팔로잉에 통합됨 — 라우트 호환성 유지
             if let vm = appState.homeViewModel {
@@ -191,7 +186,6 @@ struct SidebarView: View {
 
     private let primaryItems: [AppRouter.SidebarItem] = [.home, .following, .category]
     private let discoverItems: [AppRouter.SidebarItem] = [.search, .clips, .recentFavorites]
-    private let toolItems: [AppRouter.SidebarItem] = [.multiChat]
 
     var body: some View {
         @Bindable var router = router
@@ -207,7 +201,6 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     sidebarSection(title: nil, items: primaryItems)
                     sidebarSection(title: "탐색", items: discoverItems)
-                    sidebarSection(title: "도구", items: toolItems)
                     sidebarSection(title: "기타", items: [.settings])
                 }
                 .padding(.vertical, 8)
@@ -335,7 +328,6 @@ struct SidebarView: View {
         case .search:           return Color.blue.opacity(opacity)
         case .clips:            return Color.indigo.opacity(opacity)
         case .recentFavorites:  return Color.teal.opacity(opacity)
-        case .multiChat:        return Color.green.opacity(opacity)
         case .metrics:          return Color.mint.opacity(opacity)
         case .settings:         return Color.gray.opacity(opacity)
         }
@@ -349,7 +341,6 @@ struct SidebarView: View {
         case .search:           return .blue
         case .clips:            return .indigo
         case .recentFavorites:  return .teal
-        case .multiChat:        return .green
         case .metrics:          return .mint
         case .settings:         return .gray
         }

@@ -1,8 +1,9 @@
 {
   "version": "2.0.0",
   "tasks": [
+    // ━━━ Build ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
-      "label": "Build CView_v2 (Debug)",
+      "label": "Build (Debug)",
       "type": "shell",
       "command": "xcodebuild",
       "args": [
@@ -17,26 +18,88 @@
       },
       "presentation": {
         "reveal": "always",
-        "panel": "shared"
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "xcodebuild",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Build & Run",
+      "type": "shell",
+      "command": "pkill -x CView_v2 2>/dev/null; sleep 0.3; xcodebuild -scheme CView_v2 -configuration Debug -derivedDataPath Build build && open '${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app'",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "xcodebuild",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Clean Build",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-scheme", "CView_v2",
+        "-configuration", "Debug",
+        "-derivedDataPath", "Build",
+        "clean", "build"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "xcodebuild",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Build Release (.app)",
+      "type": "shell",
+      "command": "${workspaceFolder}/build_release.sh",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
       },
       "problemMatcher": []
     },
-    {
-      "label": "Build and Launch CView_v2",
-      "dependsOn": ["Build CView_v2 (Debug)"],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "open",
-      "args": [
-        "${workspaceFolder}/Build/Build/Products/Debug/CView_v2.app"
-      ],
-      "presentation": {
-        "reveal": "silent",
-        "panel": "shared"
-      },
-      "problemMatcher": [],
-      "isBackground": true
-    },
+
+    // ━━━ Server ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       "label": "Server: Status",
       "type": "shell",
@@ -103,6 +166,8 @@
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "dedicated", "focus": true }
     },
+
+    // ━━━ Swift Remote ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       "label": "Swift Remote: Sync → Server",
       "type": "shell",

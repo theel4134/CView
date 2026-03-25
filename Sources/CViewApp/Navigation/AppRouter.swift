@@ -19,7 +19,6 @@ public enum AppRoute: Hashable, Identifiable {
     case vod(videoNo: Int)
     case clip(clipUID: String)
     case popularClips
-    case multiChat
     case multiLive
     
     public var id: String {
@@ -34,7 +33,6 @@ public enum AppRoute: Hashable, Identifiable {
         case .vod(let no): "vod-\(no)"
         case .clip(let uid): "clip-\(uid)"
         case .popularClips: "popularClips"
-        case .multiChat: "multiChat"
         case .multiLive: "multiLive"
         }
     }
@@ -68,7 +66,6 @@ public final class AppRouter {
         case category = "카테고리"
         case search = "검색"
         case clips = "클립"
-        case multiChat = "멀티채팅"
         case recentFavorites = "최근/즐겨찾기"
         case metrics = "메트릭"
         case settings = "설정"
@@ -82,7 +79,6 @@ public final class AppRouter {
             case .category: "square.grid.2x2.fill"
             case .search: "magnifyingglass"
             case .clips: "film.stack"
-            case .multiChat: "bubble.left.and.bubble.right.fill"
             case .recentFavorites: "clock.arrow.circlepath"
             case .metrics: "chart.bar.xaxis"
             case .settings: "gearshape.fill"
@@ -149,7 +145,6 @@ public final class AppRouter {
         case .home:         selectSidebar(.home)
         case .search:       selectSidebar(.search)
         case .popularClips: selectSidebar(.clips)
-        case .multiChat:    selectSidebar(.multiChat)
         case .multiLive:    selectSidebar(.following)  // 팔로잉에 통합됨
         case .settings:     selectSidebar(.settings)
         default:            path.append(route)
