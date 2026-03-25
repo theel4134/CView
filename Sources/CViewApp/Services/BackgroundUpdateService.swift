@@ -69,10 +69,10 @@ final class BackgroundUpdateService {
         // 슬립/웨이크 알림 구독 — 슬립 중에는 폴링 중단
         let ws = NSWorkspace.shared.notificationCenter
         sleepObserver = ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.isSleeping = true
+            Task { @MainActor [weak self] in self?.isSleeping = true }
         }
         wakeObserver = ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.isSleeping = false
+            Task { @MainActor [weak self] in self?.isSleeping = false }
         }
 
         updateTask = Task { [weak self] in
@@ -86,7 +86,7 @@ final class BackgroundUpdateService {
             for await _ in AsyncTimerSequence(interval: .seconds(timerInterval), tolerance: .seconds(timerInterval * 0.15)) {
                 guard !Task.isCancelled else { break }
                 // 슬립 중이면 건너뜀
-                if await self?.isSleeping == true { continue }
+                if self?.isSleeping == true { continue }
                 await self?.performUpdate(apiClient: apiClient, onEvent: onEvent)
             }
         }

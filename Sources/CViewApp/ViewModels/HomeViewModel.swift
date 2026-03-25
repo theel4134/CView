@@ -596,7 +596,7 @@ public final class HomeViewModel {
             let stream = await ws.connect()
             for await message in stream {
                 guard !Task.isCancelled else { break }
-                await self?.handleWebSocketMessage(message)
+                self?.handleWebSocketMessage(message)
             }
         }
     }

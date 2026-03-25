@@ -355,7 +355,7 @@ public final class SearchViewModel {
     private func sortLiveResults() {
         switch liveSortOption {
         case .viewerCount:
-            liveResults.sort { ($0.concurrentUserCount ?? 0) > ($1.concurrentUserCount ?? 0) }
+            liveResults.sort { $0.concurrentUserCount > $1.concurrentUserCount }
         case .recent:
             liveResults.sort { ($0.openDate ?? .distantPast) > ($1.openDate ?? .distantPast) }
         }

@@ -488,7 +488,7 @@ struct HomeView: View {
                     Spacer()
                     VStack(spacing: 6) {
                         Image(systemName: "heart")
-                            .font(DesignTokens.Typography.title3)
+                            .font(DesignTokens.Typography.subhead)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Text("라이브 중인 팔로잉 채널이 없습니다")
                             .font(DesignTokens.Typography.caption)

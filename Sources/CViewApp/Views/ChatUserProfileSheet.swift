@@ -96,7 +96,7 @@ struct ChatUserProfileSheet: View {
         }
         .padding(DesignTokens.Spacing.xl)
         .frame(width: 260)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
     }
 
     private func profileActionButton(label: String, icon: String, id: String, action: @escaping () -> Void) -> some View {

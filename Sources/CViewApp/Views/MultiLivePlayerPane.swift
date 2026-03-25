@@ -11,8 +11,11 @@ struct MLPlayerPane: View {
     /// 이 패인이 현재 활성(포그라운드) 상태인지 여부
     /// false이면 비디오 뷰만 유지하고 오버레이/채팅 등 무거운 UI 렌더링을 생략
     var isActive: Bool = true
-    /// 채팅 패널 고정 너비 (HSplitView 대신 순수 SwiftUI 레이아웃 사용)
-    private let chatPaneWidth: CGFloat = 300
+    /// 채팅 패널 너비 (드래그로 조절 가능, 앱 재시작 시 유지)
+    @AppStorage("multiLiveChatPanelWidth") private var savedChatPaneWidth: Double = 300
+    @State private var liveChatPaneWidth: Double = 300
+    @State private var isDraggingChatResize = false
+    @State private var showChatSettings = false
 
     var body: some View {
         // ZStack으로 래핑해 크기가 항상 부모 컨테이너 범위를 지키도록 함
@@ -27,23 +30,30 @@ struct MLPlayerPane: View {
             // [크래시 방지] GeometryReader + 동적 .frame() 조합은 NSViewRepresentable 포함 시
             // layout 측정→렌더→layout 피드백 루프로 constraint 재진입 크래시를 유발한다.
             // HStack + .frame(maxWidth: .infinity) 패턴으로 대체하여 자연스러운 flex 레이아웃을 사용한다.
-            HStack(spacing: 0) {
-                if isActive {
-                    // 활성 패인: 전체 오버레이 포함 비디오 영역
-                    MLVideoArea(session: session, appState: appState, settingsStore: appState.settingsStore)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                } else {
-                    // 비활성 패인: PlayerVideoView(NSView)만 유지 → VLC drawable 연결 보존
-                    // 오버레이/hover 등 SwiftUI 렌더링 비용 제거
-                    PlayerVideoView(videoView: session.playerViewModel.currentVideoView)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black)
-                        .clipped()
-                }
-                if isActive && session.isChatVisible {
-                    ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: {})
-                        .frame(width: chatPaneWidth)
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    if isActive {
+                        // 활성 패인: 전체 오버레이 포함 비디오 영역
+                        MLVideoArea(session: session, appState: appState, settingsStore: appState.settingsStore)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    } else {
+                        // 비활성 패인: PlayerVideoView(NSView)만 유지 → VLC drawable 연결 보존
+                        // 오버레이/hover 등 SwiftUI 렌더링 비용 제거
+                        PlayerVideoView(videoView: session.playerViewModel.currentVideoView)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.black)
+                            .clipped()
+                    }
+                    if isActive && session.isChatVisible {
+                        ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatPaneWidth) { newWidth in
+                            liveChatPaneWidth = min(max(newWidth, 200), geo.size.width * 0.6)
+                        } onDragEnd: {
+                            savedChatPaneWidth = liveChatPaneWidth
+                        }
+                        ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: { showChatSettings = true })
+                            .frame(width: liveChatPaneWidth)
+                    }
                 }
             }
 
@@ -91,9 +101,9 @@ struct MLPlayerPane: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
                     .background(
+                        // [GPU 최적화] 버퍼링 중 일시적 오버레이에 Material blur 불필요
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                            .fill(.ultraThinMaterial)
-                            .environment(\.colorScheme, .dark)
+                            .fill(Color.black.opacity(0.7))
                     )
                     .transition(.opacity.animation(DesignTokens.Animation.fast))
                 }
@@ -127,6 +137,11 @@ struct MLPlayerPane: View {
             } // end if isActive
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { liveChatPaneWidth = savedChatPaneWidth }
+        .sheet(isPresented: $showChatSettings) {
+            ChatSettingsView(overrideChatVM: session.chatViewModel)
+                .environment(appState)
+        }
     }
 }
 
@@ -147,7 +162,6 @@ struct MLGridLayout: View {
 
     var body: some View {
         let sessions = manager.sessions
-        let count = sessions.count
         GeometryReader { geo in
             if let focusedId = focusedSessionId,
                let focused = sessions.first(where: { $0.id == focusedId }) {
@@ -245,23 +259,32 @@ struct MLGridCell: View {
                 .background(Color.black)
                 .clipped()
                 .overlay(alignment: .topLeading) {
-                    // 채널명 미니 배지 (오버레이 숨김 시 표시)
-                    HStack(spacing: 4) {
-                        // 오디오 활성 표시
-                        if isAudioActive && !session.isMuted {
-                            Image(systemName: "speaker.wave.2.fill")
-                                .font(DesignTokens.Typography.micro)
-                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    // 채널명 + 라이브 제목 미니 배지 (오버레이 숨김 시 표시)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            // 오디오 활성 표시
+                            if isAudioActive && !session.isMuted {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(DesignTokens.Typography.micro)
+                                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            }
+                            Text(session.channelName.isEmpty ? session.channelId : session.channelName)
+                                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                                .lineLimit(1)
                         }
-                        Text(session.channelName.isEmpty ? session.channelId : session.channelName)
-                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                            .lineLimit(1)
+                        if !session.liveTitle.isEmpty {
+                            Text(session.liveTitle)
+                                .font(DesignTokens.Typography.custom(size: 9, weight: .regular))
+                                .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.75))
+                                .lineLimit(1)
+                        }
                     }
                     .padding(.horizontal, DesignTokens.Spacing.sm).padding(.vertical, DesignTokens.Spacing.xxs)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     .overlay {
-                        Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                            .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
                     }
                     .padding(DesignTokens.Spacing.sm)
                     .opacity(showOverlay ? 0 : 1)
@@ -279,10 +302,11 @@ struct MLGridCell: View {
                 )
 
             // 버퍼링 인디케이터
+            // [GPU 최적화] Material → Color.black.opacity — 일시적 스피너 배경에 blur 불필요
             if session.playerViewModel.streamPhase == .buffering
                 || session.playerViewModel.streamPhase == .connecting {
                 ProgressView().scaleEffect(0.9).tint(.white)
-                    .background(Circle().fill(.ultraThinMaterial).frame(width: 38, height: 38))
+                    .background(Circle().fill(Color.black.opacity(0.6)).frame(width: 38, height: 38))
             }
 
             // 세션 상태 오버레이 (loading / offline / error)
@@ -291,8 +315,9 @@ struct MLGridCell: View {
                 ProgressView()
                     .scaleEffect(0.85)
                     .tint(.white)
+                    // [GPU 최적화] Material → Color.black.opacity
                     .background(
-                        Circle().fill(.ultraThinMaterial).frame(width: 36, height: 36)
+                        Circle().fill(Color.black.opacity(0.6)).frame(width: 36, height: 36)
                     )
             case .offline:
                 VStack(spacing: 6) {
@@ -316,7 +341,8 @@ struct MLGridCell: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, DesignTokens.Spacing.sm).padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
+                // [GPU 최적화] Material → Color.black.opacity
+                .background(Color.black.opacity(0.7))
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             case .error:
                 VStack(spacing: 6) {
@@ -340,7 +366,8 @@ struct MLGridCell: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, DesignTokens.Spacing.sm).padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial)
+                // [GPU 최적화] Material → Color.black.opacity
+                .background(Color.black.opacity(0.7))
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             default:
                 EmptyView()
@@ -450,7 +477,7 @@ private struct MLSessionStatusOverlay: View {
                 }
                 VStack(spacing: 8) {
                     Text(title)
-                        .font(DesignTokens.Typography.title3)
+                        .font(DesignTokens.Typography.subhead)
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                     Text(subtitle)
                         .font(DesignTokens.Typography.bodyMedium)

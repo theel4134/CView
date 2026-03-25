@@ -141,11 +141,9 @@ struct ChatInputView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
-            .background(.ultraThinMaterial)
             .overlay(alignment: .top) {
                 Rectangle()
-                    .fill(DesignTokens.Colors.border.opacity(0.15))
+                    .fill(DesignTokens.Glass.dividerColor)
                     .frame(height: 0.5)
             }
         }

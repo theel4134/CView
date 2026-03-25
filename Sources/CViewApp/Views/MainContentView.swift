@@ -103,9 +103,6 @@ struct MainContentView: View {
         case .multiChat:
             MultiChatView()
             
-        case .multiLive:
-            MultiLiveView()
-            
         case .metrics:
             if let vm = appState.homeViewModel {
                 MetricsDashboardView(viewModel: vm)
@@ -156,7 +153,12 @@ struct MainContentView: View {
         case .multiChat:
             MultiChatView()
         case .multiLive:
-            MultiLiveView()
+            // 팔로잉에 통합됨 — 라우트 호환성 유지
+            if let vm = appState.homeViewModel {
+                FollowingView(viewModel: vm)
+            } else {
+                ProgressView()
+            }
         case .settings:
             SettingsView()
         }
@@ -185,10 +187,11 @@ struct SidebarView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     private let primaryItems: [AppRouter.SidebarItem] = [.home, .following, .category]
     private let discoverItems: [AppRouter.SidebarItem] = [.search, .clips, .recentFavorites]
-    private let toolItems: [AppRouter.SidebarItem] = [.multiChat, .multiLive]
+    private let toolItems: [AppRouter.SidebarItem] = [.multiChat]
 
     var body: some View {
         @Bindable var router = router
@@ -224,7 +227,7 @@ struct SidebarView: View {
         HStack(spacing: 10) {
             Image(systemName: "play.tv.fill")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.accent)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 32, height: 32)
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
 
@@ -278,13 +281,13 @@ struct SidebarView: View {
                 // 아이콘 배경
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? Color.accentColor : iconBackground(for: item))
+                        .fill(isSelected ? (colorScheme == .light ? iconColor(for: item).opacity(0.15) : Color.accentColor) : iconBackground(for: item))
                         .frame(width: 32, height: 32)
                     Image(systemName: item.icon)
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(isSelected ? .white : iconColor(for: item))
+                        .foregroundStyle(isSelected ? (colorScheme == .light ? iconColor(for: item) : .white) : iconColor(for: item))
                 }
-                .shadow(color: isSelected ? Color.accentColor.opacity(0.28) : .clear, radius: 5, y: 2)
+                .shadow(color: isSelected ? Color.accentColor.opacity(colorScheme == .light ? 0.15 : 0.28) : .clear, radius: 5, y: 2)
 
                 // 레이블
                 Text(item.rawValue)
@@ -324,17 +327,17 @@ struct SidebarView: View {
     // MARK: - Icon Styling
 
     private func iconBackground(for item: AppRouter.SidebarItem) -> Color {
+        let opacity = colorScheme == .light ? 0.18 : 0.15
         switch item {
-        case .home:             return Color.orange.opacity(0.15)
-        case .following:        return Color.pink.opacity(0.15)
-        case .category:         return Color.purple.opacity(0.15)
-        case .search:           return Color.blue.opacity(0.15)
-        case .clips:            return Color.indigo.opacity(0.15)
-        case .recentFavorites:  return Color.teal.opacity(0.15)
-        case .multiChat:        return Color.green.opacity(0.15)
-        case .multiLive:        return Color.cyan.opacity(0.15)
-        case .metrics:          return Color.mint.opacity(0.15)
-        case .settings:         return Color.gray.opacity(0.15)
+        case .home:             return Color.orange.opacity(opacity)
+        case .following:        return Color.pink.opacity(opacity)
+        case .category:         return Color.purple.opacity(opacity)
+        case .search:           return Color.blue.opacity(opacity)
+        case .clips:            return Color.indigo.opacity(opacity)
+        case .recentFavorites:  return Color.teal.opacity(opacity)
+        case .multiChat:        return Color.green.opacity(opacity)
+        case .metrics:          return Color.mint.opacity(opacity)
+        case .settings:         return Color.gray.opacity(opacity)
         }
     }
 
@@ -347,7 +350,6 @@ struct SidebarView: View {
         case .clips:            return .indigo
         case .recentFavorites:  return .teal
         case .multiChat:        return .green
-        case .multiLive:        return .cyan
         case .metrics:          return .mint
         case .settings:         return .gray
         }
@@ -414,7 +416,7 @@ struct SidebarView: View {
                                 .frame(width: 32, height: 32)
                             Image(systemName: "person.crop.circle")
                                 .font(.system(size: 15))
-                                .foregroundStyle(.accent)
+                                .foregroundStyle(Color.accentColor)
                         }
                         Text("로그인")
                             .font(.system(size: 13, weight: .medium))

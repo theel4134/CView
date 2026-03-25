@@ -58,7 +58,7 @@ struct ChannelInfoHeroHeader: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(channelInfo.channelName)
-                            .font(DesignTokens.Typography.title2)
+                            .font(DesignTokens.Typography.titleSemibold)
                             .foregroundStyle(DesignTokens.Colors.textPrimary)
                             .shadow(color: .black.opacity(0.5), radius: 4)
 

@@ -143,7 +143,7 @@ struct ChatAutocompleteView: View {
                     .clipShape(Circle())
                 } else {
                     Image(systemName: "person.circle.fill")
-                        .font(DesignTokens.Typography.title3)
+                        .font(DesignTokens.Typography.subhead)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                         .frame(width: 22, height: 22)
                 }

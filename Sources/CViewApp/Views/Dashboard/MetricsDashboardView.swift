@@ -33,7 +33,7 @@ struct MetricsDashboardView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("CView 서버")
-                    .font(DesignTokens.Typography.title2)
+                    .font(DesignTokens.Typography.titleSemibold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Text("cv.dododo.app 실시간 모니터링")
                     .font(DesignTokens.Typography.caption)

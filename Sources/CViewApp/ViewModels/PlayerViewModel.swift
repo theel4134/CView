@@ -74,6 +74,9 @@ public final class PlayerViewModel {
     private let logger = AppLogger.player
 
     public var onPlaybackStateChanged: (() -> Void)?
+    
+    /// 방송 종료 여부 확인 콜백 — 재연결 시 API 호출로 라이브 상태 확인
+    public var onCheckStreamEnded: (@Sendable () async -> Bool)?
 
     // MARK: - 엔진 선택
 
@@ -212,6 +215,36 @@ public final class PlayerViewModel {
         }
     }
 
+    /// PlayerSettings의 레이턴시 필드 → LowLatencyController.Configuration 변환 후 StreamCoordinator에 적용
+    public func applyLatencySettings(_ ps: PlayerSettings) {
+        guard let coordinator = streamCoordinator else { return }
+        let config = Self.lowLatencyConfig(from: ps)
+        Task { await coordinator.updateLowLatencyConfig(config) }
+    }
+    
+    /// PlayerSettings → LowLatencyController.Configuration 변환
+    static func lowLatencyConfig(from ps: PlayerSettings) -> LowLatencyController.Configuration {
+        let preset = PlayerSettings.LatencyPreset(rawValue: ps.latencyPreset)
+        switch preset {
+        case .webSync:   return .webSync
+        case .standard:  return .default
+        case .ultraLow:  return .ultraLow
+        case .custom, .none:
+            return LowLatencyController.Configuration(
+                targetLatency: ps.latencyTarget,
+                maxLatency: ps.latencyMax,
+                minLatency: ps.latencyMin,
+                maxPlaybackRate: ps.latencyMaxRate,
+                minPlaybackRate: ps.latencyMinRate,
+                catchUpThreshold: ps.latencyCatchUpThreshold,
+                slowDownThreshold: ps.latencySlowDownThreshold,
+                pidKp: ps.latencyPidKp,
+                pidKi: ps.latencyPidKi,
+                pidKd: ps.latencyPidKd
+            )
+        }
+    }
+
     // MARK: - Background Mode (멀티라이브 CPU 절약)
     
     /// 멀티라이브 비활성 세션의 CPU 사용 감소
@@ -286,16 +319,23 @@ public final class PlayerViewModel {
         channelName: String = "",
         liveTitle: String = "",
         thumbnailURL: URL? = nil,
-        prefetchedManifest: MasterPlaylist? = nil
+        prefetchedManifest: MasterPlaylist? = nil,
+        playerSettings: PlayerSettings? = nil
     ) async {
         self.channelName = channelName
         self.liveTitle = liveTitle
         self.thumbnailURL = thumbnailURL
         self.currentChannelId = channelId
 
-        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, abrConfig: isMultiLive ? .multiLive : .default)
+        let lowLatencyConfig: LowLatencyController.Configuration = playerSettings.map { Self.lowLatencyConfig(from: $0) } ?? .webSync
+        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, lowLatencyConfig: lowLatencyConfig, abrConfig: isMultiLive ? .multiLive : .default)
         let coordinator = StreamCoordinator(configuration: config)
         streamCoordinator = coordinator
+        
+        // 방송 종료 확인 콜백 연결
+        if let checkEnded = onCheckStreamEnded {
+            await coordinator.setCheckStreamEndedCallback(checkEnded)
+        }
         
         // [Opt: Single VLC] 프리페치 매니페스트가 있으면 coordinator에 주입
         // startStream()에서 resolveHighestQualityVariant() 네트워크 요청 건너뜀 (~200-400ms)
@@ -407,6 +447,11 @@ public final class PlayerViewModel {
     public func toggleMute() {
         isMuted.toggle()
         playerEngine?.setVolume(isMuted ? 0 : volume)
+    }
+
+    /// StreamCoordinator 내부 per-instance 프록시의 네트워크 통계 반환
+    public func proxyNetworkStats() -> ProxyNetworkStats? {
+        streamCoordinator?.proxyNetworkStats()
     }
 
     public func switchQuality(_ quality: StreamQualityInfo) async {
@@ -723,7 +768,7 @@ public final class PlayerViewModel {
             let events = await coordinator.events()
             for await event in events {
                 guard !Task.isCancelled else { break }
-                await self?.handleStreamEvent(event)
+                self?.handleStreamEvent(event)
             }
         }
     }
@@ -789,6 +834,11 @@ public final class PlayerViewModel {
 
         case .error(let msg):
             errorMessage = msg
+
+        case .streamEnded:
+            _bufferingDebounceTask?.cancel()
+            _bufferingDebounceTask = nil
+            streamPhase = .streamEnded
 
         case .stopped:
             streamPhase = .idle

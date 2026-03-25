@@ -148,7 +148,7 @@ struct MenuBarView: View {
             .padding(.vertical, DesignTokens.Spacing.xs)
         }
         .frame(width: 320)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
     }
 }
 

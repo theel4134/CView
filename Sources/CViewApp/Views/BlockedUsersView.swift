@@ -23,7 +23,7 @@ struct BlockedUsersView: View {
             // Header
             HStack {
                 Image(systemName: "hand.raised.fill")
-                    .font(DesignTokens.Typography.title3)
+                    .font(DesignTokens.Typography.subhead)
                     .foregroundStyle(DesignTokens.Colors.error)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -39,7 +39,7 @@ struct BlockedUsersView: View {
 
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(DesignTokens.Typography.title3)
+                        .font(DesignTokens.Typography.subhead)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -124,7 +124,7 @@ struct BlockedUsersView: View {
             }
         }
         .frame(width: 380, height: 420)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
         .task {
             blockedUsers = await chatVM?.getBlockedUsers() ?? []
         }

@@ -15,6 +15,7 @@ enum MLSettingsTab: String, CaseIterable {
     case equalizer = "이퀄라이저"
     case video = "영상"
     case playback = "재생"
+    case latency = "지연"
     case network = "네트워크"
     case tools = "도구"
     case metrics = "메트릭"
@@ -25,6 +26,7 @@ enum MLSettingsTab: String, CaseIterable {
         case .equalizer:  return "slider.vertical.3"
         case .video:      return "tv"
         case .playback:   return "play.circle"
+        case .latency:    return "clock.arrow.2.circlepath"
         case .network:    return "antenna.radiowaves.left.and.right"
         case .tools:      return "wrench"
         case .metrics:    return "chart.bar.xaxis"
@@ -68,6 +70,9 @@ struct MLSettingsPanel: View {
                         case .equalizer:  MLEqualizerTab(playerVM: playerVM)
                         case .video:      MLVideoTab(playerVM: playerVM)
                         case .playback:   MLPlaybackTab(playerVM: playerVM)
+                        case .latency:    LatencySettingsCompact(settings: settingsStore) {
+                                              playerVM?.applyLatencySettings(settingsStore.player)
+                                          }
                         case .network:    MLNetworkTab(session: activeSession!, settingsStore: settingsStore)
                         case .tools:      MLToolsTab(playerVM: playerVM)
                         case .metrics:    MetricsForwardingStatusView()
@@ -92,8 +97,7 @@ struct MLSettingsPanel: View {
             }
         }
         .frame(width: 380)
-        .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.92))
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(DesignTokens.Glass.borderColor)

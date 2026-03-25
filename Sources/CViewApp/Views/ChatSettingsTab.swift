@@ -198,7 +198,7 @@ struct ChatSettingsTab: View {
                                 Button { addKeyword() } label: {
                                     Image(systemName: "plus.circle.fill")
                                         .foregroundStyle(DesignTokens.Colors.accentBlue)
-                                        .font(DesignTokens.Typography.title3)
+                                        .font(DesignTokens.Typography.subhead)
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)

@@ -59,6 +59,7 @@ struct FollowingView: View {
     @Bindable var viewModel: HomeViewModel
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var sortOrder: FollowingSortOrder = .liveFirst
     @State private var filterLiveOnly: Bool = false
@@ -68,6 +69,16 @@ struct FollowingView: View {
     // 페이징
     @State private var livePageIndex: Int = 0
     @State private var offlinePageIndex: Int = 0
+    // 멀티라이브 통합
+    @State private var showMultiLive: Bool = false
+    @State private var showMLAddChannel: Bool = false
+    @State private var showMLSettings: Bool = false
+    @State private var mlAddError: String?
+    @State private var mlPanelWidth: CGFloat = 560
+    @State private var hideFollowingList: Bool = false
+    @State private var isDraggingDivider: Bool = false
+    @GestureState private var dividerDragOffset: CGFloat = 0
+    private var multiLiveManager: MultiLiveManager { appState.multiLiveManager }
     private let liveColumns = 4
     private let liveItemsPerPage = 16   // 4열 × 4행
     private let offlineItemsPerPage = 10
@@ -137,13 +148,19 @@ struct FollowingView: View {
             DesignTokens.Colors.background
                 .ignoresSafeArea()
 
-            // 라이트 모드 배경 그라디언트 효과
+            // 배경 그라디언트 효과
             LinearGradient(
-                colors: [
-                    DesignTokens.Colors.surfaceBase.opacity(0.3),
-                    Color.clear,
-                    DesignTokens.Colors.surfaceElevated.opacity(0.15)
-                ],
+                colors: colorScheme == .light
+                    ? [
+                        DesignTokens.Colors.chzzkGreen.opacity(0.04),
+                        Color.clear,
+                        DesignTokens.Colors.accentBlue.opacity(0.03)
+                    ]
+                    : [
+                        DesignTokens.Colors.surfaceBase.opacity(0.3),
+                        Color.clear,
+                        DesignTokens.Colors.surfaceElevated.opacity(0.15)
+                    ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -314,6 +331,66 @@ struct FollowingView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isLoadingFollowing)
+
+                // 멀티라이브 토글 버튼
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showMultiLive.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "rectangle.split.2x2")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("멀티라이브")
+                            .font(.system(size: 13, weight: .semibold))
+                        if !multiLiveManager.sessions.isEmpty {
+                            Text("\(multiLiveManager.sessions.count)")
+                                .font(.system(size: 11, weight: .bold).monospacedDigit())
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(.white.opacity(0.2)))
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(showMultiLive
+                                    ? LinearGradient(colors: [.cyan, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    : DesignTokens.Gradients.primary)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                        }
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // 팔로잉 목록 숨기기/보이기 (멀티라이브 활성 시)
+                if showMultiLive {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            hideFollowingList.toggle()
+                        }
+                    } label: {
+                        Image(systemName: hideFollowingList ? "sidebar.leading" : "sidebar.squares.leading")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(DesignTokens.Colors.surfaceOverlay)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(hideFollowingList ? "팔로잉 목록 보이기" : "팔로잉 목록 숨기기")
+                    .transition(.scale.combined(with: .opacity))
+                }
 
                 // 업데이트 시간
                 if let cachedAt = viewModel.followingCachedAt {
@@ -518,7 +595,76 @@ struct FollowingView: View {
 
     // MARK: - Main Content (widget-style card layout)
 
+    private let mlPanelMinWidth: CGFloat = 400
+    private let mlPanelMaxRatio: CGFloat = 0.85
+
     private var mainContent: some View {
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let effectiveWidth = mlPanelWidth - dividerDragOffset
+            let clampedPanelWidth = min(max(effectiveWidth, mlPanelMinWidth), totalWidth * mlPanelMaxRatio)
+
+            HStack(spacing: 0) {
+                // 왼쪽: 팔로잉 채널 목록
+                if !hideFollowingList || !showMultiLive {
+                    followingListContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+
+                // 오른쪽: 멀티라이브 패널 (활성화 시)
+                if showMultiLive {
+                    if !hideFollowingList {
+                        mlDividerHandle
+                    }
+
+                    multiLiveInlinePanel
+                        .frame(width: hideFollowingList ? totalWidth : clampedPanelWidth)
+                        .frame(maxHeight: .infinity)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+        }
+        .animation(isDraggingDivider ? nil : .easeInOut(duration: 0.3), value: showMultiLive)
+        .animation(isDraggingDivider ? nil : .easeInOut(duration: 0.3), value: hideFollowingList)
+    }
+
+    private var mlDividerHandle: some View {
+        Rectangle()
+            .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.6) : DesignTokens.Glass.dividerColor.opacity(0.5))
+            .frame(width: isDraggingDivider ? 3 : 1)
+            .overlay(alignment: .center) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                    .frame(width: 4, height: 36)
+                    .opacity(isDraggingDivider ? 1 : 0.6)
+            }
+            .contentShape(Rectangle().inset(by: -4))
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.resizeLeftRight.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .updating($dividerDragOffset) { value, state, _ in
+                        state = value.translation.width
+                    }
+                    .onChanged { _ in
+                        isDraggingDivider = true
+                    }
+                    .onEnded { value in
+                        mlPanelWidth -= value.translation.width
+                        isDraggingDivider = false
+                    }
+            )
+    }
+
+    // MARK: - Following List Content
+
+    private var followingListContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: DesignTokens.Spacing.xl) {
                 // 헤더 섹션
@@ -764,6 +910,16 @@ struct FollowingView: View {
                     router.navigate(to: .live(channelId: channel.channelId))
                 }
                 .contextMenu {
+                    if channel.isLive {
+                        Button {
+                            Task { await multiLiveManager.addSession(channelId: channel.channelId) }
+                            showMultiLive = true
+                        } label: {
+                            Label("멀티라이브에 추가", systemImage: "rectangle.split.2x2")
+                        }
+                        .disabled(!multiLiveManager.canAddSession)
+                        Divider()
+                    }
                     channelNotificationMenu(channelId: channel.channelId, channelName: channel.channelName)
                 }
             }
@@ -820,7 +976,7 @@ struct FollowingView: View {
                 set: { newValue in
                     var updated = setting
                     updated.notifyOnLive = newValue
-                    Task { await appState.settingsStore.updateChannelNotification(updated) }
+                    Task { appState.settingsStore.updateChannelNotification(updated) }
                 }
             )) {
                 Label("방송 시작 알림", systemImage: "dot.radiowaves.left.and.right")
@@ -831,7 +987,7 @@ struct FollowingView: View {
                 set: { newValue in
                     var updated = setting
                     updated.notifyOnCategoryChange = newValue
-                    Task { await appState.settingsStore.updateChannelNotification(updated) }
+                    Task { appState.settingsStore.updateChannelNotification(updated) }
                 }
             )) {
                 Label("카테고리 변경 알림", systemImage: "tag")
@@ -842,7 +998,7 @@ struct FollowingView: View {
                 set: { newValue in
                     var updated = setting
                     updated.notifyOnTitleChange = newValue
-                    Task { await appState.settingsStore.updateChannelNotification(updated) }
+                    Task { appState.settingsStore.updateChannelNotification(updated) }
                 }
             )) {
                 Label("제목 변경 알림", systemImage: "textformat")
@@ -1218,5 +1374,108 @@ struct FollowingView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+
+    // MARK: - Inline Multi-Live Panel
+
+    private var multiLiveInlinePanel: some View {
+        VStack(spacing: 0) {
+            // 탭 바
+            MLTabBar(
+                manager: multiLiveManager,
+                isGridLayout: Binding(
+                    get: { multiLiveManager.isGridLayout },
+                    set: { multiLiveManager.isGridLayout = $0 }
+                ),
+                onAdd: { withAnimation(DesignTokens.Animation.snappy) {
+                    showMLAddChannel.toggle()
+                    if showMLAddChannel { showMLSettings = false }
+                }},
+                isAddPanelOpen: showMLAddChannel,
+                onSettings: { withAnimation(DesignTokens.Animation.snappy) {
+                    showMLSettings.toggle()
+                    if showMLSettings { showMLAddChannel = false }
+                }},
+                isSettingsPanelOpen: showMLSettings,
+                hideFollowingList: hideFollowingList,
+                onToggleFollowingList: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        hideFollowingList = false
+                    }
+                }
+            )
+
+            // 콘텐츠 영역
+            HStack(spacing: 0) {
+                ZStack {
+                    if multiLiveManager.sessions.isEmpty {
+                        MLEmptyState(onAdd: {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                showMLAddChannel = true
+                            }
+                        })
+                    } else if multiLiveManager.isGridLayout && multiLiveManager.sessions.count >= 2 {
+                        MLGridLayout(manager: multiLiveManager, appState: appState, onAdd: {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                showMLAddChannel = true
+                            }
+                        })
+                    } else {
+                        // [VLC 충돌 방지] 안정 컨테이너 패턴: opacity/zIndex로 가시성 전환
+                        ForEach(multiLiveManager.sessions) { session in
+                            let isActive = session.id == multiLiveManager.selectedSessionId
+                            MLPlayerPane(session: session, appState: appState, isActive: isActive)
+                                .opacity(isActive ? 1 : 0)
+                                .zIndex(isActive ? 1 : 0)
+                                .allowsHitTesting(isActive)
+                                .transaction { $0.animation = nil }
+                        }
+                        .animation(nil, value: multiLiveManager.sessions.count)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+
+                // 채널 추가 슬라이드 패널
+                if showMLAddChannel {
+                    MLAddChannelPanel(
+                        manager: multiLiveManager,
+                        appState: appState,
+                        isPresented: $showMLAddChannel,
+                        onError: { mlAddError = $0 }
+                    )
+                    .environment(appState)
+                    .transition(.move(edge: .trailing))
+                    .animation(DesignTokens.Animation.contentTransition, value: showMLAddChannel)
+                }
+
+                // 설정 슬라이드 패널
+                if showMLSettings {
+                    MLSettingsPanel(
+                        manager: multiLiveManager,
+                        settingsStore: appState.settingsStore,
+                        isPresented: $showMLSettings
+                    )
+                    .transition(.move(edge: .trailing))
+                    .animation(DesignTokens.Animation.contentTransition, value: showMLSettings)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(multiLiveManager.sessions.isEmpty ? DesignTokens.Colors.background : Color.black)
+        .clipped()
+        .task {
+            if multiLiveManager.sessions.isEmpty {
+                await multiLiveManager.restoreState(appState: appState)
+            }
+        }
+        .alert("채널 추가 실패", isPresented: Binding(
+            get: { mlAddError != nil },
+            set: { if !$0 { mlAddError = nil } }
+        )) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(mlAddError ?? "")
+        }
     }
 }

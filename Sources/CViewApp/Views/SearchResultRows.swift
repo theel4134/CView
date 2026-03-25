@@ -322,25 +322,25 @@ struct SearchClipRow: View {
 
 // MARK: - Equatable Wrappers (re-render 방지)
 
-struct EquatableSearchChannelRow: View, @preconcurrency Equatable {
+struct EquatableSearchChannelRow: View, Equatable {
     let channel: ChannelInfo
     var body: some View { SearchChannelRow(channel: channel) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.channel == rhs.channel }
 }
 
-struct EquatableSearchLiveRow: View, @preconcurrency Equatable {
+struct EquatableSearchLiveRow: View, Equatable {
     let live: LiveInfo
     var body: some View { SearchLiveRow(live: live) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.live == rhs.live }
 }
 
-struct EquatableSearchVideoRow: View, @preconcurrency Equatable {
+struct EquatableSearchVideoRow: View, Equatable {
     let video: VODInfo
     var body: some View { SearchVideoRow(video: video) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.video == rhs.video }
 }
 
-struct EquatableSearchClipRow: View, @preconcurrency Equatable {
+struct EquatableSearchClipRow: View, Equatable {
     let clip: ClipInfo
     var body: some View { SearchClipRow(clip: clip) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.clip == rhs.clip }

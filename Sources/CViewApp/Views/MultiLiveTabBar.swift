@@ -10,6 +10,8 @@ struct MLTabBar: View {
     var isAddPanelOpen: Bool = false
     var onSettings: (() -> Void)? = nil
     var isSettingsPanelOpen: Bool = false
+    var hideFollowingList: Bool = false
+    var onToggleFollowingList: (() -> Void)? = nil
 
     private var layoutModeIcon: String {
         switch manager.gridLayoutMode {
@@ -21,6 +23,27 @@ struct MLTabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            // ── 팔로잉 목록 보이기 버튼 (숨김 상태일 때) ──
+            if hideFollowingList, let toggle = onToggleFollowingList {
+                Button(action: toggle) {
+                    Image(systemName: "sidebar.leading")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(DesignTokens.Colors.surfaceOverlay)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("팔로잉 목록 보이기")
+                .padding(.leading, DesignTokens.Spacing.sm)
+            }
+
             // ── 채널 탭 스크롤 영역 ──
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
@@ -229,8 +252,7 @@ struct MLTabBar: View {
             }
         }
         .frame(height: 44)
-        .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.92))
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(DesignTokens.Glass.borderColorLight)
@@ -408,25 +430,25 @@ struct MLTabChip: View {
         case .playing:
             ZStack {
                 // backgroundElevated: 탭바 bg와 동일 → 도넛 링처럼 보임
-                Circle().fill(DesignTokens.Colors.backgroundElevated).frame(width: 9, height: 9)
+                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
                 Circle().fill(DesignTokens.Colors.chzzkGreen).frame(width: 6, height: 6)
             }
             .offset(x: 4, y: 4)
         case .loading:
             ZStack {
-                Circle().fill(DesignTokens.Colors.backgroundElevated).frame(width: 9, height: 9)
+                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
                 ProgressView().scaleEffect(0.34).tint(DesignTokens.Colors.chzzkGreen)
             }
             .offset(x: 4, y: 4)
         case .error:
             ZStack {
-                Circle().fill(DesignTokens.Colors.backgroundElevated).frame(width: 9, height: 9)
+                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
                 Circle().fill(DesignTokens.Colors.error).frame(width: 6, height: 6)
             }
             .offset(x: 4, y: 4)
         case .offline:
             ZStack {
-                Circle().fill(DesignTokens.Colors.backgroundElevated).frame(width: 9, height: 9)
+                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
                 Circle().fill(DesignTokens.Colors.textTertiary).frame(width: 6, height: 6)
             }
             .offset(x: 4, y: 4)
@@ -441,7 +463,14 @@ struct MLTabChip: View {
     private var statusSubtext: some View {
         switch session.loadState {
         case .playing:
-            if session.viewerCount > 0 {
+            if !session.liveTitle.isEmpty {
+                Text(session.liveTitle)
+                    .font(DesignTokens.Typography.micro)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 86, alignment: .leading)
+                    .help(session.liveTitle)
+            } else if session.viewerCount > 0 {
                 MLViewerCountText(session: session)
             } else {
                 liveBadge

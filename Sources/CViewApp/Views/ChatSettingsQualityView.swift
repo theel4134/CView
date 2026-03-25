@@ -97,10 +97,14 @@ struct ChatSettingsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
+    /// 외부에서 주입된 ChatViewModel (멀티라이브 등)
+    /// nil이면 appState.chatViewModel 사용 (기존 동작 유지)
+    var overrideChatVM: ChatViewModel? = nil
+
     @State private var newKeyword = ""
     @State private var confirmClear = false
 
-    private var chatVM: ChatViewModel? { appState.chatViewModel }
+    private var chatVM: ChatViewModel? { overrideChatVM ?? appState.chatViewModel }
     private var store: SettingsStore { appState.settingsStore }
 
     var body: some View {
@@ -113,7 +117,7 @@ struct ChatSettingsView: View {
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(DesignTokens.Typography.title3)
+                        .font(DesignTokens.Typography.subhead)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -364,7 +368,7 @@ struct ChatSettingsView: View {
                         Button { addKeyword(vm: vm) } label: {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(DesignTokens.Colors.accentBlue)
-                                .font(DesignTokens.Typography.title3)
+                                .font(DesignTokens.Typography.subhead)
                         }
                         .buttonStyle(.plain)
                         .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -456,7 +460,7 @@ private struct ChatSettingsCard<Content: View>: View {
             content()
                 .padding(.bottom, DesignTokens.Spacing.xxs)
         }
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
     }
 }

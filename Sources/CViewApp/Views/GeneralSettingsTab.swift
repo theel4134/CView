@@ -519,7 +519,7 @@ private struct ThemePreviewPanel: View {
                 c.surfaceLight
                 VStack(spacing: 4) {
                     Image(systemName: "play.circle.fill")
-                        .font(DesignTokens.Typography.title3)
+                        .font(DesignTokens.Typography.subhead)
                         .foregroundStyle(c.textTertiary.opacity(0.3))
                     // 프로그레스 바
                     HStack(spacing: 0) {

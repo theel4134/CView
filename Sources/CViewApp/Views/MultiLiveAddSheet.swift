@@ -300,7 +300,7 @@ struct MultiLiveAddSheet: View {
                             .fill(DesignTokens.Colors.chzzkGreen)
                             .frame(width: 8, height: 8)
                             .overlay {
-                                Circle().strokeBorder(DesignTokens.Colors.backgroundElevated, lineWidth: 1.5)
+                                Circle().strokeBorder(DesignTokens.Colors.surfaceOverlay, lineWidth: 1.5)
                             }
                     }
                 }
@@ -908,7 +908,7 @@ struct MultiLiveAddSheet: View {
         searchDebounceTask = Task {
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-            await performSearch()
+            performSearch()
         }
     }
 

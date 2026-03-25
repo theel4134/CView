@@ -47,6 +47,31 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
     /// 오디오 지연 (마이크로초)
     public var audioDelay: Int64
 
+    // MARK: - 레이턴시 동기화 설정
+
+    /// 레이턴시 프리셋 ("webSync", "default", "ultraLow", "custom")
+    public var latencyPreset: String
+    /// 목표 레이턴시 (초)
+    public var latencyTarget: Double
+    /// 최대 허용 레이턴시 (초)
+    public var latencyMax: Double
+    /// 최소 허용 레이턴시 (초)
+    public var latencyMin: Double
+    /// 최대 재생 속도 (캐치업)
+    public var latencyMaxRate: Double
+    /// 최소 재생 속도 (슬로우다운)
+    public var latencyMinRate: Double
+    /// 캐치업 시작 임계값 (초)
+    public var latencyCatchUpThreshold: Double
+    /// 슬로우다운 시작 임계값 (초)
+    public var latencySlowDownThreshold: Double
+    /// PID Kp (비례 이득)
+    public var latencyPidKp: Double
+    /// PID Ki (적분 이득)
+    public var latencyPidKi: Double
+    /// PID Kd (미분 이득)
+    public var latencyPidKd: Double
+
     public init(
         quality: StreamQuality = .auto,
         preferredEngine: PlayerEngineType = .vlc,
@@ -68,7 +93,18 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         aspectRatio: String? = nil,
         audioStereoMode: Int = 0,
         audioMixMode: UInt32 = 0,
-        audioDelay: Int64 = 0
+        audioDelay: Int64 = 0,
+        latencyPreset: String = "webSync",
+        latencyTarget: Double = 6.0,
+        latencyMax: Double = 10.0,
+        latencyMin: Double = 3.0,
+        latencyMaxRate: Double = 1.15,
+        latencyMinRate: Double = 0.90,
+        latencyCatchUpThreshold: Double = 0.5,
+        latencySlowDownThreshold: Double = 0.3,
+        latencyPidKp: Double = 1.2,
+        latencyPidKi: Double = 0.15,
+        latencyPidKd: Double = 0.08
     ) {
         self.quality = quality
         self.preferredEngine = preferredEngine
@@ -91,6 +127,17 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         self.audioStereoMode = audioStereoMode
         self.audioMixMode = audioMixMode
         self.audioDelay = audioDelay
+        self.latencyPreset = latencyPreset
+        self.latencyTarget = latencyTarget
+        self.latencyMax = latencyMax
+        self.latencyMin = latencyMin
+        self.latencyMaxRate = latencyMaxRate
+        self.latencyMinRate = latencyMinRate
+        self.latencyCatchUpThreshold = latencyCatchUpThreshold
+        self.latencySlowDownThreshold = latencySlowDownThreshold
+        self.latencyPidKp = latencyPidKp
+        self.latencyPidKi = latencyPidKi
+        self.latencyPidKd = latencyPidKd
     }
 
     // MARK: - Backward-compatible Decoding
@@ -101,6 +148,10 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         case equalizerPreset, equalizerPreAmp, equalizerBands
         case videoAdjustEnabled, videoBrightness, videoContrast, videoSaturation, videoHue, videoGamma
         case aspectRatio, audioStereoMode, audioMixMode, audioDelay
+        case latencyPreset, latencyTarget, latencyMax, latencyMin
+        case latencyMaxRate, latencyMinRate
+        case latencyCatchUpThreshold, latencySlowDownThreshold
+        case latencyPidKp, latencyPidKi, latencyPidKd
     }
 
     public init(from decoder: Decoder) throws {
@@ -126,9 +177,91 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         audioStereoMode = try c.decodeIfPresent(Int.self, forKey: .audioStereoMode) ?? 0
         audioMixMode = try c.decodeIfPresent(UInt32.self, forKey: .audioMixMode) ?? 0
         audioDelay = try c.decodeIfPresent(Int64.self, forKey: .audioDelay) ?? 0
+        latencyPreset = try c.decodeIfPresent(String.self, forKey: .latencyPreset) ?? "webSync"
+        latencyTarget = try c.decodeIfPresent(Double.self, forKey: .latencyTarget) ?? 6.0
+        latencyMax = try c.decodeIfPresent(Double.self, forKey: .latencyMax) ?? 10.0
+        latencyMin = try c.decodeIfPresent(Double.self, forKey: .latencyMin) ?? 3.0
+        latencyMaxRate = try c.decodeIfPresent(Double.self, forKey: .latencyMaxRate) ?? 1.15
+        latencyMinRate = try c.decodeIfPresent(Double.self, forKey: .latencyMinRate) ?? 0.90
+        latencyCatchUpThreshold = try c.decodeIfPresent(Double.self, forKey: .latencyCatchUpThreshold) ?? 0.5
+        latencySlowDownThreshold = try c.decodeIfPresent(Double.self, forKey: .latencySlowDownThreshold) ?? 0.3
+        latencyPidKp = try c.decodeIfPresent(Double.self, forKey: .latencyPidKp) ?? 1.2
+        latencyPidKi = try c.decodeIfPresent(Double.self, forKey: .latencyPidKi) ?? 0.15
+        latencyPidKd = try c.decodeIfPresent(Double.self, forKey: .latencyPidKd) ?? 0.08
     }
 
     public static let `default` = PlayerSettings()
+
+    // MARK: - 레이턴시 프리셋
+
+    /// 레이턴시 프리셋 정의
+    public enum LatencyPreset: String, CaseIterable, Sendable {
+        case webSync = "webSync"
+        case standard = "default"
+        case ultraLow = "ultraLow"
+        case custom = "custom"
+
+        public var displayName: String {
+            switch self {
+            case .webSync:   "웹 동기화"
+            case .standard:  "기본"
+            case .ultraLow:  "초저지연"
+            case .custom:    "사용자 지정"
+            }
+        }
+
+        public var icon: String {
+            switch self {
+            case .webSync:   "globe"
+            case .standard:  "gauge.with.dots.needle.50percent"
+            case .ultraLow:  "bolt.fill"
+            case .custom:    "slider.horizontal.3"
+            }
+        }
+
+        public var description: String {
+            switch self {
+            case .webSync:   "웹 브라우저와 동일한 재생 위치 (6초 지연)"
+            case .standard:  "안정적인 재생 (3초 지연)"
+            case .ultraLow:  "최소 지연, 끊김 가능 (1.5초 지연)"
+            case .custom:    "모든 파라미터를 직접 조정"
+            }
+        }
+
+        /// 프리셋 기본 값 (목표 지연, 최대, 최소, 최대속도, 최소속도, 캐치업임계, 슬로우다운임계, Kp, Ki, Kd)
+        public var values: (target: Double, max: Double, min: Double, maxRate: Double, minRate: Double,
+                            catchUp: Double, slowDown: Double, kp: Double, ki: Double, kd: Double) {
+            switch self {
+            case .webSync:   (6.0, 10.0, 3.0, 1.15, 0.90, 0.5, 0.3, 1.2, 0.15, 0.08)
+            case .standard:  (3.0,  8.0, 1.0, 1.15, 0.90, 1.2, 0.5, 0.8, 0.12, 0.06)
+            case .ultraLow:  (1.5,  5.0, 0.5, 1.20, 0.85, 1.0, 0.3, 1.0, 0.15, 0.08)
+            case .custom:    (6.0, 10.0, 3.0, 1.15, 0.90, 0.5, 0.3, 1.2, 0.15, 0.08)
+            }
+        }
+    }
+
+    /// 현재 선택된 프리셋 enum
+    public var currentPreset: LatencyPreset {
+        get { LatencyPreset(rawValue: latencyPreset) ?? .webSync }
+        set { latencyPreset = newValue.rawValue }
+    }
+
+    /// 프리셋 값을 현재 설정에 적용
+    public mutating func applyLatencyPreset(_ preset: LatencyPreset) {
+        latencyPreset = preset.rawValue
+        guard preset != .custom else { return }
+        let v = preset.values
+        latencyTarget = v.target
+        latencyMax = v.max
+        latencyMin = v.min
+        latencyMaxRate = v.maxRate
+        latencyMinRate = v.minRate
+        latencyCatchUpThreshold = v.catchUp
+        latencySlowDownThreshold = v.slowDown
+        latencyPidKp = v.kp
+        latencyPidKi = v.ki
+        latencyPidKd = v.kd
+    }
 }
 
 /// 채팅 표시 모드
@@ -338,6 +471,108 @@ public struct NetworkSettings: Codable, Sendable, Equatable {
     }
 
     public static let `default` = NetworkSettings()
+
+    /// 프리셋에 정의된 값과 현재 값이 같은지 비교하여 프리셋 자동 감지
+    public func matchingPreset() -> NetworkPreset {
+        for preset in NetworkPreset.allCases where preset != .custom {
+            if self == preset.settings { return preset }
+        }
+        return .custom
+    }
+}
+
+// MARK: - 네트워크 프리셋
+/// 네트워크 설정을 용도에 맞게 최적화하는 프리셋
+public enum NetworkPreset: String, Codable, Sendable, CaseIterable {
+    case balanced    // 밸런스 (기본)
+    case stability   // 안정 우선
+    case lowLatency  // 저지연 우선
+    case performance // 고성능 (멀티라이브 최적)
+    case custom      // 커스텀
+
+    public var displayName: String {
+        switch self {
+        case .balanced:    return "밸런스"
+        case .stability:   return "안정 우선"
+        case .lowLatency:  return "저지연 우선"
+        case .performance: return "고성능"
+        case .custom:      return "커스텀"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .balanced:
+            return "일반 시청에 적합한 기본 설정"
+        case .stability:
+            return "느린 네트워크에서도 끊김 없는 안정적인 연결"
+        case .lowLatency:
+            return "빠른 응답 우선. 불안정한 네트워크에서 끊김 가능"
+        case .performance:
+            return "멀티라이브 등 다수 동시 스트림에 최적화"
+        case .custom:
+            return "수동으로 각 항목을 직접 조정"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .balanced:    return "scale.3d"
+        case .stability:   return "shield.checkered"
+        case .lowLatency:  return "bolt.fill"
+        case .performance: return "gauge.with.dots.needle.67percent"
+        case .custom:      return "slider.horizontal.3"
+        }
+    }
+
+    /// 프리셋별 최적 NetworkSettings 반환
+    public var settings: NetworkSettings {
+        switch self {
+        case .balanced:
+            return NetworkSettings() // 기본값 그대로
+        case .stability:
+            return NetworkSettings(
+                requestRateLimit: 5,
+                cacheExpiry: 600,
+                retryCount: 5,
+                maxReconnectAttempts: 20,
+                autoReconnect: true,
+                connectionTimeout: 30,
+                streamConnectionTimeout: 20,
+                reconnectBaseDelay: 2.0,
+                maxConnectionsPerHost: 4,
+                forceStreamProxy: true
+            )
+        case .lowLatency:
+            return NetworkSettings(
+                requestRateLimit: 20,
+                cacheExpiry: 60,
+                retryCount: 2,
+                maxReconnectAttempts: 5,
+                autoReconnect: true,
+                connectionTimeout: 8,
+                streamConnectionTimeout: 5,
+                reconnectBaseDelay: 0.5,
+                maxConnectionsPerHost: 10,
+                forceStreamProxy: true
+            )
+        case .performance:
+            return NetworkSettings(
+                requestRateLimit: 15,
+                cacheExpiry: 600,
+                retryCount: 3,
+                maxReconnectAttempts: 15,
+                autoReconnect: true,
+                connectionTimeout: 20,
+                streamConnectionTimeout: 15,
+                reconnectBaseDelay: 1.5,
+                maxConnectionsPerHost: 16,
+                forceStreamProxy: true
+            )
+        case .custom:
+            return NetworkSettings() // 커스텀은 현재 값 유지
+        }
+    }
 }
 
 /// 앱 테마
@@ -573,4 +808,77 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
     }
 
     public static let `default` = MetricsSettings()
+}
+
+// MARK: - MultiLive Layout Mode
+
+/// 멀티라이브 레이아웃 모드
+public enum MultiLiveLayoutMode: String, Codable, Sendable, CaseIterable, Identifiable, Equatable {
+    /// 균등 분할 (2×2 그리드)
+    case preset = "preset"
+    /// 선택된 채널 포커스 + 나머지 작게
+    case focus = "focus"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .preset: "균등 분할"
+        case .focus:  "포커스 모드"
+        }
+    }
+}
+
+/// 멀티라이브 설정
+public struct MultiLiveSettings: Codable, Sendable, Equatable {
+    /// 최대 동시 세션 수 (2~6)
+    public var maxConcurrentSessions: Int
+    /// 멀티라이브 기본 엔진
+    public var preferredEngine: PlayerEngineType
+    /// 레이아웃 모드
+    public var defaultLayoutMode: MultiLiveLayoutMode
+    /// 멀티오디오 활성화
+    public var multiAudioEnabled: Bool
+    /// 보조 스트림 볼륨 (0~1)
+    public var secondaryVolume: Float
+    /// 백그라운드 세션 품질 자동 저하
+    public var backgroundQualityReduction: Bool
+    /// 자동 재연결
+    public var autoReconnect: Bool
+    /// 자동 재연결 최대 시도 횟수
+    public var autoReconnectMaxRetries: Int
+    /// 그리드 모드에서 채팅 오버레이 표시
+    public var chatOverlayInGrid: Bool
+    /// 채팅 오버레이 투명도 (0~1)
+    public var chatOverlayOpacity: Double
+    /// 채팅 오버레이 글꼴 크기 (8~24)
+    public var chatOverlayFontSize: Double
+
+    public init(
+        maxConcurrentSessions: Int = 4,
+        preferredEngine: PlayerEngineType = .vlc,
+        defaultLayoutMode: MultiLiveLayoutMode = .preset,
+        multiAudioEnabled: Bool = false,
+        secondaryVolume: Float = 0.3,
+        backgroundQualityReduction: Bool = true,
+        autoReconnect: Bool = true,
+        autoReconnectMaxRetries: Int = 10,
+        chatOverlayInGrid: Bool = false,
+        chatOverlayOpacity: Double = 0.5,
+        chatOverlayFontSize: Double = 12
+    ) {
+        self.maxConcurrentSessions = maxConcurrentSessions
+        self.preferredEngine = preferredEngine
+        self.defaultLayoutMode = defaultLayoutMode
+        self.multiAudioEnabled = multiAudioEnabled
+        self.secondaryVolume = secondaryVolume
+        self.backgroundQualityReduction = backgroundQualityReduction
+        self.autoReconnect = autoReconnect
+        self.autoReconnectMaxRetries = autoReconnectMaxRetries
+        self.chatOverlayInGrid = chatOverlayInGrid
+        self.chatOverlayOpacity = chatOverlayOpacity
+        self.chatOverlayFontSize = chatOverlayFontSize
+    }
+
+    public static let `default` = MultiLiveSettings()
 }

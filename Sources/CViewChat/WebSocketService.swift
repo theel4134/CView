@@ -3,6 +3,7 @@
 // Original: ChzzkChatService.swift (5,326 lines) → Split into focused actors
 
 import Foundation
+import Synchronization
 import CViewCore
 
 // MARK: - WebSocket Connection Actor
@@ -209,12 +210,10 @@ public actor WebSocketService {
     
     private func startReceiving() {
         receiveTask?.cancel()
-        receiveTask = Task { [weak self] in
-            guard let self else { return }
-            
+        receiveTask = Task {
             while !Task.isCancelled {
                 do {
-                    guard let ws = await self.webSocket else { break }
+                    guard let ws = self.webSocket else { break }
                     let message = try await ws.receive()
                     
                     let wsMessage: WebSocketMessage
@@ -227,41 +226,39 @@ public actor WebSocketService {
                         continue
                     }
                     
-                    await self.messageContinuation?.yield(wsMessage)
+                    self.messageContinuation?.yield(wsMessage)
                     
                 } catch {
                     if !Task.isCancelled {
-                        await self.logger.warning("WS receive error: \(error.localizedDescription, privacy: .public)")
-                        await self.handleDisconnection(error: error)
+                        self.logger.warning("WS receive error: \(error.localizedDescription, privacy: .public)")
+                        self.handleDisconnection(error: error)
                     }
                     break
                 }
             }
-            await self.logger.info("WS receive loop ended")
+            self.logger.info("WS receive loop ended")
         }
     }
     
     private func startPingTimer() {
         pingTask?.cancel()
         let pingInterval = configuration.pingInterval
-        pingTask = Task { [weak self] in
-            guard let self else { return }
-            
+        pingTask = Task {
             let timer = AsyncTimerSequence(interval: pingInterval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 do {
-                    try await sendPing()
+                    try await self.sendPing()
                 } catch {
                     // Ping 실패 시 1회 재시도 후 연결 해제 (일시적 네트워크 지터 대응)
-                    await self.logger.warning("Ping failed, retrying once...")
+                    self.logger.warning("Ping failed, retrying once...")
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2초 대기
                     do {
-                        try await sendPing()
-                        await self.logger.info("Ping retry succeeded")
+                        try await self.sendPing()
+                        self.logger.info("Ping retry succeeded")
                         continue
                     } catch {
-                        await handleDisconnection(error: error)
+                        self.handleDisconnection(error: error)
                         break
                     }
                 }
@@ -272,35 +269,55 @@ public actor WebSocketService {
     private func sendPing() async throws {
         guard let ws = webSocket else { return }
         
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            ws.sendPing { error in
+        // URLSessionWebSocketTask.sendPing의 completionHandler가 호출되지 않거나
+        // 2회 호출되는 edge case 방지를 위해 UnsafeContinuation + Mutex guard 사용.
+        let resumed = Mutex(false)
+        
+        try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
+            let resumeOnce: @Sendable (Error?) -> Void = { error in
+                let alreadyResumed = resumed.withLock { val -> Bool in
+                    if val { return true }
+                    val = true
+                    return false
+                }
+                guard !alreadyResumed else { return }
                 if let error {
                     continuation.resume(throwing: error)
                 } else {
                     continuation.resume()
                 }
             }
+            
+            ws.sendPing { error in
+                resumeOnce(error)
+            }
+            
+            // 10초 타임아웃: completionHandler가 호출되지 않는 경우 대비
+            Task {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                resumeOnce(URLError(.timedOut))
+            }
         }
-    }
-    
-    private func handleDisconnection(error: Error) {
-        logger.error("WebSocket disconnection: \(error.localizedDescription)")
-        updateState(.failed(error.localizedDescription))
-        
-        pingTask?.cancel()
-        pingTask = nil
-        receiveTask?.cancel()
-        receiveTask = nil
-        webSocket?.cancel(with: .goingAway, reason: nil)
-        webSocket = nil
-        // URLSession 무효화하여 메모리 누수 방지 (장시간 재생 시 세션 축적 방지)
-        session?.invalidateAndCancel()
-        session = nil
     }
     
     private func updateState(_ newState: State) {
         _state = newState
         stateContinuation?.yield(newState)
+    }
+    
+    private func handleDisconnection(error: Error) {
+        pingTask?.cancel()
+        pingTask = nil
+        receiveTask?.cancel()
+        receiveTask = nil
+        
+        webSocket?.cancel(with: .abnormalClosure, reason: nil)
+        webSocket = nil
+        session?.invalidateAndCancel()
+        session = nil
+        
+        updateState(.failed(error.localizedDescription))
+        logger.warning("WebSocket disconnected due to error: \(error.localizedDescription, privacy: .public)")
     }
 }
 

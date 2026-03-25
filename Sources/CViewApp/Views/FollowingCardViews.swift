@@ -43,7 +43,8 @@ struct FollowingLiveCard: View, Equatable {
                     lineWidth: isHovered ? 1.2 : 0.5
                 )
         }
-        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        // [GPU 최적화] shadow radius 4→2 — 그리드 카드 16+개 동시 shadow 렌더 비용 절감
+        .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .opacity(appeared ? 1 : 0)
         .animation(.easeOut(duration: 0.2), value: isHovered)
@@ -137,7 +138,7 @@ struct FollowingLiveCard: View, Equatable {
             DesignTokens.Colors.surfaceElevated
             Image(systemName: "play.tv")
                 .font(.system(size: 28, weight: .ultraLight))
-                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.35))
+                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
         }
     }
 

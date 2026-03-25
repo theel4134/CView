@@ -135,16 +135,17 @@ echo -n "APPL????" > "$CONTENTS/PkgInfo"
 # ── 5. 코드 서명 ──────────────────────────────────────────────────────
 echo "━━━ [5/5] 코드 서명... ━━━"
 
-# VLCKit 먼저 서명
+# VLCKit 먼저 서명 (앱과 동일한 ad-hoc + hardened runtime — macOS 26 필수)
 if [[ -d "$FRAMEWORKS/VLCKit.framework" ]]; then
-    codesign --force --deep --sign - "$FRAMEWORKS/VLCKit.framework" 2>/dev/null || true
+    codesign --force --sign - --timestamp=none --generate-entitlement-der --options runtime "$FRAMEWORKS/VLCKit.framework"
+    echo "   VLCKit.framework 서명 완료 (hardened runtime)"
 fi
 
-# 앱 번들 전체 서명 (ad-hoc, entitlements 적용)
+# 앱 번들 전체 서명 (ad-hoc + hardened runtime, entitlements 적용)
 if [[ -f "$ENTITLEMENTS" ]]; then
-    codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
+    codesign --force --sign - --timestamp=none --generate-entitlement-der --options runtime --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
 else
-    codesign --force --deep --sign - "$APP_BUNDLE"
+    codesign --force --sign - --timestamp=none --generate-entitlement-der --options runtime "$APP_BUNDLE"
 fi
 echo "✅ 코드 서명 완료 (ad-hoc)"
 

@@ -20,7 +20,7 @@ struct ChannelMemoSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "note.text")
-                    .font(DesignTokens.Typography.title3)
+                    .font(DesignTokens.Typography.subhead)
                     .foregroundStyle(DesignTokens.Colors.warning)
                 Text(channelName)
                     .font(DesignTokens.Typography.subheadSemibold)

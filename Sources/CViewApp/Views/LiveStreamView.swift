@@ -22,7 +22,9 @@ struct LiveStreamView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
 
-    @State private var chatWidth: CGFloat = 340
+    @AppStorage("chatPanelWidth") private var savedChatWidth: Double = 340
+    @State private var liveChatWidth: Double = 340
+    @State private var isDraggingChatResize = false
     @State private var showOverlay = true
     @State private var isLoadingStream = false
     @State private var loadError: String?
@@ -44,11 +46,10 @@ struct LiveStreamView: View {
     var body: some View {
         HStack(spacing: 0) {
             GeometryReader { geo in
-                HSplitView {
+                HStack(spacing: 0) {
                     // Player area + overlay chat
                     ZStack {
                         playerArea
-                            .frame(minWidth: 400)
                             .overlay(alignment: .topTrailing) {
                                 if showDebugOverlay {
                                     PerformanceOverlayView(monitor: performanceMonitor)
@@ -63,17 +64,23 @@ struct LiveStreamView: View {
                                 .transition(.opacity)
                         }
                     }
+                    .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
 
-                    // 사이드 모드: 기존 HSplitView 오른쪽 채팅 패널
+                    // 사이드 모드: 드래그 핸들 + 채팅 패널
                     if chatVM?.displayMode == .side {
+                        ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
+                            liveChatWidth = min(max(newWidth, 250), geo.size.width * 0.5)
+                        } onDragEnd: {
+                            savedChatWidth = liveChatWidth
+                        }
+
                         ChatPanelView(chatVM: chatVM) {
                             router.presentSheet(.chatSettings)
                         }
-                        .frame(width: chatWidth, alignment: .trailing)
+                        .frame(width: liveChatWidth, alignment: .trailing)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
             // ── 설정 슬라이드 패널 (push 방식 — 멀티라이브와 동일) ──
@@ -89,6 +96,7 @@ struct LiveStreamView: View {
         }
         .toolbar { streamToolbar }
         .id(channelId)
+        .onAppear { liveChatWidth = savedChatWidth }
         .task(id: channelId) {
             await startStreamAndChat()
             await performanceMonitor.start()
@@ -196,6 +204,7 @@ struct LiveStreamView: View {
     private var playerArea: some View {
         ZStack {
             PlayerVideoView(videoView: playerVM?.currentVideoView)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
                 // isAudioOnly 시 AVPlayerLayer.isHidden / VLC videoTrack으로 처리.
                 // SwiftUI .opacity()는 동적 값이면 오프스크린 compositing 버퍼를 강제 생성 → GPU 낭비.
@@ -211,7 +220,7 @@ struct LiveStreamView: View {
                         .symbolEffect(.pulse)
                     Text("오디오 전용 모드")
                         .font(DesignTokens.Typography.custom(size: 16, weight: .semibold))
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
                     Text("영상 비활성화로 데이터 절약 중")
                         .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
@@ -236,6 +245,15 @@ struct LiveStreamView: View {
                     },
                     isSettingsOpen: showSettings
                 )
+            }
+
+            // Stream alert overlay (후원/구독/공지 알림 토스트)
+            if let chatVM, !chatVM.streamAlerts.isEmpty {
+                StreamAlertOverlayView(
+                    alerts: chatVM.streamAlerts,
+                    onDismiss: { chatVM.dismissStreamAlert($0) }
+                )
+                .allowsHitTesting(!showOverlay)
             }
 
             // Buffering / Connecting / Reconnecting overlay
@@ -284,9 +302,9 @@ struct LiveStreamView: View {
             }
 
             // Stream offline
-            if isStreamOffline {
+            if isStreamOffline || playerVM?.streamPhase == .streamEnded {
                 ZStack {
-                    Rectangle().fill(DesignTokens.Colors.surfaceBase)
+                    Rectangle().fill(Color(hex: 0x1C1C1E))
                     RadialGradient(
                         colors: [Color.white.opacity(0.03), Color.clear],
                         center: .center, startRadius: 20, endRadius: 260
@@ -297,7 +315,7 @@ struct LiveStreamView: View {
                                 .fill(Color.white.opacity(0.04))
                                 .frame(width: 100, height: 100)
                             Circle()
-                                .stroke(DesignTokens.Glass.borderColor, lineWidth: 1)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
                                 .frame(width: 100, height: 100)
                             Image(systemName: "tv.slash")
                                 .font(DesignTokens.Typography.custom(size: 38, weight: .light))
@@ -305,11 +323,11 @@ struct LiveStreamView: View {
                         }
                         VStack(spacing: 8) {
                             Text("방송이 종료되었습니다")
-                                .font(DesignTokens.Typography.title3)
-                                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                                .font(DesignTokens.Typography.subhead)
+                                .foregroundStyle(.white)
                             Text("스트리머가 방송을 종료했습니다.")
                                 .font(DesignTokens.Typography.bodyMedium)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                .foregroundStyle(.white.opacity(0.6))
                         }
                         Button {
                             Task { await startStreamAndChat() }
@@ -320,12 +338,12 @@ struct LiveStreamView: View {
                                 Text("다시 확인")
                                     .font(DesignTokens.Typography.bodySemibold)
                             }
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                            .foregroundStyle(.white)
                             .padding(.horizontal, DesignTokens.Spacing.xl)
                             .padding(.vertical, DesignTokens.Spacing.md)
                             .background(
-                                Capsule().fill(DesignTokens.Colors.surfaceElevated)
-                                    .overlay(Capsule().stroke(DesignTokens.Glass.borderColorLight, lineWidth: 1))
+                                Capsule().fill(Color(hex: 0x2C2C2E))
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
                             )
                         }
                         .buttonStyle(.plain)
@@ -497,16 +515,30 @@ struct LiveStreamView: View {
 
             // ─── 영상 즉시 시작 + 로딩 오버레이 즉시 해제 ───
             let _prefetchedManifest = prefetchedManifest
+            let _channelId = channelId
+            let _apiClient = appState.apiClient
             Task { @MainActor in
                 // 재생 직전 최신 설정의 엔진 타입 반영 (앱 실행 중 설정 변경 대응)
                 playerVM?.preferredEngineType = ps.preferredEngine
+                // 방송 종료 확인 콜백 설정 — 재연결 시 API로 라이브 상태 확인
+                playerVM?.onCheckStreamEnded = { [weak _apiClient] in
+                    guard let api = _apiClient else { return false }
+                    do {
+                        let status = try await api.liveStatus(channelId: _channelId)
+                        return status.status == .close
+                    } catch {
+                        return false
+                    }
+                }
+                isStreamOffline = false
                 await playerVM?.startStream(
                     channelId: channelId,
                     streamUrl: streamURL,
                     channelName: channelName,
                     liveTitle: liveTitle,
                     thumbnailURL: liveInfo.liveImageURL,
-                    prefetchedManifest: _prefetchedManifest
+                    prefetchedManifest: _prefetchedManifest,
+                    playerSettings: ps
                 )
                 playerVM?.applySettings(volume: ps.volumeLevel, lowLatency: ps.lowLatencyMode, catchupRate: ps.catchupRate)
             }
@@ -527,7 +559,7 @@ struct LiveStreamView: View {
             let _playerVM = playerVM
             Task {
                 await _forwarder?.setSyncSpeedCallback { [weak _playerVM] speed in
-                    _playerVM?.applySyncSpeed(speed)
+                    Task { @MainActor [weak _playerVM] in _playerVM?.applySyncSpeed(speed) }
                 }
                 // VLC 엔진의 liveCaching 값을 targetLatency로 전달
                 if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {
@@ -674,6 +706,7 @@ struct LiveStreamView: View {
             viewerCount = status.concurrentUserCount
             if status.status == .close {
                 isStreamOffline = true
+                await playerVM?.stopStream()
             }
         } catch {
             Log.app.debug("방송 상태 폴링 실패: \(error.localizedDescription, privacy: .public)")

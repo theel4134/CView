@@ -14,6 +14,7 @@ import CViewUI
 struct ChatPanelView: View {
     let chatVM: ChatViewModel?
     let onOpenSettings: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,8 +27,7 @@ struct ChatPanelView: View {
             // Input area
             ChatInputView(viewModel: chatVM)
         }
-        .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
-        .background(.ultraThinMaterial)
+        .background(colorScheme == .light ? Color.white : Color.black)
         .sheet(isPresented: Binding(
             get: { chatVM?.showExportSheet ?? false },
             set: { chatVM?.showExportSheet = $0 }
@@ -82,7 +82,7 @@ struct ChatPanelView: View {
                     .strokeBorder(connectionColor.opacity(0.35), lineWidth: 0.5)
             }
 
-            // Chat export — Glass circle
+            // Chat export — [GPU 최적화] 28px 소형 원형에 Material blur 불필요 → surfaceElevated로 교체
             Button {
                 chatVM?.showExportSheet = true
             } label: {
@@ -90,7 +90,7 @@ struct ChatPanelView: View {
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .frame(width: 28, height: 28)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                     .overlay {
                         Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                     }
@@ -99,13 +99,13 @@ struct ChatPanelView: View {
             .help("채팅 내보내기")
             .disabled(chatVM?.chatHistory.isEmpty ?? true)
 
-            // Chat settings — Glass circle
+            // Chat settings — [GPU 최적화] 28px 소형 원형에 Material blur 불필요 → surfaceElevated로 교체
             Button(action: onOpenSettings) {
                 Image(systemName: "slider.horizontal.3")
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .frame(width: 28, height: 28)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                     .overlay {
                         Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                     }
@@ -114,10 +114,9 @@ struct ChatPanelView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(DesignTokens.Colors.border.opacity(0.15))
+                .fill(DesignTokens.Glass.dividerColor)
                 .frame(height: 0.5)
         }
     }

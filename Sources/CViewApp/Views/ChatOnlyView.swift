@@ -130,7 +130,7 @@ struct ChatOnlyView: View {
             
             // 액세스 토큰
             let tokenResponse = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
-            let accessToken = tokenResponse.accessToken ?? ""
+            let accessToken = tokenResponse.accessToken
             
             // uid
             var uid: String? = nil

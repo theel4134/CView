@@ -40,16 +40,20 @@ struct ChatOverlayView: View {
             }
         }
         .frame(width: overlayWidth, height: overlayHeight)
-        .background(.black.opacity(bgOpacity * chatOpacity))
-        .background(DesignTokens.Colors.surfaceBase.opacity(bgOpacity * 0.6 * chatOpacity))
+        .background {
+            // [GPU 최적화] Material blur → 솔리드 반투명 색상으로 교체
+            // Material(.ultraThinMaterial)은 아래 레이어(비디오)가 변할 때마다 blur 커널을
+            // 재계산하므로, 60fps 라이브 비디오 위에서 매 프레임 GPU blur pass 발생.
+            // 솔리드 Color는 GPU blur 연산 없이 alpha compositing만 수행 → GPU 사용량 대폭 감소.
+            Color(white: 0.1, opacity: bgOpacity * 0.85)
+        }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(.white.opacity(isHovering ? 0.2 : 0.08), lineWidth: 0.5)
         }
-        // shadow를 drawingGroup 내부로 격리 — 드래그 중 GPU blur 패스 재계산 방지
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
-        .drawingGroup(opaque: false)
+        // [GPU 최적화] shadow radius 12 → 4로 축소 — blur radius가 클수록 offscreen pass 비용 증가
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
         .opacity(chatOpacity)
         .position(currentPosition)
         .gesture(dragGesture)

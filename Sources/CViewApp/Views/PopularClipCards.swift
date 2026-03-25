@@ -271,7 +271,7 @@ struct ClipListRow: View {
 // MARK: - Equatable Wrappers (re-render 방지)
 
 /// ClipGridCard — clip.id + readCount가 동일하면 re-render 스킵
-struct EquatableClipGridCard: View, @preconcurrency Equatable {
+struct EquatableClipGridCard: View, Equatable {
     let clip: ClipInfo
     let showChannel: Bool
     let onTap: () -> Void
@@ -288,7 +288,7 @@ struct EquatableClipGridCard: View, @preconcurrency Equatable {
 }
 
 /// ClipListRow — clip.id + readCount가 동일하면 re-render 스킵
-struct EquatableClipListRow: View, @preconcurrency Equatable {
+struct EquatableClipListRow: View, Equatable {
     let clip: ClipInfo
     let onTap: () -> Void
 

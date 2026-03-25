@@ -133,6 +133,12 @@ public struct AVLiveCatchupConfig: Sendable {
         targetLatency: 5.0, maxLatency: 12.0,
         maxCatchupRate: 1.2, preferredForwardBuffer: 7.0
     )
+    /// 웹(hls.js) 동기화 — 앱↔웹 동일 재생 위치 목표
+    /// hls.js 기본 3×TARGETDURATION(2s)=6.0s에 맞춰 5.0s 타겟, 최소 속도 변화로 수렴
+    public static let webSync = AVLiveCatchupConfig(
+        targetLatency: 5.0, maxLatency: 12.0,
+        maxCatchupRate: 1.10, preferredForwardBuffer: 5.0
+    )
     public static let stable = AVLiveCatchupConfig(
         targetLatency: 8.0, maxLatency: 20.0,
         maxCatchupRate: 1.1, preferredForwardBuffer: 12.0
@@ -210,7 +216,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         var rate: Float = 1.0
         var volume: Float = 1.0
         var currentURL: URL? = nil
-        var catchupConfig: AVLiveCatchupConfig = .lowLatency
+        var catchupConfig: AVLiveCatchupConfig = .webSync
         var isLiveStream: Bool = false
         var lastProgressTime: Date = Date()
         var isRecording: Bool = false

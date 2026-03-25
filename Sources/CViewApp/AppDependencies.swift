@@ -57,7 +57,7 @@ extension AppState {
         if let metricsClient, let metricsWebSocket {
             Task {
                 try? await Task.sleep(for: .milliseconds(300))
-                await self.homeViewModel?.configureMetrics(client: metricsClient, wsClient: metricsWebSocket)
+                self.homeViewModel?.configureMetrics(client: metricsClient, wsClient: metricsWebSocket)
             }
 
             // MetricsForwarder 설정 (settingsStore에서 isEnabled 읽기)

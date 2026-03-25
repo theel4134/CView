@@ -434,8 +434,16 @@ public struct ChatMessageParser: Sendable {
             messageType = .normal
         }
         
+        // 익명 후원 처리: isAnonymous 플래그 또는 닉네임이 비어있는 후원
+        var nickname = parsedProfile.nickname
+        if parsedExtras.isDonation {
+            if parsedExtras.isAnonymous || nickname.isEmpty || nickname == "Unknown" {
+                nickname = "익명"
+            }
+        }
+        
         let chatProfile = ChatProfile(
-            nickname: parsedProfile.nickname,
+            nickname: nickname,
             profileImageURL: parsedProfile.profileImageUrl.flatMap { URL(string: $0) },
             userRoleCode: parsedProfile.isStreamer ? "streamer" : (parsedProfile.isManager ? "manager" : nil),
             badge: parsedProfile.badges.first,
@@ -450,7 +458,7 @@ public struct ChatMessageParser: Sendable {
         return ChatMessage(
             id: msgId,
             userId: uid,
-            nickname: parsedProfile.nickname,
+            nickname: nickname,
             content: msg,
             timestamp: Date(timeIntervalSince1970: Double(msgTime) / 1000.0),
             type: messageType,
@@ -516,6 +524,7 @@ public struct ChatMessageParser: Sendable {
         var emojis: [String: String] = [:]
         var donation: DonationInfo? = nil
         var isDonation: Bool = false
+        var isAnonymous: Bool = false
         var isSubscription: Bool = false
         var isSystemMessage: Bool = false
     }
@@ -561,6 +570,13 @@ public struct ChatMessageParser: Sendable {
                 currency: "KRW",
                 type: dict["donationType"] as? String ?? "CHAT"
             )
+        }
+        
+        // Anonymous donation check
+        if let isAnon = dict["isAnonymous"] as? Bool, isAnon {
+            result.isAnonymous = true
+        } else if let isAnon = dict["anonymous"] as? Bool, isAnon {
+            result.isAnonymous = true
         }
         
         // Chat type

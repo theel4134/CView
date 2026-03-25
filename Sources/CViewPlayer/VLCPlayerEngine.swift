@@ -92,7 +92,7 @@ public enum VLCStreamingProfile: Sendable {
     var manifestRefreshInterval: Int {
         switch self {
         case .ultraLow: return 8    // LL-HLS 부분 세그먼트(~200ms) 대응: 빠른 매니페스트 리프레시
-        case .lowLatency: return 10
+        case .lowLatency: return 4  // 10→4s: 2×TARGETDURATION(2s) — 새 세그먼트 조기 발견으로 레이턴시 단축
         case .multiLive: return 20  // 멀티라이브: 비활성 세션 네트워크 부하 절감
         }
     }
@@ -514,14 +514,17 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
             let capturedProfile = profile
             let attempt = retryAttempt
             let pid = String(url.lastPathComponent.prefix(8))
-            _startPlayRetryTask = Task { @MainActor [weak self] in
+            // [Fix 19] @MainActor → nonisolated Task: 폴링 sleep을 백그라운드에서 실행하여
+            // 멀티라이브 4세션 동시 시작 시 메인 스레드 이벤트 루프 포화 방지.
+            // VLC API 접근만 MainActor.run으로 호출.
+            _startPlayRetryTask = Task { [weak self] in
                 // Phase 1: 5초 안정화 대기 — VLC가 opening→buffering→playing 전이 완료
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard let self, !Task.isCancelled else { return }
                 
-                let initState = self.player.state
-                let initSize = self.player.videoSize
-                let initDecoded = self.player.media?.statistics.decodedVideo ?? 0
+                let (initState, initSize, initDecoded) = await MainActor.run {
+                    (self.player.state, self.player.videoSize, self.player.media?.statistics.decodedVideo ?? 0)
+                }
                 Log.player.debug("[FIX14] [\(pid, privacy: .public)] initial: state=\(initState.rawValue)(0=stop,1=stopping,2=open,3=buf,4=err,5=play,6=pause) vSz=\(Int(initSize.width))x\(Int(initSize.height)) decoded=\(initDecoded)")
                 
                 // 즉시 성공
@@ -540,11 +543,12 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                 if initState == .stopped || initState == .stopping || initState == .error {
                     Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 즉시 실패 (state=\(initState.rawValue)) — retry")
                     // stop() 완료까지 최대 1.5초 대기
-                    self.player.stop()
+                    await MainActor.run { self.player.stop() }
                     for _ in 0..<15 {
                         try? await Task.sleep(nanoseconds: 100_000_000)
                         guard !Task.isCancelled else { return }
-                        if self.player.state == .stopped { break }
+                        let stopped = await MainActor.run { self.player.state == .stopped }
+                        if stopped { break }
                     }
                     await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                     return
@@ -555,14 +559,14 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                 // [Fix 17b] 디코딩 프레임 기반 성공 판정: VLC가 buffering 상태이더라도
                 // 실제로 프레임을 디코딩하고 있으면 스트림은 정상 작동 중
                 Log.player.info("[FIX14] [\(pid, privacy: .public)] 장기 대기 시작 (최대 30초)")
-                var lastPolledDecoded: Int32 = self.player.media?.statistics.decodedVideo ?? 0
+                var lastPolledDecoded: Int32 = await MainActor.run { self.player.media?.statistics.decodedVideo ?? 0 }
                 for pollIdx in 0..<10 {
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                     guard !Task.isCancelled else { return }
                     
-                    let state = self.player.state
-                    let size = self.player.videoSize
-                    let decoded = self.player.media?.statistics.decodedVideo ?? 0
+                    let (state, size, decoded) = await MainActor.run {
+                        (self.player.state, self.player.videoSize, self.player.media?.statistics.decodedVideo ?? 0)
+                    }
                     let decodedDelta = decoded - lastPolledDecoded
                     lastPolledDecoded = decoded
                     Log.player.debug("[FIX14] [\(pid, privacy: .public)] poll=\(pollIdx)/10: state=\(state.rawValue) vSz=\(Int(size.width))x\(Int(size.height)) decoded=\(decoded) Δ=\(decodedDelta)")
@@ -584,11 +588,12 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                     // 버퍼링→실패 전환 감지: stopped/stopping/error
                     if state == .stopped || state == .stopping || state == .error {
                         Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 폴링 중 실패 (state=\(state.rawValue)) — retry")
-                        self.player.stop()
+                        await MainActor.run { self.player.stop() }
                         for _ in 0..<15 {
                             try? await Task.sleep(nanoseconds: 100_000_000)
                             guard !Task.isCancelled else { return }
-                            if self.player.state == .stopped { break }
+                            let stopped = await MainActor.run { self.player.state == .stopped }
+                            if stopped { break }
                         }
                         await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                         return
@@ -597,11 +602,12 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                     // playing + videoSize=0: 15초(pollIdx>=3) 이상이면 비디오 디코더 실패
                     if state == .playing && size.width == 0 && pollIdx >= 3 {
                         Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ playing+noVideo 15s+ — retry")
-                        self.player.stop()
+                        await MainActor.run { self.player.stop() }
                         for _ in 0..<15 {
                             try? await Task.sleep(nanoseconds: 100_000_000)
                             guard !Task.isCancelled else { return }
-                            if self.player.state == .stopped { break }
+                            let stopped = await MainActor.run { self.player.state == .stopped }
+                            if stopped { break }
                         }
                         await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                         return
@@ -610,11 +616,12 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                     // paused 10초+(pollIdx>=3) → 비정상
                     if state == .paused && pollIdx >= 3 {
                         Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ paused 15s+ — retry")
-                        self.player.stop()
+                        await MainActor.run { self.player.stop() }
                         for _ in 0..<15 {
                             try? await Task.sleep(nanoseconds: 100_000_000)
                             guard !Task.isCancelled else { return }
-                            if self.player.state == .stopped { break }
+                            let stopped = await MainActor.run { self.player.state == .stopped }
+                            if stopped { break }
                         }
                         await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                         return
@@ -625,9 +632,9 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                 
                 // 35초(5+30) 경과 — 최종 확인
                 guard !Task.isCancelled else { return }
-                let finalState = self.player.state
-                let finalSize = self.player.videoSize
-                let finalDecoded = self.player.media?.statistics.decodedVideo ?? 0
+                let (finalState, finalSize, finalDecoded) = await MainActor.run {
+                    (self.player.state, self.player.videoSize, self.player.media?.statistics.decodedVideo ?? 0)
+                }
                 if finalState == .playing && finalSize.width > 0 {
                     Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ 35초 후 재생 확인")
                     return
@@ -639,7 +646,7 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                 }
                 // 완전 실패 — 에러 시그널로 상위 레이어(StreamCoordinator watchdog)에 위임
                 Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 35초 타임아웃 — 에러 전환 (state=\(finalState.rawValue) decoded=\(finalDecoded))")
-                self._setPhase(.error(.networkTimeout))
+                await MainActor.run { self._setPhase(.error(.networkTimeout)) }
             }
         }
 
@@ -1179,13 +1186,11 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         let readBytesDelta = Int(stats.readBytes) - Int(prev.readBytes)
         let demuxReadBytesDelta = Int(stats.demuxReadBytes) - Int(prev.demuxReadBytes)
 
-        let rawInputKbps = Double(stats.inputBitrate) * 8.0
-        let inputKbps = rawInputKbps.isFinite && rawInputKbps >= 0 ? rawInputKbps : 0.0
-        let rawDemuxKbps = Double(stats.demuxBitrate) * 8.0
-        let demuxKbps = rawDemuxKbps.isFinite && rawDemuxKbps >= 0 ? rawDemuxKbps : 0.0
-        // Float 곱셈이 Infinity로 오버플로우될 수 있으므로 Double로 변환 후 범위 검증
-        let rawNetBytes = Double(stats.inputBitrate) * 1024.0
-        let netBytesPerSec = rawNetBytes.isFinite && rawNetBytes >= 0 && rawNetBytes < 1e15 ? Int(rawNetBytes) : 0
+        // VLC 4.0의 inputBitrate/demuxBitrate는 순간 값으로, HLS 라이브에서 버퍼가 차면 0을 반환.
+        // readBytes/demuxReadBytes delta를 시간으로 나누어 실제 처리량을 계산.
+        let netBytesPerSec = elapsed > 0 ? max(0, readBytesDelta) / Int(max(elapsed, 0.001)) : 0
+        let inputKbps = elapsed > 0 ? Double(max(0, readBytesDelta)) * 8.0 / elapsed / 1000.0 : 0.0
+        let demuxKbps = elapsed > 0 ? Double(max(0, demuxReadBytesDelta)) * 8.0 / elapsed / 1000.0 : 0.0
         let fps = elapsed > 0 ? Double(max(0, decodedDelta)) / elapsed : 0.0
 
         let size = player.videoSize

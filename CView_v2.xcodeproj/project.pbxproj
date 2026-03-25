@@ -24,6 +24,7 @@
 		A1B2C3D4E5F60001BB110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift */; };
 		A1B2C3D4E5F60001BB110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift */; };
 		A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */; };
+		A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */; };
 		A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */; };
 		A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */; };
 		A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */; };
@@ -81,6 +82,7 @@
 		EE11223344556677AABB0019 /* Sources/CViewApp/Views/MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* Sources/CViewApp/Views/PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* Sources/CViewApp/Views/ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */; };
+		EE11223344556677AABB0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift */; };
 		EE11223344556677AABB0099 /* Sources/CViewApp/Views/ChatOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */; };
 		EE6D96E875945AE62F7DC3E6 /* CViewAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 14CD73D506FE4B4592AF3E0A /* CViewAuth */; };
 		F2D063FE109ED88FD428F817 /* Sources/CViewApp/Views/LiveStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDCB3FCE46E4EDBF596E295 /* Sources/CViewApp/Views/LiveStreamView.swift */; };
@@ -98,6 +100,7 @@
 		FF11223344556677AABB0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */; };
 		FF11223344556677AABB003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */; };
 		FF11223344556677AABB003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift */; };
+		FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -121,6 +124,7 @@
 		A1B2C3D4E5F60001AA110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MetricsSettingsTab.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveSettingsTab.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MetricsForwardingStatusView.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LatencySettingsContent.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingView.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingCardViews.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SharedEffects.swift; sourceTree = SOURCE_ROOT; };
@@ -174,6 +178,7 @@
 		EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerControlsView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatPanelView.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatResizeHandle.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatOverlayView.swift; sourceTree = SOURCE_ROOT; };
 		EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/HomeViewModel.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0030 /* Sources/CViewApp/Views/MultiChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiChatView.swift; sourceTree = SOURCE_ROOT; };
@@ -188,6 +193,7 @@
 		FF11223344556677CCDD0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveOverlays.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveGridLayouts.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveSettingsPanel.swift; sourceTree = SOURCE_ROOT; };
+		FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamAlertOverlayView.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -291,6 +297,7 @@
 				EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */,
 				AA99887766554433CCDD0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift */,
 				EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */,
+				EE11223344556677CCDD0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift */,
 				EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */,
 				DD11223344556677CCDD0096 /* Sources/CViewApp/Views/ChatMessageRow.swift */,
 				DD11223344556677CCDD0097 /* Sources/CViewApp/Views/ChatInputView.swift */,
@@ -316,6 +323,7 @@
 				A1B2C3D4E5F60001AA110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift */,
 				A1B2C3D4E5F60001AA110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift */,
 				A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */,
+				A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */,
 				A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */,
 				A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */,
 				A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */,
@@ -327,6 +335,7 @@
 				A1B2C3D4E5F60003AA330005 /* Sources/CViewApp/Views/ChannelMemoSheet.swift */,
 				A1B2C3D4E5F60005AA550001 /* Sources/CViewApp/Views/CommandPaletteView.swift */,
 				A1B2C3D4E5F60005AA550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift */,
+				FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -393,6 +402,7 @@
 				29B2D46AA747A59804D46E1F /* Frameworks */,
 				66F8606E9F0A136E2228EBCB /* Resources */,
 				AA11BB22CC33DD44AA11BB22 /* Fix AppIcon ICNS */,
+				BB22CC33DD44EE55FF660011 /* Re-sign VLCKit (macOS 26) */,
 			);
 			buildRules = (
 			);
@@ -457,6 +467,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		BB22CC33DD44EE55FF660011 /* Re-sign VLCKit (macOS 26) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Re-sign VLCKit (macOS 26)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# macOS 26: dyld rejects frameworks with different signing attributes\n# Re-sign VLCKit.framework with the same identity + hardened runtime as the app\nFW_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nVLC_FW=\"${FW_DIR}/VLCKit.framework\"\nif [ -d \"$VLC_FW\" ]; then\n  echo \"Re-signing VLCKit.framework for macOS 26 compatibility...\"\n  SIGN_FLAGS=\"--force --sign ${EXPANDED_CODE_SIGN_IDENTITY:--} --timestamp=none --generate-entitlement-der\"\n  if [ \"${ENABLE_HARDENED_RUNTIME}\" = \"YES\" ]; then\n    SIGN_FLAGS=\"${SIGN_FLAGS} --options runtime\"\n  fi\n  /usr/bin/codesign ${SIGN_FLAGS} \"$VLC_FW\"\n  echo \"VLCKit.framework re-signed (hardened_runtime=${ENABLE_HARDENED_RUNTIME})\"\nelse\n  echo \"VLCKit.framework not found at: $VLC_FW\"\nfi\n";
+		};
 		AA11BB22CC33DD44AA11BB22 /* Fix AppIcon ICNS */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -519,6 +547,7 @@
 				EE11223344556677AABB0020 /* Sources/CViewApp/Views/PlayerControlsView.swift in Sources */,
 				AA99887766554433AABB0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift in Sources */,
 				EE11223344556677AABB0021 /* Sources/CViewApp/Views/ChatPanelView.swift in Sources */,
+				EE11223344556677AABB0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift in Sources */,
 				EE11223344556677AABB0099 /* Sources/CViewApp/Views/ChatOverlayView.swift in Sources */,
 				DD11223344556677AABB0096 /* Sources/CViewApp/Views/ChatMessageRow.swift in Sources */,
 				DD11223344556677AABB0097 /* Sources/CViewApp/Views/ChatInputView.swift in Sources */,
@@ -550,8 +579,7 @@
 				A1B2C3D4E5F60001BB110006 /* Sources/CViewApp/Views/PerformanceSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift in Sources */,
-				A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */,
-				A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */,
+				A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */,					A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */,				A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */,
 				A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */,
 				A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */,
 				A1B2C3D4E5F60002BB220004 /* Sources/CViewApp/Views/ErrorStateView.swift in Sources */,
@@ -566,6 +594,7 @@
 				A1B2C3D4E5F60004BB440004 /* Sources/CViewApp/AppTheme+ColorScheme.swift in Sources */,
 				A1B2C3D4E5F60005BB550001 /* Sources/CViewApp/Views/CommandPaletteView.swift in Sources */,
 				A1B2C3D4E5F60005BB550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift in Sources */,
+				FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

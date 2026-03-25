@@ -22,7 +22,7 @@ struct CompactVODCard: View {
                         Rectangle().fill(DesignTokens.Colors.surfaceElevated)
                             .overlay {
                                 Image(systemName: "play.rectangle")
-                                    .font(DesignTokens.Typography.title3)
+                                    .font(DesignTokens.Typography.subhead)
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                     }
@@ -103,7 +103,7 @@ struct CompactClipCard: View {
                                 Rectangle().fill(DesignTokens.Colors.surfaceElevated)
                                     .overlay {
                                         Image(systemName: "scissors")
-                                            .font(DesignTokens.Typography.title3)
+                                            .font(DesignTokens.Typography.subhead)
                                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                                     }
                             }
@@ -326,28 +326,28 @@ struct ClipCard: View {
 
 // MARK: - Equatable Wrappers (re-render 방지)
 
-struct EquatableCompactVODCard: View, @preconcurrency Equatable {
+struct EquatableCompactVODCard: View, Equatable {
     let vod: VODInfo
     let onTap: () -> Void
     var body: some View { CompactVODCard(vod: vod, onTap: onTap) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.vod == rhs.vod }
 }
 
-struct EquatableCompactClipCard: View, @preconcurrency Equatable {
+struct EquatableCompactClipCard: View, Equatable {
     let clip: ClipInfo
     let onTap: () -> Void
     var body: some View { CompactClipCard(clip: clip, onTap: onTap) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.clip == rhs.clip }
 }
 
-struct EquatableVODCard: View, @preconcurrency Equatable {
+struct EquatableVODCard: View, Equatable {
     let vod: VODInfo
     let onTap: () -> Void
     var body: some View { VODCard(vod: vod, onTap: onTap) }
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.vod == rhs.vod }
 }
 
-struct EquatableClipCard: View, @preconcurrency Equatable {
+struct EquatableClipCard: View, Equatable {
     let clip: ClipInfo
     let onTap: () -> Void
     var body: some View { ClipCard(clip: clip, onTap: onTap) }

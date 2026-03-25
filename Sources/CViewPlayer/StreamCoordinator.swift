@@ -26,7 +26,7 @@ public actor StreamCoordinator {
             enableLowLatency: Bool = true,
             enableABR: Bool = true,
             preferredQuality: StreamQuality? = nil,
-            lowLatencyConfig: LowLatencyController.Configuration = .default,
+            lowLatencyConfig: LowLatencyController.Configuration = .webSync,
             abrConfig: ABRController.Configuration = .default
         ) {
             self.channelId = channelId
@@ -49,6 +49,7 @@ public actor StreamCoordinator {
         case paused
         case buffering
         case reconnecting
+        case streamEnded
         case error(String)
     }
     
@@ -130,6 +131,15 @@ public actor StreamCoordinator {
     
     // Reconnection handler
     private var reconnectionHandler = PlaybackReconnectionHandler(config: .aggressive)
+    
+    /// 방송 종료 여부 확인 콜백 — 재연결 시도 전 호출하여 방송이 실제로 종료됐는지 API로 확인
+    /// true 반환 시 재연결 중단 → streamEnded 처리
+    public var onCheckStreamEnded: (@Sendable () async -> Bool)?
+    
+    /// 방송 종료 확인 콜백 설정
+    public func setCheckStreamEndedCallback(_ callback: @escaping @Sendable () async -> Bool) {
+        onCheckStreamEnded = callback
+    }
     
     // Event stream
     private var eventContinuation: AsyncStream<StreamEvent>.Continuation?
@@ -256,6 +266,21 @@ public actor StreamCoordinator {
         streamProxy.stop()
         hlsSession.invalidateAndCancel()
         eventContinuation?.finish()
+    }
+
+    // MARK: - Proxy Stats
+
+    /// 이 코디네이터의 per-instance 프록시 네트워크 통계 반환
+    public nonisolated func proxyNetworkStats() -> ProxyNetworkStats {
+        streamProxy.networkStats()
+    }
+    
+    // MARK: - Low Latency Config Update
+    
+    /// 런타임 레이턴시 설정 변경 — LowLatencyController를 새 config로 재생성
+    public func updateLowLatencyConfig(_ newConfig: LowLatencyController.Configuration) {
+        self.lowLatencyController = LowLatencyController(configuration: newConfig)
+        logger.info("LowLatencyController reconfigured: target=\(newConfig.targetLatency)s")
     }
     
     // MARK: - Setup
@@ -845,7 +870,11 @@ public actor StreamCoordinator {
         await controller.setOnSeekRequired { [weak self] targetLatency in
             Task { [weak self] in
                 guard let engine = await self?.playerEngine else { return }
-                let seekTarget = engine.duration - targetLatency
+                // 라이브 HLS에서 duration = 버퍼 내 총 길이, currentTime = 현재 위치
+                // targetLatency초 뒤에서 재생하려면 버퍼 끝(duration)에서 빼기
+                // VLC 내부 디코더 파이프라인 지연(~1s) 고려하여 약간 앞으로 seek
+                let vlcPipelineDelay: TimeInterval = 1.0
+                let seekTarget = engine.duration - max(targetLatency - vlcPipelineDelay, 1.0)
                 if seekTarget > 0 {
                     engine.seek(to: seekTarget)
                 }
@@ -870,9 +899,14 @@ public actor StreamCoordinator {
             logger.info("PDT sync active: \(mediaPlaylistURL.lastPathComponent, privacy: .public)")
             
             await controller.startSync { [weak provider, weak self] in
-                // PDT 기반 실제 레이턴시 (Method A 우선)
+                // 실제 체감 레이턴시 = PDT 세그먼트 지연 + VLC 버퍼 내 재생 위치 차이
+                // PDT: 마지막 세그먼트가 CDN에 올라온 시점 대비 현재 시각 (세그먼트 수준 지연)
+                // vlcBuffer: VLC 버퍼 끝(duration) - 현재 재생 위치(currentTime)
+                // 합계 = 실제 라이브 대비 재생 화면이 얼마나 뒤처졌는지
                 if let pdtLatency = await provider?.currentLatency() {
-                    return pdtLatency
+                    // PDT 측정 성공 시, VLC 버퍼 지연을 합산
+                    let bufferDelay = await self?.vlcBufferLatency() ?? 0
+                    return pdtLatency + bufferDelay
                 }
                 // Fallback: VLC 버퍼 내부 duration-currentTime (PDT 없을 때)
                 return await self?.vlcBufferLatency()
@@ -962,6 +996,12 @@ public actor StreamCoordinator {
         Task { [weak self] in
             guard let self else { return }
 
+            // 방송 종료 여부 API 확인 — 종료된 방송에 재연결하지 않도록
+            if let checkEnded = await self.onCheckStreamEnded, await checkEnded() {
+                await self.handleStreamEnded()
+                return
+            }
+
             // 재연결 전: PDT 폴링·로우레이턴시 PID를 중지하여 stale 데이터 오염 방지
             await self.stopLatencySubsystems()
 
@@ -979,6 +1019,11 @@ public actor StreamCoordinator {
                     await self.logger.info("StreamCoordinator: 재시도 \(attempt) — \(String(format: "%.1f", delay))초 대기")
                     if delay > 0 {
                         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    }
+                    // 재시도 전 방송 종료 여부 재확인
+                    if let checkEnded = await self.onCheckStreamEnded, await checkEnded() {
+                        await self.handleStreamEnded()
+                        return
                     }
                     // [H4 fix] 매 시도마다 매니페스트 재갱신 → 최신 CDN 토큰 URL 사용
                     if attempt > 1 {
@@ -1023,6 +1068,15 @@ public actor StreamCoordinator {
         updatePhase(.error("재연결 최대 횟수 초과"))
         emitEvent(.error("재연결 최대 횟수 초과"))
         logger.error("StreamCoordinator: 재연결 소진")
+    }
+    
+    /// 방송 종료 감지 — 플레이어 정지 및 streamEnded 이벤트 방출
+    private func handleStreamEnded() async {
+        await reconnectionHandler.cancel()
+        playerEngine?.stop()
+        updatePhase(.streamEnded)
+        emitEvent(.streamEnded)
+        logger.info("StreamCoordinator: 방송 종료 감지 — 재연결 중단")
     }
     
     /// PDT 폴링·로우레이턴시 PID를 중지 — 재연결 전 stale 데이터 오염 방지
@@ -1209,6 +1263,7 @@ public enum StreamEvent: Sendable {
     case latencyUpdate(LatencyInfo)
     case bufferUpdate(BufferHealth)
     case error(String)
+    case streamEnded
     case stopped
 }
 

@@ -503,13 +503,10 @@ public final class MultiLiveManager {
         await MainActor.run { /* yield to allow SwiftUI layout pass */ }
         try? await Task.sleep(nanoseconds: 300_000_000)
 
-        // Phase 3: 모든 세션 스트림 시작 (레이아웃 안정 후)
-        // 각 VLC 인스턴스가 안정된 뷰 계층에서 play()를 호출하여
-        // Metal 렌더링 서피스가 올바른 레이어에 생성된다.
-        // Phase 3: 세션 순차 시작 (staggered start)
-        // 4개 세션을 동시에 시작하면 CDN 연결 경합 + VLC 내부 리소스 경쟁으로
-        // 초기 HLS 세그먼트 다운로드가 지연되어 VLC가 stopping 상태로 전환될 수 있음.
-        // 선택된(포그라운드) 세션을 먼저 시작하고, 나머지를 500ms 간격으로 순차 시작.
+        // Phase 3: 세션 병렬 시작 (staggered fire-and-forget)
+        // [Fix 19] 기존: 순차 `await session.start()` → 4세션 × 2-5초 = 최대 20초 메인 스레드 차단
+        // 수정: 각 세션을 독립 Task로 시작하되, staggered 딜레이로 CDN 연결 경합 완화.
+        // fire-and-forget이므로 메인 스레드 이벤트 루프를 즉시 반환하여 앱 멈춤 방지.
         let sessionsToStart = Array(sessions)
         let selectedFirst = sessionsToStart.sorted { a, b in
             // 선택된 세션을 첫 번째로
@@ -519,10 +516,12 @@ public final class MultiLiveManager {
             if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
                 vlc.isSelectedSession = (session.id == selectedSessionId)
             }
-            await session.start()
-            // 첫 세션 이후 500ms 대기로 CDN 연결 안정화
-            if index < selectedFirst.count - 1 {
-                try? await Task.sleep(nanoseconds: 500_000_000)
+            let staggerDelay = UInt64(index) * 500_000_000 // 500ms 간격
+            Task {
+                if staggerDelay > 0 {
+                    try? await Task.sleep(nanoseconds: staggerDelay)
+                }
+                await session.start()
             }
         }
 

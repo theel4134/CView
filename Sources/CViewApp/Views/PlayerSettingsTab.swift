@@ -51,44 +51,8 @@ struct PlayerSettingsTab: View {
                     }
                 }
 
-                SettingsSection(title: "저지연 최적화", icon: "bolt.circle.fill", color: DesignTokens.Colors.accentBlue) {
-                    SettingsRow("저지연 모드",
-                                description: "딜레이를 최소화합니다. 네트워크 부하가 증가할 수 있습니다",
-                                icon: "bolt.fill", iconColor: DesignTokens.Colors.accentBlue) {
-                        Toggle("", isOn: $settings.player.lowLatencyMode)
-                            .toggleStyle(.switch)
-                            .tint(DesignTokens.Colors.accentBlue)
-                            .labelsHidden()
-                    }
-                    RowDivider()
-                    SettingsRow("버퍼 시간",
-                                description: "낮을수록 지연이 줄지만 끊김이 발생할 수 있습니다",
-                                icon: "clock.fill", iconColor: DesignTokens.Colors.textSecondary) {
-                        HStack(spacing: 6) {
-                            Slider(value: $settings.player.bufferDuration, in: 0.5...8, step: 0.5)
-                                .frame(width: 110)
-                                .tint(DesignTokens.Colors.accentBlue)
-                            Text(String(format: "%.1f초", settings.player.bufferDuration))
-                                .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                .frame(width: 42)
-                        }
-                    }
-                    RowDivider()
-                    SettingsRow("캐치업 속도",
-                                description: "딜레이가 쌓일 때 재생 속도를 높여 따라잡습니다",
-                                icon: "forward.fill", iconColor: DesignTokens.Colors.textSecondary) {
-                        HStack(spacing: 6) {
-                            Slider(value: $settings.player.catchupRate, in: 1.0...1.3, step: 0.01)
-                                .frame(width: 110)
-                                .tint(DesignTokens.Colors.accentBlue)
-                            Text(String(format: "×%.2f", settings.player.catchupRate))
-                                .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                .frame(width: 42)
-                        }
-                    }
-                }
+                // ── 레이턴시 동기화 (LatencySettingsFull) ──
+                LatencySettingsFull(settings: settings)
 
                 SettingsSection(title: "볼륨", icon: "speaker.wave.2.fill", color: DesignTokens.Colors.accentPurple) {
                     SettingsRow("기본 볼륨", icon: "speaker.wave.2.fill", iconColor: DesignTokens.Colors.accentPurple) {

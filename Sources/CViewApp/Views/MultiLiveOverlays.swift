@@ -77,7 +77,7 @@ struct MLControlOverlay: View {
                     Task { await session.playerViewModel.togglePlayPause() }
                 } label: {
                     Image(systemName: session.playerViewModel.streamPhase == .playing ? "pause.fill" : "play.fill")
-                        .font(DesignTokens.Typography.title2)
+                        .font(DesignTokens.Typography.titleSemibold)
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
@@ -253,7 +253,7 @@ struct MLEmptyState: View {
         .frame(maxWidth: 480)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                .fill(.ultraThinMaterial)
+                .fill(Color.black.opacity(0.75))
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -380,9 +380,8 @@ struct MLAddChannelPanel: View {
         }
         .frame(width: 380)
         .background(
-            DesignTokens.Colors.surfaceBase.opacity(0.85)
+            DesignTokens.Colors.surfaceBase.opacity(0.92)
         )
-        .background(.ultraThinMaterial)
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(DesignTokens.Glass.borderColor)
@@ -459,7 +458,7 @@ struct MLStatsOverlay: View {
         .frame(width: 170, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .fill(.ultraThinMaterial)
+                .fill(Color.black.opacity(0.75))
                 .environment(\.colorScheme, .dark)
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)

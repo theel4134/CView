@@ -143,7 +143,7 @@ struct MultiChatView: View {
             }
             .padding(DesignTokens.Spacing.xs)
         }
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
         .sheet(isPresented: $showAddChannel) {
             addChannelSheet
         }
@@ -307,7 +307,7 @@ struct MultiChatView: View {
             .tint(DesignTokens.Colors.chzzkGreen)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DesignTokens.Colors.backgroundElevated)
+        .background(DesignTokens.Colors.surfaceOverlay)
     }
 
     // MARK: - Actions

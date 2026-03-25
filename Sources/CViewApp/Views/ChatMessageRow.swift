@@ -93,7 +93,7 @@ struct ChatMessageRow: View {
             if showTS {
                 Text(message.formattedTime)
                     .font(DesignTokens.Typography.custom(size: max(messageFontSize - 3, 9), weight: .regular, design: .monospaced))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.75))
                     .padding(.trailing, 6)
             }
 
@@ -114,7 +114,7 @@ struct ChatMessageRow: View {
                     .foregroundStyle(nicknameColor)
                 + Text(": ")
                     .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .regular))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
                 + Text(message.content)
                     .font(DesignTokens.Typography.custom(size: messageFontSize))
                     .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.88)))
@@ -130,7 +130,7 @@ struct ChatMessageRow: View {
                         .fixedSize()
                     Text(": ")
                         .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
                         .fixedSize()
                     ChatContentRenderer(
                         content: message.content,
@@ -280,9 +280,8 @@ struct ChatMessageRow: View {
                 }
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
-        // Metal 3: material+gradient+border+shadow 4중 합성 → GPU 단일 패스
-        .compositingGroup()
-        .shadow(color: tierColor.opacity(0.08), radius: 6, x: 0, y: 2)
+        // [GPU 최적화] compositingGroup + shadow 제거 — clipShape으로 합성 범위가 이미 제한되어 있어
+        // 불필요한 offscreen 텍스처 생성 없음. shadow opacity 0.08은 시각적 차이 없으므로 삭제.
         .padding(.vertical, 2)
         .contextMenu {
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.nickname, forType: .string) } label: { Label("닉네임 복사", systemImage: "person.text.rectangle") }
@@ -420,9 +419,8 @@ struct ChatMessageRow: View {
                 }
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
-        // Metal 3: material+gradient+border+shadow 4중 합성 → GPU 단일 패스
-        .compositingGroup()
-        .shadow(color: subColor.opacity(0.08), radius: 6, x: 0, y: 2)
+        // [GPU 최적화] compositingGroup + shadow 제거 — clipShape으로 합성 범위가 이미 제한되어 있어
+        // 불필요한 offscreen 텍스처 생성 없음. shadow opacity 0.08은 시각적 차이 없으므로 삭제.
         .padding(.vertical, 2)
         .contextMenu {
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.nickname, forType: .string) } label: { Label("닉네임 복사", systemImage: "person.text.rectangle") }
@@ -535,7 +533,7 @@ struct ChatMessageRow: View {
 /// Wraps `ChatMessageRow` with equatable check so SwiftUI skips re-rendering when
 /// neither the message nor the render config has changed.
 /// chatVM은 moderation 액션 전용으로만 보유 — Observable 읽기를 이 뷰에서 수행하지 않음.
-struct EquatableChatMessageRow: View, @preconcurrency Equatable {
+struct EquatableChatMessageRow: View, Equatable {
     let message: ChatMessageItem
     let config: ChatRenderConfig
     var chatVM: ChatViewModel?

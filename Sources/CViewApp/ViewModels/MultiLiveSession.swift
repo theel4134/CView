@@ -105,7 +105,7 @@ final class MultiLiveSession: Identifiable {
         self.init(channelId: channelId, engineType: engineType, engine: engine)
         self.channelName = channelName
         self.profileImageURL = profileImageURL
-        self.liveTitle = liveInfo.liveTitle ?? ""
+        self.liveTitle = liveInfo.liveTitle
         self.thumbnailURL = liveInfo.liveImageURL
         self.storedApiClient = apiClient
         self.chatViewModel.currentUserUid = userUid
@@ -136,9 +136,20 @@ final class MultiLiveSession: Identifiable {
                 return
             }
             channelName = liveInfo.channel?.channelName ?? channelId
-            liveTitle = liveInfo.liveTitle ?? ""
+            liveTitle = liveInfo.liveTitle
             thumbnailURL = liveInfo.liveImageURL
             loadState = .playing(channelName: channelName, liveTitle: liveTitle)
+            // 방송 종료 확인 콜백 설정 — 재연결 시 API로 라이브 상태 확인
+            let _channelId = channelId
+            playerViewModel.onCheckStreamEnded = { [weak apiClient] in
+                guard let api = apiClient else { return false }
+                do {
+                    let status = try await api.liveStatus(channelId: _channelId)
+                    return status.status == .close
+                } catch {
+                    return false
+                }
+            }
             await playerViewModel.startStream(
                 channelId: channelId,
                 streamUrl: streamURL,
@@ -165,7 +176,7 @@ final class MultiLiveSession: Identifiable {
                 Task { @MainActor [weak self] in
                     guard let self, self.showStats || self.showNetworkMetrics else { return }
                     self.latestMetrics = metrics
-                    self.latestProxyStats = LocalStreamProxy.shared.networkStats()
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
             }
 
@@ -248,7 +259,7 @@ final class MultiLiveSession: Identifiable {
             }
 
             channelName  = liveInfo.channel?.channelName ?? channelId
-            liveTitle    = liveInfo.liveTitle ?? ""
+            liveTitle    = liveInfo.liveTitle
             thumbnailURL = liveInfo.liveImageURL
 
             let ps = appState.settingsStore.player
@@ -264,7 +275,8 @@ final class MultiLiveSession: Identifiable {
                 channelId: channelId,
                 streamUrl: streamURL,
                 channelName: channelName,
-                liveTitle: liveTitle
+                liveTitle: liveTitle,
+                playerSettings: ps
             )
             // startStream 내부 에러 확인 → loadState 동기화
             if let errorMsg = playerViewModel.errorMessage {
@@ -291,7 +303,7 @@ final class MultiLiveSession: Identifiable {
                 Task { @MainActor [weak self] in
                     guard let self, self.showStats || self.showNetworkMetrics else { return }
                     self.latestMetrics = metrics
-                    self.latestProxyStats = LocalStreamProxy.shared.networkStats()
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
             }
 
@@ -409,6 +421,7 @@ final class MultiLiveSession: Identifiable {
                                 if !self.isOffline {
                                     self.isOffline = true
                                     self.loadState = .offline
+                                    Task { await self.playerViewModel.stopStream() }
                                     // 오프라인 감지 → 2분 후 자동 재시도
                                     self.offlineRetryTask?.cancel()
                                     self.offlineRetryTask = Task { [weak self] in

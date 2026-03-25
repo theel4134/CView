@@ -17,6 +17,7 @@ enum AdvancedSettingsTab: String, CaseIterable {
     case subtitle = "자막"
     case audio = "오디오"
     case playback = "재생"
+    case latency = "지연"
     case tools = "도구"
     case network = "네트워크"
     case metrics = "메트릭"
@@ -29,6 +30,7 @@ enum AdvancedSettingsTab: String, CaseIterable {
         case .subtitle:    return "captions.bubble"
         case .audio:       return "speaker.wave.3"
         case .playback:    return "gauge.with.dots.needle.33percent"
+        case .latency:     return "clock.arrow.2.circlepath"
         case .tools:       return "wrench.and.screwdriver"
         case .network:     return "network"
         case .metrics:     return "chart.bar.xaxis"
@@ -76,6 +78,12 @@ struct PlayerAdvancedSettingsView: View {
                         AudioTabView(playerVM: playerVM, settingsStore: settingsStore)
                     case .playback:
                         PlaybackTabView(playerVM: playerVM)
+                    case .latency:
+                        if let settingsStore {
+                            LatencySettingsCompact(settings: settingsStore) {
+                                playerVM?.applyLatencySettings(settingsStore.player)
+                            }
+                        }
                     case .tools:
                         ToolsTabView(playerVM: playerVM)
                     case .network:
@@ -88,8 +96,7 @@ struct PlayerAdvancedSettingsView: View {
             }
         }
         .frame(width: 380)
-        .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
-        .background(.ultraThinMaterial)
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.92))
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(DesignTokens.Glass.borderColor)

@@ -87,7 +87,7 @@ struct SettingsView: View {
             VStack(spacing: 4) {
                 Image(systemName: "c.square.fill")
                     .font(DesignTokens.Typography.custom(size: 24))
-                    .foregroundStyle(.accent)
+                    .foregroundStyle(Color.accentColor)
                 Text("CView")
                     .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)

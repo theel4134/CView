@@ -4,6 +4,7 @@
 
 import Foundation
 import SwiftUI
+import AVFoundation
 import CViewCore
 import CViewChat
 import CViewNetworking
@@ -12,27 +13,21 @@ import AppKit
 // MARK: - Chat TTS Service
 
 /// 후원/구독 메시지를 음성으로 읽어주는 TTS 서비스
-/// NSSpeechSynthesizer 기반, 큐 방식 (최대 5개 대기)
+/// AVSpeechSynthesizer 기반, 큐 방식 (최대 5개 대기)
 @MainActor
-final class ChatTTSService: NSObject, NSSpeechSynthesizerDelegate {
-    private let synthesizer = NSSpeechSynthesizer()
+final class ChatTTSService: NSObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
     private var queue: [String] = []
     private let maxQueueSize = 5
     private var isSpeaking = false
 
     var isEnabled: Bool = false
-    var volume: Float = 0.8 {
-        didSet { synthesizer.volume = volume }
-    }
-    var rate: Float = 200 {
-        didSet { synthesizer.rate = rate }
-    }
+    var volume: Float = 0.8
+    var rate: Float = AVSpeechUtteranceDefaultSpeechRate
 
     override init() {
         super.init()
         synthesizer.delegate = self
-        synthesizer.volume = volume
-        synthesizer.rate = rate
     }
 
     /// 후원/구독 메시지를 TTS 큐에 추가
@@ -46,7 +41,7 @@ final class ChatTTSService: NSObject, NSSpeechSynthesizerDelegate {
 
     /// TTS 중지 및 큐 초기화
     func stop() {
-        synthesizer.stopSpeaking()
+        synthesizer.stopSpeaking(at: .immediate)
         queue.removeAll()
         isSpeaking = false
     }
@@ -70,12 +65,15 @@ final class ChatTTSService: NSObject, NSSpeechSynthesizerDelegate {
         guard !isSpeaking, !queue.isEmpty else { return }
         let text = queue.removeFirst()
         isSpeaking = true
-        synthesizer.startSpeaking(text)
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.volume = volume
+        utterance.rate = rate
+        synthesizer.speak(utterance)
     }
 
-    // MARK: - NSSpeechSynthesizerDelegate
+    // MARK: - AVSpeechSynthesizerDelegate
 
-    nonisolated func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
             self?.isSpeaking = false
             self?.speakNextIfIdle()
@@ -221,6 +219,17 @@ public final class ChatViewModel {
         )]
     }
     
+    // MARK: - Stream Alert Queue (플레이어 오버레이 알림)
+
+    /// 플레이어 화면 위에 표시할 알림 큐 (후원, 구독 등)
+    public var streamAlerts: [StreamAlertItem] = []
+    /// 알림 오버레이 활성화 여부
+    public var isStreamAlertEnabled: Bool = true
+    /// 동시에 표시할 최대 알림 수
+    private static let maxVisibleAlerts = 3
+    /// 알림 자동 해제 시간 (초)
+    private static let alertDismissDelay: TimeInterval = 5.0
+
     // Error
     public var errorMessage: String?
 
@@ -605,6 +614,39 @@ public final class ChatViewModel {
         }
     }
     
+    // MARK: - Stream Alert Methods
+
+    /// 알림을 큐에 추가하고 자동 해제 타이머 시작
+    private func enqueueStreamAlert(_ alert: StreamAlertItem) {
+        guard isStreamAlertEnabled else { return }
+
+        // 최대 표시 수 초과 시 가장 오래된 항목 제거
+        if streamAlerts.count >= Self.maxVisibleAlerts {
+            streamAlerts.removeFirst()
+        }
+
+        withAnimation(DesignTokens.Animation.contentTransition) {
+            streamAlerts.append(alert)
+        }
+
+        // 자동 해제 타이머
+        let alertId = alert.id
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.alertDismissDelay))
+            guard let self else { return }
+            withAnimation(DesignTokens.Animation.contentTransition) {
+                self.streamAlerts.removeAll { $0.id == alertId }
+            }
+        }
+    }
+
+    /// 수동으로 알림 해제
+    public func dismissStreamAlert(_ id: String) {
+        withAnimation(DesignTokens.Animation.contentTransition) {
+            streamAlerts.removeAll { $0.id == id }
+        }
+    }
+
     // MARK: - Private Methods
     
     private func startEventListening(_ engine: ChatEngine) {
@@ -645,10 +687,21 @@ public final class ChatViewModel {
             
         case .donations(let msgs):
             await appendFilteredMessages(msgs)
+            // 후원 알림 발행
+            for msg in msgs {
+                let item = ChatMessageItem(from: msg)
+                if let alert = StreamAlertItem(from: item) {
+                    enqueueStreamAlert(alert)
+                }
+            }
             
         case .notice(let msg):
             let item = ChatMessageItem(from: msg, isNotice: true)
             messages.append(item)
+            // 공지 알림 발행
+            if let alert = StreamAlertItem.notice(from: item) {
+                enqueueStreamAlert(alert)
+            }
             
         case .messageBlinded(let messageId):
             messages.removeAll { $0.id == messageId }
@@ -693,6 +746,13 @@ public final class ChatViewModel {
             }
             return Self.filterByDonationPrefsPure(rawItems, donationsOnly: donationsOnly, showDonation: showDon)
         }.value
+        
+        // 구독 메시지 알림 발행 (newMessages 경로)
+        for item in items where item.type == .subscription {
+            if let alert = StreamAlertItem(from: item) {
+                enqueueStreamAlert(alert)
+            }
+        }
         
         enqueueBatchedMessages(items)
     }

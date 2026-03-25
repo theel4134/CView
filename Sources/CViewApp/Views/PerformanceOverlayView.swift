@@ -106,10 +106,10 @@ struct PerformanceOverlayView: View {
             height: headerHeight + CGFloat(metricLines.count) * rowHeight
         )
         .padding(padding)
-        .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(Color(hex: 0x1C1C1E).opacity(0.92), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(.green.opacity(DesignTokens.Glass.borderOpacityLight), lineWidth: 0.5)
+                .strokeBorder(.green.opacity(0.18), lineWidth: 0.5)
         }
         // [GPU 최적화] drawingGroup 제거: Canvas 자체가 이미 Metal 가속화됨.
         // opaque:false 였던 오프스크린 텍스처 합성 패스(GPU 추가 비용)를 제거.

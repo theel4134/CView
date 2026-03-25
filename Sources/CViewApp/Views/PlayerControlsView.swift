@@ -121,10 +121,10 @@ struct PlayerProgressSection: View {
                                 .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                                 .padding(.horizontal, DesignTokens.Spacing.xs)
                                 .padding(.vertical, DesignTokens.Spacing.xxs)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                                .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                                 .overlay {
                                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                                        .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
+                                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
                                 }
                                 .offset(x: max(20, min(width - 50, hoverPosition - 25)), y: -24)
                         }
@@ -373,8 +373,8 @@ struct PlayerControlsBar: View {
                 .foregroundStyle(.white.opacity(0.9))
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay { Capsule().strokeBorder(.white.opacity(0.1), lineWidth: 0.5) }
+                .background(Color.black.opacity(0.55), in: Capsule())
+                .overlay { Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5) }
             }
             .buttonStyle(.plain)
 
@@ -458,9 +458,9 @@ struct QualitySelector: View {
             .foregroundStyle(.white.opacity(isHovered ? 1.0 : 0.9))
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(.ultraThinMaterial, in: Capsule())
+            .background(Color.black.opacity(0.55), in: Capsule())
             .overlay {
-                Capsule().strokeBorder(.white.opacity(isHovered ? 0.2 : 0.08), lineWidth: 0.5)
+                Capsule().strokeBorder(.white.opacity(isHovered ? 0.2 : 0.1), lineWidth: 0.5)
             }
         }
         .buttonStyle(.plain)
@@ -614,7 +614,7 @@ struct InfoBadge: View {
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .padding(.horizontal, DesignTokens.Spacing.xs)
         .padding(.vertical, DesignTokens.Spacing.xxs)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(Color.black.opacity(0.55), in: Capsule())
         .overlay {
             Capsule().strokeBorder(color.opacity(0.5), lineWidth: 0.5)
         }

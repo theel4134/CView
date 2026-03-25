@@ -69,7 +69,6 @@ public final class AppRouter {
         case search = "검색"
         case clips = "클립"
         case multiChat = "멀티채팅"
-        case multiLive = "멀티라이브"
         case recentFavorites = "최근/즐겨찾기"
         case metrics = "메트릭"
         case settings = "설정"
@@ -84,7 +83,6 @@ public final class AppRouter {
             case .search: "magnifyingglass"
             case .clips: "film.stack"
             case .multiChat: "bubble.left.and.bubble.right.fill"
-            case .multiLive: "rectangle.split.2x2.fill"
             case .recentFavorites: "clock.arrow.circlepath"
             case .metrics: "chart.bar.xaxis"
             case .settings: "gearshape.fill"
@@ -152,7 +150,7 @@ public final class AppRouter {
         case .search:       selectSidebar(.search)
         case .popularClips: selectSidebar(.clips)
         case .multiChat:    selectSidebar(.multiChat)
-        case .multiLive:    selectSidebar(.multiLive)
+        case .multiLive:    selectSidebar(.following)  // 팔로잉에 통합됨
         case .settings:     selectSidebar(.settings)
         default:            path.append(route)
         }
