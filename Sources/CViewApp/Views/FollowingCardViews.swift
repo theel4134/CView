@@ -43,7 +43,8 @@ struct FollowingLiveCard: View, Equatable {
                     lineWidth: isHovered ? 1.2 : 0.5
                 )
         }
-        // [GPU 최적화] shadow radius 4→2 — 그리드 카드 16+개 동시 shadow 렌더 비용 절감
+        // [GPU 최적화] compositingGroup으로 shadow pass 통합 — 카드 내부 레이어 개별 shadow 방지
+        .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .opacity(appeared ? 1 : 0)
@@ -308,7 +309,7 @@ struct FollowingOfflineRow: View, Equatable {
                         lineWidth: 1
                     )
                 )
-                .saturation(isHovered ? 0.9 : 0.35)
+                .grayscale(isHovered ? 0.1 : 0.65)
                 .opacity(isHovered ? 0.95 : 0.55)
 
                 // 오프라인 상태 점
@@ -341,25 +342,20 @@ struct FollowingOfflineRow: View, Equatable {
             Spacer()
 
             // 호버: 채널 보기 / 기본: 오프라인 텍스트
-            Group {
-                if isHovered {
-                    HStack(spacing: 4) {
-                        Text("채널 보기")
-                            .font(.system(size: 10, weight: .semibold))
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 8, weight: .semibold))
-                    }
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .trailing)),
-                        removal: .opacity
-                    ))
-                } else {
-                    Text("오프라인")
-                        .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
-                        .transition(.opacity)
+            ZStack {
+                HStack(spacing: 4) {
+                    Text("채널 보기")
+                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
                 }
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                .opacity(isHovered ? 1 : 0)
+
+                Text("오프라인")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                    .opacity(isHovered ? 0 : 1)
             }
             .animation(.easeOut(duration: 0.2), value: isHovered)
         }

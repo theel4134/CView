@@ -102,7 +102,7 @@ public struct LiveBadge: View {
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .clipShape(Capsule())
         // drawingGroup 제거 — opaque:false는 offscreen Metal pass 추가 비용 발생
-        .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 6, y: 2)
+            .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 3, y: 2)
         .onAppear {
             if DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) != nil {
                 withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {

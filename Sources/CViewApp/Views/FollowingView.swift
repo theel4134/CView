@@ -191,6 +191,7 @@ struct FollowingView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
+            .drawingGroup(opaque: true)
 
             if !appState.isLoggedIn {
                 followingGateView(
@@ -478,6 +479,7 @@ struct FollowingView: View {
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 )
         )
+        .compositingGroup()
     }
 
     // MARK: - Search & Filter Card (v1-inspired)
@@ -784,6 +786,7 @@ struct FollowingView: View {
                 radius: DesignTokens.Shadow.card.radius,
                 y: DesignTokens.Shadow.card.y
             )
+            .compositingGroup()
     }
 
     // MARK: - Category Filter Chips
