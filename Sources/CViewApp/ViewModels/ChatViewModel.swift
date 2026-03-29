@@ -168,12 +168,12 @@ public final class ChatViewModel {
 
     // MARK: - Dependencies
     
-    private var chatEngine: ChatEngine?
-    private var moderationService: ChatModerationService?
-    private let logger = AppLogger.chat
+    var chatEngine: ChatEngine?
+    var moderationService: ChatModerationService?
+    let logger = AppLogger.chat
     
     /// TTS 서비스 (후원/구독 메시지 음성 읽기)
-    private let ttsService = ChatTTSService()
+    let ttsService = ChatTTSService()
     
     /// 차단 목록 변경 시 외부 저장용 콜백
     public var onBlockedUsersChanged: (([String]) -> Void)?
@@ -186,40 +186,40 @@ public final class ChatViewModel {
     public var currentUserNickname: String?
     
     // Tasks
-    private var eventListenTask: Task<Void, Never>?
-    private var statsTask: Task<Void, Never>?
-    @ObservationIgnored private var recentMessageTimestamps: [Date] = []
+    var eventListenTask: Task<Void, Never>?
+    var statsTask: Task<Void, Never>?
+    @ObservationIgnored var recentMessageTimestamps: [Date] = []
     
     /// 멀티라이브 비활성 세션 CPU 절약: 백그라운드 모드에서 flush 간격 증가 + 통계 중단
     @ObservationIgnored public var isBackgroundMode: Bool = false
     /// 백그라운드 모드에서의 배치 flush 간격 (1초 — 기본 100ms의 10배)
-    @ObservationIgnored private let backgroundFlushIntervalNs: UInt64 = 1_000_000_000
+    @ObservationIgnored let backgroundFlushIntervalNs: UInt64 = 1_000_000_000
     
     // MARK: - Batching (reduces SwiftUI update frequency from 1000/s → ~10/s)
     
     /// Pending messages accumulated before the next batch flush.
-    @ObservationIgnored private var pendingMessages: [ChatMessageItem] = []
+    @ObservationIgnored var pendingMessages: [ChatMessageItem] = []
     /// Active batch‐flush timer task.
-    @ObservationIgnored private var batchFlushTask: Task<Void, Never>?
+    @ObservationIgnored var batchFlushTask: Task<Void, Never>?
     /// Batch flush interval in nanoseconds.
     /// [Freeze Fix] 100ms → 250ms: 멀티라이브 4세션 시 40 mutations/s → 16 mutations/s
     /// MainActor @Observable 업데이트 빈도를 줄여 UI 이벤트 루프 포화 방지
-    @ObservationIgnored private let batchFlushIntervalNs: UInt64 = 250_000_000
+    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 250_000_000
     
     // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
     
     /// 고유 참여 사용자 수 (증분 캐시)
-    public private(set) var uniqueUserCount: Int = 0
-    @ObservationIgnored private var _uniqueUsers = Set<String>()
+    public internal(set) var uniqueUserCount: Int = 0
+    @ObservationIgnored var _uniqueUsers = Set<String>()
     
     /// 도네이션 총 횟수 (증분 캐시)
-    public private(set) var donationCount: Int = 0
+    public internal(set) var donationCount: Int = 0
     
     /// 도네이션 총 금액 (증분 캐시)
-    public private(set) var totalDonationAmount: Int = 0
+    public internal(set) var totalDonationAmount: Int = 0
     
     /// 구독 메시지 수 (증분 캐시)
-    public private(set) var subscriptionCount: Int = 0
+    public internal(set) var subscriptionCount: Int = 0
     
     // MARK: - Initialization
     
@@ -537,7 +537,7 @@ public final class ChatViewModel {
     }
 
     /// Append items to the persistent history buffer, capping at `maxHistorySize`.
-    private func appendToHistory(_ items: [ChatMessageItem]) {
+    func appendToHistory(_ items: [ChatMessageItem]) {
         chatHistory.append(contentsOf: items)
         if chatHistory.count > Self.maxHistorySize {
             chatHistory.removeFirst(chatHistory.count - Self.maxHistorySize)
@@ -547,7 +547,7 @@ public final class ChatViewModel {
     // MARK: - Stream Alert Methods
 
     /// 알림을 큐에 추가하고 자동 해제 타이머 시작
-    private func enqueueStreamAlert(_ alert: StreamAlertItem) {
+    func enqueueStreamAlert(_ alert: StreamAlertItem) {
         guard isStreamAlertEnabled else { return }
 
         // 최대 표시 수 초과 시 가장 오래된 항목 제거
@@ -577,329 +577,6 @@ public final class ChatViewModel {
         }
     }
 
-    // MARK: - Private Methods
-    
-    private func startEventListening(_ engine: ChatEngine) {
-        eventListenTask?.cancel()
-        eventListenTask = Task { [weak self] in
-            guard let self else { return }
-            
-            let stream = await engine.events()
-            for await event in stream {
-                guard !Task.isCancelled else { break }
-                await self.handleEvent(event)
-            }
-        }
-    }
-    
-    @MainActor
-    private func handleEvent(_ event: ChatEngineEvent) async {
-        switch event {
-        case .connected:
-            connectionState = .connected(serverIndex: 0)
-            errorMessage = nil
-            
-        case .disconnected(let reason):
-            connectionState = .disconnected
-            errorMessage = reason
-            
-        case .reconnecting:
-            connectionState = .reconnecting(attempt: 0)
-            
-        case .stateChanged(let state):
-            connectionState = state
-            
-        case .newMessages(let msgs):
-            await appendFilteredMessages(msgs)
-            
-        case .recentMessages(let msgs):
-            await appendFilteredMessages(msgs)
-            
-        case .donations(let msgs):
-            await appendFilteredMessages(msgs)
-            // 후원 알림 발행
-            for msg in msgs {
-                let item = ChatMessageItem(from: msg)
-                if let alert = StreamAlertItem(from: item) {
-                    enqueueStreamAlert(alert)
-                }
-            }
-            
-        case .notice(let msg):
-            let item = ChatMessageItem(from: msg, isNotice: true)
-            messages.append(item)
-            // 공지 알림 발행
-            if let alert = StreamAlertItem.notice(from: item) {
-                enqueueStreamAlert(alert)
-            }
-            
-        case .messageBlinded(let messageId):
-            messages.removeAll { $0.id == messageId }
-            
-        case .kicked:
-            connectionState = .disconnected
-            errorMessage = "채팅에서 추방되었습니다."
-            
-        case .userPenalized(let userId, _):
-            logger.info("User penalized: \(userId)")
-            
-        case .systemMessage(let msg):
-            let systemItem = ChatMessageItem.system(msg)
-            messages.append(systemItem)
-            
-        case .messagesCleared:
-            messages.removeAll()
-        }
-    }
-    
-    private func appendFilteredMessages(_ msgs: [ChatMessage]) async {
-        // 메시지의 이모티콘을 수집 (피커용 가상 팩 구성에 사용)
-        collectEmoticons(from: msgs)
-        
-        // 채널 이모티콘 맵과 필터 설정을 캡처 — 백그라운드 Task에서 사용
-        let channelEmotes = channelEmoticons
-        let donationsOnly = showDonationsOnly
-        let showDon = showDonation
-        
-        // Moderation 필터링 (actor hop은 여기서 — 결과는 [ChatMessage])
-        let filteredMsgs: [ChatMessage]
-        if let modService = moderationService {
-            filteredMsgs = await modService.filterMessages(msgs)
-        } else {
-            filteredMsgs = msgs
-        }
-        
-        // 무거운 변환/필터링을 백그라운드 스레드에서 수행 — 메인 스레드 부하 제거
-        let items = await Task.detached(priority: .userInitiated) {
-            let rawItems = filteredMsgs.map { msg in
-                Self.enrichWithChannelEmoticonsPure(ChatMessageItem(from: msg), channelEmoticons: channelEmotes)
-            }
-            return Self.filterByDonationPrefsPure(rawItems, donationsOnly: donationsOnly, showDonation: showDon)
-        }.value
-        
-        // 구독 메시지 알림 발행 (newMessages 경로)
-        for item in items where item.type == .subscription {
-            if let alert = StreamAlertItem(from: item) {
-                enqueueStreamAlert(alert)
-            }
-        }
-        
-        enqueueBatchedMessages(items)
-    }
-    
-    /// 이모티콘 수집 — MainActor에서 실행 (collectedEmoticons 딕셔너리 접근)
-    /// 새로 발견된 이모티콘은 바로 프리페치하여 다음 표시 시 즉시 로드
-    private func collectEmoticons(from msgs: [ChatMessage]) {
-        var newURLs: [URL] = []
-        for msg in msgs {
-            if let emojis = msg.extras?.emojis {
-                for (id, urlStr) in emojis {
-                    if collectedEmoticons[id] == nil, let url = URL(string: urlStr) {
-                        collectedEmoticons[id] = url
-                        newURLs.append(url)
-                    }
-                }
-            }
-        }
-        if !newURLs.isEmpty {
-            Task.detached(priority: .background) {
-                await ImageCacheService.shared.prefetch(newURLs)
-            }
-        }
-    }
-
-    /// 이모티콘 팩의 모든 이미지를 백그라운드에서 미리 다운로드
-    private func prefetchEmoticonImages() {
-        let urls = emoticonPacks
-            .flatMap { $0.emoticons ?? [] }
-            .compactMap { $0.imageURL }
-        guard !urls.isEmpty else { return }
-        logger.info("이모티콘 프리페치 시작: \(urls.count)개 이미지")
-        Task.detached(priority: .background) {
-            await ImageCacheService.shared.prefetch(urls)
-        }
-    }
-
-    /// `showDonationsOnly` / `showDonation` 프리퍼런스 적용 필터
-    private func filterByDonationPrefs(_ items: [ChatMessageItem]) -> [ChatMessageItem] {
-        Self.filterByDonationPrefsPure(items, donationsOnly: showDonationsOnly, showDonation: showDonation)
-    }
-    
-    /// nonisolated 순수 함수 — Task.detached에서 안전하게 호출 가능
-    private nonisolated static func filterByDonationPrefsPure(
-        _ items: [ChatMessageItem], donationsOnly: Bool, showDonation: Bool
-    ) -> [ChatMessageItem] {
-        if donationsOnly {
-            return items.filter { $0.type == MessageType.donation }
-        } else if !showDonation {
-            return items.filter { $0.type != MessageType.donation }
-        }
-        return items
-    }
-    
-    /// 채널 이모티콘 맵을 메시지의 emojis에 병합
-    private func enrichWithChannelEmoticons(_ item: ChatMessageItem) -> ChatMessageItem {
-        Self.enrichWithChannelEmoticonsPure(item, channelEmoticons: channelEmoticons)
-    }
-    
-    /// nonisolated 순수 함수 — Task.detached에서 안전하게 호출 가능
-    private nonisolated static func enrichWithChannelEmoticonsPure(
-        _ item: ChatMessageItem, channelEmoticons: [String: String]
-    ) -> ChatMessageItem {
-        guard !channelEmoticons.isEmpty else { return item }
-        var merged = item.emojis
-        for (key, value) in channelEmoticons where merged[key] == nil {
-            merged[key] = value
-        }
-        guard merged.count != item.emojis.count else { return item }
-        return ChatMessageItem(
-            id: item.id, userId: item.userId, nickname: item.nickname,
-            content: item.content, timestamp: item.timestamp, type: item.type,
-            badgeImageURL: item.badgeImageURL, emojis: merged,
-            donationAmount: item.donationAmount, donationType: item.donationType,
-            subscriptionMonths: item.subscriptionMonths, profileImageUrl: item.profileImageUrl,
-            isNotice: item.isNotice, isSystem: item.isSystem
-        )
-    }
-    
-    private func refilterMessages() async {
-        guard let engine = chatEngine else { return }
-        let allMessages = await engine.messages
-        
-        guard let modService = moderationService else { return }
-        let filtered = await modService.filterMessages(allMessages)
-        
-        // 백그라운드에서 변환 수행
-        let channelEmotes = channelEmoticons
-        let donationsOnly = showDonationsOnly
-        let showDon = showDonation
-        let items = await Task.detached(priority: .userInitiated) {
-            let raw = filtered.map { Self.enrichWithChannelEmoticonsPure(ChatMessageItem(from: $0), channelEmoticons: channelEmotes) }
-            return Self.filterByDonationPrefsPure(raw, donationsOnly: donationsOnly, showDonation: showDon)
-        }.value
-        messages.replaceAll(with: items)
-    }
-    
-    // MARK: - Batching
-    
-    /// Enqueue items for the next batch flush (instead of directly mutating `messages`).
-    /// Reduces SwiftUI state updates from potentially 1 000+/s to ~10/s.
-    private func enqueueBatchedMessages(_ items: [ChatMessageItem]) {
-        guard !items.isEmpty else { return }
-        pendingMessages.append(contentsOf: items)
-        recentMessageTimestamps.append(contentsOf: items.map { _ in Date() })
-        messageCount += items.count
-        scheduleBatchFlush()
-    }
-    
-    /// Schedule a single batch-flush task. No-op if one is already pending.
-    /// 백그라운드 세션은 1초 간격, 포그라운드는 100ms 간격
-    private func scheduleBatchFlush() {
-        guard batchFlushTask == nil else { return }
-        let interval = isBackgroundMode ? backgroundFlushIntervalNs : batchFlushIntervalNs
-        batchFlushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: interval)
-            guard !Task.isCancelled, let self else { return }
-            self.flushPendingMessages()
-        }
-    }
-    
-    /// Move all pending messages into the visible ring buffer in one shot.
-    private func flushPendingMessages() {
-        batchFlushTask = nil
-        guard !pendingMessages.isEmpty else { return }
-        // TTS: 후원/구독 메시지를 음성으로 읽어주기
-        for msg in pendingMessages {
-            if msg.type == .donation || msg.type == .subscription {
-                ttsService.enqueue(msg)
-            }
-        }
-        // Track recent chatters for mention autocomplete
-        trackRecentChatters(from: pendingMessages)
-        // Persist into full history
-        appendToHistory(pendingMessages)
-        // Track unread while in replay mode
-        if isReplayMode {
-            unreadCount += pendingMessages.count
-        }
-        // 증분 통계 업데이트 — O(batch_size), 이전의 O(messages.count) 대비 대폭 절감
-        updateIncrementalStats(with: pendingMessages)
-        messages.append(contentsOf: pendingMessages)
-        pendingMessages.removeAll(keepingCapacity: true)
-    }
-    
-    /// 배치 단위로 통계를 증분 업데이트
-    private func updateIncrementalStats(with batch: [ChatMessageItem]) {
-        for msg in batch {
-            _uniqueUsers.insert(msg.userId)
-            if msg.type == .donation {
-                donationCount += 1
-                if let amt = msg.donationAmount { totalDonationAmount += amt }
-            } else if msg.type == .subscription {
-                subscriptionCount += 1
-            }
-        }
-        uniqueUserCount = _uniqueUsers.count
-    }
-    
-    /// 통계 캐시 초기화
-    private func resetIncrementalStats() {
-        _uniqueUsers.removeAll(keepingCapacity: true)
-        uniqueUserCount = 0
-        donationCount = 0
-        totalDonationAmount = 0
-        subscriptionCount = 0
-    }
-    
     // State for export sheet
     public var showExportSheet = false
-    
-    private func handleCommandResult(_ result: ChatCommandResult) {
-        switch result {
-        case .localAction(let msg):
-            let systemItem = ChatMessageItem.system(msg)
-            messages.append(systemItem)
-            
-        case .serverCommand(let command, _):
-            logger.info("Server command: \(command.rawValue)")
-            
-        case .clearChat:
-            clearMessages()
-            
-        case .exportChat:
-            showExportSheet = true
-            
-        case .error(let msg):
-            let errorItem = ChatMessageItem.system("⚠️ \(msg)")
-            messages.append(errorItem)
-        }
-    }
-    
-    private func startStatsTracking() {
-        statsTask = Task { [weak self] in
-            guard let self else { return }
-            
-            // 3초 간격: 초당 메시지 수는 5초 윈도우 평균이므로 1초 정밀도 불필요
-            let timer = AsyncTimerSequence(interval: 3.0)
-            for await _ in timer {
-                guard !Task.isCancelled else { break }
-                
-                // 백그라운드 세션은 통계 계산 생략 — CPU 절약
-                guard !self.isBackgroundMode else { continue }
-                
-                let now = Date()
-                await MainActor.run {
-                    // O(1) 접근: 정렬된 배열에서 5초 이전 항목의 인덱스 찾기
-                    let cutoff = now.addingTimeInterval(-5.0)
-                    if let idx = self.recentMessageTimestamps.firstIndex(where: { $0 >= cutoff }) {
-                        self.recentMessageTimestamps.removeSubrange(..<idx)
-                    } else {
-                        self.recentMessageTimestamps.removeAll()
-                    }
-                    self.messagesPerSecond = Double(self.recentMessageTimestamps.count) / 5.0
-                }
-            }
-        }
-    }
-
 }

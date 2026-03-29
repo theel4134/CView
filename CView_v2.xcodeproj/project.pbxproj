@@ -126,8 +126,7 @@
 		FF11223344556677AABB0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift */; };
 		FF11223344556677AABB0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift */; };
 		FF11223344556677AABB0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift */; };
-		FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */; };
-		FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */; };
+		FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */; };			FF33445566778899AB010001 /* Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF33445566778899CD010001 /* Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift */; };		FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -245,8 +244,7 @@
 		FF11223344556677CCDD0046 /* FollowingView+MultiLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+MultiLive.swift"; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0047 /* FollowingView+MultiChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+MultiChat.swift"; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0048 /* ChatTTSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ChatTTSService.swift; sourceTree = SOURCE_ROOT; };
-		FF11223344556677CCDD0049 /* ChatViewModel+Autocomplete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift"; sourceTree = SOURCE_ROOT; };
-		FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamAlertOverlayView.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0049 /* ChatViewModel+Autocomplete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift"; sourceTree = SOURCE_ROOT; };			FF33445566778899CD010001 /* ChatViewModel+Processing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift"; sourceTree = SOURCE_ROOT; };		FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamAlertOverlayView.swift; sourceTree = SOURCE_ROOT; };
             A1B2C3D4E5F60002AA220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ResponsiveFollowingLayout.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -446,8 +444,7 @@
 			children = (
 				29DFCF37AFC447A104B9AC1A /* Sources/CViewApp/ViewModels/ChatViewModel.swift */,
 				FF11223344556677CCDD0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift */,
-				FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */,
-				EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */,
+				FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */,						FF33445566778899CD010001 /* Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift */,				EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */,
 				65E3862D7E778FCBA02E0FBB /* Sources/CViewApp/ViewModels/PlayerViewModel.swift */,
 				FF11223344556677CCDD0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift */,
 				FF11223344556677CCDD0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift */,
@@ -596,8 +593,7 @@
 				EC2A5455CDC2A049885E941D /* Sources/CViewApp/Navigation/AppRouter.swift in Sources */,
 				23302727FE83731000625271 /* Sources/CViewApp/ViewModels/ChatViewModel.swift in Sources */,
 				FF11223344556677AABB0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift in Sources */,
-				FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */,
-				1FFA8590CFC902B7376F16A8 /* Sources/CViewApp/ViewModels/HomeViewModel.swift in Sources */,
+				FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */,						FF33445566778899AB010001 /* Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift in Sources */,				1FFA8590CFC902B7376F16A8 /* Sources/CViewApp/ViewModels/HomeViewModel.swift in Sources */,
 				8E3298E000AF57284B57F035 /* Sources/CViewApp/ViewModels/PlayerViewModel.swift in Sources */,
 				FF11223344556677AABB0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift in Sources */,
 				FF11223344556677AABB0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift in Sources */,
