@@ -249,6 +249,33 @@ public actor ImageCacheService {
         }
     }
 
+    /// 프리페치 + 프리디코딩 — 다운로드와 NSImage 디코딩까지 완료하여 캐시에 저장
+    /// 페이지 전환 시 다음 페이지 썸네일을 미리 디코딩하여 즉시 표시 가능
+    /// - Parameters:
+    ///   - urls: 프리페치할 이미지 URL 배열
+    ///   - concurrency: 동시 처리 수 (기본 4)
+    public func prefetchAndDecode(_ urls: [URL], concurrency: Int = 4) async {
+        // 이미 디코딩 캐시에 있는 항목은 건너뜀
+        let uncached = urls.filter { url in
+            let key = cacheKey(for: url) as NSString
+            return decodedImageCache.object(forKey: key) == nil
+        }
+        guard !uncached.isEmpty else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            var launched = 0
+            for url in uncached {
+                if launched >= concurrency {
+                    await group.next()
+                }
+                launched += 1
+                group.addTask { [weak self] in
+                    _ = await self?.nsImage(for: url)
+                }
+            }
+        }
+    }
+
     /// 캐시 전체 삭제
     public func clearAll() {
         memoryCache.removeAllObjects()

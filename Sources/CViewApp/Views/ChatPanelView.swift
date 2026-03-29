@@ -15,6 +15,8 @@ struct ChatPanelView: View {
     let chatVM: ChatViewModel?
     let onOpenSettings: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isExportHovered = false
+    @State private var isSettingsHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,11 +25,14 @@ struct ChatPanelView: View {
 
             // Messages list — rebuilt scroll engine
             ChatMessagesView(viewModel: chatVM)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Input area
             ChatInputView(viewModel: chatVM)
         }
-        .background(colorScheme == .light ? Color.white : Color.black)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .background(Color(nsColor: .controlBackgroundColor))
         .sheet(isPresented: Binding(
             get: { chatVM?.showExportSheet ?? false },
             set: { chatVM?.showExportSheet = $0 }
@@ -39,13 +44,13 @@ struct ChatPanelView: View {
     // MARK: - Header
 
     private var chatHeader: some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
+        HStack(spacing: DesignTokens.Spacing.xs) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(DesignTokens.Typography.captionMedium)
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
             
             Text("채팅")
-                .font(DesignTokens.Typography.bodySemibold)
+                .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
 
             // 참여자 수 표시
@@ -64,23 +69,25 @@ struct ChatPanelView: View {
             chatModeMenu
 
             // Connection status pill — Glass
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Circle()
                     .fill(connectionColor)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: connectionColor.opacity(0.6), radius: 4)
+                    .frame(width: 5, height: 5)
+                    .shadow(color: connectionColor.opacity(0.6), radius: 3)
 
                 Text(connectionText)
-                    .font(DesignTokens.Typography.footnoteMedium)
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .default))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.xxs + 1)
-            .background(.ultraThinMaterial, in: Capsule())
+            // [GPU 최적화] Material blur → 솔리드 반투명 색상 (비디오 위 blur 매 프레임 재계산 방지)
+            .background(DesignTokens.Colors.surfaceBase.opacity(0.8), in: Capsule())
             .overlay {
                 Capsule()
                     .strokeBorder(connectionColor.opacity(0.35), lineWidth: 0.5)
             }
+            .animation(DesignTokens.Animation.smooth, value: chatVM?.connectionState)
 
             // Chat export — [GPU 최적화] 28px 소형 원형에 Material blur 불필요 → surfaceElevated로 교체
             Button {
@@ -88,14 +95,20 @@ struct ChatPanelView: View {
             } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .frame(width: 28, height: 28)
+                    .foregroundStyle(isExportHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    .frame(width: 24, height: 24)
                     .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                     .overlay {
-                        Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                        Circle().strokeBorder(
+                            isExportHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : DesignTokens.Glass.borderColor,
+                            lineWidth: 0.5
+                        )
                     }
+                    .scaleEffect(isExportHovered ? 1.06 : 1.0)
+                    .animation(DesignTokens.Animation.fast, value: isExportHovered)
             }
             .buttonStyle(.plain)
+            .onHover { hovering in isExportHovered = hovering }
             .help("채팅 내보내기")
             .disabled(chatVM?.chatHistory.isEmpty ?? true)
 
@@ -103,20 +116,26 @@ struct ChatPanelView: View {
             Button(action: onOpenSettings) {
                 Image(systemName: "slider.horizontal.3")
                     .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .frame(width: 28, height: 28)
+                    .foregroundStyle(isSettingsHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    .frame(width: 24, height: 24)
                     .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                     .overlay {
-                        Circle().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                        Circle().strokeBorder(
+                            isSettingsHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : DesignTokens.Glass.borderColor,
+                            lineWidth: 0.5
+                        )
                     }
+                    .scaleEffect(isSettingsHovered ? 1.06 : 1.0)
+                    .animation(DesignTokens.Animation.fast, value: isSettingsHovered)
             }
             .buttonStyle(.plain)
+            .onHover { hovering in isSettingsHovered = hovering }
         }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.sm)
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, 5)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(DesignTokens.Glass.dividerColor)
+                .fill(DesignTokens.Glass.dividerColor.opacity(0.6))
                 .frame(height: 0.5)
         }
     }
@@ -139,7 +158,7 @@ struct ChatPanelView: View {
             Image(systemName: chatVM?.displayMode.icon ?? "sidebar.right")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .frame(width: 28, height: 28)
+                .frame(width: 26, height: 26)
                 .background(DesignTokens.Colors.surfaceElevated, in: Circle())
                 .overlay {
                     Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
@@ -181,6 +200,8 @@ struct ChatMessagesView: View {
     @State private var isScrollViewVisible = true
     /// 프로그래밍적 스크롤 중 onScrollGeometryChange 오탐 방지 (카운터 기반)
     @State private var scrollSuppressionCount = 0
+    /// ScrollView 컨테이너의 실제 너비 — LazyVStack 콘텐츠에 명시적 너비 제약 전달용
+    @State private var containerWidth: CGFloat = 300
 
     /// 스크롤 억제 중인지 여부
     private var isScrollSuppressed: Bool { scrollSuppressionCount > 0 }
@@ -209,8 +230,13 @@ struct ChatMessagesView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, DesignTokens.Spacing.xxs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, DesignTokens.Spacing.xs)
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { newWidth in
+                    if newWidth > 0 { containerWidth = newWidth }
                 }
                 .defaultScrollAnchor(.bottom)
                 // Rebuilt scroll detection — 거리 기반 하단 감지
@@ -361,7 +387,7 @@ struct ChatMessagesView: View {
     // MARK: - Empty State
 
     private var chatEmptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DesignTokens.Spacing.md) {
             ZStack {
                 Circle()
                     .fill(DesignTokens.Colors.chzzkGreen.opacity(0.08))
@@ -372,7 +398,7 @@ struct ChatMessagesView: View {
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.5))
             }
 
-            VStack(spacing: 6) {
+            VStack(spacing: DesignTokens.Spacing.xs) {
                 Text("채팅에 연결 중...")
                     .font(DesignTokens.Typography.custom(size: 13, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)

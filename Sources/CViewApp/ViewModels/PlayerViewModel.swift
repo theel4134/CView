@@ -16,7 +16,7 @@ public final class PlayerViewModel {
 
     // MARK: - Constants
 
-    private static let maxLatencyHistory = 60
+    static let maxLatencyHistory = 60
 
     // MARK: - 재생 상태
 
@@ -24,7 +24,7 @@ public final class PlayerViewModel {
     public var currentQuality: StreamQualityInfo?
     public var availableQualities: [StreamQualityInfo] = []
     public var latencyInfo: LatencyInfo?
-    public private(set) var latencyHistory: [LatencyDataPoint] = []
+    public var latencyHistory: [LatencyDataPoint] = []
     public var bufferHealth: BufferHealth?
     public var playbackRate: Double = 1.0
     public var volume: Float = 1.0
@@ -44,8 +44,8 @@ public final class PlayerViewModel {
 
     public var isRecording: Bool = false
     public var recordingDuration: TimeInterval = 0
-    public private(set) var recordingURL: URL?
-    private var recordingTimerTask: Task<Void, Never>?
+    public var recordingURL: URL?
+    var recordingTimerTask: Task<Void, Never>?
 
     // MARK: - 스트림 메타정보
 
@@ -58,20 +58,22 @@ public final class PlayerViewModel {
 
     // MARK: - 의존성
 
-    private var streamCoordinator: StreamCoordinator?
+    var streamCoordinator: StreamCoordinator?
     public private(set) var playerEngine: (any PlayerEngineProtocol)?
     private var isPreallocated: Bool
     public var isMultiLive: Bool = false
-    private var eventTask: Task<Void, Never>?
+    var eventTask: Task<Void, Never>?
     private var controlHideTask: Task<Void, Never>?
-    private var uptimeTask: Task<Void, Never>?
+    var uptimeTask: Task<Void, Never>?
     /// VLC 버퍼링 디바운스: 재생 중 순간적인 버퍼링 상태 변경은 무시하고
     /// 일정 시간 이상 지속될 때만 UI에 반영
-    private var _bufferingDebounceTask: Task<Void, Never>?
+    var _bufferingDebounceTask: Task<Void, Never>?
     /// 안티플리커: 마지막으로 .playing 전환된 시각 (쿨다운 기준)
     /// playing 진입 후 일정 시간 동안은 버퍼링 전환을 억제하여 깜빡임 방지
-    private var _lastPlayingTime: Date?
-    private let logger = AppLogger.player
+    var _lastPlayingTime: Date?
+    /// [Freeze Fix] drawable 재바인딩 Task 추적
+    var _refreshDrawableTask: Task<Void, Never>?
+    let logger = AppLogger.player
 
     public var onPlaybackStateChanged: (() -> Void)?
     
@@ -80,8 +82,8 @@ public final class PlayerViewModel {
 
     // MARK: - 엔진 선택
 
-    public var preferredEngineType: PlayerEngineType = .vlc
-    public private(set) var currentEngineType: PlayerEngineType = .vlc
+    public var preferredEngineType: PlayerEngineType = .avPlayer
+    public private(set) var currentEngineType: PlayerEngineType = .avPlayer
 
     // MARK: - VLC 고급 설정 (Observable 상태)
 
@@ -109,7 +111,7 @@ public final class PlayerViewModel {
 
     // MARK: - Init
 
-    public init(engineType: PlayerEngineType = .vlc, isPreallocated: Bool = false) {
+    public init(engineType: PlayerEngineType = .avPlayer, isPreallocated: Bool = false) {
         self.preferredEngineType = engineType
         self.currentEngineType = engineType
         self.isPreallocated = isPreallocated
@@ -164,6 +166,19 @@ public final class PlayerViewModel {
             }
         } else {
             vlc.onVLCMetrics = nil
+        }
+    }
+
+    // MARK: - AVPlayer 메트릭 콜백
+
+    public func setAVPlayerMetricsCallback(_ callback: (@Sendable (AVPlayerLiveMetrics) -> Void)?) {
+        guard let avEngine = playerEngine as? AVPlayerEngine else { return }
+        if let callback = callback {
+            avEngine.onAVMetrics = { metrics in
+                callback(metrics)
+            }
+        } else {
+            avEngine.onAVMetrics = nil
         }
     }
 
@@ -411,6 +426,7 @@ public final class PlayerViewModel {
         eventTask?.cancel(); eventTask = nil
         controlHideTask?.cancel(); controlHideTask = nil
         _bufferingDebounceTask?.cancel(); _bufferingDebounceTask = nil
+        _refreshDrawableTask?.cancel(); _refreshDrawableTask = nil
 
         await streamCoordinator?.stopStream()
         streamCoordinator = nil
@@ -495,223 +511,6 @@ public final class PlayerViewModel {
 
     public var mediaPlayer: VLCPlayerEngine? { playerEngine as? VLCPlayerEngine }
 
-    // MARK: - 스크린샷
-
-    public func takeScreenshot() {
-        guard let engine = playerEngine as? VLCPlayerEngine else { return }
-        guard let tempURL = engine.captureSnapshot() else { return }
-        let picturesDir = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
-        let dir = picturesDir?.appendingPathComponent("CView Screenshots")
-        if let dir {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let name = "CView_\(channelName)_\(Int(Date().timeIntervalSince1970)).png"
-            let dest = dir.appendingPathComponent(name)
-            Task.detached {
-                try? await Task.sleep(for: .milliseconds(500))
-                try? FileManager.default.copyItem(at: tempURL, to: dest)
-                await MainActor.run { Log.player.info("스크린샷 저장: \(dest.path)") }
-            }
-        }
-    }
-
-    // MARK: - 이퀄라이저
-
-    public func getEqualizerPresets() -> [String] {
-        (playerEngine as? VLCPlayerEngine)?.equalizerPresets() ?? []
-    }
-
-    public func getEqualizerFrequencies() -> [Float] {
-        (playerEngine as? VLCPlayerEngine)?.equalizerBandFrequencies() ?? []
-    }
-
-    public func applyEqualizerPreset(_ name: String) {
-        guard let vlc = playerEngine as? VLCPlayerEngine else { return }
-        vlc.setEqualizerPresetByName(name)
-        equalizerPresetName = name
-        isEqualizerEnabled = true
-        equalizerPreAmp = vlc.equalizerPreAmpValue()
-        equalizerBands = vlc.equalizerBandValues()
-    }
-
-    public func setEqualizerPreAmp(_ value: Float) {
-        (playerEngine as? VLCPlayerEngine)?.setEqualizerPreAmp(value)
-        equalizerPreAmp = value
-    }
-
-    public func setEqualizerBand(index: Int, value: Float) {
-        (playerEngine as? VLCPlayerEngine)?.setEqualizerBand(index: index, value: value)
-        if index < equalizerBands.count { equalizerBands[index] = value }
-    }
-
-    public func disableEqualizer() {
-        (playerEngine as? VLCPlayerEngine)?.resetEqualizer()
-        isEqualizerEnabled = false
-        equalizerPresetName = ""
-        equalizerPreAmp = 0
-        equalizerBands = []
-    }
-
-    // MARK: - 비디오 조정
-
-    public func setVideoAdjust(enabled: Bool) {
-        (playerEngine as? VLCPlayerEngine)?.setVideoAdjustEnabled(enabled)
-        isVideoAdjustEnabled = enabled
-    }
-
-    public func setVideoBrightness(_ v: Float)  { (playerEngine as? VLCPlayerEngine)?.setVideoBrightness(v); videoBrightness = v }
-    public func setVideoContrast(_ v: Float)    { (playerEngine as? VLCPlayerEngine)?.setVideoContrast(v); videoContrast = v }
-    public func setVideoSaturation(_ v: Float)  { (playerEngine as? VLCPlayerEngine)?.setVideoSaturation(v); videoSaturation = v }
-    public func setVideoHue(_ v: Float)         { (playerEngine as? VLCPlayerEngine)?.setVideoHue(v); videoHue = v }
-    public func setVideoGamma(_ v: Float)       { (playerEngine as? VLCPlayerEngine)?.setVideoGamma(v); videoGamma = v }
-
-    public func resetVideoAdjust() {
-        (playerEngine as? VLCPlayerEngine)?.resetVideoAdjust()
-        isVideoAdjustEnabled = false
-        videoBrightness = 1.0; videoContrast = 1.0; videoSaturation = 1.0
-        videoHue = 0; videoGamma = 1.0
-    }
-
-    // MARK: - 화면 비율
-
-    public func setAspectRatio(_ ratio: String?) {
-        (playerEngine as? VLCPlayerEngine)?.setAspectRatio(ratio)
-        aspectRatio = ratio
-    }
-
-    // MARK: - 오디오 고급
-
-    public func setAudioStereoMode(_ mode: UInt) {
-        (playerEngine as? VLCPlayerEngine)?.setAudioStereoMode(mode)
-        audioStereoMode = mode
-    }
-
-    public func setAudioDelay(_ delay: Int) {
-        (playerEngine as? VLCPlayerEngine)?.setAudioDelay(delay)
-        audioDelay = delay
-    }
-
-    public func setAudioMixMode(_ mode: UInt32) {
-        (playerEngine as? VLCPlayerEngine)?.setAudioMixMode(mode)
-        audioMixMode = mode
-    }
-
-    // MARK: - 자막
-
-    public func refreshSubtitleTracks() {
-        subtitleTracks = (playerEngine as? VLCPlayerEngine)?.textTracks() ?? []
-    }
-
-    public func selectSubtitleTrack(_ index: Int) {
-        if index < 0 {
-            (playerEngine as? VLCPlayerEngine)?.deselectAllTextTracks()
-            selectedSubtitleTrack = -1
-        } else {
-            (playerEngine as? VLCPlayerEngine)?.selectTextTrack(index)
-            selectedSubtitleTrack = index
-        }
-    }
-
-    public func addSubtitleFile(url: URL) {
-        (playerEngine as? VLCPlayerEngine)?.addSubtitleFile(url: url)
-        Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            refreshSubtitleTracks()
-        }
-    }
-
-    public func setSubtitleDelay(_ delay: Int) {
-        (playerEngine as? VLCPlayerEngine)?.setSubtitleDelay(delay)
-        subtitleDelay = delay
-    }
-
-    public func setSubtitleFontScale(_ scale: Float) {
-        (playerEngine as? VLCPlayerEngine)?.setSubtitleFontScale(scale)
-        subtitleFontScale = scale
-    }
-
-    /// 고급 설정 일괄 적용
-    public func applyAdvancedSettings(from settings: PlayerSettings) {
-        guard let vlc = playerEngine as? VLCPlayerEngine else { return }
-        vlc.applyAdvancedSettings(settings)
-        if let preset = settings.equalizerPreset {
-            isEqualizerEnabled = true
-            equalizerPresetName = preset
-            equalizerPreAmp = vlc.equalizerPreAmpValue()
-            equalizerBands = vlc.equalizerBandValues()
-        }
-        if settings.videoAdjustEnabled {
-            isVideoAdjustEnabled = true
-            videoBrightness = settings.videoBrightness; videoContrast = settings.videoContrast
-            videoSaturation = settings.videoSaturation; videoHue = settings.videoHue
-            videoGamma = settings.videoGamma
-        }
-        aspectRatio = settings.aspectRatio
-        audioStereoMode = UInt(settings.audioStereoMode)
-        audioMixMode = settings.audioMixMode
-        audioDelay = Int(settings.audioDelay)
-    }
-
-    // MARK: - 녹화
-
-    public func startRecording(to customURL: URL? = nil) async {
-        guard let engine = playerEngine, !isRecording else { return }
-        let url = customURL ?? StreamRecordingService.defaultRecordingURL(channelName: channelName)
-        recordingURL = url
-        do {
-            try await engine.startRecording(to: url)
-            isRecording = true
-            recordingDuration = 0
-            startRecordingTimer()
-            logger.info("녹화 시작: \(url.lastPathComponent, privacy: .public)")
-        } catch {
-            errorMessage = "녹화 시작 실패: \(error.localizedDescription)"
-        }
-    }
-
-    public func stopRecording() async {
-        guard let engine = playerEngine, isRecording else { return }
-        await engine.stopRecording()
-        isRecording = false
-        recordingTimerTask?.cancel(); recordingTimerTask = nil
-        if let url = recordingURL {
-            logger.info("녹화 저장 완료: \(url.path, privacy: .public)")
-        }
-    }
-
-    public func toggleRecording() async {
-        if isRecording { await stopRecording() } else { await startRecording() }
-    }
-
-    public func startRecordingWithSavePanel() async {
-        let panel = NSSavePanel()
-        panel.title = "녹화 파일 저장"
-        panel.nameFieldStringValue = StreamRecordingService.defaultRecordingURL(channelName: channelName).lastPathComponent
-        panel.allowedContentTypes = [.mpeg2TransportStream]
-        panel.canCreateDirectories = true
-        let moviesDir = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first
-        if let dir = moviesDir?.appendingPathComponent("CView") {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            panel.directoryURL = dir
-        }
-        let response = await panel.beginSheetModal(for: NSApp.keyWindow ?? NSApp.mainWindow ?? NSPanel())
-        guard response == .OK, let url = panel.url else { return }
-        await startRecording(to: url)
-    }
-
-    public var formattedRecordingDuration: String { Self.formatTimeInterval(recordingDuration) }
-
-    private func startRecordingTimer() {
-        recordingTimerTask?.cancel()
-        let start = Date()
-        recordingTimerTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled, let self else { break }
-                self.recordingDuration = Date().timeIntervalSince(start)
-            }
-        }
-    }
-
     // MARK: - 포맷 헬퍼
 
     public var formattedUptime: String {
@@ -745,205 +544,5 @@ public final class PlayerViewModel {
 
     public func refreshDrawable() {
         (playerEngine as? VLCPlayerEngine)?.refreshDrawable()
-    }
-
-    // MARK: - Private
-
-    private func startUptimeTimer() {
-        uptimeTask?.cancel()
-        uptimeTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled, let self else { break }
-                if let coord = self.streamCoordinator {
-                    self.uptime = await coord.uptime
-                }
-            }
-        }
-    }
-
-    private func startEventListening(_ coordinator: StreamCoordinator) {
-        eventTask?.cancel()
-        eventTask = Task { [weak self] in
-            let events = await coordinator.events()
-            for await event in events {
-                guard !Task.isCancelled else { break }
-                self?.handleStreamEvent(event)
-            }
-        }
-    }
-
-    @MainActor
-    private func handleStreamEvent(_ event: StreamEvent) {
-        switch event {
-        case .phaseChanged(let phase):
-            // [버퍼링 디바운스 통합] StreamCoordinator에서 오는 .buffering phase도
-            // VLC 디바운스와 동일하게 처리해야 한다.
-            // 그렇지 않으면 VLC 디바운스를 우회하여 즉시 streamPhase = .buffering이 되어
-            // 정상 재생 중에도 버퍼링 스피너가 계속 표시된다.
-            if phase == .buffering && streamPhase == .playing {
-                // 이미 재생 중이면 디바운스 적용 (VLC _handleVLCPhase와 동일 로직)
-                // [Fix 16h-opt3] 안티플리커: 5→3초, 디바운스: 3→2초
-                if let lastPlaying = _lastPlayingTime,
-                   Date().timeIntervalSince(lastPlaying) < 3.0 {
-                    // 쿨다운 중 — 무시
-                } else if _bufferingDebounceTask == nil {
-                    _bufferingDebounceTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
-                        guard !Task.isCancelled, let self else { return }
-                        self.streamPhase = .buffering
-                        self._bufferingDebounceTask = nil
-                    }
-                }
-            } else if phase == .playing {
-                // playing 전환 시 디바운스 취소 + 즉시 반영
-                _bufferingDebounceTask?.cancel()
-                _bufferingDebounceTask = nil
-                _lastPlayingTime = Date()
-                streamPhase = phase
-            } else {
-                streamPhase = phase
-            }
-            if case .error(let msg) = phase { errorMessage = msg }
-            onPlaybackStateChanged?()
-
-        case .qualitySelected(let q):
-            currentQuality = q
-            Task {
-                if let coord = streamCoordinator {
-                    self.availableQualities = await coord.availableQualities
-                }
-            }
-
-        case .qualityChanged(let q):
-            currentQuality = q
-
-        case .abrDecision:
-            break
-
-        case .latencyUpdate(let info):
-            latencyInfo = info
-            if latencyHistory.isEmpty || latencyHistory.count % 10 == 0 {
-                let point = LatencyDataPoint(timestamp: Date(), latency: info.current)
-                latencyHistory.append(point)
-                if latencyHistory.count > Self.maxLatencyHistory { latencyHistory.removeFirst() }
-            }
-
-        case .bufferUpdate(let health):
-            bufferHealth = health
-
-        case .error(let msg):
-            errorMessage = msg
-
-        case .streamEnded:
-            _bufferingDebounceTask?.cancel()
-            _bufferingDebounceTask = nil
-            streamPhase = .streamEnded
-
-        case .stopped:
-            streamPhase = .idle
-        }
-    }
-
-    /// VLC 상태 변경 처리
-    @MainActor
-    private func _handleVLCPhase(_ phase: PlayerState.Phase, coordinator: StreamCoordinator?) {
-        // StreamCoordinator에 VLC 상태 전달 — watchdog + lowLatency 제어
-        // (이전에는 configureEngineCallbacks에서 설정했으나 이 핸들러가 덮어써서 작동 안 됐음)
-        if let coord = coordinator {
-            Task { await coord.handleVLCEngineState(phase) }
-        }
-
-        switch phase {
-        case .error:
-            logger.warning("VLC → ERROR: StreamCoordinator 재연결 트리거")
-            if let coord = coordinator {
-                Task { await coord.triggerReconnect(reason: "VLC error state") }
-            }
-        case .ended:
-            logger.warning("VLC → ENDED: 라이브 스트림 재연결")
-            if let coord = coordinator {
-                Task { await coord.triggerReconnect(reason: "VLC ended (live stream)") }
-            }
-        case .playing:
-            // 버퍼링 디바운스 취소 — VLC가 playing으로 돌아오면 즉시 반영
-            _bufferingDebounceTask?.cancel()
-            _bufferingDebounceTask = nil
-            _lastPlayingTime = Date()
-            streamPhase = .playing
-            errorMessage = nil
-            onPlaybackStateChanged?()
-            // 재생 시작 시 고급 설정 적용 (설정이 기본값이 아닐 경우만)
-            _applyVLCAdvancedSettingsIfNeeded()
-            // VLC → playing 전환 시 drawable 재바인딩: vout이 올바른 레이어에서 렌더링되도록 보장
-            // 멀티라이브에서 여러 세션이 동시 시작될 때 SwiftUI 뷰 마운트 타이밍으로
-            // drawable이 올바르게 설정되지 않는 경우를 대비
-            if let vlcEngine = playerEngine as? VLCPlayerEngine {
-                Task { @MainActor [weak vlcEngine] in
-                    // 200ms 후 drawable 재바인딩 — VLC vout 초기화 완료 대기
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    vlcEngine?.refreshDrawable()
-                }
-            }
-        case .buffering:
-            // [VLC 버퍼링 디바운스] VLC는 라이브 HLS 중 네트워크 버퍼를 채울 때
-            // 수시로 .buffering 상태를 보고한다 (수백ms 이내 .playing으로 복귀).
-            // 이 순간적인 버퍼링마다 UI 스피너를 표시하면 영상이 정상 재생되는데도
-            // 스피너가 계속 깜빡이거나 고착되어 보인다.
-            //
-            // 해결 1: 이미 재생 중(.playing)이었으면 3초 디바운스 적용.
-            //         3초 이상 버퍼링이 지속될 때만 streamPhase를 .buffering으로 전환.
-            // 해결 2: 안티플리커 쿨다운 — 재생 시작 후 5초 이내 버퍼링은 무시.
-            //         VLC가 재생 초반에 버퍼를 정리하는 과정에서 발생하는 순간 버퍼링 방지.
-            if streamPhase == .playing {
-                // 안티플리커: 재생 시작 후 3초 이내면 버퍼링 전환 억제
-                if let lastPlaying = _lastPlayingTime,
-                   Date().timeIntervalSince(lastPlaying) < 3.0 {
-                    break
-                }
-                if _bufferingDebounceTask == nil {
-                    _bufferingDebounceTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
-                        guard !Task.isCancelled, let self else { return }
-                        self.streamPhase = .buffering
-                        self._bufferingDebounceTask = nil
-                    }
-                }
-            } else {
-                // 아직 재생 전이면 (connecting, idle 등) 즉시 반영
-                if streamPhase != .buffering { streamPhase = .buffering }
-            }
-        case .paused:
-            streamPhase = .paused
-        case .loading:
-            streamPhase = .connecting
-        case .idle:
-            break
-        }
-    }
-
-    /// 재생 시작 시 VLC 고급 설정 적용 (기본값이 아닌 항목만)
-    private func _applyVLCAdvancedSettingsIfNeeded() {
-        guard let vlc = playerEngine as? VLCPlayerEngine else { return }
-        let hasEq = isEqualizerEnabled && !equalizerPresetName.isEmpty
-        let hasVideoAdj = isVideoAdjustEnabled
-        let hasAspect = aspectRatio != nil
-        let hasAudio = audioStereoMode != 0 || audioMixMode != 0 || audioDelay != 0
-        guard hasEq || hasVideoAdj || hasAspect || hasAudio else { return }
-
-        if hasEq {
-            vlc.setEqualizerPresetByName(equalizerPresetName)
-            vlc.setEqualizerPreAmp(equalizerPreAmp)
-            for (i, val) in equalizerBands.enumerated() { vlc.setEqualizerBand(index: i, value: val) }
-        }
-        if hasVideoAdj {
-            vlc.setVideoAdjustEnabled(true)
-            vlc.setVideoBrightness(videoBrightness); vlc.setVideoContrast(videoContrast)
-            vlc.setVideoSaturation(videoSaturation); vlc.setVideoHue(videoHue); vlc.setVideoGamma(videoGamma)
-        }
-        if hasAspect { vlc.setAspectRatio(aspectRatio) }
-        if audioStereoMode != 0 { vlc.setAudioStereoMode(audioStereoMode) }
-        if audioMixMode != 0 { vlc.setAudioMixMode(audioMixMode) }
-        if audioDelay != 0 { vlc.setAudioDelay(audioDelay) }
     }
 }

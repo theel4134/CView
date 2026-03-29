@@ -54,7 +54,7 @@ struct GeneralSettingsTab: View {
                     }
                     RowDivider()
                     SettingsRow("자동 새로고침",
-                                description: "팔로잉 목록을 주기적으로 업데이트합니다",
+                                description: "라이브 목록을 주기적으로 업데이트합니다",
                                 icon: "arrow.clockwise", iconColor: DesignTokens.Colors.accentBlue) {
                         HStack(spacing: 6) {
                             TextField("", value: $settings.general.autoRefreshInterval, format: .number)

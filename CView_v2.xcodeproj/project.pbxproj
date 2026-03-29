@@ -12,6 +12,8 @@
 		7FCF127FAEDD144242C41B93 /* CViewPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = DF7DCF350F526B445EF794DA /* CViewPlayer */; };
 		850BFB1A05E64A31270044D6 /* CViewChat in Frameworks */ = {isa = PBXBuildFile; productRef = 4F4BA833254E60BA32D6F082 /* CViewChat */; };
 		8E3298E000AF57284B57F035 /* Sources/CViewApp/ViewModels/PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E3862D7E778FCBA02E0FBB /* Sources/CViewApp/ViewModels/PlayerViewModel.swift */; };
+		FF11223344556677AABB0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift */; };
+		FF11223344556677AABB0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift */; };
 		915BCA520DBB4A0AD16721C1 /* Sources/CViewApp/CViewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C6DD518EFF58FB380A26ED /* Sources/CViewApp/CViewApp.swift */; };
 		93A45A2F1B5428A96F6BAEA5 /* CViewUI in Frameworks */ = {isa = PBXBuildFile; productRef = FABB040F6E63F6039AC923FD /* CViewUI */; };
 		9427E70309498CDBF08B3846 /* Sources/CViewApp/Views/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD59E0EB71DC1D5B631D2753 /* Sources/CViewApp/Views/SettingsView.swift */; };
@@ -27,6 +29,7 @@
 		A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */; };
 		A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */; };
 		A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */; };
+             A1B2C3D4E5F60002BB220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift */; };
 		A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */; };
 		A1B2C3D4E5F60002BB220004 /* Sources/CViewApp/Views/ErrorStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220004 /* Sources/CViewApp/Views/ErrorStateView.swift */; };
 		A1B2C3D4E5F60003BB330001 /* Sources/CViewApp/Views/ChannelInfoHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60003AA330001 /* Sources/CViewApp/Views/ChannelInfoHeaderView.swift */; };
@@ -47,6 +50,9 @@
 		AA22334455667788AABB0041 /* Sources/CViewApp/Views/ChatOnlyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA22334455667788CCDD0041 /* Sources/CViewApp/Views/ChatOnlyView.swift */; };
 		AA22334455667788AABB0042 /* Sources/CViewApp/Views/BlockedUsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA22334455667788CCDD0042 /* Sources/CViewApp/Views/BlockedUsersView.swift */; };
 		AA99887766554433AABB0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA99887766554433CCDD0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift */; };
+		FF11223344556677AABB0050 /* Sources/CViewApp/Views/PlayerAdvancedSettings+Equalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0050 /* Sources/CViewApp/Views/PlayerAdvancedSettings+Equalizer.swift */; };
+		FF11223344556677AABB0051 /* Sources/CViewApp/Views/PlayerAdvancedSettings+MediaTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0051 /* Sources/CViewApp/Views/PlayerAdvancedSettings+MediaTabs.swift */; };
+		FF11223344556677AABB0052 /* Sources/CViewApp/Views/PlayerAdvancedSettings+ToolsNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0052 /* Sources/CViewApp/Views/PlayerAdvancedSettings+ToolsNetwork.swift */; };
 		B3D3AC5A438794CA2FA7ABB8 /* CViewPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = 7A292BAE5A2BCAC04740FA8C /* CViewPersistence */; };
 		BB11223344556677AABB0004 /* Sources/CViewApp/ViewModels/VODPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677CCDD0004 /* Sources/CViewApp/ViewModels/VODPlayerViewModel.swift */; };
 		BB11223344556677AABB0005 /* Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677CCDD0005 /* Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift */; };
@@ -93,13 +99,30 @@
 		FF11223344556677AABB0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift */; };
 		FF11223344556677AABB0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift */; };
 		FF11223344556677AABB0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */; };
+		FF11223344556677AABB0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift */; };
 		FF11223344556677AABB0035 /* Sources/CViewApp/Views/MultiLiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0035 /* Sources/CViewApp/Views/MultiLiveView.swift */; };
 		FF11223344556677AABB0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */; };
 		FF11223344556677AABB0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */; };
 		FF11223344556677AABB0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */; };
+		FF11223344556677AABB0053 /* Sources/CViewApp/Views/MultiLiveAddSheet+Following.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0053 /* Sources/CViewApp/Views/MultiLiveAddSheet+Following.swift */; };
+		FF11223344556677AABB0054 /* Sources/CViewApp/Views/MultiLiveAddSheet+Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0054 /* Sources/CViewApp/Views/MultiLiveAddSheet+Search.swift */; };
 		FF11223344556677AABB0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */; };
 		FF11223344556677AABB003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */; };
 		FF11223344556677AABB003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift */; };
+		FF11223344556677AABB003C /* Sources/CViewApp/Views/MLSplitVideoChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003C /* Sources/CViewApp/Views/MLSplitVideoChat.swift */; };
+		FF11223344556677AABB003D /* Sources/CViewApp/Views/MLAudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003D /* Sources/CViewApp/Views/MLAudioTab.swift */; };
+		FF11223344556677AABB003E /* Sources/CViewApp/Views/MLEqualizerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003E /* Sources/CViewApp/Views/MLEqualizerTab.swift */; };
+		FF11223344556677AABB003F /* Sources/CViewApp/Views/MLVideoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD003F /* Sources/CViewApp/Views/MLVideoTab.swift */; };
+		FF11223344556677AABB0040 /* Sources/CViewApp/Views/MLPlaybackTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0040 /* Sources/CViewApp/Views/MLPlaybackTab.swift */; };
+		FF11223344556677AABB0041 /* Sources/CViewApp/Views/MLToolsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0041 /* Sources/CViewApp/Views/MLToolsTab.swift */; };
+		FF11223344556677AABB0042 /* Sources/CViewApp/Views/MLNetworkTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0042 /* Sources/CViewApp/Views/MLNetworkTab.swift */; };
+		FF11223344556677AABB0043 /* Sources/CViewApp/Views/MLSettingsSharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0043 /* Sources/CViewApp/Views/MLSettingsSharedComponents.swift */; };
+		FF11223344556677AABB0044 /* Sources/CViewApp/Views/FollowingView+Header.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0044 /* Sources/CViewApp/Views/FollowingView+Header.swift */; };
+		FF11223344556677AABB0045 /* Sources/CViewApp/Views/FollowingView+List.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0045 /* Sources/CViewApp/Views/FollowingView+List.swift */; };
+		FF11223344556677AABB0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift */; };
+		FF11223344556677AABB0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift */; };
+		FF11223344556677AABB0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift */; };
+		FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */; };
 		FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */; };
 /* End PBXBuildFile section */
 
@@ -111,6 +134,8 @@
 		447BA75BCCBEC31888890E33 /* SupportFiles/CView_v2.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SupportFiles/CView_v2.entitlements; sourceTree = SOURCE_ROOT; };
 		635C3C61AC212E0FAB710257 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = SOURCE_ROOT; };
 		65E3862D7E778FCBA02E0FBB /* Sources/CViewApp/ViewModels/PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/PlayerViewModel.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift"; sourceTree = SOURCE_ROOT; };
 		671E5B54412D9F8033A8454C /* SupportFiles/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = SupportFiles/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		6FDCB3FCE46E4EDBF596E295 /* Sources/CViewApp/Views/LiveStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LiveStreamView.swift; sourceTree = SOURCE_ROOT; };
 		6FDCB3FCE46E4EDB00000001 /* Sources/CViewApp/Views/StreamLoadingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamLoadingOverlay.swift; sourceTree = SOURCE_ROOT; };
@@ -147,6 +172,9 @@
 		AA22334455667788CCDD0041 /* Sources/CViewApp/Views/ChatOnlyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatOnlyView.swift; sourceTree = SOURCE_ROOT; };
 		AA22334455667788CCDD0042 /* Sources/CViewApp/Views/BlockedUsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/BlockedUsersView.swift; sourceTree = SOURCE_ROOT; };
 		AA99887766554433CCDD0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0050 /* PlayerAdvancedSettings+Equalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/PlayerAdvancedSettings+Equalizer.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0051 /* PlayerAdvancedSettings+MediaTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/PlayerAdvancedSettings+MediaTabs.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0052 /* PlayerAdvancedSettings+ToolsNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/PlayerAdvancedSettings+ToolsNetwork.swift"; sourceTree = SOURCE_ROOT; };
 		BB11223344556677CCDD0004 /* Sources/CViewApp/ViewModels/VODPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/VODPlayerViewModel.swift; sourceTree = SOURCE_ROOT; };
 		BB11223344556677CCDD0005 /* Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift; sourceTree = SOURCE_ROOT; };
 		BB11223344556677CCDD0006 /* Sources/CViewApp/Views/VODPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/VODPlayerView.swift; sourceTree = SOURCE_ROOT; };
@@ -186,14 +214,32 @@
 		FF11223344556677CCDD0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MultiChatSessionManager.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/MultiLiveManager.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/MultiLiveSession.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/FollowingViewState.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0035 /* Sources/CViewApp/Views/MultiLiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveTabBar.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLivePlayerPane.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveAddSheet.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0053 /* Sources/CViewApp/Views/MultiLiveAddSheet+Following.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/MultiLiveAddSheet+Following.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0054 /* Sources/CViewApp/Views/MultiLiveAddSheet+Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/MultiLiveAddSheet+Search.swift"; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveOverlays.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveGridLayouts.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveSettingsPanel.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD003C /* Sources/CViewApp/Views/MLSplitVideoChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLSplitVideoChat.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD003D /* Sources/CViewApp/Views/MLAudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLAudioTab.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD003E /* Sources/CViewApp/Views/MLEqualizerTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLEqualizerTab.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD003F /* Sources/CViewApp/Views/MLVideoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLVideoTab.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0040 /* Sources/CViewApp/Views/MLPlaybackTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLPlaybackTab.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0041 /* Sources/CViewApp/Views/MLToolsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLToolsTab.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0042 /* Sources/CViewApp/Views/MLNetworkTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLNetworkTab.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0043 /* Sources/CViewApp/Views/MLSettingsSharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLSettingsSharedComponents.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0044 /* FollowingView+Header.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+Header.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0045 /* FollowingView+List.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+List.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0046 /* FollowingView+MultiLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+MultiLive.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0047 /* FollowingView+MultiChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+MultiChat.swift"; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0048 /* ChatTTSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ChatTTSService.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0049 /* ChatViewModel+Autocomplete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift"; sourceTree = SOURCE_ROOT; };
 		FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamAlertOverlayView.swift; sourceTree = SOURCE_ROOT; };
+            A1B2C3D4E5F60002AA220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ResponsiveFollowingLayout.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -296,6 +342,9 @@
 				EE11223344556677CCDD0019 /* Sources/CViewApp/Views/MenuBarView.swift */,
 				EE11223344556677CCDD0020 /* Sources/CViewApp/Views/PlayerControlsView.swift */,
 				AA99887766554433CCDD0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift */,
+				FF11223344556677CCDD0050 /* Sources/CViewApp/Views/PlayerAdvancedSettings+Equalizer.swift */,
+				FF11223344556677CCDD0051 /* Sources/CViewApp/Views/PlayerAdvancedSettings+MediaTabs.swift */,
+				FF11223344556677CCDD0052 /* Sources/CViewApp/Views/PlayerAdvancedSettings+ToolsNetwork.swift */,
 				EE11223344556677CCDD0021 /* Sources/CViewApp/Views/ChatPanelView.swift */,
 				EE11223344556677CCDD0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift */,
 				EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */,
@@ -308,9 +357,19 @@
 				FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */,
 				FF11223344556677CCDD0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */,
 				FF11223344556677CCDD0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */,
+				FF11223344556677CCDD0053 /* Sources/CViewApp/Views/MultiLiveAddSheet+Following.swift */,
+				FF11223344556677CCDD0054 /* Sources/CViewApp/Views/MultiLiveAddSheet+Search.swift */,
 				FF11223344556677CCDD0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift */,
 				FF11223344556677CCDD003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift */,
 				FF11223344556677CCDD003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift */,
+				FF11223344556677CCDD003C /* Sources/CViewApp/Views/MLSplitVideoChat.swift */,
+				FF11223344556677CCDD003D /* Sources/CViewApp/Views/MLAudioTab.swift */,
+				FF11223344556677CCDD003E /* Sources/CViewApp/Views/MLEqualizerTab.swift */,
+				FF11223344556677CCDD003F /* Sources/CViewApp/Views/MLVideoTab.swift */,
+				FF11223344556677CCDD0040 /* Sources/CViewApp/Views/MLPlaybackTab.swift */,
+				FF11223344556677CCDD0041 /* Sources/CViewApp/Views/MLToolsTab.swift */,
+				FF11223344556677CCDD0042 /* Sources/CViewApp/Views/MLNetworkTab.swift */,
+				FF11223344556677CCDD0043 /* Sources/CViewApp/Views/MLSettingsSharedComponents.swift */,
 				AA22334455667788CCDD0040 /* Sources/CViewApp/Views/CategoryBrowseView.swift */,
 				AA22334455667788CCDD0041 /* Sources/CViewApp/Views/ChatOnlyView.swift */,
 				AA22334455667788CCDD0042 /* Sources/CViewApp/Views/BlockedUsersView.swift */,
@@ -325,6 +384,10 @@
 				A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */,
 				A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */,
 				A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */,
+				FF11223344556677CCDD0044 /* Sources/CViewApp/Views/FollowingView+Header.swift */,
+				FF11223344556677CCDD0045 /* Sources/CViewApp/Views/FollowingView+List.swift */,
+				FF11223344556677CCDD0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift */,
+				FF11223344556677CCDD0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift */,
 				A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */,
 				A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */,
 				A1B2C3D4E5F60002AA220004 /* Sources/CViewApp/Views/ErrorStateView.swift */,
@@ -370,13 +433,18 @@
 			isa = PBXGroup;
 			children = (
 				29DFCF37AFC447A104B9AC1A /* Sources/CViewApp/ViewModels/ChatViewModel.swift */,
+				FF11223344556677CCDD0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift */,
+				FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */,
 				EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */,
 				65E3862D7E778FCBA02E0FBB /* Sources/CViewApp/ViewModels/PlayerViewModel.swift */,
+				FF11223344556677CCDD0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift */,
+				FF11223344556677CCDD0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift */,
 				AA11223344556677CCDD0001 /* Sources/CViewApp/ViewModels/SearchViewModel.swift */,
 				BB11223344556677CCDD0004 /* Sources/CViewApp/ViewModels/VODPlayerViewModel.swift */,
 				BB11223344556677CCDD0005 /* Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift */,
 				FF11223344556677CCDD0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift */,
 				FF11223344556677CCDD0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */,
+				FF11223344556677CCDD0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift */,
 			);
 			name = ViewModels;
 			sourceTree = "<group>";
@@ -515,8 +583,12 @@
 				915BCA520DBB4A0AD16721C1 /* Sources/CViewApp/CViewApp.swift in Sources */,
 				EC2A5455CDC2A049885E941D /* Sources/CViewApp/Navigation/AppRouter.swift in Sources */,
 				23302727FE83731000625271 /* Sources/CViewApp/ViewModels/ChatViewModel.swift in Sources */,
+				FF11223344556677AABB0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift in Sources */,
+				FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */,
 				1FFA8590CFC902B7376F16A8 /* Sources/CViewApp/ViewModels/HomeViewModel.swift in Sources */,
 				8E3298E000AF57284B57F035 /* Sources/CViewApp/ViewModels/PlayerViewModel.swift in Sources */,
+				FF11223344556677AABB0055 /* Sources/CViewApp/ViewModels/PlayerViewModel+VLCAdvanced.swift in Sources */,
+				FF11223344556677AABB0056 /* Sources/CViewApp/ViewModels/PlayerViewModel+EventHandling.swift in Sources */,
 				F2D063FE109ED88FD428F817 /* Sources/CViewApp/Views/LiveStreamView.swift in Sources */,
 				F2D063FE109ED88F00000001 /* Sources/CViewApp/Views/StreamLoadingOverlay.swift in Sources */,
 				FDF40C1A2D801D341C3EFED2 /* Sources/CViewApp/Views/MainContentView.swift in Sources */,
@@ -546,6 +618,9 @@
 				EE11223344556677AABB0019 /* Sources/CViewApp/Views/MenuBarView.swift in Sources */,
 				EE11223344556677AABB0020 /* Sources/CViewApp/Views/PlayerControlsView.swift in Sources */,
 				AA99887766554433AABB0095 /* Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift in Sources */,
+				FF11223344556677AABB0050 /* Sources/CViewApp/Views/PlayerAdvancedSettings+Equalizer.swift in Sources */,
+				FF11223344556677AABB0051 /* Sources/CViewApp/Views/PlayerAdvancedSettings+MediaTabs.swift in Sources */,
+				FF11223344556677AABB0052 /* Sources/CViewApp/Views/PlayerAdvancedSettings+ToolsNetwork.swift in Sources */,
 				EE11223344556677AABB0021 /* Sources/CViewApp/Views/ChatPanelView.swift in Sources */,
 				EE11223344556677AABB0150 /* Sources/CViewApp/Views/ChatResizeHandle.swift in Sources */,
 				EE11223344556677AABB0099 /* Sources/CViewApp/Views/ChatOverlayView.swift in Sources */,
@@ -557,13 +632,28 @@
 				FF11223344556677AABB0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift in Sources */,
 				FF11223344556677AABB0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift in Sources */,
 				FF11223344556677AABB0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift in Sources */,
+				FF11223344556677AABB0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift in Sources */,
 				FF11223344556677AABB0035 /* Sources/CViewApp/Views/MultiLiveView.swift in Sources */,
 				FF11223344556677AABB0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift in Sources */,
 				FF11223344556677AABB0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift in Sources */,
 				FF11223344556677AABB0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift in Sources */,
+				FF11223344556677AABB0053 /* Sources/CViewApp/Views/MultiLiveAddSheet+Following.swift in Sources */,
+				FF11223344556677AABB0054 /* Sources/CViewApp/Views/MultiLiveAddSheet+Search.swift in Sources */,
 				FF11223344556677AABB0039 /* Sources/CViewApp/Views/MultiLiveOverlays.swift in Sources */,
 				FF11223344556677AABB003A /* Sources/CViewApp/Views/MultiLiveGridLayouts.swift in Sources */,
 				FF11223344556677AABB003B /* Sources/CViewApp/Views/MultiLiveSettingsPanel.swift in Sources */,
+				FF11223344556677AABB003C /* Sources/CViewApp/Views/MLSplitVideoChat.swift in Sources */,
+				FF11223344556677AABB003D /* Sources/CViewApp/Views/MLAudioTab.swift in Sources */,
+				FF11223344556677AABB003E /* Sources/CViewApp/Views/MLEqualizerTab.swift in Sources */,
+				FF11223344556677AABB003F /* Sources/CViewApp/Views/MLVideoTab.swift in Sources */,
+				FF11223344556677AABB0040 /* Sources/CViewApp/Views/MLPlaybackTab.swift in Sources */,
+				FF11223344556677AABB0041 /* Sources/CViewApp/Views/MLToolsTab.swift in Sources */,
+				FF11223344556677AABB0042 /* Sources/CViewApp/Views/MLNetworkTab.swift in Sources */,
+				FF11223344556677AABB0043 /* Sources/CViewApp/Views/MLSettingsSharedComponents.swift in Sources */,
+				FF11223344556677AABB0044 /* Sources/CViewApp/Views/FollowingView+Header.swift in Sources */,
+				FF11223344556677AABB0045 /* Sources/CViewApp/Views/FollowingView+List.swift in Sources */,
+				FF11223344556677AABB0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift in Sources */,
+				FF11223344556677AABB0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift in Sources */,
 				AA22334455667788AABB0042 /* Sources/CViewApp/Views/BlockedUsersView.swift in Sources */,
 				BB33445566778899AABB0050 /* Sources/CViewApp/Views/Dashboard/DashboardStatCard.swift in Sources */,
 				BB33445566778899AABB0051 /* Sources/CViewApp/Views/Dashboard/DashboardCharts.swift in Sources */,
@@ -581,6 +671,7 @@
 				A1B2C3D4E5F60001BB110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */,					A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */,				A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */,
 				A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */,
+				A1B2C3D4E5F60002BB220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift in Sources */,
 				A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */,
 				A1B2C3D4E5F60002BB220004 /* Sources/CViewApp/Views/ErrorStateView.swift in Sources */,
 				A1B2C3D4E5F60003BB330001 /* Sources/CViewApp/Views/ChannelInfoHeaderView.swift in Sources */,

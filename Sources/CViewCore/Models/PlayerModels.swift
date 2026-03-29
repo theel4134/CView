@@ -133,8 +133,8 @@ public enum PlayerEngineType: String, Sendable, Codable, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .vlc: "VLC (저지연)"
-        case .avPlayer: "AVPlayer (안정)"
+        case .vlc: "VLC (고급)"
+        case .avPlayer: "AVPlayer (기본·저전력)"
         }
     }
 }

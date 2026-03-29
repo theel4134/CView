@@ -49,7 +49,15 @@ public struct VLCVideoView: NSViewRepresentable {
     public func makeNSView(context: Context) -> NSView {
         let container = NSView()
         container.wantsLayer = true
+        container.layerContentsRedrawPolicy = .never     // drawRect 차단 — 리사이즈 시 불필요한 redraw 방지
+        container.canDrawSubviewsIntoLayer = true        // 서브뷰 레이어 합성 플래트닝
         container.layer?.backgroundColor = NSColor.black.cgColor
+        container.layer?.isOpaque = true
+        // 리사이즈 시 CA 암묵적 애니메이션 제거
+        container.layer?.actions = [
+            "position": NSNull(), "bounds": NSNull(),
+            "frame": NSNull(), "sublayers": NSNull(),
+        ]
 
         if let engine = playerEngine {
             attach(engine.playerView, to: container)
@@ -84,16 +92,12 @@ public struct VLCVideoView: NSViewRepresentable {
     // MARK: - Private Helpers
 
     private func attach(_ playerView: VLCLayerHostView, to container: NSView) {
-        // Auto Layout으로 container를 꽉 채움 (makeNSView 시 frame이 zero일 수 있으므로
-        // autoresizingMask 프레임 세팅보다 Auto Layout이 더 안정적)
-        playerView.translatesAutoresizingMaskIntoConstraints = false
+        // autoresizingMask로 container 꽉 채움 — Auto Layout constraint solver 비용 제거
+        // 리사이즈 시 매 프레임 constraint 재계산 대신 즉시 프레임 추종
+        playerView.translatesAutoresizingMaskIntoConstraints = true
+        playerView.frame = container.bounds
+        playerView.autoresizingMask = [.width, .height]
         container.addSubview(playerView)
-        NSLayoutConstraint.activate([
-            playerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            playerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            playerView.topAnchor.constraint(equalTo: container.topAnchor),
-            playerView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
     }
 
     // MARK: - VLCVideoContainerView (PiPController 호환 wrapper)

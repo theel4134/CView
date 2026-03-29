@@ -24,7 +24,7 @@ struct ChatResizeHandle: View {
     var body: some View {
         Rectangle()
             .fill(handleColor)
-            .frame(width: 5)
+            .frame(width: isDragging || isHovering ? 4 : 1)
             .padding(.horizontal, 3)
             .contentShape(Rectangle().inset(by: -4))
             .customCursor(.resizeLeftRight)
@@ -45,17 +45,18 @@ struct ChatResizeHandle: View {
                         onDragEnd?()
                     }
             )
+            .transaction { $0.animation = nil }
             .animation(DesignTokens.Animation.fast, value: isHovering)
             .animation(DesignTokens.Animation.fast, value: isDragging)
     }
 
     private var handleColor: Color {
         if isDragging {
-            return DesignTokens.Colors.chzzkGreen.opacity(0.6)
+            return DesignTokens.Colors.chzzkGreen.opacity(0.5)
         } else if isHovering {
-            return DesignTokens.Colors.chzzkGreen.opacity(0.35)
+            return DesignTokens.Colors.chzzkGreen.opacity(0.25)
         } else {
-            return Color.white.opacity(0.06)
+            return Color.white.opacity(0.08)
         }
     }
 }

@@ -145,6 +145,7 @@ struct ChatMessageRow: View {
 
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
         .background(

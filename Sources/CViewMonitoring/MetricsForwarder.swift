@@ -47,6 +47,9 @@ public actor MetricsForwarder {
     /// VLCPlayerEngine에서 주기적으로 전달받는 최신 VLC 통계 (nil = 아직 수신 전)
     private var latestVLCMetrics: VLCLiveMetrics?
 
+    /// AVPlayerEngine에서 주기적으로 전달받는 최신 AVPlayer 통계 (nil = 아직 수신 전)
+    private var latestAVPlayerMetrics: AVPlayerLiveMetrics?
+
     /// 서버 동기화 추천에 따른 재생 속도 변경 콜백
     /// MetricsForwarder → 외부 PlayerEngine 연결용
     private var onSyncSpeedChange: (@Sendable (Float) -> Void)?
@@ -91,7 +94,7 @@ public actor MetricsForwarder {
         apiClient: MetricsAPIClient,
         monitor: PerformanceMonitor,
         isEnabled: Bool = false,
-        forwardInterval: TimeInterval = 5.0,
+        forwardInterval: TimeInterval = 8.0,
         pingInterval: TimeInterval = 30.0
     ) {
         self.apiClient = apiClient
@@ -226,6 +229,10 @@ public actor MetricsForwarder {
         stopSyncStatusPolling()
         await monitor.stop()
 
+        // 엔진별 메트릭 캐시 클리어
+        latestVLCMetrics = nil
+        latestAVPlayerMetrics = nil
+
         guard let channelId = activeChannelId, isEnabled else {
             activeChannelId = nil
             activeChannelName = nil
@@ -285,6 +292,21 @@ public actor MetricsForwarder {
         )
     }
 
+    /// AVPlayerEngine.onAVMetrics 콜백에서 호출합니다.
+    /// PerformanceMonitor를 업데이트하고 최신 AVPlayer 통계를 캐싱합니다.
+    public func updateAVPlayerMetrics(_ metrics: AVPlayerLiveMetrics) async {
+        latestAVPlayerMetrics = metrics
+        await monitor.updateVLCMetricsBatch(
+            fps: 0,  // AVPlayer에서는 FPS 직접 수집 불가
+            droppedFrames: metrics.droppedFramesDelta,
+            networkBytes: 0,
+            bufferHealth: metrics.bufferHealth * 100,  // 0-1 → 0-100%
+            resolution: metrics.resolution,
+            inputBitrateKbps: metrics.bitrateKbps,
+            networkSpeedBytesPerSec: 0
+        )
+    }
+
     // MARK: - Metrics Forwarding
 
     private func startForwarding() {
@@ -310,6 +332,11 @@ public actor MetricsForwarder {
 
         let metrics = await monitor.currentMetrics
         let vlc = latestVLCMetrics
+        let avp = latestAVPlayerMetrics
+
+        // 엔진 판별: VLC 메트릭이 있으면 VLC, AVPlayer 메트릭이 있으면 AVPlayer
+        let isAVPlayerEngine = vlc == nil && avp != nil
+        let engineName = isAVPlayerEngine ? "AVPlayer" : "VLC"
 
         // VLC 통계가 있으면 CView 하트비트에 포함
         let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
@@ -322,34 +349,68 @@ public actor MetricsForwarder {
         let pdtTimestampMs = pdtLat.map { _ in Date().timeIntervalSince1970 * 1000.0 }
 
         // NaN/Infinity 방어: finite 값만 전송, 비유한 값은 기본값으로 대체
-        let payload = CViewHeartbeatPayload(
-            clientId: clientId,
-            channelId: channelId,
-            channelName: channelName,
-            latency: (metrics?.latencyMs ?? 0).safeForJSON,
-            resolution: vlc?.resolution,
-            bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
-            fps: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
-            bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
-            playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
-            droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
-            healthScore: vlc.map { $0.healthScore.safeForJSON },
-            vlcMetrics: vlcPayload,
-            targetLatency: targetLatencyMs,
-            connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
-            connectionQuality: deriveConnectionQuality(vlc: vlc, metrics: metrics),
-            isBuffering: vlc.map { $0.bufferHealth < 0.3 },
-            latePictures: vlc.map { $0.latePicturesDelta },
-            currentTime: playbackTime?.safeForJSON,
-            pdtTimestamp: pdtTimestampMs?.safeForJSON,
-            pdtLatency: pdtLatMs?.safeForJSON,
-            latencyUnit: "ms"
-        )
+        let payload: CViewHeartbeatPayload
+        if isAVPlayerEngine, let avp {
+            // AVPlayer 엔진 — AVPlayerLiveMetrics 기반 하트비트
+            payload = CViewHeartbeatPayload(
+                clientId: clientId,
+                channelId: channelId,
+                channelName: channelName,
+                latency: (avp.measuredLatency * 1000.0).safeForJSON, // sec → ms
+                resolution: avp.resolution,
+                bitrate: Int(avp.bitrateKbps.safeForJSON),
+                fps: nil, // AVPlayer에서는 FPS 직접 수집 불가
+                bufferHealth: (avp.bufferHealth * 100).safeForJSON,
+                playbackRate: Double(avp.playbackRate).safeForJSON,
+                droppedFrames: avp.droppedFramesDelta,
+                healthScore: avp.healthScore.safeForJSON,
+                engine: engineName,
+                vlcMetrics: nil,
+                targetLatency: targetLatencyMs,
+                connectionState: avp.bufferHealth > 0.5 ? "connected" : "degraded",
+                connectionQuality: avp.bufferHealth > 0.7 ? "excellent" : avp.bufferHealth > 0.3 ? "good" : "poor",
+                isBuffering: avp.bufferHealth < 0.3,
+                latePictures: nil,
+                currentTime: playbackTime?.safeForJSON,
+                pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                pdtLatency: pdtLatMs?.safeForJSON,
+                latencyUnit: "ms"
+            )
+        } else {
+            // VLC 엔진 — 기존 VLC 기반 하트비트
+            payload = CViewHeartbeatPayload(
+                clientId: clientId,
+                channelId: channelId,
+                channelName: channelName,
+                latency: (metrics?.latencyMs ?? 0).safeForJSON,
+                resolution: vlc?.resolution,
+                bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
+                fps: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
+                bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
+                playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
+                droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
+                healthScore: vlc.map { $0.healthScore.safeForJSON },
+                engine: engineName,
+                vlcMetrics: vlcPayload,
+                targetLatency: targetLatencyMs,
+                connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
+                connectionQuality: deriveConnectionQuality(vlc: vlc, metrics: metrics),
+                isBuffering: vlc.map { $0.bufferHealth < 0.3 },
+                latePictures: vlc.map { $0.latePicturesDelta },
+                currentTime: playbackTime?.safeForJSON,
+                pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                pdtLatency: pdtLatMs?.safeForJSON,
+                latencyUnit: "ms"
+            )
+        }
 
         do {
             let response = try await apiClient.cviewHeartbeat(payload)
             totalSent += 1
             lastSentAt = Date()
+            // 전송 성공 → 이전 에러 상태 클리어
+            lastErrorAt = nil
+            lastErrorMessage = nil
             
             // 양방향: 서버 응답에서 동기화 데이터 저장
             lastSyncData = response.syncData
@@ -360,8 +421,8 @@ public actor MetricsForwarder {
                 let hybridPayload = HybridHeartbeatPayload(
                     channelId: channelId,
                     clientId: clientId,
-                    clientType: "vlc",
-                    engine: "VLC",
+                    clientType: isAVPlayerEngine ? "avplayer" : "vlc",
+                    engine: engineName,
                     vlcPosition: playbackTime?.safeForJSON,
                     pdtTimestamp: pdtTimestampMs?.safeForJSON,
                     latencyMs: pdtLatMs?.safeForJSON ?? (metrics?.latencyMs ?? 0).safeForJSON
@@ -386,27 +447,50 @@ public actor MetricsForwarder {
             // HTTP 200 성공했으나 서버 응답 형식 불일치 — 전송은 완료된 상태
             totalSent += 1
             lastSentAt = Date()
+            lastErrorAt = nil
+            lastErrorMessage = nil
         } catch {
             // HTTP 오류 또는 네트워크 오류 — /api/metrics 폴백
-            let legacyPayload = AppLatencyPayload(
-                channelId: channelId,
-                channelName: channelName,
-                latency: (metrics?.latencyMs ?? 0).safeForJSON,
-                bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
-                resolution: vlc?.resolution,
-                frameRate: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
-                droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
-                bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
-                playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
-                engine: "VLC",
-                healthScore: vlc.map { $0.healthScore.safeForJSON },
-                latencySource: "native",
-                latencyUnit: "ms"
-            )
+            let legacyPayload: AppLatencyPayload
+            if isAVPlayerEngine, let avp {
+                legacyPayload = AppLatencyPayload(
+                    channelId: channelId,
+                    channelName: channelName,
+                    latency: (avp.measuredLatency * 1000.0).safeForJSON,
+                    bitrate: Int(avp.bitrateKbps.safeForJSON),
+                    resolution: avp.resolution,
+                    frameRate: nil,
+                    droppedFrames: avp.droppedFramesDelta,
+                    bufferHealth: (avp.bufferHealth * 100).safeForJSON,
+                    playbackRate: Double(avp.playbackRate).safeForJSON,
+                    engine: engineName,
+                    healthScore: avp.healthScore.safeForJSON,
+                    latencySource: "native",
+                    latencyUnit: "ms"
+                )
+            } else {
+                legacyPayload = AppLatencyPayload(
+                    channelId: channelId,
+                    channelName: channelName,
+                    latency: (metrics?.latencyMs ?? 0).safeForJSON,
+                    bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
+                    resolution: vlc?.resolution,
+                    frameRate: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
+                    droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
+                    bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
+                    playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
+                    engine: engineName,
+                    healthScore: vlc.map { $0.healthScore.safeForJSON },
+                    latencySource: "native",
+                    latencyUnit: "ms"
+                )
+            }
             do {
                 try await apiClient.sendMetrics(legacyPayload)
                 totalSent += 1
                 lastSentAt = Date()
+                lastErrorAt = nil
+                lastErrorMessage = nil
             } catch {
                 totalErrors += 1
                 lastErrorAt = Date()

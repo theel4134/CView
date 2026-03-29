@@ -67,8 +67,8 @@ struct MenuBarView: View {
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
 
                     Text(appState.isLoggedIn
-                         ? "현재 방송 중인 팔로잉 채널이 없습니다"
-                         : "로그인하면 팔로잉 채널을 확인할 수 있습니다")
+                         ? "현재 방송 중인 라이브 채널이 없습니다"
+                         : "로그인하면 라이브 채널을 확인할 수 있습니다")
                         .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .multilineTextAlignment(.center)

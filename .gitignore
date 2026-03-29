@@ -16,6 +16,9 @@ Package.resolved
 *.swp
 *~
 
+# Release
+Release/
+
 # Python
 __pycache__/
 *.pyc

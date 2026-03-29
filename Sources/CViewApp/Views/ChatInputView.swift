@@ -13,6 +13,8 @@ struct ChatInputView: View {
     @State private var inputText = ""
     @FocusState private var isFocused: Bool
     @State private var showEmoticonPicker = false
+    @State private var isEmoticonHovered = false
+    @State private var isSendHovered = false
 
     /// 채팅 전송 가능 여부 (연결 + 로그인)
     private var canSend: Bool { viewModel?.canSendChat ?? false }
@@ -61,12 +63,25 @@ struct ChatInputView: View {
                         .font(DesignTokens.Typography.body)
                         .foregroundStyle(showEmoticonPicker ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
                         .frame(width: 28, height: 28)
-                        .background(DesignTokens.Colors.surfaceElevated, in: Circle())
+                        .background(
+                            isEmoticonHovered && canSend
+                                ? DesignTokens.Colors.surfaceElevated.opacity(1.2)
+                                : DesignTokens.Colors.surfaceElevated,
+                            in: Circle()
+                        )
                         .overlay {
-                            Circle().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                            Circle().strokeBorder(
+                                isEmoticonHovered && canSend
+                                    ? DesignTokens.Colors.chzzkGreen.opacity(0.3)
+                                    : DesignTokens.Glass.borderColorLight,
+                                lineWidth: 0.5
+                            )
                         }
+                        .scaleEffect(isEmoticonHovered && canSend ? 1.06 : 1.0)
+                        .animation(DesignTokens.Animation.fast, value: isEmoticonHovered)
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in isEmoticonHovered = hovering }
                 .popover(isPresented: $showEmoticonPicker) {
                     EmoticonPickerView(packs: viewModel?.emoticonPickerPacks ?? []) { emoticon in
                         inputText += emoticon.chatPattern
@@ -102,7 +117,9 @@ struct ChatInputView: View {
                 }
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.vertical, DesignTokens.Spacing.xs)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+                // [GPU 최적화] Material blur → 솔리드 반투명 색상으로 교체
+                // ultraThinMaterial은 비디오 레이어 변경 시 매 프레임 blur 재계산 → GPU 부하
+                .background(DesignTokens.Colors.surfaceBase.opacity(0.85), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                         .strokeBorder(
@@ -115,29 +132,36 @@ struct ChatInputView: View {
                 .onTapGesture { if canSend { isFocused = true } }
 
                 // 전송 버튼 — Pill 느낌의 원형
+                let isReady = canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty
                 Button {
                     sendMessage()
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .font(DesignTokens.Typography.captionMedium)
-                        .foregroundStyle(canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .black : DesignTokens.Colors.textTertiary)
+                        .foregroundStyle(isReady ? .black : DesignTokens.Colors.textTertiary)
                         .frame(width: 32, height: 32)
                         .background(
-                            canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty
+                            isReady
                                 ? AnyShapeStyle(DesignTokens.Colors.chzzkGreen)
                                 : AnyShapeStyle(DesignTokens.Colors.surfaceElevated)
                         )
                         .clipShape(Circle())
                         .overlay {
-                            if !(canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty) {
-                                Circle().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                            if !isReady {
+                                Circle().strokeBorder(
+                                    isSendHovered ? DesignTokens.Colors.textTertiary.opacity(0.3) : DesignTokens.Glass.borderColorLight,
+                                    lineWidth: 0.5
+                                )
                             }
                         }
-                        .shadow(color: canSend && !inputText.trimmingCharacters(in: .whitespaces).isEmpty ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : .clear, radius: 6)
+                        .shadow(color: isReady ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : .clear, radius: 6)
+                        .scaleEffect(isSendHovered && isReady ? 1.08 : 1.0)
                 }
                 .buttonStyle(.plain)
-                .disabled(!canSend || inputText.trimmingCharacters(in: .whitespaces).isEmpty)
-                .animation(DesignTokens.Animation.fast, value: inputText.isEmpty)
+                .onHover { hovering in isSendHovered = hovering }
+                .disabled(!isReady)
+                .animation(DesignTokens.Animation.fast, value: isReady)
+                .animation(DesignTokens.Animation.fast, value: isSendHovered)
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.sm)

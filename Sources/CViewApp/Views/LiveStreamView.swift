@@ -36,6 +36,8 @@ struct LiveStreamView: View {
     @State private var viewerCount: Int = 0
     @State private var metricsFeedTask: Task<Void, Never>?
     @State private var showSettings = false
+    /// 채팅 클램핑·오버레이 크기 계산용 — GeometryReader 대신 경량 onGeometryChange로 추적
+    @State private var containerSize: CGSize = .zero
 
     /// AppState의 공유 PerformanceMonitor 사용 (MetricsForwarder와 동일 인스턴스)
     private var performanceMonitor: PerformanceMonitor { appState.performanceMonitor }
@@ -45,43 +47,51 @@ struct LiveStreamView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            GeometryReader { geo in
-                HStack(spacing: 0) {
-                    // Player area + overlay chat
-                    ZStack {
-                        playerArea
-                            .overlay(alignment: .topTrailing) {
-                                if showDebugOverlay {
-                                    PerformanceOverlayView(monitor: performanceMonitor)
-                                        .padding(DesignTokens.Spacing.xs)
-                                }
+            HStack(spacing: 0) {
+                // Player area + overlay chat
+                ZStack {
+                    playerArea
+                        .overlay(alignment: .topTrailing) {
+                            if showDebugOverlay {
+                                PerformanceOverlayView(monitor: performanceMonitor)
+                                    .padding(DesignTokens.Spacing.xs)
                             }
-
-                        // 오버레이 모드: 플레이어 위에 반투명 채팅
-                        if chatVM?.displayMode == .overlay {
-                            ChatOverlayView(chatVM: chatVM, containerSize: geo.size)
-                                .allowsHitTesting(true)
-                                .transition(.opacity)
-                        }
-                    }
-                    .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-
-                    // 사이드 모드: 드래그 핸들 + 채팅 패널
-                    if chatVM?.displayMode == .side {
-                        ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
-                            liveChatWidth = min(max(newWidth, 250), geo.size.width * 0.5)
-                        } onDragEnd: {
-                            savedChatWidth = liveChatWidth
                         }
 
-                        ChatPanelView(chatVM: chatVM) {
-                            router.presentSheet(.chatSettings)
-                        }
-                        .frame(width: liveChatWidth, alignment: .trailing)
+                    // 오버레이 모드: 플레이어 위에 반투명 채팅
+                    if chatVM?.displayMode == .overlay {
+                        ChatOverlayView(chatVM: chatVM, containerSize: containerSize)
+                            .allowsHitTesting(true)
+                            .transition(.opacity)
                     }
                 }
+                .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .layoutPriority(0)
+
+                // 사이드 모드: 드래그 핸들 + 채팅 패널
+                if chatVM?.displayMode == .side {
+                    ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
+                        liveChatWidth = min(max(newWidth, 250), containerSize.width * 0.5)
+                    } onDragEnd: {
+                        savedChatWidth = liveChatWidth
+                    }
+
+                    ChatPanelView(chatVM: chatVM) {
+                        router.presentSheet(.chatSettings)
+                    }
+                    .frame(width: liveChatWidth, alignment: .trailing)
+                    .frame(maxHeight: .infinity)
+                    .layoutPriority(1)
+                }
             }
-            .clipped()
+            // GeometryReader 제거 — 리사이즈마다 전체 자식 뷰 트리 재렌더링 유발
+            // onGeometryChange로 컨테이너 크기만 경량 추적 → 채팅 클램핑·오버레이 크기 계산
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { newSize in
+                containerSize = newSize
+            }
 
             // ── 설정 슬라이드 패널 (push 방식 — 멀티라이브와 동일) ──
             if showSettings {
@@ -94,6 +104,7 @@ struct LiveStreamView: View {
                 .animation(DesignTokens.Animation.contentTransition, value: showSettings)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar { streamToolbar }
         .id(channelId)
         .onAppear { liveChatWidth = savedChatWidth }

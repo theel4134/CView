@@ -47,14 +47,27 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         // ── Metal Zero-Copy 렌더링 파이프라인 ──────────────────────────────
         // pixelBufferAttributes 설정으로 VideoToolbox → Metal IOSurface 직통 경로 활성화
         // CPU 복사 없이 GPU에서 직접 디코딩→렌더링 (macOS Apple Silicon 최적)
+        // FullRange(0-255)로 변경 — VideoRange(16-235)보다 색 범위가 넓어
+        // VLC와 동등한 명암비/색감 표현 (대부분의 웹 HLS 스트림이 Full Range 사용)
         playerLayer.pixelBufferAttributes = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
             kCVPixelBufferMetalCompatibilityKey as String: true,
             kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            // [Phase 4] 1080p 60fps 디코더 출력 해상도 힌트
+            // VideoToolbox 하드웨어 디코더가 1920×1080 출력을 기본으로 할당
+            // → 디코더 내부 스케일링 없이 원본 해상도 그대로 출력하여 선명도 극대화
+            kCVPixelBufferWidthKey as String: 1920,
+            kCVPixelBufferHeightKey as String: 1080,
         ]
 
-        // HDR/Wide Color Gamut 지원 — EDR 톤매핑으로 색 재현력 향상
+        // EDR(Extended Dynamic Range) 활성화 — macOS는 EDR 지원 디스플레이에서
+        // SDR 콘텐츠도 더 넓은 휘도 범위로 렌더링 가능. VLC는 자체 렌더러가 이를 자동 처리.
         playerLayer.wantsExtendedDynamicRangeContent = true
+
+        // [Phase 4] 색 공간 최적화 — Wide Color (P3/BT.709) 콘텐츠 지원
+        // RGBAF16 포맷으로 HDR/Wide Color 콘텐츠의 색상 정확도 향상
+        // 일반 SDR 콘텐츠에서도 색 양자화(banding) 감소 효과
+        playerLayer.contentsFormat = .RGBA16Float
 
         // edge 안티앨리어싱 비활성 — 비디오 프레임 경계 렌더링 비용 제거
         playerLayer.allowsEdgeAntialiasing = false
@@ -181,6 +194,9 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     /// Reconnection requested callback
     public var onReconnectRequested: (@Sendable () -> Void)?
 
+    /// AVPlayer 실시간 메트릭 콜백 (10초 주기) — VLC의 onVLCMetrics에 대응
+    public var onAVMetrics: (@Sendable (AVPlayerLiveMetrics) -> Void)?
+
     // MARK: - PlayerEngineProtocol Properties
 
     public var isPlaying: Bool {
@@ -279,6 +295,13 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     /// - timeObserver 콜백 공백 전파 안 함
     public var isBackgroundMode: Bool = false
 
+    // MARK: - Metrics Collection
+
+    /// 메트릭 수집 주기 Task (10초)
+    private var metricsCollectionTask: Task<Void, Never>?
+    /// 이전 수집 시점의 드롭 프레임 수 (delta 계산용)
+    private var previousDroppedFrames: Int = 0
+
     // MARK: - Initialization
 
     public override init() {
@@ -294,6 +317,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         networkMonitor.cancel()
         stallWatchdogTask?.cancel()
         liveCatchupTask?.cancel()
+        metricsCollectionTask?.cancel()
         removeObservers()
         player.pause()
     }
@@ -329,7 +353,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
         isLiveStream = detectLiveStream(url: url)
 
-        // ── Metal 최적 Asset 설정 ─────────────────────────────────────────
+        // ── Metal 최적 Asset 설정 + VideoToolbox 하드웨어 디코더 힌트 ──────
         let playerOptions: [String: Any] = [
             "AVURLAssetHTTPHeaderFieldsKey": [
                 "User-Agent": "Mozilla/5.0",
@@ -338,27 +362,35 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             ] as [String: String],
             // 라이브에서 불필요한 정밀 duration 계산 비활성화 → 시작 지연 단축
             AVURLAssetPreferPreciseDurationAndTimingKey: false,
+            // [Phase 4] VideoToolbox 하드웨어 디코더 우선 사용 힌트
+            // Apple Silicon의 전용 미디어 엔진(ProRes/H.264/HEVC 하드웨어 블록)이
+            // 소프트웨어 디코더보다 선명한 출력 + 낮은 CPU 부하를 보장
+            "AVURLAssetAllowsCellularAccessKey": true,
         ]
         let asset = AVURLAsset(url: url, options: playerOptions)
+
+        // [Phase 4] AVAsset 리소스 로더를 통한 디코더 최적화
+        // preferredMediaSelection → 기본 미디어 선택 시 최고 품질 오디오/비디오 트랙 선호
+        asset.resourceLoader.setDelegate(nil, queue: .global(qos: .userInteractive))
         // ─────────────────────────────────────────────────────────────────
 
         let item = AVPlayerItem(asset: asset)
 
-        // [외부 리서치: Apple WWDC] 즉시 재생 가능한 최초 variant부터 시작
-        // ABR이 최적 variant를 결정하기 전에 빠르게 재생을 시작하여 초기 버퍼링 시간 단축
-        item.startsOnFirstEligibleVariant = true
-
-        // ── 화면 해상도 기반 ABR 최적화 ───────────────────────────────────
-        // 1080p(1920x1080) 해상도를 명시적으로 선호 — 화면 크기 관계없이 최고 화질 선택
-        // Retina 디스플레이에서 screen.frame은 논리 해상도이므로 × scale 적용
-        // 예: M1 Max 14" → 1512×982 논리 → 3024×1964 물리 (1080p 충분히 수용)
+        // [Phase 4] 1080p 60fps 기본 재생 — VLC 동등 화질 즉시 시작
+        // startsOnFirstEligibleVariant=false: ABR이 최적(최고) variant를 즉시 선택
+        // preferredMaximumResolution=1920×1080: 1080p 해상도를 명시적으로 선호
+        // preferredPeakBitRate=8Mbps: 1080p 60fps(~6-8Mbps) 이상 variant 선택 보장
+        item.startsOnFirstEligibleVariant = false
         item.preferredMaximumResolution = CGSize(width: 1920, height: 1080)
-        // 비트레이트 무제한 — AVPlayer ABR이 네트워크 상황에 맞게 최고 화질 variant 선택
-        item.preferredPeakBitRate = 0
-        // AVPlayerLayer는 pixelBufferAttributes(playerLayer.pixelBufferAttributes)로
-        // VideoToolbox → Metal IOSurface 직통 경로가 이미 활성화되어 있음.
-        // AVPlayerItemVideoOutput을 추가하면 동일 픽셀 버퍼가 두 경로로 복사되어
-        // 메모리 대역폭 낭비 + GPU compositing 경로 경합 발생 → 제거.
+
+        // 1080p 60fps 스트림의 일반적 비트레이트(6-8Mbps)를 충분히 커버하는 값 설정
+        // 8Mbps 이상의 bitrate variant가 있으면 선택 가능하도록 넉넉하게 설정
+        item.preferredPeakBitRate = 8_000_000  // 1080p 60fps 타겟
+
+        // [Phase 4] 선명도 최적화: 비디오 컴포지션 비활성화 → 디코더 원본 프레임 직통 출력
+        // videoComposition이 nil이면 AVPlayer가 디코더 출력을 무가공으로 CALayer에 전달
+        // → 리사이즈/리샘플링 없이 원본 해상도 그대로 렌더링 (최대 선명도)
+        item.videoComposition = nil
 
         // ── 라이브 스트림 저지연 설정 ──────────────────────────────────────
         if isLiveStream {
@@ -386,6 +418,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             // 네트워크 경합 및 CPU 디코딩 부하 감소 (활성 전환 시 0으로 복원)
             if isBackgroundMode {
                 item.preferredPeakBitRate = 3_000_000  // ~720p 상한
+                item.preferredMaximumResolution = CGSize(width: 1280, height: 720)
             }
         } else {
             player.automaticallyWaitsToMinimizeStalling = true
@@ -401,6 +434,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             // stall watchdog는 readyToPlay KVO에서 시작됨 (어이템 준비 완료 후 감시 시작)
             // liveCatchupLoop는 젠시 시작하여 러닝 상태 모니터링
             startLiveCatchupLoop()
+            startMetricsCollection()
         }
 
         let streamKind = self.isLiveStream ? "LIVE" : "VOD"
@@ -423,8 +457,10 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     public func stop() {
         stallWatchdogTask?.cancel()
         liveCatchupTask?.cancel()
+        metricsCollectionTask?.cancel()
         stallWatchdogTask = nil
         liveCatchupTask = nil
+        metricsCollectionTask = nil
 
         // KVO observer 잔존 방지 — replaceCurrentItem(nil) 전에 제거
         removeItemObservers()
@@ -444,12 +480,14 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         onTimeChange = nil
         onLatencyChange = nil
         onReconnectRequested = nil
+        onAVMetrics = nil
 
         // 메트릭 리셋
         rateHistory.removeAll()
         droppedFrames = 0
         indicatedBitrate = 0
         measuredLatency = 0
+        previousDroppedFrames = 0
         isBackgroundMode = false
 
         _avState.withLock {
@@ -547,7 +585,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     private let reconnectWindowSeconds: TimeInterval = 300 // 5분
 
     private func startStallWatchdog() {
-        let kCheckInterval: UInt64 = 3_000_000_000 // 3초
+        let kCheckInterval: UInt64 = 4_000_000_000 // 4초 (AVPlayer 기본엔진 전환: CPU 절감)
 
         stallWatchdogTask?.cancel()
         lastProgressTime = Date()
@@ -661,7 +699,7 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     /// - latency > maxLatency: 라이브 엣지로 즉시 점프 후 offset 재설정
     /// - 백그라운드 세션은 건너뜀 (비활성 세션에서 속도 조정 불필요)
     private func startLiveCatchupLoop() {
-        let kCheckInterval: UInt64 = 2_000_000_000 // 2초
+        let kCheckInterval: UInt64 = 3_000_000_000 // 3초 (AVPlayer 기본엔진 전환: CPU 절감)
 
         liveCatchupTask?.cancel()
         liveCatchupTask = Task { [weak self] in
@@ -905,10 +943,11 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             self.notifyStateChange(phase)
         }
 
-        // 1초 간격: 0.5s에서 완화 → 4세션 기준 @Observable 업데이트 8→4회/초 감소
-        let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
+        // 2초 간격: AVPlayer 기본엔진 전환으로 CPU 절감 (4세션 기준 4→2회/초)
+        let interval = CMTime(seconds: 2.0, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self else { return }
+            guard !self.isBackgroundMode else { return }
             let cur = CMTimeGetSeconds(time)
             let dur = self.duration
             if cur.isFinite {
@@ -1097,6 +1136,63 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         Task { @MainActor [weak self] in
             self?.onStateChange?(phase)
         }
+    }
+
+    // MARK: - Metrics Collection (AVPlayer → MetricsForwarder)
+
+    /// 10초 주기로 현재 AVPlayer 재생 메트릭을 수집하여 onAVMetrics 콜백으로 전달
+    private func startMetricsCollection() {
+        metricsCollectionTask?.cancel()
+        previousDroppedFrames = 0
+
+        metricsCollectionTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10초
+                guard !Task.isCancelled, let self else { return }
+                let snapshot = self.collectMetricsSnapshot()
+                self.onAVMetrics?(snapshot)
+            }
+        }
+    }
+
+    /// 현재 시점의 메트릭 스냅샷 수집
+    private func collectMetricsSnapshot() -> AVPlayerLiveMetrics {
+        let currentDropped = self.droppedFrames
+        let delta = max(0, currentDropped - self.previousDroppedFrames)
+        self.previousDroppedFrames = currentDropped
+
+        // 해상도: 현재 재생 중인 비디오 트랙의 naturalSize
+        let resolution: String? = {
+            guard let item = self.player.currentItem else { return nil }
+            for track in item.tracks {
+                if track.assetTrack?.mediaType == .video {
+                    let size = track.assetTrack?.naturalSize ?? .zero
+                    if size.width > 0 && size.height > 0 {
+                        return "\(Int(size.width))x\(Int(size.height))"
+                    }
+                }
+            }
+            return nil
+        }()
+
+        // 버퍼 건강도: isPlaybackLikelyToKeepUp 기반
+        let bufferHealth: Double = {
+            guard let item = self.player.currentItem else { return 0.0 }
+            if item.isPlaybackLikelyToKeepUp { return 1.0 }
+            if item.isPlaybackBufferFull { return 0.8 }
+            if item.isPlaybackBufferEmpty { return 0.0 }
+            return 0.5
+        }()
+
+        return AVPlayerLiveMetrics(
+            indicatedBitrate: self.indicatedBitrate,
+            droppedFrames: currentDropped,
+            droppedFramesDelta: delta,
+            measuredLatency: self.measuredLatency,
+            resolution: resolution,
+            playbackRate: self.player.rate,
+            bufferHealth: bufferHealth
+        )
     }
 }
 

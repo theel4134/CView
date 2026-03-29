@@ -66,18 +66,18 @@ public actor StreamCoordinator {
     // MARK: - Properties
     
     private let config: Configuration
-    private let logger = AppLogger.player
+    let logger = AppLogger.player
     
     // Sub-controllers
-    private let hlsParser = HLSManifestParser()
-    private var abrController: ABRController?
-    private var lowLatencyController: LowLatencyController?
+    let hlsParser = HLSManifestParser()
+    var abrController: ABRController?
+    var lowLatencyController: LowLatencyController?
     // 인스턴스별 프록시 — 멀티라이브 세션이 다른 CDN 호스트를 사용할 수 있으므로
     // 각 StreamCoordinator에 독립 프록시를 할당하여 호스트 간 간섭 방지
-    private let streamProxy = LocalStreamProxy()
+    let streamProxy = LocalStreamProxy()
 
     // P0-2: HLS 전용 URLSession — ephemeral(쿠키 격리) + 캐시 비활성화(라이브 스트림)
-    private nonisolated let hlsSession: URLSession = {
+    nonisolated let hlsSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 30
@@ -87,50 +87,50 @@ public actor StreamCoordinator {
     }()
     
     // State
-    private var _phase: StreamPhase = .idle
-    private var _masterPlaylist: MasterPlaylist?
-    private var _currentQuality: StreamQualityInfo?
-    private var _streamURL: URL?
+    var _phase: StreamPhase = .idle
+    var _masterPlaylist: MasterPlaylist?
+    var _currentQuality: StreamQualityInfo?
+    var _streamURL: URL?
     private var _startTime: Date?
-    private var _isProxyActive = false
+    var _isProxyActive = false
     
     // 1080p+ABR 하이브리드 상태
-    private var _preferredQualityVariant: MasterPlaylist.Variant?  // 원래 선호 화질 (복귀 목표)
-    private var _isQualityDegraded: Bool = false  // 현재 화질 하향 상태 여부
-    private var _qualityRecoveryTask: Task<Void, Never>?
+    var _preferredQualityVariant: MasterPlaylist.Variant?  // 원래 선호 화질 (복귀 목표)
+    var _isQualityDegraded: Bool = false  // 현재 화질 하향 상태 여부
+    var _qualityRecoveryTask: Task<Void, Never>?
     
     // 매니페스트 주기적 갱신 (토큰 리프레시 + variant URL 갱신)
-    private var _manifestRefreshTask: Task<Void, Never>?
-    private var _currentVariantURL: URL?  // VLC에 전달한 현재 variant URL
+    var _manifestRefreshTask: Task<Void, Never>?
+    var _currentVariantURL: URL?  // VLC에 전달한 현재 variant URL
     
     // 재생 감시 (Watchdog) — currentTime 정체 감지 → 자동 재연결
-    private var _watchdogTask: Task<Void, Never>?
-    private var _lastWatchdogTime: TimeInterval = -1
-    private var _lastWatchdogDecodedFrames: Int32 = -1  // 보조 감지: VLC 디코딩 프레임 수
-    private var _stallCount: Int = 0
-    private let _stallThreshold: Int = 2  // 연속 2회(6초) 정체 시 재연결
+    var _watchdogTask: Task<Void, Never>?
+    var _lastWatchdogTime: TimeInterval = -1
+    var _lastWatchdogDecodedFrames: Int32 = -1  // 보조 감지: VLC 디코딩 프레임 수
+    var _stallCount: Int = 0
+    let _stallThreshold: Int = 2  // 연속 2회(6초) 정체 시 재연결
     
     // [Fix 15] 초기 재생 시 FIX14 모니터링과 watchdog 충돌 방지
     // FIX14가 35초간 VLC 상태를 감시하므로 그 기간엔 watchdog 재연결 차단
-    private var _playbackStartTime: Date = .distantPast
+    var _playbackStartTime: Date = .distantPast
     // 20초: FIX14 Phase 1(5초) + Phase 2 초반 커버, Phase 2 후반부터 watchdog 활성화
-    private let _watchdogGracePeriod: TimeInterval = 20
+    let _watchdogGracePeriod: TimeInterval = 20
     
     // 재연결 이중 트리거 방지: 마지막 재연결 시각 (VLC stall + Watchdog 동시 발화 차단)
-    private var _lastReconnectTime: Date = .distantPast
-    private let _reconnectCooldown: TimeInterval = 8  // 8초 내 이중 재연결 차단 (10→8s: 빠른 복구)
+    var _lastReconnectTime: Date = .distantPast
+    let _reconnectCooldown: TimeInterval = 8  // 8초 내 이중 재연결 차단 (10→8s: 빠른 복구)
     
     // PDT-based latency provider (Method A)
-    private var pdtProvider: PDTLatencyProvider?
+    var pdtProvider: PDTLatencyProvider?
     
     // 매니페스트 갱신 연속 실패 카운터 — CDN 장애 감지
-    private var _manifestRefreshFailCount: Int = 0
+    var _manifestRefreshFailCount: Int = 0
     
     // Player reference (injected)
-    private var playerEngine: (any PlayerEngineProtocol)?
+    var playerEngine: (any PlayerEngineProtocol)?
     
     // Reconnection handler
-    private var reconnectionHandler = PlaybackReconnectionHandler(config: .aggressive)
+    var reconnectionHandler = PlaybackReconnectionHandler(config: .aggressive)
     
     /// 방송 종료 여부 확인 콜백 — 재연결 시도 전 호출하여 방송이 실제로 종료됐는지 API로 확인
     /// true 반환 시 재연결 중단 → streamEnded 처리
@@ -142,8 +142,8 @@ public actor StreamCoordinator {
     }
     
     // Event stream
-    private var eventContinuation: AsyncStream<StreamEvent>.Continuation?
-    private var _eventStream: AsyncStream<StreamEvent>?
+    var eventContinuation: AsyncStream<StreamEvent>.Continuation?
+    var _eventStream: AsyncStream<StreamEvent>?
     
     // MARK: - Public Accessors
     
@@ -453,7 +453,17 @@ public actor StreamCoordinator {
                     }
                 }
             } else {
-                // AVPlayer: 프록시 URL로 변환
+                // AVPlayer: 마스터 URL을 프록시 경유로 전달 (AVPlayer 내장 ABR 활용)
+                // [Phase 4] 매니페스트를 미리 파싱하여 1080p 60fps variant 정보 확인 →
+                // AVPlayerItem의 preferredPeakBitRate를 정확한 1080p 비트레이트로 힌트 설정
+                if let prefetchedMaster = _masterPlaylist, !prefetchedMaster.variants.isEmpty {
+                    // 프리페치 캐시 활용: 네트워크 요청 없이 variant 정보 설정
+                    await resolveAVPlayerInitialQuality(from: prefetchedMaster)
+                } else {
+                    // 프리페치 없음: 빠른 매니페스트 파싱으로 품질 정보 사전 확보
+                    await resolveAVPlayerManifest(from: url)
+                }
+                
                 if _isProxyActive {
                     playbackURL = streamProxy.proxyURL(from: url)
                 }
@@ -545,6 +555,67 @@ public actor StreamCoordinator {
         }
     }
     
+    // MARK: - AVPlayer 1080p 60fps 초기 품질 해석 [Phase 4]
+    
+    /// 프리페치된 매니페스트에서 AVPlayer 초기 품질 정보를 설정합니다.
+    /// AVPlayer는 마스터 URL을 직접 재생하므로 variant URL은 전달하지 않고,
+    /// preferredPeakBitRate 힌트와 UI용 품질 정보만 설정합니다.
+    private func resolveAVPlayerInitialQuality(from master: MasterPlaylist) async {
+        await abrController?.setLevels(master.variants)
+        
+        guard let variant = select1080p60Variant(from: master.variants) else { return }
+        
+        _currentQuality = qualityFromVariant(variant)
+        _preferredQualityVariant = variant
+        emitEvent(.qualitySelected(_currentQuality!))
+        logger.info("AVPlayer: [Phase 4] 프리페치 매니페스트 → \(variant.qualityLabel) \(variant.frameRate.map { "\(Int($0))fps" } ?? "") (\(variant.bandwidth / 1000)kbps)")
+    }
+    
+    /// 마스터 URL을 파싱하여 AVPlayer 초기 품질 정보를 설정합니다.
+    /// play() 이전에 호출하여 ABR 레벨과 UI 품질 정보를 사전 구성합니다.
+    private func resolveAVPlayerManifest(from masterURL: URL) async {
+        do {
+            var request = URLRequest(url: masterURL)
+            request.timeoutInterval = 3  // play() 차단 최소화
+            request.setValue(CommonHeaders.safariUserAgent, forHTTPHeaderField: "User-Agent")
+            request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
+            
+            let (data, _) = try await hlsSession.data(for: request)
+            let content = String(data: data, encoding: .utf8) ?? ""
+            
+            guard content.contains("#EXT-X-STREAM-INF") else { return }
+            
+            let master = try await hlsParser.parseMasterPlaylist(content: content, baseURL: masterURL)
+            _masterPlaylist = master
+            
+            await resolveAVPlayerInitialQuality(from: master)
+            logger.info("AVPlayer: [Phase 4] 매니페스트 파싱 완료 → variants: \(master.variants.count)개")
+        } catch {
+            logger.debug("AVPlayer: 매니페스트 사전 파싱 실패 (무시): \(error.localizedDescription)")
+        }
+    }
+    
+    /// 1080p 60fps variant를 우선 선택하는 공통 선택 로직.
+    /// 우선순위: 1080p 60fps > 1080p (아무 fps) > 최고 bandwidth variant
+    func select1080p60Variant(from variants: [MasterPlaylist.Variant]) -> MasterPlaylist.Variant? {
+        let sorted = variants.sorted { $0.bandwidth > $1.bandwidth }
+        
+        // 1순위: 1080p && 60fps (프레임레이트가 명시된 경우)
+        if let target = sorted.first(where: {
+            $0.resolution.contains("1080") && ($0.frameRate ?? 0) >= 59.0
+        }) {
+            return target
+        }
+        
+        // 2순위: 1080p (아무 프레임레이트)
+        if let target = sorted.first(where: { $0.resolution.contains("1080") }) {
+            return target
+        }
+        
+        // 3순위: 최고 bandwidth
+        return sorted.first
+    }
+    
     /// CDN 엣지 서버에 HEAD 요청을 보내 TCP/TLS 연결을 사전 수립합니다.
     /// VLC play() 전에 호출하면 초기 버퍼링 시간(TTFP)을 200~500ms 단축할 수 있습니다.
     /// - Parameter url: CDN 스트림 URL (마스터 매니페스트 또는 variant URL)
@@ -565,128 +636,6 @@ public actor StreamCoordinator {
         }
     }
 
-    // MARK: - Manifest Refresh Timer (Token Refresh + Variant URL Update)
-
-    /// 매니페스트 주기적 갱신 타이머 시작 (프로파일별 갱신 주기)
-    /// 치지직 CDN URL의 토큰/서명이 만료되면 variant URL이 무효화되므로
-    /// 주기적으로 마스터 매니페스트를 재파싱하여 신선한 variant URL을 유지합니다.
-    /// lowLatency=15초, normal=20초, highBuffer=30초 주기
-    private func startManifestRefreshTimer() {
-        _manifestRefreshTask?.cancel()
-        
-        // 프로파일에서 갱신 주기 취득 (actor-isolated 컨텍스트에서 미리 읽기)
-        let refreshInterval: Int
-        if let vlcEngine = self.playerEngine as? VLCPlayerEngine {
-            refreshInterval = vlcEngine.streamingProfile.manifestRefreshInterval
-        } else {
-            refreshInterval = 20  // 기본 20초
-        }
-        
-        _manifestRefreshTask = Task { [weak self] in
-            // 초기 대기 (최초 재생 직후에는 굳이 갱신 필요 없음)
-            try? await Task.sleep(for: .seconds(refreshInterval))
-            
-            while !Task.isCancelled {
-                guard let self else { break }
-                await self.refreshMasterManifest()
-                try? await Task.sleep(for: .seconds(refreshInterval))
-            }
-        }
-    }
-
-    /// 마스터 매니페스트를 다시 다운로드하여 variant URL을 갱신합니다.
-    /// 토큰 리프레시 + variant 목록 업데이트 + VLC 엔진 URL 동기화.
-    private func refreshMasterManifest() async {
-        guard let streamURL = _streamURL else { return }
-        // 에러/재연결 중에는 주기적 갱신 사이클 스킵 (호출자가 triggerReconnect인 경우는 예외)
-        // triggerReconnect에서 직접 호출 시에는 .reconnecting 상태이므로 phase 체크는 .error만
-        if case .error = _phase {
-            return
-        }
-        
-        do {
-            var request = URLRequest(url: streamURL)
-            request.timeoutInterval = 5
-            request.setValue(CommonHeaders.safariUserAgent, forHTTPHeaderField: "User-Agent")
-            request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
-            request.cachePolicy = .reloadIgnoringLocalCacheData  // 캐시 무시
-            
-            let (data, _) = try await hlsSession.data(for: request)
-            let content = String(data: data, encoding: .utf8) ?? ""
-            
-            guard content.contains("#EXT-X-STREAM-INF") else { return }
-            
-            let master = try await hlsParser.parseMasterPlaylist(content: content, baseURL: streamURL)
-            
-            // 매니페스트 업데이트
-            _masterPlaylist = master
-            _manifestRefreshFailCount = 0  // 성공 시 실패 카운터 리셋
-            await abrController?.setLevels(master.variants)
-            
-            // 1080p variant URL 갱신
-            let sortedVariants = master.variants.sorted { $0.bandwidth > $1.bandwidth }
-            let target = sortedVariants.first(where: { $0.resolution.contains("1080") })
-                ?? sortedVariants.first
-            
-            if let variant = target {
-                let newURL = variant.uri
-                let oldURL = _currentVariantURL
-                _currentVariantURL = newURL
-                _preferredQualityVariant = variant
-                _currentQuality = qualityFromVariant(variant)
-
-                if oldURL != newURL {
-                    logger.info("매니페스트 갱신: variant URL 변경됨 (토큰 리프레시)")
-                } else {
-                    logger.debug("매니페스트 갱신: variant URL 동일 (토큰 유효)")
-                }
-            }
-        } catch {
-            self._manifestRefreshFailCount += 1
-            if self._manifestRefreshFailCount >= 5 {
-                self.logger.warning("매니페스트 갱신 \(self._manifestRefreshFailCount)회 연속 실패 — 재연결 시도")
-                self._manifestRefreshFailCount = 0
-                self.triggerReconnect(reason: "manifest refresh 5회 연속 실패")
-            } else {
-                self.logger.debug("매니페스트 갱신 실패 (\(self._manifestRefreshFailCount)/5): \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// 백그라운드에서 매니페스트를 파싱하여 품질 정보 수집 (재생에는 영향 없음)
-    private func loadManifestInfo(from url: URL) {
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                var request = URLRequest(url: url)
-                request.setValue(CommonHeaders.safariUserAgent, forHTTPHeaderField: "User-Agent")
-                request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
-                
-                let (data, _) = try await hlsSession.data(for: request)
-                let content = String(data: data, encoding: .utf8) ?? ""
-                
-                if content.contains("#EXT-X-STREAM-INF") {
-                    let master = try await self.hlsParser.parseMasterPlaylist(content: content, baseURL: url)
-                    await self.updateMasterPlaylist(master)
-                }
-            } catch {
-                await self.logger.debug("Manifest info fetch skipped: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    /// 매니페스트 정보 업데이트 (actor-isolated)
-    private func updateMasterPlaylist(_ master: MasterPlaylist) async {
-        _masterPlaylist = master
-        await abrController?.setLevels(master.variants)
-        
-        // 최고 품질을 현재 품질로 표시 (VLC가 자동 선택)
-        if let best = master.variants.first {
-            _currentQuality = qualityFromVariant(best)
-            emitEvent(.qualitySelected(_currentQuality!))
-        }
-    }
-    
     /// Stop the stream
     public func stopStream() async {
         await reconnectionHandler.cancel()
@@ -785,14 +734,11 @@ public actor StreamCoordinator {
         // 프록시 활성 시 프록시 경유 URL 사용 (Content-Type 수정 필요)
         let playURL = _isProxyActive ? streamProxy.proxyURL(from: variant.uri) : variant.uri
 
-        // VLC: stop() 없이 바로 play()로 미디어 교체 — 블랙 프레임 방지
-        // VLCPlayerEngine._startPlay()에서 player.media = newMedia가 이전 미디어를 안전하게 교체
-        // (player.media = nil만 금지, 새 미디어 할당은 안전)
-        // 비-VLC 엔진은 기존 stop→play 방식 유지
-        if !(engine is VLCPlayerEngine) {
-            engine.stop()
-        }
-        
+        // 모든 엔진: stop() 없이 바로 play()로 미디어 교체 — 재생 끊김 방지
+        // VLCPlayerEngine: player.media = newMedia가 이전 미디어를 안전하게 교체
+        // AVPlayerEngine: play() 내부에서 removeItemObservers() + replaceCurrentItem()으로
+        //   이전 재생을 정리하므로 별도 stop() 불필요. stop()은 replaceCurrentItem(nil)로
+        //   아이템을 완전히 제거하고 상태를 idle로 바꿔 멀티라이브 화질 전환 시 재생이 정지됨.
         try await engine.play(url: playURL)
 
         _currentQuality = qualityFromVariant(variant)
@@ -858,342 +804,12 @@ public actor StreamCoordinator {
         return master.variants[midIndex]
     }
     
-    private func startLowLatencySync() async {
-        guard let controller = lowLatencyController else { return }
-        
-        await controller.setOnRateChange { [weak self] rate in
-            Task { [weak self] in
-                await self?.playerEngine?.setRate(Float(rate))
-            }
-        }
-        
-        await controller.setOnSeekRequired { [weak self] targetLatency in
-            Task { [weak self] in
-                guard let engine = await self?.playerEngine else { return }
-                // 라이브 HLS에서 duration = 버퍼 내 총 길이, currentTime = 현재 위치
-                // targetLatency초 뒤에서 재생하려면 버퍼 끝(duration)에서 빼기
-                // VLC 내부 디코더 파이프라인 지연(~1s) 고려하여 약간 앞으로 seek
-                let vlcPipelineDelay: TimeInterval = 1.0
-                let seekTarget = engine.duration - max(targetLatency - vlcPipelineDelay, 1.0)
-                if seekTarget > 0 {
-                    engine.seek(to: seekTarget)
-                }
-            }
-        }
-        
-        // Method A: 미디어 플레이리스트 URL 확보 (마스터 플레이리스트 파싱)
-        // loadManifestInfo가 백그라운드 Task이므로 직접 fetch해서 타이밍 문제 해결
-        let mediaPlaylistURL = await resolveMediaPlaylistURL()
-        
-        if let mediaPlaylistURL {
-            let provider = PDTLatencyProvider(playlistURL: mediaPlaylistURL)
-            await provider.start()
-            pdtProvider = provider
-            
-            // PDT 초기 안정화 대기 (최대 6초, 값이 준비되면 즉시 진행)
-            for _ in 0..<6 {
-                if await provider.isReady { break }
-                try? await Task.sleep(for: .seconds(1))
-            }
-            
-            logger.info("PDT sync active: \(mediaPlaylistURL.lastPathComponent, privacy: .public)")
-            
-            await controller.startSync { [weak provider, weak self] in
-                // 실제 체감 레이턴시 = PDT 세그먼트 지연 + VLC 버퍼 내 재생 위치 차이
-                // PDT: 마지막 세그먼트가 CDN에 올라온 시점 대비 현재 시각 (세그먼트 수준 지연)
-                // vlcBuffer: VLC 버퍼 끝(duration) - 현재 재생 위치(currentTime)
-                // 합계 = 실제 라이브 대비 재생 화면이 얼마나 뒤처졌는지
-                if let pdtLatency = await provider?.currentLatency() {
-                    // PDT 측정 성공 시, VLC 버퍼 지연을 합산
-                    let bufferDelay = await self?.vlcBufferLatency() ?? 0
-                    return pdtLatency + bufferDelay
-                }
-                // Fallback: VLC 버퍼 내부 duration-currentTime (PDT 없을 때)
-                return await self?.vlcBufferLatency()
-            }
-        } else {
-            // 마스터 플레이리스트 fetch 실패 - VLC 버퍼 fallback
-            logger.info("Media playlist URL unavailable, using VLC buffer latency")
-            await controller.startSync { [weak self] in
-                await self?.vlcBufferLatency()
-            }
-        }
-    }
-    
-    /// 마스터 플레이리스트에서 첫 번째 미디어 플레이리스트 URL을 가져옴
-    /// 이미 파싱된 경우 즉시 반환, 없으면 _streamURL에서 직접 fetch
-    private func resolveMediaPlaylistURL() async -> URL? {
-        // 이미 파싱된 경우 즉시 반환
-        if let url = _masterPlaylist?.variants.first?.uri {
-            return url
-        }
-        // 직접 fetch
-        guard let streamURL = _streamURL else { return nil }
-        do {
-            var request = URLRequest(url: streamURL)
-            request.setValue(
-                CommonHeaders.safariUserAgent,
-                forHTTPHeaderField: "User-Agent"
-            )
-            request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            
-            let (data, _) = try await hlsSession.data(for: request)
-            let content = String(data: data, encoding: .utf8) ?? ""
-            
-            if content.contains("#EXT-X-STREAM-INF") {
-                let master = try hlsParser.parseMasterPlaylist(content: content, baseURL: streamURL)
-                // 파싱 결과로 내부 상태도 업데이트 (loadManifestInfo 중복 방지 효과)
-                if _masterPlaylist == nil {
-                    await updateMasterPlaylist(master)
-                }
-                return master.variants.first?.uri
-            } else if content.contains("#EXTINF") {
-                // 이미 미디어 플레이리스트인 경우
-                return streamURL
-            }
-        } catch {
-            logger.warning("Master playlist fetch failed: \(error.localizedDescription, privacy: .public)")
-        }
-        return nil
-    }
-    
-    /// VLC 내부 버퍼 기반 레이턴시 (PDT 없을 때 fallback)
-    private func vlcBufferLatency() async -> TimeInterval? {
-        guard let engine = playerEngine else { return nil }
-        guard engine.isPlaying else { return nil }
-        let duration = engine.duration
-        let current = engine.currentTime
-        guard duration > 0, current > 0 else { return nil }
-        let latency = duration - current
-        guard latency > 0, latency < 60 else { return nil }
-        return latency
-    }
-    
-    // MARK: - Reconnection
-
-    /// 재연결 트리거 — 현재 URL로 재시도
-    /// - Parameter reason: 로그용 재연결 원인
-    public func triggerReconnect(reason: String = "") {
-        guard let rawURL = _streamURL else {
-            logger.warning("StreamCoordinator: 재연결 실패 — 저장된 URL 없음")
-            return
-        }
-        // 이미 재연결 중이면 무시
-        guard _phase != .reconnecting else { return }
-        
-        // 이중 트리거 방지: 최근 재연결로부터 cooldown 이내면 무시
-        let now = Date()
-        if now.timeIntervalSince(_lastReconnectTime) < _reconnectCooldown {
-            logger.info("StreamCoordinator: 재연결 쿨다운 중 — 무시 (\(reason))")
-            return
-        }
-        _lastReconnectTime = now
-        
-        updatePhase(.reconnecting)
-        logger.info("StreamCoordinator: 재연결 시작 (\(reason))")
-
-        Task { [weak self] in
-            guard let self else { return }
-
-            // 방송 종료 여부 API 확인 — 종료된 방송에 재연결하지 않도록
-            if let checkEnded = await self.onCheckStreamEnded, await checkEnded() {
-                await self.handleStreamEnded()
-                return
-            }
-
-            // 재연결 전: PDT 폴링·로우레이턴시 PID를 중지하여 stale 데이터 오염 방지
-            await self.stopLatencySubsystems()
-
-            // 프록시 세션 리셋 — stale 연결 풀 정리
-            if await self._isProxyActive {
-                self.streamProxy.resetSession()
-            }
-
-            // [H4 fix] 재연결 전 초기 매니페스트 갱신
-            await self.refreshMasterManifest()
-
-            await self.reconnectionHandler.startReconnecting(
-                onAttempt: { [weak self] attempt, delay in
-                    guard let self else { return }
-                    await self.logger.info("StreamCoordinator: 재시도 \(attempt) — \(String(format: "%.1f", delay))초 대기")
-                    if delay > 0 {
-                        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                    }
-                    // 재시도 전 방송 종료 여부 재확인
-                    if let checkEnded = await self.onCheckStreamEnded, await checkEnded() {
-                        await self.handleStreamEnded()
-                        return
-                    }
-                    // [H4 fix] 매 시도마다 매니페스트 재갱신 → 최신 CDN 토큰 URL 사용
-                    if attempt > 1 {
-                        await self.refreshMasterManifest()
-                    }
-                    let reconnectBase = await self._currentVariantURL ?? rawURL
-                    let isProxyActive = await self._isProxyActive
-                    let url = isProxyActive ? await self.streamProxy.proxyURL(from: reconnectBase) : reconnectBase
-                    await self.performReconnectAttempt(url: url)
-                },
-                onExhausted: { [weak self] in
-                    await self?.handleReconnectExhausted()
-                }
-            )
-        }
-    }
-
-    /// 단일 재연결 시도 — play()를 재호출하여 스트림 재시작
-    private func performReconnectAttempt(url: URL) async {
-        guard let engine = playerEngine else { return }
-        engine.stop()
-        do {
-            try await engine.play(url: url)
-            await reconnectionHandler.handleSuccess()
-            updatePhase(.playing)
-            logger.info("StreamCoordinator: 재연결 성공")
-            
-            // 재연결 후 Watchdog 상태 리셋 — stale 값으로 즉시 재감지되는 것 방지
-            _lastWatchdogTime = -1
-            _lastWatchdogDecodedFrames = -1
-            _stallCount = 0
-            
-            // 재연결 성공 후 PDT·로우레이턴시 동기화 재시작 (갱신된 URL 사용)
-            await startLowLatencySync()
-        } catch {
-            logger.warning("StreamCoordinator: 재연결 시도 실패 — \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// 재연결 시도 모두 소진
-    private func handleReconnectExhausted() {
-        updatePhase(.error("재연결 최대 횟수 초과"))
-        emitEvent(.error("재연결 최대 횟수 초과"))
-        logger.error("StreamCoordinator: 재연결 소진")
-    }
-    
-    /// 방송 종료 감지 — 플레이어 정지 및 streamEnded 이벤트 방출
-    private func handleStreamEnded() async {
-        await reconnectionHandler.cancel()
-        playerEngine?.stop()
-        updatePhase(.streamEnded)
-        emitEvent(.streamEnded)
-        logger.info("StreamCoordinator: 방송 종료 감지 — 재연결 중단")
-    }
-    
-    /// PDT 폴링·로우레이턴시 PID를 중지 — 재연결 전 stale 데이터 오염 방지
-    private func stopLatencySubsystems() async {
-        await lowLatencyController?.stopSync()
-        await pdtProvider?.stop()
-        pdtProvider = nil
-    }
-    
-    // MARK: - Playback Watchdog
-
-    /// 3초마다 `currentTime`을 확인하여 재생이 멈췄는지 감시합니다.
-    /// 6초(2연속 체크) 동안 시간이 진행되지 않으면 자동 재연결을 시도합니다.
-    private func startPlaybackWatchdog() {
-        _watchdogTask?.cancel()
-        _stallCount = 0
-        _lastWatchdogTime = -1
-        _lastWatchdogDecodedFrames = -1
-        
-        _watchdogTask = Task { [weak self] in
-            // onStateChange .playing 이후 시작되므로 짧은 안정화 대기면 충분
-            try? await Task.sleep(for: .seconds(2))
-            
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled, let self else { break }
-                
-                let phase = await self._phase
-                guard phase == .playing else {
-                    await self.resetStallCounter()
-                    continue
-                }
-                
-                guard let engine = await self.playerEngine else { continue }
-                let currentTime = engine.currentTime
-                let lastTime = await self._lastWatchdogTime
-                
-                // 보조 감지: VLC 디코딩 프레임 수 확인
-                let currentDecoded: Int32
-                let lastDecoded: Int32
-                if let vlcEngine = engine as? VLCPlayerEngine {
-                    currentDecoded = vlcEngine.decodedVideoFrames
-                    lastDecoded = await self._lastWatchdogDecodedFrames
-                } else {
-                    currentDecoded = -1
-                    lastDecoded = -1
-                }
-                
-                // currentTime 정체 감지
-                let timeStalled = lastTime >= 0 && abs(currentTime - lastTime) < 0.1
-                // 디코딩 프레임 정체 감지: 3초간 새 프레임이 2개 미만이면 실질적 정체
-                // (VLC http-reconnect가 간헐적으로 1프레임만 디코딩하는 경우 잡아냄)
-                let framesStalled = lastDecoded >= 0 && currentDecoded >= 0 && (currentDecoded - lastDecoded) < 2
-                
-                // [Fix 17b] Watchdog 정젠 로직: time AND frames 모두 정체해야 재연결
-                // VLC가 buffering 상태로 currentTime을 업데이트하지 않지만
-                // 실제로는 프레임을 디코딩/표시 중인 경우 재연결 방지
-                if timeStalled && (lastDecoded < 0 || framesStalled) {
-                    let count = await self.incrementStallCount()
-                    let threshold = await self._stallThreshold
-                    if count >= threshold {
-                        // [Fix 15] Grace period: 초기 재생 후 40초간 watchdog 재연결 차단
-                        // FIX14가 35초간 VLC 상태를 감시하므로 중복 재시작 방지
-                        let playbackStart = await self._playbackStartTime
-                        let gracePeriod = await self._watchdogGracePeriod
-                        let elapsed = Date().timeIntervalSince(playbackStart)
-                        if elapsed < gracePeriod {
-                            await self.logger.info("Watchdog: grace period 중 (\(Int(elapsed))s/\(Int(gracePeriod))s) — 재연결 보류")
-                            await self.resetStallCounter()
-                            continue
-                        }
-                        // [Fix 15] 프레임이 한 번도 디코딩되지 않은 상태(decodedFrames==0)에서
-                        // stall 감지는 무의미 — VLC가 아직 디코더를 생성하지 못한 것
-                        if currentDecoded == 0 {
-                            await self.logger.info("Watchdog: decodedFrames=0 — 디코더 미생성, 재연결 보류")
-                            await self.resetStallCounter()
-                            continue
-                        }
-                        let stallReason = timeStalled ? "currentTime 정체" : "디코딩 프레임 정체 (\(currentDecoded - lastDecoded)f/3s)"
-                        await self.logger.warning("Watchdog: \(count * 3)초간 \(stallReason) 감지 — 재연결 시도")
-                        await self.resetStallCounter()
-                        await self.triggerReconnect(reason: "watchdog: \(stallReason)")
-                        try? await Task.sleep(for: .seconds(6))
-                    }
-                } else {
-                    await self.resetStallCounter()
-                }
-                
-                await self.setLastWatchdogTime(currentTime)
-                await self.setLastWatchdogDecodedFrames(currentDecoded)
-            }
-        }
-    }
-    
-    private func resetStallCounter() {
-        _stallCount = 0
-    }
-    
-    private func incrementStallCount() -> Int {
-        _stallCount += 1
-        return _stallCount
-    }
-    
-    private func setLastWatchdogTime(_ time: TimeInterval) {
-        _lastWatchdogTime = time
-    }
-    
-    private func setLastWatchdogDecodedFrames(_ count: Int32) {
-        _lastWatchdogDecodedFrames = count
-    }
-
-    private func updatePhase(_ newPhase: StreamPhase) {
+    func updatePhase(_ newPhase: StreamPhase) {
         _phase = newPhase
         emitEvent(.phaseChanged(newPhase))
     }
     
-    private func qualityFromVariant(_ variant: MasterPlaylist.Variant) -> StreamQualityInfo {
+    func qualityFromVariant(_ variant: MasterPlaylist.Variant) -> StreamQualityInfo {
         StreamQualityInfo(
             name: variant.qualityLabel,
             resolution: variant.resolution,
@@ -1201,7 +817,7 @@ public actor StreamCoordinator {
         )
     }
     
-    private func emitEvent(_ event: StreamEvent) {
+    func emitEvent(_ event: StreamEvent) {
         eventContinuation?.yield(event)
     }
 

@@ -74,7 +74,7 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
 
     public init(
         quality: StreamQuality = .auto,
-        preferredEngine: PlayerEngineType = .vlc,
+        preferredEngine: PlayerEngineType = .avPlayer,
         lowLatencyMode: Bool = true,
         catchupRate: Double = 1.05,
         bufferDuration: TimeInterval = 2.0,
@@ -856,7 +856,7 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
 
     public init(
         maxConcurrentSessions: Int = 4,
-        preferredEngine: PlayerEngineType = .vlc,
+        preferredEngine: PlayerEngineType = .avPlayer,
         defaultLayoutMode: MultiLiveLayoutMode = .preset,
         multiAudioEnabled: Bool = false,
         secondaryVolume: Float = 0.3,

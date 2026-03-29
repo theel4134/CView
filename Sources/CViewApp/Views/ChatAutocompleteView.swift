@@ -74,7 +74,7 @@ struct ChatAutocompleteView: View {
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-        .shadow(color: .black.opacity(0.3), radius: 16, y: -6)
+        .shadow(color: .black.opacity(0.3), radius: 8, y: -4) // [GPU 최적화] radius 16→8 — shadow blur 연산 절반 축소
     }
 
     // MARK: - Emoticon Row

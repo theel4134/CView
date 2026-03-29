@@ -16,6 +16,8 @@ struct ChatOverlayView: View {
     @State private var isHovering = false
     @State private var isResizing = false
     @State private var resizeStart: CGSize = .zero
+    @State private var isSideHovered = false
+    @State private var isHideHovered = false
 
     private var overlayWidth: CGFloat { chatVM?.overlayWidth ?? 340 }
     private var overlayHeight: CGFloat { chatVM?.overlayHeight ?? 400 }
@@ -64,8 +66,8 @@ struct ChatOverlayView: View {
             // 초기 위치: 우측 하단
             if position == .zero {
                 position = CGPoint(
-                    x: containerSize.width - overlayWidth / 2 - 16,
-                    y: containerSize.height - overlayHeight / 2 - 16
+                    x: containerSize.width - overlayWidth / 2 - DesignTokens.Spacing.lg,
+                    y: containerSize.height - overlayHeight / 2 - DesignTokens.Spacing.lg
                 )
             }
         }
@@ -97,11 +99,14 @@ struct ChatOverlayView: View {
             } label: {
                 Image(systemName: "sidebar.right")
                     .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(isSideHovered ? 0.95 : 0.7))
                     .frame(width: 22, height: 22)
-                    .background(.white.opacity(0.1), in: Circle())
+                    .background(.white.opacity(isSideHovered ? 0.18 : 0.1), in: Circle())
+                    .scaleEffect(isSideHovered ? 1.08 : 1.0)
+                    .animation(DesignTokens.Animation.fast, value: isSideHovered)
             }
             .buttonStyle(.plain)
+            .onHover { hovering in isSideHovered = hovering }
             .help("사이드 모드로 전환")
 
             // 채팅 숨기기
@@ -110,11 +115,14 @@ struct ChatOverlayView: View {
             } label: {
                 Image(systemName: "eye.slash")
                     .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(isHideHovered ? 0.95 : 0.7))
                     .frame(width: 22, height: 22)
-                    .background(.white.opacity(0.1), in: Circle())
+                    .background(.white.opacity(isHideHovered ? 0.18 : 0.1), in: Circle())
+                    .scaleEffect(isHideHovered ? 1.08 : 1.0)
+                    .animation(DesignTokens.Animation.fast, value: isHideHovered)
             }
             .buttonStyle(.plain)
+            .onHover { hovering in isHideHovered = hovering }
             .help("채팅 숨기기")
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)

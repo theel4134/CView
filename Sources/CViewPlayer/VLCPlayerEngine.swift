@@ -208,17 +208,17 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
     // MARK: - VLC 내부
 
-    private let player: VLCMediaPlayer
+    let player: VLCMediaPlayer
     private(set) public var playerView: VLCLayerHostView
 
     // 상태 (Mutex 격리)
-    private struct VLCEngineState: Sendable {
+    struct VLCEngineState: Sendable {
         var currentPhase: PlayerState.Phase = .idle
         var isRecording: Bool = false
         var isMuted: Bool = false
         var volume: Float = 1.0
     }
-    private let _state = Mutex(VLCEngineState())
+    let _state = Mutex(VLCEngineState())
     private var statsTask: Task<Void, Never>?
     private var playTask: Task<Void, Never>?
 
@@ -233,12 +233,16 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
     // 버퍼링 필터용: 마지막 buffering 이벤트 시점의 decodedVideo 누적값
     // 누적값이 아닌 delta로 비교하여 장시간 재생 후에도 정확한 감지
-    private var _lastBufferingDecodedCount: Int32 = 0
+    var _lastBufferingDecodedCount: Int32 = 0
 
     // C1 fix: 버퍼링 필터 시간 기반 override
     // .buffering이 delta>0으로 연속 필터링될 때 최초 필터 시각을 기록.
     // 이 시점 이후 5초 이상 지나면 필터링을 중단하고 .buffering을 강제 전파.
-    private var _bufferingFilterStartTime: Date?
+    var _bufferingFilterStartTime: Date?
+
+    // _setPhase 중복 호출 방지: 동일 phase 연속 콜백 억제
+    // VLC가 같은 상태를 수십 ms 간격으로 반복 보고해도 onStateChange 1회만 호출
+    var _lastEmittedPhase: PlayerState.Phase?
 
     // collectMetrics() player.videoSize 캐싱 (MainActor 동기 호출 최소화)
     // 해상도는 재생 시작 이후 거의 변하지 않으므로 이전 값과 비교 후 변경 시에만 갱신
@@ -246,8 +250,8 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     private var _cachedResolutionString: String? = nil
 
     // mediaPlayerTimeChanged 스로틀링 — 초당 10~30회 콜백을 1초 간격으로 제한
-    private var _lastTimeChangeNotify: UInt64 = 0
-    private let _timeChangeThrottleNs: UInt64 = 1_000_000_000  // 1초
+    var _lastTimeChangeNotify: UInt64 = 0
+    let _timeChangeThrottleNs: UInt64 = 2_000_000_000  // 2초 (CPU 최적화: 1→2초)
 
     // Fix 12: VLC 4.0 fMP4 디먹서 폴백 버그 대응 — 초기 재생 실패 시 자동 재시도
     // VLC adaptive 모듈이 init segment 파싱 후 첫 미디어 세그먼트 CDN 연결 지연으로
@@ -542,14 +546,14 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                 // 명확한 실패: stopped/stopping/error → 1회 재시도
                 if initState == .stopped || initState == .stopping || initState == .error {
                     Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 즉시 실패 (state=\(initState.rawValue)) — retry")
-                    // stop() 완료까지 최대 1.5초 대기
-                    await MainActor.run { self.player.stop() }
-                    for _ in 0..<15 {
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                        guard !Task.isCancelled else { return }
-                        let stopped = await MainActor.run { self.player.state == .stopped }
-                        if stopped { break }
+                    // [Freeze Fix] stop + wait를 단일 MainActor.run으로 통합
+                    // 이전: 15× MainActor.run hop → 4세션 동시 실행 시 MainActor 직렬화 부하
+                    await MainActor.run {
+                        self.player.stop()
                     }
+                    // 1.5초 sleep 후 즉시 재시도 (100ms×15 폴링 대신 — MainActor hop 제거)
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled else { return }
                     await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                     return
                 }
@@ -589,12 +593,8 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                     if state == .stopped || state == .stopping || state == .error {
                         Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 폴링 중 실패 (state=\(state.rawValue)) — retry")
                         await MainActor.run { self.player.stop() }
-                        for _ in 0..<15 {
-                            try? await Task.sleep(nanoseconds: 100_000_000)
-                            guard !Task.isCancelled else { return }
-                            let stopped = await MainActor.run { self.player.state == .stopped }
-                            if stopped { break }
-                        }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
                         await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                         return
                     }
@@ -603,12 +603,8 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                     if state == .playing && size.width == 0 && pollIdx >= 3 {
                         Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ playing+noVideo 15s+ — retry")
                         await MainActor.run { self.player.stop() }
-                        for _ in 0..<15 {
-                            try? await Task.sleep(nanoseconds: 100_000_000)
-                            guard !Task.isCancelled else { return }
-                            let stopped = await MainActor.run { self.player.state == .stopped }
-                            if stopped { break }
-                        }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
                         await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                         return
                     }
@@ -617,12 +613,8 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
                     if state == .paused && pollIdx >= 3 {
                         Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ paused 15s+ — retry")
                         await MainActor.run { self.player.stop() }
-                        for _ in 0..<15 {
-                            try? await Task.sleep(nanoseconds: 100_000_000)
-                            guard !Task.isCancelled else { return }
-                            let stopped = await MainActor.run { self.player.state == .stopped }
-                            if stopped { break }
-                        }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
                         await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
                         return
                     }
@@ -951,206 +943,24 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         player.selectTrack(at: index, type: .audio)
     }
 
-    // MARK: - 이퀄라이저
-
-    public func equalizerPresets() -> [String] {
-        return VLCAudioEqualizer.presets.map { $0.name }
-    }
-
-    public func setEqualizerPreset(_ index: Int) {
-        let presets = VLCAudioEqualizer.presets
-        guard index >= 0 && index < presets.count else { return }
-        player.equalizer = VLCAudioEqualizer(preset: presets[index])
-    }
-
-    public func setEqualizerPresetByName(_ name: String) {
-        let presets = VLCAudioEqualizer.presets
-        guard let index = presets.firstIndex(where: { $0.name == name }) else { return }
-        setEqualizerPreset(index)
-    }
-
-    public func setEqualizerPreAmp(_ value: Float) {
-        guard let eq = player.equalizer else { return }
-        eq.preAmplification = value
-        player.equalizer = eq
-    }
-
-    public func setEqualizerBand(index: Int, value: Float) {
-        guard let eq = player.equalizer else { return }
-        let bands = eq.bands
-        guard index >= 0 && index < bands.count else { return }
-        bands[index].amplification = value
-        player.equalizer = eq
-    }
-
-    public func equalizerBandCount() -> Int {
-        return player.equalizer?.bands.count ?? VLCAudioEqualizer().bands.count
-    }
-
-    public func equalizerBandValues() -> [Float] {
-        guard let eq = player.equalizer else { return [] }
-        return eq.bands.map { $0.amplification }
-    }
-
-    public func equalizerBandFrequencies() -> [Float] {
-        let eq = player.equalizer ?? VLCAudioEqualizer()
-        return eq.bands.map { $0.frequency }
-    }
-
-    public func equalizerPreAmpValue() -> Float {
-        return player.equalizer?.preAmplification ?? 0
-    }
-
-    public func resetEqualizer() {
-        player.equalizer = nil
-    }
-
-    // MARK: - 비디오 조정 필터
-
-    public func setVideoAdjustEnabled(_ enabled: Bool) {
-        player.adjustFilter.isEnabled = enabled
-    }
-
-    public func setVideoBrightness(_ value: Float) {
-        player.adjustFilter.brightness.value = NSNumber(value: value)
-    }
-
-    public func setVideoContrast(_ value: Float) {
-        player.adjustFilter.contrast.value = NSNumber(value: value)
-    }
-
-    public func setVideoSaturation(_ value: Float) {
-        player.adjustFilter.saturation.value = NSNumber(value: value)
-    }
-
-    public func setVideoHue(_ value: Float) {
-        player.adjustFilter.hue.value = NSNumber(value: value)
-    }
-
-    public func setVideoGamma(_ value: Float) {
-        player.adjustFilter.gamma.value = NSNumber(value: value)
-    }
-
-    public func resetVideoAdjust() {
-        player.adjustFilter.resetParametersIfNeeded()
-        player.adjustFilter.isEnabled = false
-    }
-
-    // MARK: - 화면비율 / 크롭 / 스케일
-
-    public func setAspectRatio(_ ratio: String?) {
-        player.videoAspectRatio = ratio
-    }
-
-    public func setCropRatio(numerator: UInt32, denominator: UInt32) {
-        player.setCropRatioWithNumerator(UInt32(numerator), denominator: UInt32(denominator))
-    }
-
-    public func setScaleFactor(_ scale: Float) {
-        player.scaleFactor = scale
-    }
-
-    // MARK: - 자막 트랙
-
-    public func textTracks() -> [(Int, String)] {
-        return player.textTracks.enumerated().map { (i, t) in (i, t.trackName) }
-    }
-
-    public func selectTextTrack(_ index: Int) {
-        let tracks = player.textTracks
-        guard index >= 0 && index < tracks.count else { return }
-        tracks[index].isSelectedExclusively = true
-    }
-
-    public func deselectAllTextTracks() {
-        player.deselectAllTextTracks()
-    }
-
-    public func addSubtitleFile(url: URL) {
-        player.addPlaybackSlave(url, type: .subtitle, enforce: true)
-    }
-
-    public func setSubtitleDelay(_ delay: Int) {
-        player.currentVideoSubTitleDelay = delay
-    }
-
-    public func setSubtitleFontScale(_ scale: Float) {
-        player.currentSubTitleFontScale = scale
-    }
-
-    // MARK: - 오디오 스테레오 / 믹스 모드
-
-    public func setAudioStereoMode(_ mode: UInt) {
-        guard let stereoMode = VLCMediaPlayer.AudioStereoMode(rawValue: mode) else { return }
-        player.audioStereoMode = stereoMode
-    }
-
-    public func currentAudioStereoMode() -> UInt {
-        return player.audioStereoMode.rawValue
-    }
-
-    public func setAudioMixMode(_ mode: UInt32) {
-        guard let mixMode = VLCMediaPlayer.AudioMixMode(rawValue: mode) else { return }
-        player.audioMixMode = mixMode
-    }
-
-    public func currentAudioMixMode() -> UInt32 {
-        player.audioMixMode.rawValue
-    }
-
-    /// 오디오 지연 설정 (마이크로초)
-    public func setAudioDelay(_ delay: Int) {
-        Task { @MainActor [weak self] in
-            self?.player.currentAudioPlaybackDelay = delay
-        }
-    }
-
-    public func currentAudioDelay() -> Int {
-        player.currentAudioPlaybackDelay
-    }
-
-    // MARK: - 고급 설정 일괄 적용 (PlayerSettings)
-
-    public func applyAdvancedSettings(_ settings: PlayerSettings) {
-        // 이퀄라이저
-        if let preset = settings.equalizerPreset {
-            setEqualizerPresetByName(preset)
-            setEqualizerPreAmp(settings.equalizerPreAmp)
-            for (i, val) in settings.equalizerBands.enumerated() {
-                setEqualizerBand(index: i, value: val)
-            }
-        } else {
-            resetEqualizer()
-        }
-        // 비디오 조정
-        setVideoAdjustEnabled(settings.videoAdjustEnabled)
-        if settings.videoAdjustEnabled {
-            setVideoBrightness(settings.videoBrightness)
-            setVideoContrast(settings.videoContrast)
-            setVideoSaturation(settings.videoSaturation)
-            setVideoHue(settings.videoHue)
-            setVideoGamma(settings.videoGamma)
-        }
-        // 화면 비율
-        setAspectRatio(settings.aspectRatio)
-        // 오디오 고급
-        setAudioStereoMode(UInt(settings.audioStereoMode))
-        setAudioMixMode(settings.audioMixMode)
-        setAudioDelay(Int(settings.audioDelay))
-    }
-
     // MARK: - Private Helpers
 
-    private func _setPhase(_ phase: PlayerState.Phase) {
+    func _setPhase(_ phase: PlayerState.Phase) {
+        // [Freeze Fix] 동일 phase 반복 콜백 억제 — VLC가 같은 상태를 수십 ms 간격으로
+        // 반복 보고하면 매번 Task { @MainActor } 가 생성되어 MainActor 큐 포화.
+        // 동일 phase라면 state만 갱신하고 onStateChange 콜백을 건너뛴다.
+        let isDuplicate = (_lastEmittedPhase == phase)
         _state.withLock { $0.currentPhase = phase }
+        guard !isDuplicate else { return }
+        _lastEmittedPhase = phase
         onStateChange?(phase)
     }
 
     private func startStatsTimer() {
         statsTask?.cancel()
-        // 멀티라이브: 4초 주기 (4세션 × MainActor 접근 최소화)
-        // 싱글/저지연: 2초 주기 (실시간 메트릭 중요)
-        let interval: UInt64 = streamingProfile == .multiLive ? 4_000_000_000 : 2_000_000_000
+        // [Freeze Fix] 멀티라이브: 6→10초 (4세션 × MainActor 부하 40% 추가 감소)
+        // 싱글/저지연: 3초 주기 (실시간 메트릭)
+        let interval: UInt64 = streamingProfile == .multiLive ? 10_000_000_000 : 3_000_000_000
         statsTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: interval)
@@ -1242,120 +1052,6 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         } else {
             // idle/buffering/paused/error 상태에서는 카운터 리셋
             _zeroFrameCount = 0
-        }
-    }
-}
-
-// MARK: - VLCMediaPlayerDelegate (VLCKit 4.0)
-
-extension VLCPlayerEngine: VLCMediaPlayerDelegate {
-
-    /// 재생 상태 변경 — VLCKit 4.0: State를 직접 파라미터로 받음 (Notification 아님)
-    ///
-    /// [프레임 기반 버퍼링 필터링]
-    /// VLC는 라이브 HLS 중 네트워크 버퍼를 채울 때 수시로 .buffering 상태를 보고하지만,
-    /// 이 시점에도 프레임이 실제로 디코딩/표시되고 있을 수 있다.
-    /// VLC가 .buffering을 보고해도 최근 프레임이 디코딩되었다면 상위 레이어에 전파하지 않는다.
-    /// 이로써 "영상은 잘 나오는데 버퍼링 스피너가 계속 뜨는" 문제를 엔진 레벨에서 차단.
-    public func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
-        Log.player.debug("[DIAG] VLC stateChanged: \(newState.rawValue) (0=stopped,1=stopping,2=opening,3=buffering,4=error,5=playing,6=paused)")
-        let phase: PlayerState.Phase
-        switch newState {
-        case .opening:
-            phase = .loading
-        case .buffering:
-            // 프레임 기반 필터링: 이미 재생 중이었고 프레임이 디코딩되고 있으면
-            // .buffering 상태를 상위에 전파하지 않는다 (VLC 내부 버퍼 리필일 뿐)
-            // [수정] 누적값이 아닌 delta 비교 — 장시간 재생 후에도 정확 감지
-            // [C1 fix] 시간 기반 override: delta>0 필터가 5초 이상 지속되면
-            // 실제 버퍼링으로 간주하고 강제 전파 (CDN 403 시 VLC가 간헐적으로
-            // 1-2프레임 디코딩하면서 무한 필터링 되는 것을 방지)
-            if case .playing = _state.withLock({ $0.currentPhase }) {
-                let decoded = player.media?.statistics.decodedVideo ?? 0
-                let delta = decoded - _lastBufferingDecodedCount
-                _lastBufferingDecodedCount = decoded
-                if delta > 0 {
-                    // 이전 체크 이후 새 프레임이 디코딩됨
-                    let now = Date()
-                    if let filterStart = _bufferingFilterStartTime {
-                        if now.timeIntervalSince(filterStart) >= 3.0 {
-                            // [Fix 16h-opt3] 5→3초: 실제 버퍼링 감지 2초 빨라짐
-                            _bufferingFilterStartTime = nil
-                        } else {
-                            return  // 아직 5초 미만, 필터 유지
-                        }
-                    } else {
-                        _bufferingFilterStartTime = now
-                        return  // 최초 필터링, 타이머 시작
-                    }
-                } else {
-                    // delta == 0: 프레임 디코딩 없음 → 필터 타이머 리셋 (진짜 버퍼링)
-                    _bufferingFilterStartTime = nil
-                }
-            }
-            phase = .buffering(progress: 0)
-        case .playing:
-            _bufferingFilterStartTime = nil  // C1: .playing 전이 시 필터 타이머 리셋
-            phase = .playing
-        case .paused:
-            phase = .paused
-        case .stopped, .stopping:
-            phase = .idle
-        case .error:
-            phase = .error(.decodingFailed("VLC 재생 오류"))
-        @unknown default:
-            phase = .loading
-        }
-        _setPhase(phase)
-    }
-
-    /// 재생 위치 변경 — VLCKit 4.0: Notification 파라미터
-    /// [스로틀링] VLC는 초당 10~30회 호출 → 멀티라이브 4세션 = 초당 40~120회
-    /// 1초 미만 간격의 콜백은 무시하여 CPU 부하 대폭 감소
-    public func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        let now = DispatchTime.now().uptimeNanoseconds
-        guard now - _lastTimeChangeNotify >= _timeChangeThrottleNs else { return }
-        _lastTimeChangeNotify = now
-        let t = TimeInterval(player.time.intValue) / 1000.0
-        let d = TimeInterval(player.media?.length.intValue ?? 0) / 1000.0
-        onTimeChange?(t, d)
-    }
-
-    /// 미디어 길이 확정 — VLCKit 4.0: Int64 직접 파라미터
-    public func mediaPlayerLengthChanged(_ length: Int64) {
-        let t = TimeInterval(player.time.intValue) / 1000.0
-        let d = TimeInterval(length) / 1000.0
-        onTimeChange?(t, d)
-    }
-
-    // MARK: - 트랙 Delegate
-
-    public func mediaPlayerTrackAdded(_ trackId: String, with trackType: VLCMedia.TrackType) {
-        let type = playerTrackType(trackType)
-        onTrackEvent?(TrackEvent(trackId: trackId, trackType: type, kind: .added))
-    }
-
-    public func mediaPlayerTrackRemoved(_ trackId: String, with trackType: VLCMedia.TrackType) {
-        let type = playerTrackType(trackType)
-        onTrackEvent?(TrackEvent(trackId: trackId, trackType: type, kind: .removed))
-    }
-
-    public func mediaPlayerTrackUpdated(_ trackId: String, with trackType: VLCMedia.TrackType) {
-        let type = playerTrackType(trackType)
-        onTrackEvent?(TrackEvent(trackId: trackId, trackType: type, kind: .updated))
-    }
-
-    public func mediaPlayerTrackSelected(_ trackType: VLCMedia.TrackType, selectedId: String, unselectedId: String) {
-        let type = playerTrackType(trackType)
-        onTrackEvent?(TrackEvent(trackId: selectedId, trackType: type, kind: .selected(unselectedId: unselectedId)))
-    }
-
-    private func playerTrackType(_ vlcType: VLCMedia.TrackType) -> PlayerTrackType {
-        switch vlcType {
-        case .audio: return .audio
-        case .video: return .video
-        case .text: return .text
-        @unknown default: return .unknown
         }
     }
 }

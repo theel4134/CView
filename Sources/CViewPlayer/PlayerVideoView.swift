@@ -45,6 +45,15 @@ public struct PlayerVideoView: NSViewRepresentable {
         }
         nsView.setFillMode(fill)
     }
+
+    /// SwiftUI가 제안한 크기를 그대로 수용 — NSViewRepresentable 기본 동작을 명시하여
+    /// HStack 내에서 정확한 프레임을 보장한다.
+    public func sizeThatFits(_ proposal: ProposedViewSize, nsView: PlayerContainerView, context: Context) -> CGSize {
+        CGSize(
+            width: proposal.width ?? nsView.bounds.width,
+            height: proposal.height ?? nsView.bounds.height
+        )
+    }
 }
 
 // MARK: - Container NSView
@@ -73,6 +82,7 @@ public final class PlayerContainerView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .never           // drawRect 완전 차단
+        canDrawSubviewsIntoLayer = false             // VLC 서브뷰가 독립 레이어를 사용하도록 하여 masksToBounds 클리핑 보장
 
         // 컨테이너 자체 레이어 최적화
         let l = layer!
@@ -130,6 +140,20 @@ public final class PlayerContainerView: NSView {
         // VLCLayerHostView — VLC가 생성한 렌더링 서브뷰 포함 클리핑
         if let sublayer = videoView.layer {
             sublayer.masksToBounds = true
+            sublayer.frame = bounds
+            // VLC 내부 렌더링 서브레이어까지 클리핑 강제
+            if let children = sublayer.sublayers {
+                for child in children {
+                    child.masksToBounds = true
+                    child.frame = bounds
+                }
+            }
+        }
+        // VLC 내부 서브뷰(렌더링 서피스) 클리핑
+        for child in videoView.subviews {
+            child.frame = bounds
+            child.layer?.masksToBounds = true
+            child.layer?.frame = bounds
         }
 
         currentSubview = videoView
@@ -202,7 +226,34 @@ public final class PlayerContainerView: NSView {
     public override func layout() {
         isLayingOut = true
         super.layout()
-        currentSubview?.frame = bounds
+        // 리사이즈 중 CA 암묵적 애니메이션 비활성화 — 프레임 변경 즉시 반영
+        // layout()이 매 프레임 호출되면서 서브레이어 위치/크기 트랜지션이 누적되면
+        // GPU 합성 파이프라인이 병목이 되어 버벅거림 발생
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let b = bounds
+        currentSubview?.frame = b
+
+        // [클리핑 강제] VLC 렌더링 레이어가 컨테이너 밖으로 넘치지 않도록
+        // 모든 서브뷰 + 서브레이어에 masksToBounds 재적용
+        layer?.masksToBounds = true
+        if let subview = currentSubview {
+            subview.layer?.frame = b
+            subview.layer?.masksToBounds = true
+            // VLC 내부 렌더링 서브뷰/서브레이어까지 클리핑
+            for child in subview.subviews {
+                child.frame = b
+                child.layer?.frame = b
+                child.layer?.masksToBounds = true
+            }
+            if let sublayers = subview.layer?.sublayers {
+                for sublayer in sublayers {
+                    sublayer.frame = b
+                    sublayer.masksToBounds = true
+                }
+            }
+        }
+        CATransaction.commit()
         isLayingOut = false
 
         // layout() 중 요청된 videoView 교체를 안전하게 처리

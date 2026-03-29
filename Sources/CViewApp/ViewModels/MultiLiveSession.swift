@@ -51,8 +51,8 @@ final class MultiLiveSession: Identifiable {
     // MARK: - UI 상태
 
     var loadState: MultiLiveLoadState = .idle
-    var isChatVisible: Bool = true
     var latestMetrics: VLCLiveMetrics?
+    var latestAVMetrics: AVPlayerLiveMetrics?
     var latestProxyStats: ProxyNetworkStats?
     var showStats: Bool = false
     var showNetworkMetrics: Bool = false
@@ -180,6 +180,20 @@ final class MultiLiveSession: Identifiable {
                 }
             }
 
+            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
+                Task {
+                    if await _forwarder?.currentChannelId == sessionChannelId {
+                        await _forwarder?.updateAVPlayerMetrics(metrics)
+                    }
+                }
+                Task { @MainActor [weak self] in
+                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    self.latestAVMetrics = metrics
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                }
+            }
+
             // 메트릭 채널 활성화 (포그라운드 세션만)
             if !isBackground {
                 Task { await _forwarder?.activateChannel(channelId: channelId, channelName: channelName, streamUrl: streamURL.absoluteString) }
@@ -303,6 +317,34 @@ final class MultiLiveSession: Identifiable {
                 Task { @MainActor [weak self] in
                     guard let self, self.showStats || self.showNetworkMetrics else { return }
                     self.latestMetrics = metrics
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                }
+            }
+
+            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
+                Task {
+                    if await _forwarder2?.currentChannelId == sessionChannelId2 {
+                        await _forwarder2?.updateAVPlayerMetrics(metrics)
+                    }
+                }
+                Task { @MainActor [weak self] in
+                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    self.latestAVMetrics = metrics
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                }
+            }
+
+            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
+                Task {
+                    if await _forwarder2?.currentChannelId == sessionChannelId2 {
+                        await _forwarder2?.updateAVPlayerMetrics(metrics)
+                    }
+                }
+                Task { @MainActor [weak self] in
+                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    self.latestAVMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
             }

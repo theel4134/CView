@@ -46,6 +46,9 @@ final class AppState {
     var settingsStore: SettingsStore = SettingsStore()
     let multiLiveManager = MultiLiveManager()
 
+    /// 라이브(팔로잉) 메뉴 영속 상태 — 메뉴 전환 시에도 설정/패널/채팅 유지
+    let followingViewState = FollowingViewState()
+
     /// 공유 성능 모니터 (LiveStreamView → MetricsForwarder 모두 같은 인스턴스 사용)
     let performanceMonitor = PerformanceMonitor()
 

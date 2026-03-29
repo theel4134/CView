@@ -1,14 +1,10 @@
 // MARK: - MultiLiveOverlays.swift
-// MLGridControlOverlay, MLVideoArea, MLEmptyState, MLAddChannelPanel 등
-// MultiLivePlayerPane.swift에서 분리된 오버레이 뷰
-
 import SwiftUI
 import CViewCore
 import CViewPlayer
 import CViewPersistence
 
 // MARK: - MLVideoArea
-/// 활성 패인의 비디오 영역 + 컨트롤 오버레이
 struct MLVideoArea: View {
     let session: MultiLiveSession
     let appState: AppState
@@ -24,28 +20,27 @@ struct MLVideoArea: View {
                 .background(Color.black)
                 .clipped()
 
-            // 호버 시 컨트롤 오버레이
             if showControls {
                 MLControlOverlay(session: session, appState: appState)
                     .transition(.opacity.animation(DesignTokens.Animation.fast))
             }
 
-            // Stats 오버레이 (좌상단)
             if session.showStats {
                 MLStatsOverlay(
                     metrics: session.latestMetrics,
                     proxyStats: session.latestProxyStats
                 )
-                .padding(DesignTokens.Spacing.sm)
+                .padding(DesignTokens.Spacing.md)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .allowsHitTesting(false)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onHover { hovering in
             hideTask?.cancel()
             if hovering {
-                withAnimation { showControls = true }
+                withAnimation(DesignTokens.Animation.fast) { showControls = true }
                 scheduleHide()
             } else {
                 scheduleHide()
@@ -57,13 +52,12 @@ struct MLVideoArea: View {
         hideTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-            withAnimation { showControls = false }
+            withAnimation(DesignTokens.Animation.fast) { showControls = false }
         }
     }
 }
 
 // MARK: - MLControlOverlay
-/// 싱글 모드 컨트롤 오버레이 (볼륨, 플레이/일시정지 등)
 struct MLControlOverlay: View {
     let session: MultiLiveSession
     let appState: AppState
@@ -71,65 +65,84 @@ struct MLControlOverlay: View {
     var body: some View {
         VStack {
             Spacer()
-            HStack(spacing: DesignTokens.Spacing.md) {
-                // 재생/일시정지
-                Button {
-                    Task { await session.playerViewModel.togglePlayPause() }
-                } label: {
-                    Image(systemName: session.playerViewModel.streamPhase == .playing ? "pause.fill" : "play.fill")
-                        .font(DesignTokens.Typography.titleSemibold)
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                // 음소거 토글
-                Button {
-                    session.setMuted(!session.isMuted)
-                } label: {
-                    Image(systemName: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(DesignTokens.Typography.body)
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-
-                // 채팅 토글
-                Button {
-                    withAnimation(DesignTokens.Animation.snappy) {
-                        session.isChatVisible.toggle()
-                    }
-                } label: {
-                    Image(systemName: session.isChatVisible ? "bubble.left.fill" : "bubble.left")
-                        .font(DesignTokens.Typography.body)
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-
-                // Stats 토글
-                Button {
-                    session.showStats.toggle()
-                } label: {
-                    Image(systemName: session.showStats ? "chart.bar.fill" : "chart.bar")
-                        .font(DesignTokens.Typography.body)
-                        .foregroundStyle(session.showStats ? DesignTokens.Colors.chzzkGreen : .white)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(DesignTokens.Spacing.md)
-            .background(
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.6)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            controlBar
         }
+    }
+
+    private var controlBar: some View {
+        HStack(spacing: DesignTokens.Spacing.lg) {
+            controlButton(
+                icon: session.playerViewModel.streamPhase == .playing ? "pause.fill" : "play.fill",
+                size: 18
+            ) {
+                Task { await session.playerViewModel.togglePlayPause() }
+            }
+
+            Spacer()
+
+            controlButton(
+                icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+            ) {
+                session.setMuted(!session.isMuted)
+            }
+
+            controlButton(
+                icon: session.showStats ? "chart.bar.fill" : "chart.bar",
+                tint: session.showStats ? DesignTokens.Colors.chzzkGreen : .white
+            ) {
+                session.showStats.toggle()
+            }
+        }
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, DesignTokens.Spacing.md)
+        .background(
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .drawingGroup()
+    }
+
+    private func controlButton(
+        icon: String,
+        size: CGFloat = 14,
+        tint: Color = .white,
+        action: @escaping () -> Void
+    ) -> some View {
+        MLOverlayControlButton(icon: icon, size: size, tint: tint, action: action)
+    }
+}
+
+/// MLControlOverlay용 개별 버튼 — 호버 효과 포함
+private struct MLOverlayControlButton: View {
+    let icon: String
+    var size: CGFloat = 14
+    var tint: Color = .white
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(.white.opacity(isHovered ? 0.15 : 0))
+                )
+                .contentShape(Circle())
+                .scaleEffect(isHovered ? 1.1 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
 
 // MARK: - MLGridControlOverlay
-/// 그리드 셀 호버 시 표시되는 컨트롤 오버레이
 struct MLGridControlOverlay: View {
     let session: MultiLiveSession
     let manager: MultiLiveManager
@@ -141,164 +154,192 @@ struct MLGridControlOverlay: View {
 
     var body: some View {
         ZStack {
-            // 반투명 배경
-            Color.black.opacity(0.4)
+            Color.black.opacity(0.35)
 
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                // 채널명
+            VStack(spacing: DesignTokens.Spacing.md) {
                 Text(session.channelName.isEmpty ? session.channelId : session.channelName)
                     .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(.white)
                     .lineLimit(1)
+                    .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
 
-                HStack(spacing: DesignTokens.Spacing.md) {
-                    // 오디오 토글
-                    Button {
-                        onHideCancel()
-                        manager.toggleSessionAudio(session)
-                        onScheduleHide()
-                    } label: {
-                        Image(systemName: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-
-                    // 포커스 토글
-                    Button {
-                        withAnimation(DesignTokens.Animation.indicator) {
-                            focusedSessionId = (focusedSessionId == session.id) ? nil : session.id
-                        }
-                    } label: {
-                        Image(systemName: isFocused ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-
-                    // 제거
-                    Button {
-                        Task { await manager.removeSession(session) }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(.white.opacity(0.8))
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // 볼륨 슬라이더 (오디오 활성 셀에서만)
-                if !session.isMuted {
-                    HStack(spacing: 6) {
-                        Image(systemName: "speaker.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(0.5))
-                        Slider(
-                            value: Binding(
-                                get: { Double(session.playerViewModel.volume) },
-                                set: { session.playerViewModel.setVolume(Float($0)) }
-                            ),
-                            in: 0...1
-                        )
-                        .tint(DesignTokens.Colors.chzzkGreen)
-                        .frame(width: 80)
-                        Image(systemName: "speaker.wave.3.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                }
+                gridButtons
+                volumeSlider
             }
         }
+    }
+
+    private var gridButtons: some View {
+        HStack(spacing: DesignTokens.Spacing.lg) {
+            gridActionButton(icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
+                onHideCancel()
+                manager.toggleSessionAudio(session)
+                onScheduleHide()
+            }
+
+            gridActionButton(
+                icon: isFocused ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+            ) {
+                withAnimation(DesignTokens.Animation.indicator) {
+                    focusedSessionId = (focusedSessionId == session.id) ? nil : session.id
+                }
+            }
+
+            gridActionButton(icon: "xmark", opacity: 0.75) {
+                Task { await manager.removeSession(session) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var volumeSlider: some View {
+        if !session.isMuted {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                Image(systemName: "speaker.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.45))
+                Slider(
+                    value: Binding(
+                        get: { Double(session.playerViewModel.volume) },
+                        set: { session.playerViewModel.setVolume(Float($0)) }
+                    ),
+                    in: 0...1
+                )
+                .tint(DesignTokens.Colors.chzzkGreen)
+                .frame(width: 86)
+                Image(systemName: "speaker.wave.3.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+        }
+    }
+
+    private func gridActionButton(
+        icon: String,
+        opacity: CGFloat = 1.0,
+        action: @escaping () -> Void
+    ) -> some View {
+        MLGridActionButton(icon: icon, opacity: opacity, action: action)
+    }
+}
+
+/// MLGridControlOverlay용 개별 액션 버튼 — 호버 효과 포함
+private struct MLGridActionButton: View {
+    let icon: String
+    var opacity: CGFloat = 1.0
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(opacity))
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle()
+                        .fill(.white.opacity(isHovered ? 0.22 : 0.12))
+                )
+                .scaleEffect(isHovered ? 1.1 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(DesignTokens.Animation.fast, value: isHovered)
     }
 }
 
 // MARK: - MLEmptyState
-/// 세션이 없을 때 표시되는 빈 상태 뷰
 struct MLEmptyState: View {
     let onAdd: () -> Void
+    @State private var isAddHovered = false
 
     var body: some View {
-        VStack(spacing: DesignTokens.Spacing.xxl) {
-            // 2x2 그리드 미리보기
-            mlGridPreview
-
-            // 타이틀 + 설명
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                Text("멀티 라이브")
-                    .font(DesignTokens.Typography.headline)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Text("최대 4개 채널을 동시에 시청하세요")
-                    .font(DesignTokens.Typography.body)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-            }
-
-            // 채널 추가 버튼
-            Button(action: onAdd) {
-                HStack(spacing: DesignTokens.Spacing.sm) {
-                    Image(systemName: "plus")
-                    Text("채널 추가")
-                }
-                .font(DesignTokens.Typography.bodySemibold)
-                .foregroundStyle(DesignTokens.Colors.onPrimary)
-                .padding(.horizontal, DesignTokens.Spacing.xl)
-                .padding(.vertical, DesignTokens.Spacing.md)
-                .background(Capsule().fill(DesignTokens.Colors.chzzkGreen))
-            }
-            .buttonStyle(.plain)
-
-            // 키보드 단축키 안내
-            mlShortcutHints
+        VStack(spacing: DesignTokens.Spacing.xl) {
+            emptyGridPreview
+            emptyDescription
+            addButton
+            shortcutHints
         }
         .padding(DesignTokens.Spacing.xxxl)
-        .frame(maxWidth: 480)
+        .frame(maxWidth: 440)
         .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                .fill(Color.black.opacity(0.75))
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
+                .fill(DesignTokens.Colors.surfaceBase.opacity(0.85))
                 .overlay(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 )
+                .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DesignTokens.Colors.background)
     }
 
-    // 2x2 빈 슬롯 그리드 미리보기
-    private var mlGridPreview: some View {
-        let slotSize: CGFloat = 80
+    private var emptyGridPreview: some View {
+        let size: CGFloat = 72
         let gap: CGFloat = 2
         return VStack(spacing: gap) {
             ForEach(0..<2, id: \.self) { row in
                 HStack(spacing: gap) {
                     ForEach(0..<2, id: \.self) { col in
-                        let index = row * 2 + col
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                            .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
-                            .overlay(
-                                VStack(spacing: 4) {
-                                    Image(systemName: index == 0 ? "play.fill" : "plus")
-                                        .font(.system(size: 14, weight: .medium))
+                        let idx = row * 2 + col
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
+                            .fill(DesignTokens.Colors.surfaceElevated.opacity(idx == 0 ? 0.6 : 0.3))
+                            .overlay {
+                                VStack(spacing: 3) {
+                                    Image(systemName: idx == 0 ? "play.fill" : "plus")
+                                        .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(
-                                            index == 0
-                                                ? DesignTokens.Colors.chzzkGreen
-                                                : DesignTokens.Colors.textTertiary
+                                            idx == 0 ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary
                                         )
-                                    if index == 0 {
+                                    if idx == 0 {
                                         Text("CH 1")
                                             .font(DesignTokens.Typography.micro)
                                             .foregroundStyle(DesignTokens.Colors.textSecondary)
                                     }
                                 }
-                            )
-                            .frame(width: slotSize, height: slotSize * 9 / 16)
+                            }
+                            .frame(width: size, height: size * 9 / 16)
                     }
                 }
             }
         }
     }
 
-    // 키보드 단축키 안내
-    private var mlShortcutHints: some View {
+    private var emptyDescription: some View {
+        VStack(spacing: DesignTokens.Spacing.xs) {
+            Text("멀티 라이브")
+                .font(DesignTokens.Typography.headline)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            Text("최대 4개 채널을 동시에 시청하세요")
+                .font(DesignTokens.Typography.body)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+        }
+    }
+
+    private var addButton: some View {
+        Button(action: onAdd) {
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Image(systemName: "plus")
+                Text("채널 추가")
+            }
+            .font(DesignTokens.Typography.bodySemibold)
+            .foregroundStyle(DesignTokens.Colors.onPrimary)
+            .padding(.horizontal, DesignTokens.Spacing.xl)
+            .padding(.vertical, DesignTokens.Spacing.md)
+            .background(
+                Capsule()
+                    .fill(DesignTokens.Colors.chzzkGreen)
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(isAddHovered ? 0.5 : 0.3), radius: isAddHovered ? 12 : 8, y: 3)
+            )
+            .scaleEffect(isAddHovered ? 1.05 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { isAddHovered = $0 }
+        .animation(DesignTokens.Animation.fast, value: isAddHovered)
+    }
+
+    private var shortcutHints: some View {
         HStack(spacing: DesignTokens.Spacing.lg) {
             shortcutPill("⌘1-4", "탭 전환")
             shortcutPill("⌘G", "그리드 전환")
@@ -308,13 +349,13 @@ struct MLEmptyState: View {
     private func shortcutPill(_ key: String, _ label: String) -> some View {
         HStack(spacing: DesignTokens.Spacing.xs) {
             Text(key)
-                .font(DesignTokens.Typography.micro)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .rounded))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                        .fill(DesignTokens.Colors.surfaceElevated.opacity(0.6))
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
+                        .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
                 )
             Text(label)
                 .font(DesignTokens.Typography.micro)
@@ -324,147 +365,171 @@ struct MLEmptyState: View {
 }
 
 // MARK: - MLAddChannelPanel
-/// 사이드 패널: 채널 추가 UI
 struct MLAddChannelPanel: View {
     @Bindable var manager: MultiLiveManager
     let appState: AppState
     @Binding var isPresented: Bool
     let onError: (String) -> Void
+    @State private var isCloseHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // 헤더
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                Image(systemName: "rectangle.split.2x2.fill")
-                    .font(.title3)
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("채널 추가")
-                        .font(.headline)
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    Text("최대 \(MultiLiveManager.maxSessions)개 채널 동시 시청")
-                        .font(.caption)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-
-                Spacer()
-
-                // 세션 카운터
-                HStack(spacing: 4) {
-                    ForEach(0..<MultiLiveManager.maxSessions, id: \.self) { i in
-                        Circle()
-                            .fill(i < manager.sessions.count ? DesignTokens.Colors.chzzkGreen : DesignTokens.Glass.borderColor)
-                            .frame(width: 6, height: 6)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.6)))
-
-                Button {
-                    withAnimation(DesignTokens.Animation.snappy) { isPresented = false }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, DesignTokens.Spacing.lg)
-            .padding(.vertical, DesignTokens.Spacing.md)
-
-            // 콘텐츠
+            panelHeader
             MultiLiveAddSheet(manager: manager, isPresented: $isPresented)
                 .environment(appState)
         }
         .frame(width: 380)
-        .background(
-            DesignTokens.Colors.surfaceBase.opacity(0.92)
-        )
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.94))
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(DesignTokens.Glass.borderColor)
                 .frame(width: 0.5)
         }
+    }
 
+    private var panelHeader: some View {
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            Image(systemName: "rectangle.split.2x2.fill")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("채널 추가")
+                    .font(DesignTokens.Typography.bodySemibold)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                Text("최대 \(MultiLiveManager.maxSessions)개 채널 동시 시청")
+                    .font(DesignTokens.Typography.micro)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+
+            Spacer()
+
+            sessionCounter
+
+            Button {
+                withAnimation(DesignTokens.Animation.snappy) { isPresented = false }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isCloseHovered ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.textTertiary)
+                    .scaleEffect(isCloseHovered ? 1.1 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .onHover { isCloseHovered = $0 }
+            .animation(DesignTokens.Animation.fast, value: isCloseHovered)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, DesignTokens.Spacing.md)
+    }
+
+    private var sessionCounter: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<MultiLiveManager.maxSessions, id: \.self) { i in
+                Circle()
+                    .fill(
+                        i < manager.sessions.count
+                            ? DesignTokens.Colors.chzzkGreen
+                            : DesignTokens.Colors.surfaceOverlay.opacity(0.5)
+                    )
+                    .frame(width: 5, height: 5)
+            }
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xs)
+        .background(
+            Capsule().fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+        )
     }
 }
 
 // MARK: - MLStatsOverlay
-/// 멀티라이브 실시간 네트워크/재생 모니터링 오버레이
 struct MLStatsOverlay: View {
     let metrics: VLCLiveMetrics?
     let proxyStats: ProxyNetworkStats?
 
-    private let monoFont = Font.system(size: 10, weight: .regular, design: .monospaced)
-    private let labelFont = Font.system(size: 10, weight: .medium, design: .monospaced)
+    private let monoFont = DesignTokens.Typography.custom(size: 10, design: .monospaced)
+    private let labelFont = DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            // 헤더
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 6, height: 6)
-                Text("LIVE MONITOR")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.6))
+            statsHeader
+            Divider().overlay(.white.opacity(0.12))
+            videoMetrics
+            proxyMetrics
+        }
+        .padding(DesignTokens.Spacing.sm)
+        .frame(width: 174, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                .fill(.black.opacity(0.72))
+                .environment(\.colorScheme, .dark)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+        )
+    }
+
+    // MARK: - Header
+
+    private var statsHeader: some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 5, height: 5)
+            Text("MONITOR")
+                .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.5))
+        }
+    }
+
+    // MARK: - Video Metrics
+
+    @ViewBuilder
+    private var videoMetrics: some View {
+        if let m = metrics {
+            statsSection("VIDEO") {
+                statRow("FPS", value: String(format: "%.1f", m.fps), color: m.fps < 25 ? .orange : .green)
+                statRow("해상도", value: m.resolution ?? "—")
+                statRow("드롭", value: "\(m.droppedFramesDelta)", color: m.droppedFramesDelta > 0 ? .orange : .white)
+                statRow("지연", value: "\(m.latePicturesDelta)", color: m.latePicturesDelta > 0 ? .orange : .white)
             }
 
-            Divider().overlay(.white.opacity(0.15))
-
-            // 비디오 메트릭
-            if let m = metrics {
-                statsSection("VIDEO") {
-                    statRow("FPS", value: String(format: "%.1f", m.fps), color: m.fps < 25 ? .orange : .green)
-                    statRow("해상도", value: m.resolution ?? "—")
-                    statRow("드롭", value: "\(m.droppedFramesDelta)", color: m.droppedFramesDelta > 0 ? .orange : .white)
-                    statRow("지연", value: "\(m.latePicturesDelta)", color: m.latePicturesDelta > 0 ? .orange : .white)
-                }
-
-                statsSection("NETWORK") {
-                    statRow("속도", value: formatBytesPerSec(m.networkBytesPerSec))
-                    statRow("입력", value: String(format: "%.0f kbps", m.inputBitrateKbps))
-                    statRow("Demux", value: String(format: "%.0f kbps", m.demuxBitrateKbps))
-                }
-
-                statsSection("HEALTH") {
-                    let score = m.healthScore
-                    statRow("점수", value: String(format: "%.0f%%", score * 100), color: healthColor(score))
-                    statRow("버퍼", value: String(format: "%.0f%%", m.bufferHealth * 100), color: healthColor(m.bufferHealth))
-                    statRow("오디오손실", value: "\(m.lostAudioBuffersDelta)", color: m.lostAudioBuffersDelta > 0 ? .orange : .white)
-                }
+            statsSection("NETWORK") {
+                statRow("속도", value: formatBytesPerSec(m.networkBytesPerSec))
+                statRow("입력", value: String(format: "%.0f kbps", m.inputBitrateKbps))
+                statRow("Demux", value: String(format: "%.0f kbps", m.demuxBitrateKbps))
             }
 
-            // 프록시 메트릭
-            if let p = proxyStats {
-                statsSection("PROXY") {
-                    statRow("요청", value: "\(p.totalRequests)")
-                    statRow("캐시히트", value: String(format: "%.0f%%", p.cacheHitRatio * 100), color: p.cacheHitRatio > 0.9 ? .green : .orange)
-                    statRow("CDN수신", value: formatBytes(p.totalBytesReceived))
-                    statRow("응답시간", value: String(format: "%.0fms", p.avgResponseTime * 1000), color: p.avgResponseTime > 0.5 ? .red : p.avgResponseTime > 0.2 ? .orange : .white)
-                    statRow("연결", value: "\(p.activeConnections)")
-                    if p.errorCount > 0 {
-                        statRow("에러", value: "\(p.errorCount)", color: .red)
-                    }
-                    if p.consecutive403Count > 0 {
-                        statRow("403연속", value: "\(p.consecutive403Count)", color: .red)
-                    }
+            statsSection("HEALTH") {
+                let score = m.healthScore
+                statRow("점수", value: String(format: "%.0f%%", score * 100), color: healthColor(score))
+                statRow("버퍼", value: String(format: "%.0f%%", m.bufferHealth * 100), color: healthColor(m.bufferHealth))
+                statRow("오디오손실", value: "\(m.lostAudioBuffersDelta)", color: m.lostAudioBuffersDelta > 0 ? .orange : .white)
+            }
+        }
+    }
+
+    // MARK: - Proxy Metrics
+
+    @ViewBuilder
+    private var proxyMetrics: some View {
+        if let p = proxyStats {
+            statsSection("PROXY") {
+                statRow("요청", value: "\(p.totalRequests)")
+                statRow("캐시히트", value: String(format: "%.0f%%", p.cacheHitRatio * 100), color: p.cacheHitRatio > 0.9 ? .green : .orange)
+                statRow("CDN수신", value: formatBytes(p.totalBytesReceived))
+                statRow("응답시간", value: String(format: "%.0fms", p.avgResponseTime * 1000), color: p.avgResponseTime > 0.5 ? .red : p.avgResponseTime > 0.2 ? .orange : .white)
+                statRow("연결", value: "\(p.activeConnections)")
+                if p.errorCount > 0 {
+                    statRow("에러", value: "\(p.errorCount)", color: .red)
+                }
+                if p.consecutive403Count > 0 {
+                    statRow("403연속", value: "\(p.consecutive403Count)", color: .red)
                 }
             }
         }
-        .padding(8)
-        .frame(width: 170, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .fill(Color.black.opacity(0.75))
-                .environment(\.colorScheme, .dark)
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                )
-        )
     }
 
     // MARK: - Components
@@ -472,8 +537,8 @@ struct MLStatsOverlay: View {
     private func statsSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
+                .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.65))
                 .padding(.top, 2)
             content()
         }
@@ -483,12 +548,12 @@ struct MLStatsOverlay: View {
         HStack {
             Text(label)
                 .font(labelFont)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.white.opacity(0.45))
                 .frame(width: 62, alignment: .leading)
             Spacer()
             Text(value)
                 .font(monoFont)
-                .foregroundStyle(color.opacity(0.9))
+                .foregroundStyle(color.opacity(0.85))
         }
     }
 

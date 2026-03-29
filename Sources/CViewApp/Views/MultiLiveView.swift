@@ -16,7 +16,7 @@ struct MultiLiveView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // ── 메인 콘텐츠 (push 방식: 패널 열리면 자동 축소) ──
+            // ── 메인 영역 ──
             VStack(spacing: 0) {
                 MLTabBar(
                     manager: manager,
@@ -35,6 +35,8 @@ struct MultiLiveView: View {
                     }},
                     isSettingsPanelOpen: showSettings
                 )
+
+                // ── 콘텐츠 ──
                 ZStack {
                     if manager.sessions.isEmpty {
                         MLEmptyState(onAdd: {
@@ -43,19 +45,13 @@ struct MultiLiveView: View {
                             }
                         })
                     } else if manager.isGridLayout && manager.sessions.count >= 2 {
-                        // 그리드 모드: MLGridLayout이 모든 세션의 PlayerVideoView를 이미 렌더링
                         MLGridLayout(manager: manager, appState: appState, onAdd: {
                             withAnimation(DesignTokens.Animation.snappy) {
                                 showAddChannel = true
                             }
                         })
                     } else {
-                        // ── [VLC 충돌 방지] 안정 컨테이너 패턴 ──
-                        // 기존: .id(selected.id)로 탭 전환 시 MLPlayerPane 완전 파괴→재생성
-                        //   → VLC drawable 끊김 → 0.3초 refreshDrawable() 불안정
-                        // 개선: ForEach로 모든 세션의 PlayerVideoView를 항상 살려두고
-                        //   opacity/zIndex/allowsHitTesting으로 가시성만 전환
-                        //   → VLC drawable 연결 유지 → 즉시 화면 전환
+                        // [VLC 안정성] ForEach + opacity 전환 — drawable 연결 유지
                         ForEach(manager.sessions) { session in
                             let isActive = session.id == manager.selectedSessionId
                             MLPlayerPane(session: session, appState: appState, isActive: isActive)
@@ -73,9 +69,7 @@ struct MultiLiveView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
-            // ── 채널 추가 슬라이드 패널 (push 방식) ──────────────
-            // 세션 추가 등 다른 상태 변경에 애니메이션이 전파되지 않도록
-            // 패널 자체에만 애니메이션 콘텍스트 부여
+            // ── 채널 추가 패널 (push slide) ──
             if showAddChannel {
                 MLAddChannelPanel(
                     manager: manager,
@@ -84,34 +78,23 @@ struct MultiLiveView: View {
                     onError: { addError = $0 }
                 )
                 .environment(appState)
-                .transition(.move(edge: .trailing))
+                .transition(.move(edge: .trailing).combined(with: .opacity))
                 .animation(DesignTokens.Animation.contentTransition, value: showAddChannel)
             }
 
-            // ── 설정 슬라이드 패널 (push 방식) ──────────────
+            // ── 설정 패널 (push slide) ──
             if showSettings {
                 MLSettingsPanel(
                     manager: manager,
                     settingsStore: appState.settingsStore,
                     isPresented: $showSettings
                 )
-                .transition(.move(edge: .trailing))
+                .transition(.move(edge: .trailing).combined(with: .opacity))
                 .animation(DesignTokens.Animation.contentTransition, value: showSettings)
             }
         }
         .background(manager.sessions.isEmpty ? DesignTokens.Colors.background : Color.black)
-        // 전체 HStack에는 애니메이션 제거 — 세션 추가 시 비디오가 확장되는 현상 방지
-        .clipped()
-        .frame(minWidth: 740, minHeight: 520)
-        .task {
-            // 저장된 세션 복원 (최초 진입 시, 세션이 비어있을 때만)
-            if manager.sessions.isEmpty {
-                await manager.restoreState(appState: appState)
-            }
-        }
-        .onKeyPress(phases: .down) { press in
-            handleMultiLiveShortcut(press)
-        }
+        .onKeyPress { handleMultiLiveShortcut($0) }
         .onKeyPress(.escape) {
             if showAddChannel {
                 withAnimation(DesignTokens.Animation.contentTransition) { showAddChannel = false }
@@ -160,7 +143,7 @@ struct MultiLiveView: View {
             case .toggleFullscreen:
                 NSApp.keyWindow?.toggleFullScreen(nil)
             case .toggleChat:
-                withAnimation(DesignTokens.Animation.snappy) { session.isChatVisible.toggle() }
+                break // 채팅은 멀티채팅 패널에서 관리
             case .togglePiP:
                 if let vlcEngine = vm.playerEngine as? VLCPlayerEngine {
                     PiPController.shared.startPiP(vlcEngine: vlcEngine)

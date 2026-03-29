@@ -6,22 +6,37 @@ import SwiftUI
 import CViewCore
 import CViewPlayer
 
+private let gridGap: CGFloat = 1
+
 // MARK: - MLPresetGridLayout
 /// 프리셋 그리드: 세션 수에 따라 자동 배치 (2x1, 2x2 등)
 struct MLPresetGridLayout: View {
     let manager: MultiLiveManager
     let appState: AppState
     @Binding var focusedSessionId: UUID?
+    var containerSize: CGSize = .zero
     var onAdd: (() -> Void)? = nil
+
+    /// 2채널일 때 컨테이너 비율에 따라 세로/가로 분할 자동 전환
+    /// 가로가 충분히 넓으면(>2.8:1) 가로 분할, 아니면 세로 분할로 letterbox 최소화
+    private var use2ChannelVerticalStack: Bool {
+        guard containerSize.height > 0 else { return false }
+        let ratio = containerSize.width / containerSize.height
+        // 16:9 ≈ 1.78, 2채널 가로 배치 시 각 셀 ~0.89 → letterbox 심함
+        // 세로 배치 시 각 셀 ~1.78:0.5 = 3.56 → 너무 넓음
+        // 임계값 2.8 이하에서는 세로 분할이 letterbox를 줄임
+        return ratio < 2.8
+    }
 
     var body: some View {
         let sessions = manager.sessions
         let count = sessions.count
 
-        GeometryReader { geo in
-            if count <= 2 {
-                // 2개 이하: 가로 분할
-                HStack(spacing: 1) {
+        // GeometryReader 제거 — geo 미참조, 리사이즈마다 불필요한 자식 뷰 트리 재렌더링 유발
+        if count <= 2 {
+            // 2개 이하: 컨테이너 비율에 따라 자동 분할 방향 결정
+            if use2ChannelVerticalStack {
+                VStack(spacing: gridGap) {
                     ForEach(sessions) { session in
                         MLGridCell(
                             session: session,
@@ -31,33 +46,47 @@ struct MLPresetGridLayout: View {
                             isFocused: false
                         )
                     }
-                    // 빈 슬롯에 추가 버튼 (최대 2칸)
                     if count < 2, let onAdd {
                         MLEmptySlotButton(onAdd: onAdd)
                     }
                 }
             } else {
-                // 3~4개: 2x2 그리드
-                let rows = 2
-                let cols = 2
-                VStack(spacing: 1) {
-                    ForEach(0..<rows, id: \.self) { row in
-                        HStack(spacing: 1) {
-                            ForEach(0..<cols, id: \.self) { col in
-                                let idx = row * cols + col
-                                if idx < count {
-                                    MLGridCell(
-                                        session: sessions[idx],
-                                        manager: manager,
-                                        appState: appState,
-                                        focusedSessionId: $focusedSessionId,
-                                        isFocused: false
-                                    )
-                                } else if idx == count, let onAdd {
-                                    MLEmptySlotButton(onAdd: onAdd)
-                                } else {
-                                    Color.black
-                                }
+                HStack(spacing: gridGap) {
+                    ForEach(sessions) { session in
+                        MLGridCell(
+                            session: session,
+                            manager: manager,
+                            appState: appState,
+                            focusedSessionId: $focusedSessionId,
+                            isFocused: false
+                        )
+                    }
+                    if count < 2, let onAdd {
+                        MLEmptySlotButton(onAdd: onAdd)
+                    }
+                }
+            }
+        } else {
+            // 3~4개: 2x2 그리드
+            let rows = 2
+            let cols = 2
+            VStack(spacing: gridGap) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: gridGap) {
+                        ForEach(0..<cols, id: \.self) { col in
+                            let idx = row * cols + col
+                            if idx < count {
+                                MLGridCell(
+                                    session: sessions[idx],
+                                    manager: manager,
+                                    appState: appState,
+                                    focusedSessionId: $focusedSessionId,
+                                    isFocused: false
+                                )
+                            } else if idx == count, let onAdd {
+                                MLEmptySlotButton(onAdd: onAdd)
+                            } else {
+                                DesignTokens.Colors.background
                             }
                         }
                     }
@@ -101,11 +130,14 @@ struct MLCustomGridLayout: View {
                 )
                 .frame(width: containerSize.width * manager.layoutRatios.horizontalRatio)
 
-                MLResizeDivider(isHorizontal: true) { delta in
-                    let ratio = manager.layoutRatios.horizontalRatio + delta / containerSize.width
-                    manager.layoutRatios.horizontalRatio = ratio
-                    manager.layoutRatios.clampHorizontal()
-                }
+                MLResizeDivider(
+                    isHorizontal: true,
+                    containerLength: containerSize.width,
+                    currentRatio: manager.layoutRatios.horizontalRatio,
+                    onRatioChange: { newRatio in
+                        manager.layoutRatios.horizontalRatio = newRatio
+                    }
+                )
 
                 MLGridCell(
                     session: sessions[1],
@@ -118,7 +150,7 @@ struct MLCustomGridLayout: View {
         } else {
             // 3~4개: 상하 분할 + 좌우 분할
             VStack(spacing: 0) {
-                HStack(spacing: 1) {
+                HStack(spacing: gridGap) {
                     ForEach(0..<min(2, count), id: \.self) { i in
                         MLGridCell(
                             session: sessions[i],
@@ -131,13 +163,16 @@ struct MLCustomGridLayout: View {
                 }
                 .frame(height: containerSize.height * manager.layoutRatios.verticalRatio)
 
-                MLResizeDivider(isHorizontal: false) { delta in
-                    let ratio = manager.layoutRatios.verticalRatio + delta / containerSize.height
-                    manager.layoutRatios.verticalRatio = ratio
-                    manager.layoutRatios.clampVertical()
-                }
+                MLResizeDivider(
+                    isHorizontal: false,
+                    containerLength: containerSize.height,
+                    currentRatio: manager.layoutRatios.verticalRatio,
+                    onRatioChange: { newRatio in
+                        manager.layoutRatios.verticalRatio = newRatio
+                    }
+                )
 
-                HStack(spacing: 1) {
+                HStack(spacing: gridGap) {
                     ForEach(2..<count, id: \.self) { i in
                         MLGridCell(
                             session: sessions[i],
@@ -172,7 +207,7 @@ struct MLFocusLeftLayout: View {
         let others = Array(sessions.dropFirst())
 
         return AnyView(
-            HStack(spacing: 1) {
+            HStack(spacing: gridGap) {
                 // 메인 패인 (70%)
                 MLGridCell(
                     session: first,
@@ -184,7 +219,7 @@ struct MLFocusLeftLayout: View {
                 .frame(width: containerSize.width * 0.7)
 
                 // 서브 스트립 (30%)
-                VStack(spacing: 1) {
+                VStack(spacing: gridGap) {
                     ForEach(others) { session in
                         MLGridCell(
                             session: session,
@@ -206,38 +241,79 @@ struct MLFocusLeftLayout: View {
 
 // MARK: - MLResizeDivider
 /// 커스텀 레이아웃용 리사이즈 디바이더
+/// `startRatio` 패턴: 드래그 시작 시 ratio를 기억하고 누적 translation으로 절대 계산 → delta 오차 없음
 struct MLResizeDivider: View {
     let isHorizontal: Bool
-    let onDrag: (CGFloat) -> Void
+    /// 컨테이너 크기 (translation → ratio 변환용)
+    let containerLength: CGFloat
+    /// 현재 ratio 읽기용
+    let currentRatio: CGFloat
+    /// 새 ratio를 전달하는 콜백 (절대값)
+    let onRatioChange: (CGFloat) -> Void
+    /// 드래그 종료 시 호출 (저장 등)
+    var onDragEnd: (() -> Void)? = nil
 
     @State private var isDragging = false
+    /// 드래그 시작 시점의 ratio
+    @State private var dragStartRatio: CGFloat = 0
+
+    private let dividerThickness: CGFloat = 3
+    private let hitAreaInset: CGFloat = -6
 
     var body: some View {
-        Rectangle()
-            .fill(isDragging ? DesignTokens.Colors.chzzkGreen.opacity(0.6) : Color.white.opacity(0.1))
-            .frame(
-                width: isHorizontal ? 4 : nil,
-                height: isHorizontal ? nil : 4
-            )
-            .contentShape(Rectangle().inset(by: -4))
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
+        ZStack {
+            // 히트 영역 (투명, 넓은 터치 영역)
+            Rectangle()
+                .fill(Color.clear)
+                .frame(
+                    width: isHorizontal ? dividerThickness + 12 : nil,
+                    height: isHorizontal ? nil : dividerThickness + 12
+                )
+                .contentShape(Rectangle())
+
+            // 시각적 디바이더
+            RoundedRectangle(cornerRadius: 1)
+                .fill(
+                    isDragging
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.8)
+                        : DesignTokens.Glass.dividerColor
+                )
+                .frame(
+                    width: isHorizontal ? dividerThickness : nil,
+                    height: isHorizontal ? nil : dividerThickness
+                )
+                .shadow(
+                    color: isDragging ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : .clear,
+                    radius: 4
+                )
+        }
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    if !isDragging {
                         isDragging = true
-                        let delta = isHorizontal ? value.translation.width : value.translation.height
-                        onDrag(delta)
+                        dragStartRatio = currentRatio
                     }
-                    .onEnded { _ in
-                        isDragging = false
-                    }
-            )
-            .onHover { hovering in
-                if hovering {
-                    (isHorizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
-                } else {
-                    NSCursor.pop()
+                    guard containerLength > 0 else { return }
+                    let translation = isHorizontal ? value.translation.width : value.translation.height
+                    let newRatio = dragStartRatio + translation / containerLength
+                    let clamped = min(MultiLiveLayoutRatios.maxRatio, max(MultiLiveLayoutRatios.minRatio, newRatio))
+                    onRatioChange(clamped)
                 }
+                .onEnded { _ in
+                    isDragging = false
+                    onDragEnd?()
+                }
+        )
+        .transaction { $0.animation = nil }
+        .onHover { hovering in
+            if hovering {
+                (isHorizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
+            } else {
+                NSCursor.pop()
             }
+        }
+        .animation(DesignTokens.Animation.fast, value: isDragging)
     }
 }
 
@@ -249,20 +325,44 @@ private struct MLEmptySlotButton: View {
 
     var body: some View {
         Button(action: onAdd) {
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .light))
-                    .foregroundStyle(isHovered ? DesignTokens.Colors.chzzkGreen : .white.opacity(0.4))
+            VStack(spacing: DesignTokens.Spacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            isHovered
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.15)
+                                : Color.white.opacity(0.06)
+                        )
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(
+                            isHovered
+                                ? DesignTokens.Colors.chzzkGreen
+                                : DesignTokens.Colors.textTertiary
+                        )
+                }
+
                 Text("채널 추가")
-                    .font(DesignTokens.Typography.footnoteMedium)
-                    .foregroundStyle(isHovered ? .white.opacity(0.8) : .white.opacity(0.35))
+                    .font(DesignTokens.Typography.caption)
+                    .foregroundStyle(
+                        isHovered
+                            ? DesignTokens.Colors.textSecondary
+                            : DesignTokens.Colors.textTertiary
+                    )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(isHovered ? Color.white.opacity(0.04) : Color.black.opacity(0.3))
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .fill(DesignTokens.Colors.background.opacity(0.6))
+            )
             .overlay {
-                RoundedRectangle(cornerRadius: 0)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .strokeBorder(
-                        isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.4) : .white.opacity(0.08),
+                        isHovered
+                            ? DesignTokens.Colors.chzzkGreen.opacity(0.4)
+                            : DesignTokens.Colors.border.opacity(0.3),
                         style: StrokeStyle(lineWidth: 1, dash: [6, 4])
                     )
             }

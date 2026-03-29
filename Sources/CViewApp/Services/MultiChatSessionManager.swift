@@ -42,13 +42,24 @@ public final class MultiChatSessionManager {
         channelId: String,
         channelName: String,
         chatChannelId: String,
-        accessToken: String
+        accessToken: String,
+        extraToken: String? = nil,
+        uid: String? = nil,
+        nickname: String? = nil
     ) async {
         // 이미 존재하면 무시
         guard !sessions.contains(where: { $0.id == channelId }) else { return }
 
         let vm = ChatViewModel()
-        await vm.connect(chatChannelId: chatChannelId, accessToken: accessToken)
+        vm.currentUserUid = uid
+        vm.currentUserNickname = nickname
+        await vm.connect(
+            chatChannelId: chatChannelId,
+            accessToken: accessToken,
+            extraToken: extraToken,
+            uid: uid,
+            channelId: channelId
+        )
 
         let session = ChatSession(
             channelId: channelId,

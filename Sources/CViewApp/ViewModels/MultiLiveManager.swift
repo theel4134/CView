@@ -115,8 +115,14 @@ public final class MultiLiveManager {
 
     // MARK: - 세션 관리
 
+    /// 설정에서 선호 엔진 타입 조회
+    private var configuredEngine: PlayerEngineType {
+        settingsStore?.player.preferredEngine ?? .avPlayer
+    }
+
     /// 채널 ID로 새 세션 추가 (엔진 풀에서 엔진 할당)
-    func addSession(channelId: String, preferredEngine: PlayerEngineType = .vlc, startImmediately: Bool = true) async {
+    func addSession(channelId: String, preferredEngine: PlayerEngineType? = nil, startImmediately: Bool = true) async {
+        let preferredEngine = preferredEngine ?? configuredEngine
         let maxSessions = effectiveMaxSessions
         guard canAddSession else {
             logger.warning("MultiLive: 최대 세션 수(\(maxSessions)) 도달")
@@ -231,6 +237,27 @@ public final class MultiLiveManager {
             await enginePool.release(engine)
             logger.error("MultiLive: 세션 추가 실패 — \(error.localizedDescription)")
         }
+    }
+
+    /// 세션 엔진 전환 — 정지 → 엔진 교체 → 재시작
+    func switchEngine(session: MultiLiveSession, to newType: PlayerEngineType) async {
+        let oldEngine = session.playerViewModel.detachEngine()
+        await session.stop()
+        if let oldEngine { await enginePool.release(oldEngine) }
+
+        guard let engine = await enginePool.acquire(type: newType) else {
+            logger.error("MultiLive: 엔진 전환 실패 — 풀 할당 불가")
+            // 복구: 이전 엔진 재획득 시도
+            if let fallback = await enginePool.acquire(type: session.playerViewModel.currentEngineType) {
+                session.playerViewModel.injectEngine(fallback)
+            }
+            return
+        }
+
+        session.playerViewModel.preferredEngineType = newType
+        session.playerViewModel.injectEngine(engine)
+        await session.start()
+        logger.info("MultiLive: 엔진 전환 → \(newType.rawValue) [\(session.channelName)]")
     }
 
     /// 세션 제거 — 엔진 풀 반환 포함

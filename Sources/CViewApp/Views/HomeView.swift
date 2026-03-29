@@ -454,7 +454,7 @@ struct HomeView: View {
     private var personalStatsSection: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             HStack {
-                sectionHeader(title: "내 팔로잉", subtitle: nil)
+                sectionHeader(title: "내 라이브", subtitle: nil)
 
                 // 라이브 비율 배지
                 if viewModel.followingChannels.count > 0 {
@@ -490,7 +490,7 @@ struct HomeView: View {
                         Image(systemName: "heart")
                             .font(DesignTokens.Typography.subhead)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        Text("라이브 중인 팔로잉 채널이 없습니다")
+                        Text("라이브 중인 채널이 없습니다")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
@@ -527,7 +527,7 @@ struct HomeView: View {
                 .foregroundStyle(DesignTokens.Colors.warning)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text("팔로잉 조회에는 네이버 로그인이 필요합니다")
+                Text("라이브 조회에는 네이버 로그인이 필요합니다")
                     .font(DesignTokens.Typography.captionMedium)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Text("로그인 → '네이버 로그인' 탭을 선택하세요")

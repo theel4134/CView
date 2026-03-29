@@ -1,5 +1,5 @@
 // MARK: - FollowingView.swift
-// CViewApp - 팔로잉 채널 목록 탭
+// CViewApp - 라이브 채널 목록 탭
 // 글래스모피즘 + 모던 인터랙션 + 부드러운 애니메이션
 
 import SwiftUI
@@ -47,24 +47,10 @@ enum FollowingSortOrder: String, CaseIterable, Identifiable {
 
 // MARK: - Preference Key for Live Grid Height
 
-private struct LiveGridHeightKey: PreferenceKey {
+struct LiveGridHeightKey: PreferenceKey {
     nonisolated(unsafe) static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
-    }
-}
-
-// MARK: - Multi-Live Panel Tab
-
-private enum MultiLivePanelTab: String, CaseIterable {
-    case video = "비디오"
-    case chat  = "채팅"
-
-    var icon: String {
-        switch self {
-        case .video: return "play.rectangle.fill"
-        case .chat:  return "bubble.left.and.bubble.right.fill"
-        }
     }
 }
 
@@ -73,71 +59,134 @@ private enum MultiLivePanelTab: String, CaseIterable {
 struct FollowingView: View {
 
     @Bindable var viewModel: HomeViewModel
-    @Environment(AppState.self) private var appState
-    @Environment(AppRouter.self) private var router
+    @Environment(AppState.self) var appState
+    @Environment(AppRouter.self) var router
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var sortOrder: FollowingSortOrder = .liveFirst
-    @State private var filterLiveOnly: Bool = false
-    @State private var searchText: String = ""
+    /// 영속 상태 — AppState에서 관리되어 메뉴 전환 시에도 유지
+    var ps: FollowingViewState { appState.followingViewState }
+
+    // 정렬/필터 — 영속
+    var sortOrder: FollowingSortOrder {
+        get { ps.sortOrder }
+        nonmutating set { ps.sortOrder = newValue }
+    }
+    var filterLiveOnly: Bool {
+        get { ps.filterLiveOnly }
+        nonmutating set { ps.filterLiveOnly = newValue }
+    }
+    var selectedCategory: String? {
+        get { ps.selectedCategory }
+        nonmutating set { ps.selectedCategory = newValue }
+    }
+    // 페이징 — 영속
+    var livePageIndex: Int {
+        get { ps.livePageIndex }
+        nonmutating set { ps.livePageIndex = newValue }
+    }
+    var offlinePageIndex: Int {
+        get { ps.offlinePageIndex }
+        nonmutating set { ps.offlinePageIndex = newValue }
+    }
+    // 멀티라이브 — 영속
+    var showMultiLive: Bool {
+        get { ps.showMultiLive }
+        nonmutating set { ps.showMultiLive = newValue }
+    }
+    var showMLAddChannel: Bool {
+        get { ps.showMLAddChannel }
+        nonmutating set { ps.showMLAddChannel = newValue }
+    }
+    var showMLSettings: Bool {
+        get { ps.showMLSettings }
+        nonmutating set { ps.showMLSettings = newValue }
+    }
+    var mlPanelWidth: CGFloat {
+        get { ps.mlPanelWidth }
+        nonmutating set { ps.mlPanelWidth = newValue }
+    }
+    var hideFollowingList: Bool {
+        get { ps.hideFollowingList }
+        nonmutating set { ps.hideFollowingList = newValue }
+    }
+    // 멀티채팅 — 영속
+    var showMultiChat: Bool {
+        get { ps.showMultiChat }
+        nonmutating set { ps.showMultiChat = newValue }
+    }
+    var chatSessionManager: MultiChatSessionManager { ps.chatSessionManager }
+    var showChatAddChannel: Bool {
+        get { ps.showChatAddChannel }
+        nonmutating set { ps.showChatAddChannel = newValue }
+    }
+    var showChatSettings: Bool {
+        get { ps.showChatSettings }
+        nonmutating set { ps.showChatSettings = newValue }
+    }
+    var dualPanelSplitRatio: CGFloat {
+        get { ps.dualPanelSplitRatio }
+        nonmutating set { ps.dualPanelSplitRatio = newValue }
+    }
+
+    // 트랜지언트 상태 — 뷰 로컬 (재생성 시 초기화 허용)
+    @State var searchText: String = ""
     @State private var _searchDebounceTask: Task<Void, Never>?
-    @State private var selectedCategory: String? = nil
-    // 페이징
-    @State private var livePageIndex: Int = 0
-    @State private var offlinePageIndex: Int = 0
-    // 멀티라이브 통합
-    @State private var showMultiLive: Bool = false
-    @State private var showMLAddChannel: Bool = false
-    @State private var showMLSettings: Bool = false
-    @State private var mlAddError: String?
-    @State private var mlPanelWidth: CGFloat = 560
-    @State private var hideFollowingList: Bool = false
+    @State private var _resizeDebounceTask: Task<Void, Never>?
+    @State var mlAddError: String?
     @State private var isDraggingDivider: Bool = false
     @GestureState private var dividerDragOffset: CGFloat = 0
-    private var multiLiveManager: MultiLiveManager { appState.multiLiveManager }
-    // 멀티채팅 통합 (인라인 패널 탭 전환)
-    @State private var mlPanelTab: MultiLivePanelTab = .video
-    @State private var chatSessionManager = MultiChatSessionManager()
-    @State private var showChatAddChannel: Bool = false
-    @State private var chatSearchQuery: String = ""
-    @State private var chatSearchResults: [ChannelInfo] = []
-    @State private var isSearchingChatChannels: Bool = false
-    @State private var newChatChannelId: String = ""
-    @State private var chatAddError: String?
-    @State private var showChatSettings: Bool = false
-    private let liveColumns = 4
-    private let liveItemsPerPage = 16   // 4열 × 4행
-    private let offlineItemsPerPage = 10
+    @FocusState var isSearchFocused: Bool
+    @State var skeletonAppeared = false
+
+    var multiLiveManager: MultiLiveManager { appState.multiLiveManager }
+
+    @State var chatSearchQuery: String = ""
+    @State var chatSearchResults: [ChannelInfo] = []
+    @State var isSearchingChatChannels: Bool = false
+    @State var newChatChannelId: String = ""
+    @State var chatAddError: String?
+    @GestureState private var dualSplitDragOffset: CGFloat = 0
+    // 반응형 그리드: 컨테이너 너비에 따라 열 수·페이지 크기 자동 조정
+    @State var followingContentWidth: CGFloat = 800
+
+    /// 반응형 레이아웃 토큰 — followingContentWidth 변경 시 자동 재계산
+    var layout: ResponsiveFollowingLayout {
+        ResponsiveFollowingLayout(width: followingContentWidth)
+    }
+
+    var liveColumns: Int { layout.liveColumns }
+    var liveItemsPerPage: Int { layout.liveItemsPerPage }
+    var offlineItemsPerPage: Int { layout.offlineRowsPerPage }
 
     // 캐싱된 필터 결과 — 입력 변경 시에만 재산출 (body 중복 호출 방지)
-    @State private var cachedLive: [LiveChannelItem] = []
-    @State private var cachedAllOffline: [LiveChannelItem] = []
-    @State private var cachedLiveCategoryCounts: [(name: String, count: Int)] = []
-    @State private var computedLiveGridHeight: CGFloat = 500
+    @State var cachedLive: [LiveChannelItem] = []
+    @State var cachedAllOffline: [LiveChannelItem] = []
+    @State var cachedLiveCategoryCounts: [(name: String, count: Int)] = []
+    @State var computedLiveGridHeight: CGFloat = 500
 
-    private var totalLiveCount: Int { cachedLive.count }
-    private var totalOfflineCount: Int { cachedAllOffline.count }
-    private var liveCategoryCounts: [(name: String, count: Int)] { cachedLiveCategoryCounts }
-    private var liveCategories: [String] { cachedLiveCategoryCounts.map { $0.name } }
+    var totalLiveCount: Int { cachedLive.count }
+    var totalOfflineCount: Int { cachedAllOffline.count }
+    var liveCategoryCounts: [(name: String, count: Int)] { cachedLiveCategoryCounts }
+    var liveCategories: [String] { cachedLiveCategoryCounts.map { $0.name } }
 
-    private var totalLivePages: Int { max(1, Int(ceil(Double(totalLiveCount) / Double(liveItemsPerPage)))) }
-    private var totalOfflinePages: Int { max(1, Int(ceil(Double(totalOfflineCount) / Double(offlineItemsPerPage)))) }
+    var totalLivePages: Int { max(1, Int(ceil(Double(totalLiveCount) / Double(liveItemsPerPage)))) }
+    var totalOfflinePages: Int { max(1, Int(ceil(Double(totalOfflineCount) / Double(offlineItemsPerPage)))) }
 
-    private func liveChannelsForPage(_ page: Int) -> [LiveChannelItem] {
+    func liveChannelsForPage(_ page: Int) -> [LiveChannelItem] {
         let start = page * liveItemsPerPage
         let end = min(start + liveItemsPerPage, totalLiveCount)
         guard start < end else { return [] }
         return Array(cachedLive[start..<end])
     }
 
-    private func offlineChannelsForPage(_ page: Int) -> [LiveChannelItem] {
+    func offlineChannelsForPage(_ page: Int) -> [LiveChannelItem] {
         let start = page * offlineItemsPerPage
         let end = min(start + offlineItemsPerPage, totalOfflineCount)
         guard start < end else { return [] }
         return Array(cachedAllOffline[start..<end])
     }
 
-    private func formatShortCount(_ n: Int) -> String {
+    func formatShortCount(_ n: Int) -> String {
         if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000) }
         if n >= 1_000  { return String(format: "%.1f천", Double(n) / 1_000) }
         return "\(n)"
@@ -174,31 +223,23 @@ struct FollowingView: View {
             DesignTokens.Colors.background
                 .ignoresSafeArea()
 
-            // 배경 그라디언트 효과
+            // 배경 — 단색 기반 미니멀 그라디언트
             LinearGradient(
-                colors: colorScheme == .light
-                    ? [
-                        DesignTokens.Colors.chzzkGreen.opacity(0.04),
-                        Color.clear,
-                        DesignTokens.Colors.accentBlue.opacity(0.03)
-                    ]
-                    : [
-                        DesignTokens.Colors.surfaceBase.opacity(0.3),
-                        Color.clear,
-                        DesignTokens.Colors.surfaceElevated.opacity(0.15)
-                    ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                stops: [
+                    .init(color: DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.02 : 0.03), location: 0),
+                    .init(color: .clear, location: 0.5),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
             .ignoresSafeArea()
-            .drawingGroup(opaque: true)
 
             if !appState.isLoggedIn {
                 followingGateView(
                     icon: "person.crop.circle.badge.questionmark",
                     iconColor: DesignTokens.Colors.textTertiary,
                     title: "로그인이 필요합니다",
-                    subtitle: "로그인하면 팔로잉 채널을 확인할 수 있습니다",
+                    subtitle: "로그인하면 라이브 채널을 확인할 수 있습니다",
                     buttonLabel: "로그인",
                     action: { router.presentSheet(.login) }
                 )
@@ -208,7 +249,7 @@ struct FollowingView: View {
                     icon: "key.fill",
                     iconColor: DesignTokens.Colors.accentOrange,
                     title: "네이버 로그인이 필요합니다",
-                    subtitle: "팔로잉 목록을 보려면 '네이버 로그인'으로 다시 로그인하세요",
+                    subtitle: "라이브 목록을 보려면 '네이버 로그인'으로 다시 로그인하세요",
                     buttonLabel: "네이버 로그인",
                     action: { router.presentSheet(.login) }
                 )
@@ -221,7 +262,7 @@ struct FollowingView: View {
                     followingGateView(
                         icon: "heart",
                         iconColor: DesignTokens.Colors.accentPink,
-                        title: "팔로잉 채널이 없습니다",
+                        title: "라이브 채널이 없습니다",
                         subtitle: "치지직에서 채널을 팔로우하면 여기서 확인할 수 있어요",
                         buttonLabel: nil,
                         action: nil
@@ -233,6 +274,8 @@ struct FollowingView: View {
                     .transition(.opacity)
             }
         }
+        .animation(DesignTokens.Animation.smooth, value: viewModel.isLoadingFollowing)
+        .animation(DesignTokens.Animation.smooth, value: viewModel.followingChannels.isEmpty)
         .navigationTitle("")
         .toolbar(.hidden)
         .toolbar {
@@ -253,6 +296,26 @@ struct FollowingView: View {
             }
         }
         .onChange(of: viewModel.followingChannels) { _, _ in recomputeFiltered() }
+        // 페이지 전환 시 인접 페이지 썸네일 프리페치 + 프리디코딩
+        .onChange(of: livePageIndex) { _, newPage in
+            prefetchAdjacentLivePages(around: newPage)
+        }
+        .onChange(of: offlinePageIndex) { _, newPage in
+            prefetchAdjacentOfflinePages(around: newPage)
+        }
+        // 멀티라이브 세션 추가 시 → 멀티채팅에도 자동 추가
+        .onChange(of: multiLiveManager.sessions.count) { oldCount, newCount in
+            guard newCount > oldCount else { return }
+            let existingChatIds = Set(chatSessionManager.sessions.map { $0.id })
+            let newSessions = multiLiveManager.sessions.filter { !existingChatIds.contains($0.channelId) }
+            for session in newSessions {
+                let channelId = session.channelId
+                Task { await addChatChannel(channelId: channelId) }
+            }
+            if !newSessions.isEmpty {
+                showMultiChat = true
+            }
+        }
         .task {
             // 데이터 있고 캐시가 5분 이내면 재로드 스킵
             let isFresh = viewModel.followingCachedAt.map { Date().timeIntervalSince($0) < 300 } ?? false
@@ -266,407 +329,107 @@ struct FollowingView: View {
     }
 
 
-    // MARK: - Header Section (v1-inspired gradient hero)
-
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
-            HStack(spacing: DesignTokens.Spacing.md) {
-                // 그라디언트 아이콘
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    DesignTokens.Colors.chzzkGreen.opacity(0.15),
-                                    DesignTokens.Colors.chzzkGreen.opacity(0.08)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 52, height: 52)
-
-
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.7)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("팔로잉")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-
-                    HStack(spacing: 6) {
-                        Text("내가 팔로우하는 채널")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                        if !viewModel.followingChannels.isEmpty {
-                            Text("•")
-                                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            Text("\(viewModel.followingChannels.count)개")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                        }
-
-                        if viewModel.followingLiveCount > 0 {
-                            Text("•")
-                                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(DesignTokens.Colors.live)
-                                    .frame(width: 6, height: 6)
-                                Text("\(viewModel.followingLiveCount)개 라이브")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(DesignTokens.Colors.live)
-                            }
-                        }
-                    }
-                }
-
-                Spacer()
-
-                // 새로고침 버튼
-                Button {
-                    Task { await viewModel.loadFollowingChannels() }
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .semibold))
-                            .opacity(viewModel.isLoadingFollowing ? 0.6 : 1.0)
-                        Text("새로고침")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(DesignTokens.Gradients.primary)
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
-                        }
-                    )
-
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoadingFollowing)
-
-                // 멀티라이브 토글 버튼
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showMultiLive.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "rectangle.split.2x2")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("멀티라이브")
-                            .font(.system(size: 13, weight: .semibold))
-                        if !multiLiveManager.sessions.isEmpty {
-                            Text("\(multiLiveManager.sessions.count)")
-                                .font(.system(size: 11, weight: .bold).monospacedDigit())
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(.white.opacity(0.2)))
-                        }
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(showMultiLive
-                                    ? LinearGradient(colors: [.cyan, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    : DesignTokens.Gradients.primary)
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
-                        }
-                    )
-                }
-                .buttonStyle(.plain)
-
-                // 팔로잉 목록 숨기기/보이기 (멀티라이브 활성 시)
-                if showMultiLive {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            hideFollowingList.toggle()
-                        }
-                    } label: {
-                        Image(systemName: hideFollowingList ? "sidebar.leading" : "sidebar.squares.leading")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(DesignTokens.Colors.surfaceOverlay)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                                    )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .help(hideFollowingList ? "팔로잉 목록 보이기" : "팔로잉 목록 숨기기")
-                    .transition(.scale.combined(with: .opacity))
-                }
-
-                // 업데이트 시간
-                if let cachedAt = viewModel.followingCachedAt {
-                    HStack(spacing: 3) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 8))
-                        Text(cachedAt, style: .relative)
-                            .font(.system(size: 10, weight: .regular).monospacedDigit())
-                    }
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(DesignTokens.Colors.surfaceOverlay, in: Capsule())
-                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
-                }
-            }
-
-            // 핵심 통계 인라인 (라이브 채널이 있을 때)
-            if viewModel.followingLiveCount > 0 || viewModel.followingTotalViewers > 0 {
-                HStack(spacing: DesignTokens.Spacing.lg) {
-                    statIndicator(
-                        icon: "heart.fill",
-                        value: "\(viewModel.followingChannels.count)",
-                        label: "팔로잉",
-                        color: DesignTokens.Colors.accentPink
-                    )
-                    statIndicator(
-                        icon: "dot.radiowaves.left.and.right",
-                        value: "\(viewModel.followingLiveCount)",
-                        label: "라이브",
-                        color: DesignTokens.Colors.live
-                    )
-                    if viewModel.followingTotalViewers > 0 {
-                        statIndicator(
-                            icon: "eye.fill",
-                            value: formatShortCount(viewModel.followingTotalViewers),
-                            label: "시청 중",
-                            color: DesignTokens.Colors.accentBlue
-                        )
-                    }
-                    if viewModel.followingLiveRate > 0 {
-                        statIndicator(
-                            icon: "chart.bar.fill",
-                            value: "\(viewModel.followingLiveRate)%",
-                            label: "라이브율",
-                            color: DesignTokens.Colors.accentPurple
-                        )
-                    }
-                }
-            }
-        }
-        .padding(DesignTokens.Spacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(DesignTokens.Colors.surfaceBase)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                )
-        )
-        .compositingGroup()
-    }
-
-    // MARK: - Search & Filter Card (v1-inspired)
-
-    private var searchAndFilterCard: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
-            Text("검색 및 필터")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-
-            VStack(spacing: DesignTokens.Spacing.md) {
-                // 검색바
-                HStack(spacing: DesignTokens.Spacing.sm) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(
-                            searchText.isEmpty
-                                ? DesignTokens.Colors.textTertiary
-                                : DesignTokens.Colors.chzzkGreen
-                        )
-
-                    TextField("채널 검색...", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13, weight: .regular))
-
-                    if !searchText.isEmpty {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { searchText = "" }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.sm + 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(DesignTokens.Colors.surfaceElevated)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(
-                            searchText.isEmpty
-                                ? DesignTokens.Glass.borderColor
-                                : DesignTokens.Colors.chzzkGreen.opacity(0.3),
-                            lineWidth: 0.5
-                        )
-                )
-
-                // 필터 버튼들 (전체/라이브)
-                HStack(spacing: DesignTokens.Spacing.sm) {
-                    filterToggleButton(
-                        isActive: !filterLiveOnly,
-                        icon: "person.3.fill",
-                        title: "전체",
-                        count: viewModel.followingChannels.count
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            filterLiveOnly = false
-                            selectedCategory = nil
-                        }
-                    }
-
-                    filterToggleButton(
-                        isActive: filterLiveOnly,
-                        icon: "dot.radiowaves.left.and.right",
-                        title: "라이브",
-                        count: viewModel.followingLiveCount
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            filterLiveOnly = true
-                            selectedCategory = nil
-                        }
-                    }
-                }
-            }
-        }
-        .padding(DesignTokens.Spacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(DesignTokens.Colors.surfaceBase)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                )
-        )
-    }
-
-    // MARK: - Filter Toggle Button
-
-    private func filterToggleButton(isActive: Bool, icon: String, title: String, count: Int, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(isActive ? DesignTokens.Colors.textOnOverlay.opacity(0.8) : DesignTokens.Colors.textTertiary)
-                }
-            }
-            .foregroundStyle(isActive ? DesignTokens.Colors.textOnOverlay : DesignTokens.Colors.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 11)
-            .background(
-                ZStack {
-                    if isActive {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(DesignTokens.Gradients.primary)
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
-                    } else {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(DesignTokens.Colors.surfaceElevated)
-                    }
-                }
-            )
-
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func statIndicator(icon: String, value: String, label: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(color)
-            Text(value)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-        }
-    }
-
     // MARK: - Main Content (widget-style card layout)
 
-    private let mlPanelMinWidth: CGFloat = 400
     private let mlPanelMaxRatio: CGFloat = 0.85
+    private let mlPanelMinWidth: CGFloat = 280
 
     private var mainContent: some View {
-        GeometryReader { geo in
+        let hasSidePanel = showMultiLive || showMultiChat
+
+        return GeometryReader { geo in
             let totalWidth = geo.size.width
             let effectiveWidth = mlPanelWidth - dividerDragOffset
             let clampedPanelWidth = min(max(effectiveWidth, mlPanelMinWidth), totalWidth * mlPanelMaxRatio)
+            let listWidth = totalWidth - clampedPanelWidth - 1 // 1 = divider
 
             HStack(spacing: 0) {
-                // 왼쪽: 팔로잉 채널 목록
-                if !hideFollowingList || !showMultiLive {
+                // 왼쪽: 라이브 채널 목록 — 고정 너비 (나머지를 패널에 양보)
+                if !hideFollowingList || !hasSidePanel {
                     followingListContent
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(width: hasSidePanel ? max(listWidth, 0) : nil)
+                        .frame(maxWidth: hasSidePanel ? nil : .infinity, maxHeight: .infinity)
                         .transition(.move(edge: .leading).combined(with: .opacity))
                 }
 
-                // 오른쪽: 멀티라이브 패널 (활성화 시)
-                if showMultiLive {
+                // 오른쪽: 사이드 패널 (멀티라이브 또는 멀티채팅)
+                if hasSidePanel {
                     if !hideFollowingList {
                         mlDividerHandle
                     }
 
-                    multiLiveInlinePanel
-                        .frame(width: hideFollowingList ? totalWidth : clampedPanelWidth)
-                        .frame(maxHeight: .infinity)
+                    sidePanelContent(totalWidth: clampedPanelWidth)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
         }
-        .animation(isDraggingDivider ? nil : .easeInOut(duration: 0.3), value: showMultiLive)
-        .animation(isDraggingDivider ? nil : .easeInOut(duration: 0.3), value: hideFollowingList)
+        .animation(isDraggingDivider ? nil : DesignTokens.Animation.normal, value: showMultiLive)
+        .animation(isDraggingDivider ? nil : DesignTokens.Animation.normal, value: showMultiChat)
+        .animation(isDraggingDivider ? nil : DesignTokens.Animation.normal, value: hideFollowingList)
+    }
+
+    /// 멀티라이브 + 멀티채팅 동시 또는 단독 표시
+    @ViewBuilder
+    private func sidePanelContent(totalWidth: CGFloat) -> some View {
+        if showMultiLive && showMultiChat {
+            // 커스텀 분할 뷰 (HSplitView 대신 순수 SwiftUI로 레이아웃 순환 방지)
+            GeometryReader { geo in
+                let panelW = geo.size.width
+                let effectiveRatio = dualPanelSplitRatio + (dualSplitDragOffset / panelW)
+                let clampedRatio = min(max(effectiveRatio, 0.25), 0.75)
+                let liveW = panelW * clampedRatio
+                let chatW = panelW * (1 - clampedRatio)
+
+                HStack(spacing: 0) {
+                    multiLiveInlinePanel
+                        .frame(width: max(liveW - 1, 0))
+                        .frame(maxHeight: .infinity)
+
+                    // 분할 핸들
+                    Rectangle()
+                        .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
+                        .frame(width: 1)
+                        .overlay(alignment: .center) {
+                            Capsule()
+                                .fill(DesignTokens.Colors.textTertiary.opacity(0.3))
+                                .frame(width: 3, height: 28)
+                        }
+                        .contentShape(Rectangle().inset(by: -4))
+                        .onHover { h in
+                            if h { NSCursor.resizeLeftRight.set() } else { NSCursor.arrow.set() }
+                        }
+                        .gesture(
+                            DragGesture(minimumDistance: 1)
+                                .updating($dualSplitDragOffset) { value, state, _ in
+                                    state = value.translation.width
+                                }
+                                .onEnded { value in
+                                    let delta = value.translation.width / panelW
+                                    dualPanelSplitRatio = min(max(dualPanelSplitRatio + delta, 0.25), 0.75)
+                                }
+                        )
+
+                    multiChatInlinePanel
+                        .frame(width: max(chatW - 1, 0))
+                        .frame(maxHeight: .infinity)
+                }
+            }
+        } else if showMultiLive {
+            multiLiveInlinePanel
+        } else if showMultiChat {
+            multiChatInlinePanel
+        }
     }
 
     private var mlDividerHandle: some View {
         Rectangle()
-            .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.6) : DesignTokens.Glass.dividerColor.opacity(0.5))
-            .frame(width: isDraggingDivider ? 3 : 1)
+            .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.dividerColor.opacity(0.3))
+            .frame(width: 1)
             .overlay(alignment: .center) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
-                    .frame(width: 4, height: 36)
-                    .opacity(isDraggingDivider ? 1 : 0.6)
+                Capsule()
+                    .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.6) : DesignTokens.Colors.textTertiary.opacity(0.3))
+                    .frame(width: 3, height: 28)
             }
             .contentShape(Rectangle().inset(by: -4))
             .onHover { hovering in
@@ -694,8 +457,29 @@ struct FollowingView: View {
     // MARK: - Following List Content
 
     private var followingListContent: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: DesignTokens.Spacing.xl) {
+        let outerPad = layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.xl
+        let innerSpacing = layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.md : DesignTokens.Spacing.xl
+
+        return ScrollView(showsIndicators: false) {
+            VStack(spacing: innerSpacing) {
+                // 반응형 너비 측정 — 레이아웃 패스 밖에서 상태 업데이트하여 순환 방지
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear {
+                            let w = geo.size.width - outerPad * 2
+                            if abs(w - followingContentWidth) > 1 {
+                                DispatchQueue.main.async { followingContentWidth = w }
+                            }
+                        }
+                        .onChange(of: geo.size.width) { _, w in
+                            let newWidth = w - outerPad * 2
+                            if abs(newWidth - followingContentWidth) > 20 {
+                                debounceResize(to: newWidth)
+                            }
+                        }
+                }
+                .frame(height: 0)
+
                 // 헤더 섹션
                 headerSection
 
@@ -728,7 +512,10 @@ struct FollowingView: View {
 
                                 if totalLivePages > 1 {
                                     pageNavigator(
-                                        currentPage: $livePageIndex,
+                                        currentPage: Binding(
+                                            get: { ps.livePageIndex },
+                                            set: { ps.livePageIndex = $0 }
+                                        ),
                                         totalPages: totalLivePages,
                                         accentColor: DesignTokens.Colors.live
                                     )
@@ -752,7 +539,10 @@ struct FollowingView: View {
 
                                 if totalOfflinePages > 1 {
                                     pageNavigator(
-                                        currentPage: $offlinePageIndex,
+                                        currentPage: Binding(
+                                            get: { ps.offlinePageIndex },
+                                            set: { ps.offlinePageIndex = $0 }
+                                        ),
                                         totalPages: totalOfflinePages,
                                         accentColor: DesignTokens.Colors.accentPurple
                                     )
@@ -762,1177 +552,57 @@ struct FollowingView: View {
                     }
                 }
 
-                Spacer(minLength: DesignTokens.Spacing.xl)
+                Spacer(minLength: innerSpacing)
             }
-            .padding(DesignTokens.Spacing.xl)
+            .padding(outerPad)
+            .id(layout.sizeClass)
         }
     }
 
-    /// 위젯 스타일 카드 래퍼 (v1-inspired material card)
-    private func widgetCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(DesignTokens.Spacing.xl)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(DesignTokens.Colors.surfaceBase)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                    )
-            )
-            .shadow(
-                color: DesignTokens.Shadow.card.color,
-                radius: DesignTokens.Shadow.card.radius,
-                y: DesignTokens.Shadow.card.y
-            )
-            .compositingGroup()
-    }
+    // MARK: - Resize Debounce (리사이즈 디바운스)
 
-    // MARK: - Category Filter Chips
-
-    private var categoryFilterChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                // 전체 칩
-                categoryChip(label: "전체", count: 0, isSelected: selectedCategory == nil) {
-                    withAnimation(DesignTokens.Animation.indicator) {
-                        selectedCategory = nil
-                    }
-                }
-                ForEach(liveCategoryCounts, id: \.name) { cat in
-                    categoryChip(label: cat.name, count: cat.count, isSelected: selectedCategory == cat.name) {
-                        withAnimation(DesignTokens.Animation.indicator) {
-                            selectedCategory = selectedCategory == cat.name ? nil : cat.name
-                        }
-                    }
-                }
-            }
-            .padding(.vertical, DesignTokens.Spacing.xxs)
+    /// 너비 변경 시 100ms 디바운스 — 드래그 중 과도한 레이아웃 재계산 방지
+    private func debounceResize(to newWidth: CGFloat) {
+        _resizeDebounceTask?.cancel()
+        _resizeDebounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            followingContentWidth = newWidth
+            livePageIndex = min(livePageIndex, max(0, totalLivePages - 1))
+            offlinePageIndex = min(offlinePageIndex, max(0, totalOfflinePages - 1))
         }
     }
 
-    private func categoryChip(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Text(label)
-                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                    .foregroundStyle(isSelected ? DesignTokens.Colors.textOnOverlay : DesignTokens.Colors.textSecondary)
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(isSelected ? DesignTokens.Colors.textOnOverlay.opacity(0.85) : DesignTokens.Colors.textTertiary)
-                }
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs + 1)
-            .background {
-                if isSelected {
-                    Capsule().fill(
-                        LinearGradient(
-                            colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                } else {
-                    Capsule().fill(DesignTokens.Colors.surfaceElevated.opacity(0.8))
-                }
-            }
-            .overlay(
-                Capsule().strokeBorder(
-                    isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.7) : DesignTokens.Glass.borderColor,
-                    lineWidth: isSelected ? 1.0 : 0.5
-                )
-            )
+    // MARK: - Page Prefetch (인접 페이지 썸네일 프리디코딩)
 
+    /// 라이브 페이지 전환 시 인접 페이지 썸네일을 미리 디코딩하여 깜빡임 방지
+    private func prefetchAdjacentLivePages(around page: Int) {
+        let adjacentPages = [page - 1, page + 1].filter { $0 >= 0 && $0 < totalLivePages }
+        let urls: [URL] = adjacentPages.flatMap { p in
+            liveChannelsForPage(p).compactMap { ch in
+                if let thumb = ch.thumbnailUrl, !thumb.isEmpty { return URL(string: thumb) }
+                if let img = ch.channelImageUrl, !img.isEmpty { return URL(string: img) }
+                return nil
+            }
         }
-        .buttonStyle(.plain)
-    }
-
-
-    // MARK: - Section Header
-
-    private func sectionHeader(icon: String, title: String, count: Int, color: Color) -> some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
-                    .foregroundStyle(color)
-                Text(title)
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-            }
-
-            Text("\(count)")
-                .font(DesignTokens.Typography.custom(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(color)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2.5)
-                .background(color.opacity(0.1), in: Capsule())
-                .overlay(Capsule().strokeBorder(color.opacity(0.2), lineWidth: 0.5))
-
-            // 얇은 구분선
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [color.opacity(0.2), color.opacity(0.05), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 0.5)
-
-            Spacer()
+        guard !urls.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            await ImageCacheService.shared.prefetchAndDecode(urls)
         }
     }
 
-    // MARK: - Live Paging View (슬라이딩 페이지 전환)
-
-    private var livePagingView: some View {
-        GeometryReader { geo in
-            let cardHeight = livecardHeight(for: geo.size.width)
-            let maxRows = Int(ceil(Double(min(liveItemsPerPage, totalLiveCount)) / Double(liveColumns)))
-            let spacing: CGFloat = DesignTokens.Spacing.sm
-            let gridHeight = CGFloat(max(maxRows, 1)) * (cardHeight + spacing) - spacing + DesignTokens.Spacing.xs * 2
-
-            // 현재 페이지만 렌더링 — 보이지 않는 페이지의 LivePulseBadge 애니메이션 제거
-            liveGridPage(livePageIndex)
-                .frame(width: geo.size.width, height: gridHeight, alignment: .top)
-                .id(livePageIndex)
-                .transition(.opacity)
-                .animation(DesignTokens.Animation.normal, value: livePageIndex)
-                .preference(key: LiveGridHeightKey.self, value: gridHeight)
-        }
-        .frame(height: computedLiveGridHeight)
-        .clipped()
-        .onPreferenceChange(LiveGridHeightKey.self) { height in
-            if abs(height - computedLiveGridHeight) > 1 {
-                computedLiveGridHeight = height
+    /// 오프라인 페이지 전환 시 인접 페이지 프로필 이미지 프리페치
+    private func prefetchAdjacentOfflinePages(around page: Int) {
+        let adjacentPages = [page - 1, page + 1].filter { $0 >= 0 && $0 < totalOfflinePages }
+        let urls: [URL] = adjacentPages.flatMap { p in
+            offlineChannelsForPage(p).compactMap { ch in
+                if let img = ch.channelImageUrl, !img.isEmpty { return URL(string: img) }
+                return nil
             }
         }
-    }
-
-    /// 실제 컨테이너 너비로 16:9 카드 높이 계산
-    private func livecardHeight(for containerWidth: CGFloat) -> CGFloat {
-        let totalSpacing = DesignTokens.Spacing.sm * CGFloat(liveColumns - 1)
-        let cardWidth = (containerWidth - totalSpacing) / CGFloat(liveColumns)
-        let imageHeight = cardWidth * (9.0 / 16.0)  // 16:9 비율
-        let infoHeight: CGFloat = 42
-        return imageHeight + infoHeight
-    }
-
-    private func liveGridPage(_ page: Int) -> some View {
-        let channels = liveChannelsForPage(page)
-        return LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: DesignTokens.Spacing.sm), count: liveColumns),
-            spacing: DesignTokens.Spacing.sm
-        ) {
-            ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
-                FollowingLiveCard(channel: channel, index: page * liveItemsPerPage + index) {
-                    router.navigate(to: .live(channelId: channel.channelId))
-                } onPrefetch: { channelId in
-                    if let service = appState.hlsPrefetchService {
-                        Task { await service.prefetch(channelId: channelId) }
-                    }
-                }
-                .equatable()
-                .onTapGesture {
-                    router.navigate(to: .live(channelId: channel.channelId))
-                }
-                .contextMenu {
-                    if channel.isLive {
-                        Button {
-                            Task { await multiLiveManager.addSession(channelId: channel.channelId) }
-                            showMultiLive = true
-                        } label: {
-                            Label("멀티라이브에 추가", systemImage: "rectangle.split.2x2")
-                        }
-                        .disabled(!multiLiveManager.canAddSession)
-                        Divider()
-                    }
-                    channelNotificationMenu(channelId: channel.channelId, channelName: channel.channelName)
-                }
-            }
-        }
-        .padding(.vertical, DesignTokens.Spacing.xs)
-    }
-
-    // MARK: - Offline Paging View (슬라이딩 페이지 전환)
-
-    private var offlinePagingView: some View {
-        GeometryReader { geo in
-            // 현재 페이지만 렌더링
-            offlineListPage(offlinePageIndex)
-                .frame(width: geo.size.width)
-                .id(offlinePageIndex)
-                .transition(.opacity)
-                .animation(DesignTokens.Animation.normal, value: offlinePageIndex)
-        }
-        .frame(height: offlinePageHeight)
-        .clipped()
-    }
-
-    private var offlinePageHeight: CGFloat {
-        let count = min(offlineItemsPerPage, max(1, totalOfflineCount))
-        let rowHeight: CGFloat = 44
-        return CGFloat(count) * rowHeight
-    }
-
-    private func offlineListPage(_ page: Int) -> some View {
-        let channels = offlineChannelsForPage(page)
-        return LazyVStack(spacing: DesignTokens.Spacing.xxs) {
-            ForEach(Array(channels.enumerated()), id: \.element.id) { idx, channel in
-                FollowingOfflineRow(channel: channel, index: idx)
-                    .equatable()
-                    .onTapGesture {
-                        router.navigate(to: .channelDetail(channelId: channel.channelId))
-                    }
-                    .contextMenu {
-                        channelNotificationMenu(channelId: channel.channelId, channelName: channel.channelName)
-                    }
-            }
-        }
-    }
-
-    // MARK: - Channel Notification Context Menu
-
-    @ViewBuilder
-    private func channelNotificationMenu(channelId: String, channelName: String) -> some View {
-        let setting = appState.settingsStore.channelNotificationSetting(for: channelId, channelName: channelName)
-
-        Section("알림 설정 — \(channelName)") {
-            Toggle(isOn: Binding(
-                get: { setting.notifyOnLive },
-                set: { newValue in
-                    var updated = setting
-                    updated.notifyOnLive = newValue
-                    Task { appState.settingsStore.updateChannelNotification(updated) }
-                }
-            )) {
-                Label("방송 시작 알림", systemImage: "dot.radiowaves.left.and.right")
-            }
-
-            Toggle(isOn: Binding(
-                get: { setting.notifyOnCategoryChange },
-                set: { newValue in
-                    var updated = setting
-                    updated.notifyOnCategoryChange = newValue
-                    Task { appState.settingsStore.updateChannelNotification(updated) }
-                }
-            )) {
-                Label("카테고리 변경 알림", systemImage: "tag")
-            }
-
-            Toggle(isOn: Binding(
-                get: { setting.notifyOnTitleChange },
-                set: { newValue in
-                    var updated = setting
-                    updated.notifyOnTitleChange = newValue
-                    Task { appState.settingsStore.updateChannelNotification(updated) }
-                }
-            )) {
-                Label("제목 변경 알림", systemImage: "textformat")
-            }
-        }
-    }
-
-    // MARK: - Page Navigator
-
-    private func pageNavigator(currentPage: Binding<Int>, totalPages: Int, accentColor: Color) -> some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
-            Spacer()
-
-            // 이전 버튼
-            Button {
-                withAnimation(DesignTokens.Animation.normal) {
-                    currentPage.wrappedValue = max(0, currentPage.wrappedValue - 1)
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
-                    .foregroundStyle(currentPage.wrappedValue > 0 ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.4))
-                    .frame(width: 26, height: 26)
-                    .background(
-                        currentPage.wrappedValue > 0
-                            ? AnyShapeStyle(accentColor.opacity(0.1))
-                            : AnyShapeStyle(DesignTokens.Colors.surfaceElevated.opacity(0.5)),
-                        in: Circle()
-                    )
-                    .overlay(Circle()
-                        .strokeBorder(
-                            currentPage.wrappedValue > 0
-                                ? accentColor.opacity(0.25)
-                                : DesignTokens.Glass.borderColor,
-                            lineWidth: 0.5
-                        ))
-            }
-            .buttonStyle(.plain)
-            .disabled(currentPage.wrappedValue == 0)
-
-            // 페이지 인디케이터
-            if totalPages <= 7 {
-                HStack(spacing: DesignTokens.Spacing.xs) {
-                    ForEach(0..<totalPages, id: \.self) { page in
-                        Capsule()
-                            .fill(page == currentPage.wrappedValue ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.3))
-                            .frame(
-                                width: page == currentPage.wrappedValue ? 16 : 5,
-                                height: 5
-                            )
-                            .animation(DesignTokens.Animation.fast, value: currentPage.wrappedValue)
-                            .onTapGesture {
-                                withAnimation(DesignTokens.Animation.normal) {
-                                    currentPage.wrappedValue = page
-                                }
-                            }
-                    }
-                }
-            } else {
-                Text("\(currentPage.wrappedValue + 1) / \(totalPages)")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-
-            // 다음 버튼
-            Button {
-                withAnimation(DesignTokens.Animation.normal) {
-                    currentPage.wrappedValue = min(totalPages - 1, currentPage.wrappedValue + 1)
-                }
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
-                    .foregroundStyle(currentPage.wrappedValue < totalPages - 1 ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.4))
-                    .frame(width: 26, height: 26)
-                    .background(
-                        currentPage.wrappedValue < totalPages - 1
-                            ? AnyShapeStyle(accentColor.opacity(0.1))
-                            : AnyShapeStyle(DesignTokens.Colors.surfaceElevated.opacity(0.5)),
-                        in: Circle()
-                    )
-                    .overlay(Circle()
-                        .strokeBorder(
-                            currentPage.wrappedValue < totalPages - 1
-                                ? accentColor.opacity(0.25)
-                                : DesignTokens.Glass.borderColor,
-                            lineWidth: 0.5
-                        ))
-            }
-            .buttonStyle(.plain)
-            .disabled(currentPage.wrappedValue == totalPages - 1)
-
-            Spacer()
-        }
-        .padding(.vertical, DesignTokens.Spacing.sm)
-    }
-
-    // MARK: - Skeleton Loading View
-
-    @State private var skeletonAppeared = false
-
-    private var skeletonLoadingView: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: DesignTokens.Spacing.xl) {
-                // 스켈레톤 헤더
-                skeletonHeaderCard
-
-                // 라이브 스켈레톤 카드
-                widgetCard {
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
-                        sectionHeader(icon: "dot.radiowaves.left.and.right", title: "라이브 중", count: 0, color: DesignTokens.Colors.live)
-                            .redacted(reason: .placeholder)
-
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: DesignTokens.Spacing.sm), count: liveColumns),
-                            spacing: DesignTokens.Spacing.sm
-                        ) {
-                            ForEach(0..<8, id: \.self) { idx in
-                                SkeletonLiveCard()
-                                    .opacity(skeletonAppeared ? 1 : 0)
-                                    .offset(y: skeletonAppeared ? 0 : 6)
-                                    .animation(
-                                        .easeOut(duration: 0.3).delay(Double(idx) * 0.03),
-                                        value: skeletonAppeared
-                                    )
-                            }
-                        }
-                    }
-                }
-
-                // 오프라인 스켈레톤 카드
-                widgetCard {
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
-                        sectionHeader(icon: "moon.zzz.fill", title: "오프라인", count: 0, color: DesignTokens.Colors.textTertiary)
-                            .redacted(reason: .placeholder)
-
-                        VStack(spacing: DesignTokens.Spacing.xxs) {
-                            ForEach(0..<5, id: \.self) { _ in
-                                HStack(spacing: 10) {
-                                    Circle().fill(DesignTokens.Colors.surfaceElevated).frame(width: 34, height: 34).shimmer()
-                                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-                                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                                            .fill(DesignTokens.Colors.surfaceElevated)
-                                            .frame(height: 10).shimmer()
-                                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                                            .fill(DesignTokens.Colors.surfaceElevated)
-                                            .frame(width: 60, height: 8).shimmer()
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.vertical, 9)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(DesignTokens.Spacing.xl)
-        }
-        .onAppear { skeletonAppeared = true }
-    }
-
-    /// 스켈레톤 헤더 카드
-    private var skeletonHeaderCard: some View {
-        HStack(spacing: DesignTokens.Spacing.md) {
-            Circle()
-                .fill(DesignTokens.Colors.surfaceElevated)
-                .frame(width: 52, height: 52)
-                .shimmer()
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                    .fill(DesignTokens.Colors.surfaceElevated)
-                    .frame(width: 100, height: 20)
-                    .shimmer()
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                    .fill(DesignTokens.Colors.surfaceElevated)
-                    .frame(width: 160, height: 12)
-                    .shimmer()
-            }
-            Spacer()
-        }
-        .padding(DesignTokens.Spacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.xl, style: .continuous)
-                .fill(DesignTokens.Colors.surfaceBase)
-        )
-    }
-
-    // MARK: - Empty Search / Gate Views
-
-    private var emptySearchResult: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            // 아이콘 (더블 링)
-            ZStack {
-                Circle()
-                    .fill(DesignTokens.Colors.textTertiary.opacity(0.04))
-                    .frame(width: 72, height: 72)
-                Circle()
-                    .strokeBorder(DesignTokens.Colors.textTertiary.opacity(0.08), lineWidth: 1)
-                    .frame(width: 72, height: 72)
-                Circle()
-                    .strokeBorder(DesignTokens.Colors.textTertiary.opacity(0.15), lineWidth: 1.5)
-                    .frame(width: 48, height: 48)
-                Image(systemName: "magnifyingglass")
-                    .font(DesignTokens.Typography.custom(size: 20, weight: .light))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-
-            VStack(spacing: DesignTokens.Spacing.xs) {
-                Text("검색 결과가 없습니다")
-                    .font(DesignTokens.Typography.bodySemibold)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                if !searchText.isEmpty {
-                    Text("'\(searchText)'와 일치하는 채널이 없습니다")
-                        .font(DesignTokens.Typography.footnote)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-
-            // 필터 초기화 버튼들
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                if !searchText.isEmpty {
-                    filterResetButton(label: "검색 초기화", icon: "xmark.circle") {
-                        searchText = ""
-                    }
-                }
-                if selectedCategory != nil {
-                    filterResetButton(label: "카테고리 초기화", icon: "tag.slash") {
-                        selectedCategory = nil
-                    }
-                }
-                if filterLiveOnly {
-                    filterResetButton(label: "라이브만 해제", icon: "dot.radiowaves.left.and.right.slash") {
-                        filterLiveOnly = false
-                    }
-                }
-            }
-
-            if !searchText.isEmpty || selectedCategory != nil || filterLiveOnly {
-                Button {
-                    withAnimation(DesignTokens.Animation.normal) {
-                        searchText = ""
-                        selectedCategory = nil
-                        filterLiveOnly = false
-                    }
-                } label: {
-                    HStack(spacing: DesignTokens.Spacing.xs) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(DesignTokens.Typography.microSemibold)
-                        Text("모든 필터 초기화")
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                    .padding(.vertical, DesignTokens.Spacing.sm)
-                    .background(DesignTokens.Colors.surfaceOverlay, in: Capsule())
-                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 200)
-        .padding(.top, DesignTokens.Spacing.xl)
-    }
-
-    private func filterResetButton(label: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                Image(systemName: icon).font(DesignTokens.Typography.custom(size: 9, weight: .medium))
-                Text(label).font(DesignTokens.Typography.micro)
-            }
-            .foregroundStyle(DesignTokens.Colors.textSecondary)
-            .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(DesignTokens.Colors.surfaceElevated.opacity(0.6), in: Capsule())
-            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func followingGateView(
-        icon: String,
-        iconColor: Color,
-        title: String,
-        subtitle: String,
-        buttonLabel: String?,
-        action: (() -> Void)?
-    ) -> some View {
-        VStack(spacing: DesignTokens.Spacing.xl) {
-            // 아이콘 (더블 링 + 글로우)
-            ZStack {
-                Circle()
-                    .fill(iconColor.opacity(0.06))
-                    .frame(width: 80, height: 80)
-                Circle()
-                    .strokeBorder(iconColor.opacity(0.1), lineWidth: 1)
-                    .frame(width: 80, height: 80)
-                Circle()
-                    .strokeBorder(iconColor.opacity(0.2), lineWidth: 1.5)
-                    .frame(width: 56, height: 56)
-                Image(systemName: icon)
-                    .font(DesignTokens.Typography.custom(size: 26, weight: .light))
-                    .foregroundStyle(iconColor)
-            }
-
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                Text(title)
-                    .font(DesignTokens.Typography.bodySemibold)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Text(subtitle)
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(2)
-            }
-
-            if let label = buttonLabel, let action {
-                Button(action: action) {
-                    HStack(spacing: DesignTokens.Spacing.xs) {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(DesignTokens.Typography.caption)
-                        Text(label)
-                            .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
-                    }
-                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                    .padding(.horizontal, DesignTokens.Spacing.xl)
-                    .padding(.vertical, DesignTokens.Spacing.md)
-                    .background(
-                        Capsule().fill(
-                            LinearGradient(
-                                colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.85)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 80)
-    }
-
-    // MARK: - Sort Menu
-
-    private var sortMenuButton: some View {
-        Menu {
-            ForEach(FollowingSortOrder.allCases) { order in
-                Button {
-                    withAnimation(DesignTokens.Animation.normal) { sortOrder = order }
-                } label: {
-                    HStack {
-                        Label(order.rawValue, systemImage: order.icon)
-                        if sortOrder == order { Image(systemName: "checkmark") }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                Image(systemName: sortOrder.icon)
-                    .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
-                Text(sortOrder.rawValue)
-                    .font(DesignTokens.Typography.micro)
-                Image(systemName: "chevron.down")
-                    .font(DesignTokens.Typography.custom(size: 7, weight: .bold))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-            .foregroundStyle(DesignTokens.Colors.textSecondary)
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(DesignTokens.Colors.surfaceElevated.opacity(0.5), in: Capsule())
-            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
-    // MARK: - Inline Multi-Live Panel
-
-    private var multiLiveInlinePanel: some View {
-        VStack(spacing: 0) {
-            // 패널 탭 바 (비디오 / 채팅 전환)
-            mlPanelTabBar
-
-            // 탭별 콘텐츠
-            Group {
-                switch mlPanelTab {
-                case .video:
-                    mlVideoContent
-                case .chat:
-                    mlChatContent
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(mlPanelTab == .video && !multiLiveManager.sessions.isEmpty ? Color.black : DesignTokens.Colors.background)
-        .clipped()
-        .task {
-            if multiLiveManager.sessions.isEmpty {
-                await multiLiveManager.restoreState(appState: appState)
-            }
-        }
-        .alert("채널 추가 실패", isPresented: Binding(
-            get: { mlAddError != nil },
-            set: { if !$0 { mlAddError = nil } }
-        )) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(mlAddError ?? "")
-        }
-        .alert("채팅 연결 실패", isPresented: Binding(
-            get: { chatAddError != nil },
-            set: { if !$0 { chatAddError = nil } }
-        )) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(chatAddError ?? "")
-        }
-        .sheet(isPresented: $showChatSettings) {
-            ChatSettingsView()
-                .environment(appState)
-        }
-    }
-
-    // MARK: - Panel Tab Bar (비디오/채팅 전환)
-
-    private var mlPanelTabBar: some View {
-        HStack(spacing: 0) {
-            // 탭 전환 피커
-            HStack(spacing: DesignTokens.Spacing.xxs) {
-                ForEach(MultiLivePanelTab.allCases, id: \.self) { tab in
-                    Button {
-                        withAnimation(DesignTokens.Animation.snappy) {
-                            mlPanelTab = tab
-                        }
-                    } label: {
-                        HStack(spacing: DesignTokens.Spacing.xs) {
-                            Image(systemName: tab.icon)
-                                .font(DesignTokens.Typography.microSemibold)
-                            Text(tab.rawValue)
-                                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            mlPanelTab == tab
-                                ? DesignTokens.Colors.chzzkGreen.opacity(0.15)
-                                : Color.clear,
-                            in: Capsule()
-                        )
-                        .foregroundStyle(
-                            mlPanelTab == tab
-                                ? DesignTokens.Colors.chzzkGreen
-                                : DesignTokens.Colors.textSecondary
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(DesignTokens.Colors.surfaceElevated.opacity(0.5), in: Capsule())
-            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
-
-            Spacer()
-
-            // 팔로잉 리스트 표시 버튼 (접힌 경우)
-            if hideFollowingList {
-                Button {
-                    withAnimation(DesignTokens.Animation.glassAppear) {
-                        hideFollowingList = false
-                    }
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(DesignTokens.Typography.footnoteMedium)
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(DesignTokens.Colors.surfaceElevated.opacity(0.5), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("팔로잉 목록 표시")
-            }
-        }
-        .padding(.horizontal, DesignTokens.Spacing.sm)
-        .padding(.vertical, 6)
-        .background(DesignTokens.Colors.surfaceOverlay)
-    }
-
-    // MARK: - ML Video Content (기존 멀티라이브)
-
-    private var mlVideoContent: some View {
-        VStack(spacing: 0) {
-            // 멀티라이브 탭 바
-            MLTabBar(
-                manager: multiLiveManager,
-                isGridLayout: Binding(
-                    get: { multiLiveManager.isGridLayout },
-                    set: { multiLiveManager.isGridLayout = $0 }
-                ),
-                onAdd: { withAnimation(DesignTokens.Animation.snappy) {
-                    showMLAddChannel.toggle()
-                    if showMLAddChannel { showMLSettings = false }
-                }},
-                isAddPanelOpen: showMLAddChannel,
-                onSettings: { withAnimation(DesignTokens.Animation.snappy) {
-                    showMLSettings.toggle()
-                    if showMLSettings { showMLAddChannel = false }
-                }},
-                isSettingsPanelOpen: showMLSettings,
-                hideFollowingList: hideFollowingList,
-                onToggleFollowingList: {
-                    withAnimation(DesignTokens.Animation.glassAppear) {
-                        hideFollowingList = false
-                    }
-                }
-            )
-
-            // 콘텐츠 영역
-            mlVideoMainArea
-        }
-    }
-
-    private var mlVideoMainArea: some View {
-        HStack(spacing: 0) {
-            ZStack {
-                if multiLiveManager.sessions.isEmpty {
-                    MLEmptyState(onAdd: {
-                        withAnimation(DesignTokens.Animation.snappy) {
-                            showMLAddChannel = true
-                        }
-                    })
-                } else if multiLiveManager.isGridLayout && multiLiveManager.sessions.count >= 2 {
-                    MLGridLayout(manager: multiLiveManager, appState: appState, onAdd: {
-                        withAnimation(DesignTokens.Animation.snappy) {
-                            showMLAddChannel = true
-                        }
-                    })
-                } else {
-                    // [VLC 충돌 방지] 안정 컨테이너 패턴: opacity/zIndex로 가시성 전환
-                    ForEach(multiLiveManager.sessions) { session in
-                        let isActive = session.id == multiLiveManager.selectedSessionId
-                        MLPlayerPane(session: session, appState: appState, isActive: isActive)
-                            .opacity(isActive ? 1 : 0)
-                            .zIndex(isActive ? 1 : 0)
-                            .allowsHitTesting(isActive)
-                            .transaction { $0.animation = nil }
-                    }
-                    .animation(nil, value: multiLiveManager.sessions.count)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-
-            // 채널 추가 슬라이드 패널
-            if showMLAddChannel {
-                MLAddChannelPanel(
-                    manager: multiLiveManager,
-                    appState: appState,
-                    isPresented: $showMLAddChannel,
-                    onError: { mlAddError = $0 }
-                )
-                .environment(appState)
-                .transition(.move(edge: .trailing))
-                .animation(DesignTokens.Animation.contentTransition, value: showMLAddChannel)
-            }
-
-            // 설정 슬라이드 패널
-            if showMLSettings {
-                MLSettingsPanel(
-                    manager: multiLiveManager,
-                    settingsStore: appState.settingsStore,
-                    isPresented: $showMLSettings
-                )
-                .transition(.move(edge: .trailing))
-                .animation(DesignTokens.Animation.contentTransition, value: showMLSettings)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - ML Chat Content (멀티채팅 통합)
-
-    private var mlChatContent: some View {
-        HStack(spacing: 0) {
-            // 채널 사이드바
-            chatChannelSidebar
-                .frame(width: 180)
-
-            Divider()
-
-            // 선택된 채널 채팅 패널
-            if let session = chatSessionManager.selectedSession {
-                ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: { showChatSettings = true })
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                chatEmptyState
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-
-    // MARK: - Chat Channel Sidebar
-
-    private var chatChannelSidebar: some View {
-        VStack(spacing: 0) {
-            // 헤더
-            HStack {
-                Text("채팅 채널")
-                    .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Spacer()
-                Button {
-                    showChatAddChannel = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(DesignTokens.Typography.body)
-                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                }
-                .buttonStyle(.plain)
-                .help("채널 추가")
-            }
-            .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.sm)
-
-            Divider()
-
-            // 채널 목록
-            if chatSessionManager.sessions.isEmpty {
-                VStack(spacing: DesignTokens.Spacing.sm) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(DesignTokens.Typography.headline)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    Text("채널을 추가하세요")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    Button {
-                        showChatAddChannel = true
-                    } label: {
-                        Text("추가")
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DesignTokens.Colors.chzzkGreen)
-                    .controlSize(.small)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: DesignTokens.Spacing.xxs) {
-                        ForEach(chatSessionManager.sessions) { session in
-                            chatChannelRow(session)
-                        }
-                    }
-                    .padding(.vertical, DesignTokens.Spacing.xs)
-                }
-            }
-
-            Divider()
-
-            // 푸터
-            HStack {
-                Text("\(chatSessionManager.sessions.count)개 채널")
-                    .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                Spacer()
-                if !chatSessionManager.sessions.isEmpty {
-                    Button(role: .destructive) {
-                        Task { await chatSessionManager.disconnectAll() }
-                    } label: {
-                        Text("전체 해제")
-                            .font(DesignTokens.Typography.micro)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(DesignTokens.Colors.error)
-                }
-            }
-            .padding(.horizontal, DesignTokens.Spacing.xs)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-        }
-        .background(DesignTokens.Colors.surfaceOverlay)
-        .sheet(isPresented: $showChatAddChannel) {
-            chatAddChannelSheet
-        }
-    }
-
-    private func chatChannelRow(_ session: MultiChatSessionManager.ChatSession) -> some View {
-        let isSelected = session.id == chatSessionManager.selectedChannelId
-        return Button {
-            chatSessionManager.selectChannel(session.id)
-        } label: {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(session.chatViewModel.connectionState.isConnected
-                        ? DesignTokens.Colors.chzzkGreen
-                        : DesignTokens.Colors.error)
-                    .frame(width: 5, height: 5)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(session.channelName)
-                        .font(DesignTokens.Typography.custom(size: 11, weight: isSelected ? .semibold : .regular))
-                        .lineLimit(1)
-                        .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
-                    Text("\(session.chatViewModel.messageCount)개")
-                        .font(DesignTokens.Typography.custom(size: 9, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, 5)
-            .background(
-                isSelected
-                    ? DesignTokens.Colors.chzzkGreen.opacity(0.08)
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-            )
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(role: .destructive) {
-                Task { await chatSessionManager.removeSession(channelId: session.id) }
-            } label: {
-                Label("채널 제거", systemImage: "minus.circle")
-            }
-        }
-    }
-
-    // MARK: - Chat Empty State
-
-    private var chatEmptyState: some View {
-        VStack(spacing: DesignTokens.Spacing.md) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(DesignTokens.Typography.custom(size: 32, weight: .regular))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            Text("멀티채팅")
-                .font(DesignTokens.Typography.bodyBold)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-            Text("채널을 추가하면 여러 채팅을\n동시에 볼 수 있습니다")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .multilineTextAlignment(.center)
-            Button {
-                showChatAddChannel = true
-            } label: {
-                Label("채널 추가", systemImage: "plus")
-                    .font(DesignTokens.Typography.footnoteMedium)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(DesignTokens.Colors.chzzkGreen)
-            .controlSize(.small)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DesignTokens.Colors.surfaceOverlay)
-    }
-
-    // MARK: - Chat Add Channel Sheet
-
-    private var chatAddChannelSheet: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            Text("채팅 채널 추가")
-                .font(DesignTokens.Typography.headline)
-
-            // 검색
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                TextField("채널명 검색 또는 채널 ID 입력", text: $chatSearchQuery)
-                    .textFieldStyle(.plain)
-                    .font(DesignTokens.Typography.captionMedium)
-                    .onSubmit { searchChatChannels() }
-                if isSearchingChatChannels {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(DesignTokens.Colors.surfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-                    )
-            )
-
-            // 검색 결과
-            if !chatSearchResults.isEmpty {
-                ScrollView {
-                    LazyVStack(spacing: DesignTokens.Spacing.xxs) {
-                        ForEach(chatSearchResults) { channel in
-                            Button {
-                                Task {
-                                    await addChatChannel(channelId: channel.channelId)
-                                    chatSearchQuery = ""
-                                    chatSearchResults = []
-                                    showChatAddChannel = false
-                                }
-                            } label: {
-                                HStack(spacing: DesignTokens.Spacing.sm) {
-                                    if let url = channel.channelImageURL {
-                                        CachedAsyncImage(url: url) {
-                                            Circle().fill(DesignTokens.Colors.surfaceElevated)
-                                        }
-                                        .frame(width: 28, height: 28)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Circle().fill(DesignTokens.Colors.surfaceElevated)
-                                            .frame(width: 28, height: 28)
-                                            .overlay {
-                                                Image(systemName: "person.fill")
-                                                    .font(DesignTokens.Typography.micro)
-                                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                                            }
-                                    }
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(channel.channelName)
-                                            .font(DesignTokens.Typography.footnoteMedium)
-                                            .foregroundStyle(DesignTokens.Colors.textPrimary)
-                                        Text("팔로워 \(channel.followerCount.formatted())")
-                                            .font(DesignTokens.Typography.micro)
-                                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, DesignTokens.Spacing.xs)
-                                .padding(.vertical, DesignTokens.Spacing.xs)
-                                .background(DesignTokens.Colors.surfaceOverlay.opacity(0.001))
-                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .frame(maxHeight: 200)
-            }
-
-            Divider()
-
-            // 직접 입력
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                TextField("채널 ID 직접 입력", text: $newChatChannelId)
-                    .textFieldStyle(.roundedBorder)
-                    .font(DesignTokens.Typography.caption)
-                Button("추가") {
-                    let channelId = newChatChannelId.trimmingCharacters(in: .whitespaces)
-                    guard !channelId.isEmpty else { return }
-                    Task {
-                        await addChatChannel(channelId: channelId)
-                        newChatChannelId = ""
-                        showChatAddChannel = false
-                    }
-                }
-                .disabled(newChatChannelId.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-
-            HStack {
-                Button("취소") {
-                    newChatChannelId = ""
-                    chatSearchQuery = ""
-                    chatSearchResults = []
-                    showChatAddChannel = false
-                }
-                .keyboardShortcut(.cancelAction)
-                Spacer()
-            }
-        }
-        .padding(DesignTokens.Spacing.xl)
-        .frame(width: 360)
-    }
-
-    // MARK: - Chat Actions
-
-    private func searchChatChannels() {
-        let query = chatSearchQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty, let apiClient = appState.apiClient else { return }
-        isSearchingChatChannels = true
-        Task {
-            do {
-                let result = try await apiClient.searchChannels(keyword: query, size: 10)
-                chatSearchResults = result.data
-            } catch {
-                chatSearchResults = []
-            }
-            isSearchingChatChannels = false
-        }
-    }
-
-    private func addChatChannel(channelId: String) async {
-        guard let apiClient = appState.apiClient else { return }
-        do {
-            let liveDetail = try await apiClient.liveDetail(channelId: channelId)
-            guard let chatChannelId = liveDetail.chatChannelId else { return }
-            let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
-            let channelName = liveDetail.channel?.channelName ?? channelId
-            await chatSessionManager.addSession(
-                channelId: channelId,
-                channelName: channelName,
-                chatChannelId: chatChannelId,
-                accessToken: tokenInfo.accessToken
-            )
-        } catch {
-            chatAddError = "채널 '\(channelId)'에 연결할 수 없습니다: \(error.localizedDescription)"
+        guard !urls.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            await ImageCacheService.shared.prefetchAndDecode(urls)
         }
     }
 }

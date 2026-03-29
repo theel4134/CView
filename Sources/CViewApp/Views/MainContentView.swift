@@ -183,6 +183,8 @@ struct SidebarView: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isLogoutHovered = false
+    @State private var isLoginHovered = false
 
     private let primaryItems: [AppRouter.SidebarItem] = [.home, .following, .category]
     private let discoverItems: [AppRouter.SidebarItem] = [.search, .clips, .recentFavorites]
@@ -217,12 +219,12 @@ struct SidebarView: View {
     // MARK: - App Header
 
     private var sidebarHeader: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DesignTokens.Spacing.sm + 2) {
             Image(systemName: "play.tv.fill")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-                .frame(width: 32, height: 32)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("CView")
@@ -235,7 +237,7 @@ struct SidebarView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, 14)
     }
 
@@ -243,15 +245,15 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func sidebarSection(title: String?, items: [AppRouter.SidebarItem]) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xxs) {
             if let title = title {
                 Text(title.uppercased())
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .tracking(0.8)
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                    .padding(.bottom, 4)
+                    .padding(.horizontal, DesignTokens.Spacing.lg + 2)
+                    .padding(.top, DesignTokens.Spacing.lg + 2)
+                    .padding(.bottom, DesignTokens.Spacing.xs)
             }
 
             ForEach(items) { item in
@@ -273,9 +275,9 @@ struct SidebarView: View {
             HStack(spacing: 11) {
                 // 아이콘 배경
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .fill(isSelected ? (colorScheme == .light ? iconColor(for: item).opacity(0.15) : Color.accentColor) : iconBackground(for: item))
-                        .frame(width: 32, height: 32)
+                        .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
                     Image(systemName: item.icon)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(isSelected ? (colorScheme == .light ? iconColor(for: item) : .white) : iconColor(for: item))
@@ -298,6 +300,7 @@ struct SidebarView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(DesignTokens.Colors.live, in: Capsule())
+                        .shadow(color: DesignTokens.Colors.live.opacity(0.4), radius: 4, y: 1)
                 }
             }
             .padding(.horizontal, 10)
@@ -351,81 +354,100 @@ struct SidebarView: View {
     private var accountFooter: some View {
         Group {
             if appState.isLoggedIn {
-                HStack(spacing: 10) {
-                    avatarImage(size: 32)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(appState.userNickname ?? "사용자")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        let liveCount = appState.backgroundUpdateService.onlineChannels.count
-                        HStack(spacing: 4) {
-                            if liveCount > 0 {
-                                Circle()
-                                    .fill(DesignTokens.Colors.live)
-                                    .frame(width: 6, height: 6)
-                                Text("\(liveCount)채널 라이브")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(DesignTokens.Colors.live)
-                            } else {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 6, height: 6)
-                                Text("온라인")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                    }
-
-                    Spacer()
-
-                    Button {
-                        Task { await appState.handleLogout() }
-                    } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 28, height: 28)
-                            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-                    .help("로그아웃")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                loggedInFooter
             } else {
-                Button {
-                    router.presentSheet(.login)
-                } label: {
-                    HStack(spacing: 11) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.12))
-                                .frame(width: 32, height: 32)
-                            Image(systemName: "person.crop.circle")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Color.accentColor)
-                        }
-                        Text("로그인")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                loggedOutFooter
             }
         }
         .background(.bar)
+    }
+
+    private var loggedInFooter: some View {
+        HStack(spacing: 10) {
+            avatarImage(size: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(appState.userNickname ?? "사용자")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                let liveCount = appState.backgroundUpdateService.onlineChannels.count
+                HStack(spacing: 4) {
+                    if liveCount > 0 {
+                        Circle()
+                            .fill(DesignTokens.Colors.live)
+                            .frame(width: 6, height: 6)
+                        Text("\(liveCount)채널 라이브")
+                            .font(.system(size: 11))
+                            .foregroundStyle(DesignTokens.Colors.live)
+                    } else {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                        Text("온라인")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            Button {
+                Task { await appState.handleLogout() }
+            } label: {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isLogoutHovered ? .secondary : .tertiary)
+                    .frame(width: 28, height: 28)
+                    .background(isLogoutHovered ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.fill.quaternary), in: RoundedRectangle(cornerRadius: 6))
+                    .scaleEffect(isLogoutHovered ? 1.06 : 1.0)
+                    .animation(DesignTokens.Animation.fast, value: isLogoutHovered)
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in isLogoutHovered = hovering }
+            .help("로그아웃")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private var loggedOutFooter: some View {
+        Button {
+            router.presentSheet(.login)
+        } label: {
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(Color.accentColor.opacity(isLoginHovered ? 0.18 : 0.12))
+                        .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Text("로그인")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(isLoginHovered ? .secondary : .tertiary)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm + 2)
+            .background {
+                if isLoginHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        .fill(.fill.quaternary)
+                }
+            }
+            .animation(DesignTokens.Animation.fast, value: isLoginHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in isLoginHovered = hovering }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xs)
     }
 
     private func avatarImage(size: CGFloat) -> some View {
@@ -442,7 +464,7 @@ struct SidebarView: View {
 
     private func avatarPlaceholder(size: CGFloat) -> some View {
         Circle()
-            .fill(Color(.systemGray).opacity(0.3))
+            .fill(DesignTokens.Colors.textTertiary.opacity(0.3))
             .frame(width: size, height: size)
             .overlay {
                 Image(systemName: "person.fill")

@@ -52,6 +52,7 @@ public struct AVVideoView: NSViewRepresentable {
         
         private func commonInit() {
             wantsLayer = true
+            layerContentsRedrawPolicy = .never       // drawRect 차단 — 리사이즈 시 불필요한 redraw 방지
             
             playerLayer.videoGravity = .resizeAspect
             playerLayer.backgroundColor = NSColor.black.cgColor
@@ -65,8 +66,9 @@ public struct AVVideoView: NSViewRepresentable {
             playerLayer.minificationFilter  = .trilinear
             
             // Metal Zero-Copy 렌더링 파이프라인
+            // FullRange(0-255): VideoRange(16-235)보다 색 범위가 넓어 VLC 동등 명암비/색감
             playerLayer.pixelBufferAttributes = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
                 kCVPixelBufferMetalCompatibilityKey as String: true,
                 kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
             ]

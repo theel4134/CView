@@ -62,7 +62,7 @@ public final class AppRouter {
     
     public enum SidebarItem: String, CaseIterable, Identifiable {
         case home = "홈"
-        case following = "팔로잉"
+        case following = "라이브"
         case category = "카테고리"
         case search = "검색"
         case clips = "클립"
