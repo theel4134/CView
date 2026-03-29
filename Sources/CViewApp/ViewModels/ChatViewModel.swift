@@ -7,7 +7,6 @@ import SwiftUI
 import CViewCore
 import CViewChat
 import CViewNetworking
-import AppKit
 
 // MARK: - Chat ViewModel
 

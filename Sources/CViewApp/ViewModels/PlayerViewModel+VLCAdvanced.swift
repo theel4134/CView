@@ -5,7 +5,6 @@ import Foundation
 import SwiftUI
 import CViewCore
 import CViewPlayer
-import UniformTypeIdentifiers
 
 extension PlayerViewModel {
 

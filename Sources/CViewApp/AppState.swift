@@ -2,7 +2,6 @@
 // AppState - Observable application state container
 
 import SwiftUI
-import AppKit
 import CViewCore
 import CViewNetworking
 import CViewAuth

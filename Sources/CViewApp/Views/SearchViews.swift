@@ -3,7 +3,6 @@
 // Design: Spotlight/Raycast 스타일 검색 + 모던 결과 카드
 
 import SwiftUI
-import AppKit
 import CViewCore
 import CViewUI
 

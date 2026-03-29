@@ -1,6 +1,6 @@
 # CView v2 — 프로젝트 정밀 분석 문서
 
-> **분석 일자**: 2025년 7월 (최종 갱신)  
+> **분석 일자**: 2026년 3월 30일 (최종 갱신)  
 > **프로젝트**: CView v2 (chzzkView 차세대 재설계)  
 > **플랫폼**: macOS 15+ (네이티브 SwiftUI)  
 > **언어**: Swift 6 (Strict Concurrency)  
