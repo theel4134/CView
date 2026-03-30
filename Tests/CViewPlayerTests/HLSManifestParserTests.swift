@@ -111,11 +111,12 @@ struct HLSManifestParserMasterTests {
         }
     }
 
-    @Test("Empty content after #EXTM3U returns empty variants")
-    func emptyVariants() throws {
+    @Test("Empty content after #EXTM3U throws invalidManifest")
+    func emptyVariantsThrows() throws {
         let content = "#EXTM3U\n"
-        let playlist = try parser.parseMasterPlaylist(content: content, baseURL: baseURL)
-        #expect(playlist.variants.isEmpty)
+        #expect(throws: AppError.self) {
+            _ = try parser.parseMasterPlaylist(content: content, baseURL: baseURL)
+        }
     }
 
     @Test("Blank lines and comments are ignored")

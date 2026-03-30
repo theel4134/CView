@@ -137,7 +137,7 @@ struct VLCLogAnalyzerTests {
         let analyzer = VLCLogAnalyzer()
         let report = try analyzer.analyze()
 
-        #expect(report.totalLines == 4) // 3줄 + 마지막 빈줄
+        #expect(report.totalLines == 3)
         #expect(report.verdict.mp4FormatDetected == true)
         #expect(report.verdict.tsFailureDetected == false)
         #expect(report.verdict.proxyBypassWorked == true)

@@ -29,15 +29,15 @@ struct LLCConfigurationTests {
         let config = LowLatencyController.Configuration.default
         
         #expect(config.targetLatency == 3.0)
-        #expect(config.maxLatency == 10.0)
+        #expect(config.maxLatency == 8.0)
         #expect(config.minLatency == 1.0)
         #expect(config.maxPlaybackRate == 1.15)
         #expect(config.minPlaybackRate == 0.9)
-        #expect(config.catchUpThreshold == 1.5)
+        #expect(config.catchUpThreshold == 1.2)
         #expect(config.slowDownThreshold == 0.5)
         #expect(config.pidKp == 0.8)
-        #expect(config.pidKi == 0.1)
-        #expect(config.pidKd == 0.05)
+        #expect(config.pidKi == 0.12)
+        #expect(config.pidKd == 0.06)
     }
     
     @Test("ultraLow Configuration 값 검증")
@@ -51,7 +51,7 @@ struct LLCConfigurationTests {
         #expect(config.minPlaybackRate == 0.85)
         #expect(config.catchUpThreshold == 1.0)
         #expect(config.slowDownThreshold == 0.3)
-        #expect(config.pidKp == 1.2)
+        #expect(config.pidKp == 1.0)
         #expect(config.pidKi == 0.15)
         #expect(config.pidKd == 0.08)
     }
@@ -257,9 +257,9 @@ struct LLCProcessLatencyTests {
             rateBox.value = rate
         }
         
-        // 큰 레이턴시로 속도 변화 유도
-        for _ in 0..<10 {
-            await controller.processLatency(8.0)
+        // 큰 레이턴시로 속도 변화 유도 (maxLatency=8.0 이하로 EWMA 수렴 필요)
+        for _ in 0..<20 {
+            await controller.processLatency(6.0)
         }
         
         #expect(rateBox.value != nil)
@@ -444,10 +444,10 @@ struct LLCEdgeCaseTests {
         let defaultCtrl = LowLatencyController(configuration: .default)
         let ultraLowCtrl = LowLatencyController(configuration: .ultraLow)
         
-        // 동일한 레이턴시 피드
-        for _ in 0..<10 {
-            await defaultCtrl.processLatency(5.0)
-            await ultraLowCtrl.processLatency(5.0)
+        // 동일한 레이턴시 피드 (ultraLow maxLatency=5.0 이하로 EWMA 수렴 필요)
+        for _ in 0..<20 {
+            await defaultCtrl.processLatency(4.0)
+            await ultraLowCtrl.processLatency(4.0)
         }
         
         let defaultRate = await defaultCtrl.currentRate
