@@ -127,7 +127,11 @@ public actor CookieManager {
         Log.auth.info("WebKit store: synced \(authCookies.count) auth cookies")
 
         // 키체인에도 저장 (다음 앱 시작 시 복원 가능)
-        try? await saveCookiesToKeychain()
+        do {
+            try await saveCookiesToKeychain()
+        } catch {
+            Log.auth.error("Failed to save cookies to keychain: \(error.localizedDescription)")
+        }
 
         return hasCookies
     }
@@ -140,7 +144,11 @@ public actor CookieManager {
                 cookieStorage.deleteCookie(cookie)
             }
         }
-        try? await keychainService.delete(key: Self.keychainKey)
+        do {
+            try await keychainService.delete(key: Self.keychainKey)
+        } catch {
+            Log.auth.error("Failed to delete cookies from keychain: \(error.localizedDescription)")
+        }
         Log.auth.info("All auth cookies cleared")
     }
 }

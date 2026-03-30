@@ -317,7 +317,13 @@ public actor ChatEngine {
             _sessionId = sessionId
             updateConnectionState(.connected(serverIndex: 0))
             logger.info("Chat CONNECTED (sid: \(LogMask.token(sessionId), privacy: .private))")
-            Task { try? await requestRecentMessages() }
+            Task {
+                do {
+                    try await requestRecentMessages()
+                } catch {
+                    logger.warning("Recent messages fetch failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             emitEvent(.connected)
             
         case .messages(let msgs):
@@ -350,7 +356,11 @@ public actor ChatEngine {
         case .ping:
             Task {
                 let pong = parser.buildPong()
-                try? await webSocket?.send(pong)
+                do {
+                    try await webSocket?.send(pong)
+                } catch {
+                    logger.warning("Pong send failed: \(error.localizedDescription, privacy: .public)")
+                }
             }
             
         case .pong:
