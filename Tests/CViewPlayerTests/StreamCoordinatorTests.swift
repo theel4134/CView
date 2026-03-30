@@ -126,20 +126,32 @@ private func makeTestConfig(
 private let testStreamURL = URL(string: "https://example.com/live/stream.m3u8")!
 private let testStreamURL2 = URL(string: "https://example.com/live/stream-720p.m3u8")!
 
-/// Collect events from stream with timeout.
+/// Thread-safe event collector for async stream testing.
+private actor EventCollector {
+    var events: [StreamEvent] = []
+    func add(_ event: StreamEvent) { events.append(event) }
+    var count: Int { events.count }
+    func result() -> [StreamEvent] { events }
+}
+
+/// Collect events from stream with proper timeout.
+/// Uses Task.sleep for cooperative timeout — `for await` alone blocks indefinitely if no events arrive.
 private func collectEvents(
     from stream: AsyncStream<StreamEvent>,
     count: Int,
     timeout: TimeInterval = 2.0
 ) async -> [StreamEvent] {
-    var events: [StreamEvent] = []
-    let deadline = Date().addingTimeInterval(timeout)
-
-    for await event in stream {
-        events.append(event)
-        if events.count >= count || Date() > deadline { break }
+    let collector = EventCollector()
+    let task = Task {
+        for await event in stream {
+            await collector.add(event)
+            if await collector.count >= count { return }
+        }
     }
-    return events
+    try? await Task.sleep(for: .seconds(timeout))
+    task.cancel()
+    try? await Task.sleep(for: .milliseconds(100))
+    return await collector.result()
 }
 
 // MARK: - StreamCoordinator Initialization Tests
