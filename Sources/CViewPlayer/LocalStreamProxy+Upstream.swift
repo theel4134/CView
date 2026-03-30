@@ -194,7 +194,9 @@ extension LocalStreamProxy {
                         c += 1
                         return c
                     }
-                    if count == self._consecutive403Threshold {
+                    if count >= self._consecutive403Threshold {
+                        // 즉시 리셋하여 재트리거 가능하게 함
+                        self._consecutive403Count.withLock { $0 = 0 }
                         self.logger.warning("Proxy: CDN 403 \(count)회 연속 — 토큰 만료 의심, 상위 통보")
                         self.onUpstreamAuthFailure?()
                     }
@@ -264,6 +266,20 @@ extension LocalStreamProxy {
             // [Fix 16] M3U8 응답 캐싱 — URL 재작성 후 최종 데이터를 캐시
             if isM3U8 {
                 self._m3u8Cache.withLock { cache in
+                    // stale 엔트리 제거 + 최대 사이즈 제한 (CDN 토큰 변경으로 URL 키 누적 방지)
+                    if cache.count >= self._m3u8CacheMaxEntries {
+                        let now = Date()
+                        let ttl = self._m3u8CacheTTL * 3 // stale 기준: TTL의 3배
+                        cache = cache.filter { now.timeIntervalSince($0.value.timestamp) < ttl }
+                        // 여전히 초과하면 가장 오래된 절반 제거
+                        if cache.count >= self._m3u8CacheMaxEntries {
+                            let sorted = cache.sorted { $0.value.timestamp < $1.value.timestamp }
+                            let removeCount = cache.count / 2
+                            for entry in sorted.prefix(removeCount) {
+                                cache.removeValue(forKey: entry.key)
+                            }
+                        }
+                    }
                     cache[targetURL] = M3U8CacheEntry(
                         data: responseData,
                         contentType: contentType,

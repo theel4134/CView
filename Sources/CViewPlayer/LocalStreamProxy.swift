@@ -115,6 +115,8 @@ public final class LocalStreamProxy: @unchecked Sendable {
     let _m3u8Cache = Mutex<[String: M3U8CacheEntry]>([:])
     // [Fix 16h-opt3] 0.5→0.3초: 새 세그먼트 감지 속도 40% 향상 → 초기 버퍼링 단축
     let _m3u8CacheTTL: TimeInterval = 0.3
+    /// 캐시 최대 엔트리 수 — CDN 토큰 변경으로 URL 키가 누적되므로 제한 필수
+    let _m3u8CacheMaxEntries = 50
     let _m3u8DebugCount = Mutex<Int>(0)
 
     let queue = DispatchQueue(label: "com.cview.streamproxy", qos: .userInteractive, attributes: .concurrent)
@@ -122,18 +124,21 @@ public final class LocalStreamProxy: @unchecked Sendable {
     
     let keepAliveTimeout = ProxyDefaults.keepAliveTimeout
     
-    var _proxySession: URLSession?
+    /// URLSession 인스턴스 — Mutex로 동시 접근 시 이중 생성 방지
+    let _proxySessionStorage = Mutex<URLSession?>(nil)
     
     var proxySession: URLSession {
-        if let existing = _proxySession { return existing }
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = ProxyDefaults.requestTimeout
-        config.timeoutIntervalForResource = ProxyDefaults.resourceTimeout
-        config.httpMaximumConnectionsPerHost = ProxyDefaults.maxConnectionsPerHost
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        let session = URLSession(configuration: config)
-        _proxySession = session
-        return session
+        _proxySessionStorage.withLock { session in
+            if let existing = session { return existing }
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = ProxyDefaults.requestTimeout
+            config.timeoutIntervalForResource = ProxyDefaults.resourceTimeout
+            config.httpMaximumConnectionsPerHost = ProxyDefaults.maxConnectionsPerHost
+            config.requestCachePolicy = .reloadIgnoringLocalCacheData
+            let newSession = URLSession(configuration: config)
+            session = newSession
+            return newSession
+        }
     }
     
     public init() {}
@@ -229,8 +234,10 @@ public final class LocalStreamProxy: @unchecked Sendable {
         listener?.cancel()
         listener = nil
         // proxySession 무효화 — 장시간 재생 시 URLSession 연결 풀 축적 방지
-        _proxySession?.invalidateAndCancel()
-        _proxySession = nil
+        _proxySessionStorage.withLock { session in
+            session?.invalidateAndCancel()
+            session = nil
+        }
         proxyState.withLock {
             $0.isRunning = false
             $0.port = 0
@@ -246,8 +253,10 @@ public final class LocalStreamProxy: @unchecked Sendable {
     
     /// 프록시 세션만 리셋 — stale 연결 풀 + M3U8 캐시 정리 (재연결 시 사용)
     public func resetSession() {
-        _proxySession?.invalidateAndCancel()
-        _proxySession = nil
+        _proxySessionStorage.withLock { session in
+            session?.invalidateAndCancel()
+            session = nil
+        }
         _consecutive403Count.withLock { $0 = 0 }
         // 재연결 시 stale 매니페스트 캐시 제거 — 새 CDN 토큰이 반영된 URL 사용 보장
         _m3u8Cache.withLock { $0.removeAll() }
