@@ -136,5 +136,15 @@ let package = Package(
             dependencies: ["CViewAuth", "CViewCore"],
             swiftSettings: commonSwiftSettings
         ),
+        .testTarget(
+            name: "CViewPersistenceTests",
+            dependencies: ["CViewPersistence", "CViewCore"],
+            swiftSettings: commonSwiftSettings
+        ),
+        .testTarget(
+            name: "CViewMonitoringTests",
+            dependencies: ["CViewMonitoring", "CViewCore", "CViewNetworking"],
+            swiftSettings: commonSwiftSettings
+        ),
     ]
 )
