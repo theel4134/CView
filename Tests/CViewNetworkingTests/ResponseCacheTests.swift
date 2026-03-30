@@ -264,7 +264,7 @@ struct ResponseCacheDefaultsTests {
 
     @Test("Default maxEntries matches constant")
     func defaultMaxEntries() {
-        #expect(ResponseCacheDefaults.maxEntries == 200)
+        #expect(ResponseCacheDefaults.maxEntries == 100)
     }
 
     @Test("Default TTL matches constant")

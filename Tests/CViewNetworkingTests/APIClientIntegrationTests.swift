@@ -464,7 +464,7 @@ struct NetworkConstantsTests {
 
     @Test("Response cache defaults")
     func responseCacheDefaults() {
-        #expect(ResponseCacheDefaults.maxEntries == 200)
+        #expect(ResponseCacheDefaults.maxEntries == 100)
         #expect(ResponseCacheDefaults.defaultTTL == 300)
     }
 }
