@@ -24,10 +24,14 @@ public actor VODStreamResolver {
     /// VODDetail에서 스트림 URL 추출
     private func resolveFromDetail(_ detail: VODDetail) throws -> VODStreamInfo {
         // 1. Try liveRewindPlaybackJson first (contains HLS manifests)
-        if let playbackJson = detail.liveRewindPlaybackJson,
-           let streamInfo = try? parsePlaybackJson(playbackJson, detail: detail) {
-            logger.info("VOD resolved from playbackJson: \(detail.videoTitle)")
-            return streamInfo
+        if let playbackJson = detail.liveRewindPlaybackJson {
+            do {
+                let streamInfo = try parsePlaybackJson(playbackJson, detail: detail)
+                logger.info("VOD resolved from playbackJson: \(detail.videoTitle)")
+                return streamInfo
+            } catch {
+                logger.warning("VOD playbackJson 파싱 실패 (vodUrl 폴백): \(error.localizedDescription, privacy: .public)")
+            }
         }
         
         // 2. Try direct vodUrl
