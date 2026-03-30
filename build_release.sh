@@ -63,7 +63,10 @@ if [[ -d "$VLC_FW_SRC" ]]; then
         install_name_tool -change "$CURRENT_ID" "@rpath/VLCKit.framework/Versions/A/VLCKit" "$MACOS_DIR/$APP_NAME" 2>/dev/null || true
     fi
 else
-    echo "⚠️  VLCKit.framework를 찾을 수 없습니다: $VLC_FW_SRC"
+    echo "❌ VLCKit.framework를 찾을 수 없습니다: $VLC_FW_SRC"
+    echo "   → SPM 의존성 확인: swift package resolve"
+    echo "   → 네트워크 연결 및 VLCKitSPM 저장소 접근 확인"
+    exit 1
 fi
 
 # ── 4. 리소스 복사 ────────────────────────────────────────────────────
