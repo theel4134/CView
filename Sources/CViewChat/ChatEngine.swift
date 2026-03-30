@@ -94,6 +94,13 @@ public actor ChatEngine {
         self.eventContinuation = cont
     }
     
+    deinit {
+        messageListenTask?.cancel()
+        stateListenTask?.cancel()
+        reconnectionTask?.cancel()
+        eventContinuation?.finish()
+    }
+    
     // MARK: - Public API
     
     /// Connect to chat server

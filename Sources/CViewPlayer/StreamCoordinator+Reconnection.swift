@@ -91,6 +91,7 @@ extension StreamCoordinator {
             _lastWatchdogTime = -1
             _lastWatchdogDecodedFrames = -1
             _stallCount = 0
+            _playbackStartTime = Date()  // grace period 기준점 갱신 — 재시작 직후 stall 오탐 방지
             
             // 재연결 성공 후 PDT·로우레이턴시 동기화 재시작 (갱신된 URL 사용)
             await startLowLatencySync()

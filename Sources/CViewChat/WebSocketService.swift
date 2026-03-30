@@ -124,7 +124,11 @@ public actor WebSocketService {
             "Keep-Alive": WSDefaults.keepAliveHeader
         ]
         
-        let delegate = WebSocketDelegate()
+        let delegate = WebSocketDelegate { [weak self] closeCode, _ in
+            Task { [weak self] in
+                await self?.handleServerClose(closeCode: closeCode)
+            }
+        }
         session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
         
         var request = URLRequest(url: configuration.url)
@@ -306,6 +310,9 @@ public actor WebSocketService {
     }
     
     private func handleDisconnection(error: Error) {
+        // 이미 연결 해제 상태면 중복 처리 방지
+        guard _state == .connected || _state == .connecting else { return }
+        
         pingTask?.cancel()
         pingTask = nil
         receiveTask?.cancel()
@@ -318,6 +325,13 @@ public actor WebSocketService {
         
         updateState(.failed(error.localizedDescription))
         logger.warning("WebSocket disconnected due to error: \(error.localizedDescription, privacy: .public)")
+    }
+    
+    /// 서버가 close frame을 보냈을 때 delegate에서 호출
+    private func handleServerClose(closeCode: URLSessionWebSocketTask.CloseCode) {
+        guard _state == .connected || _state == .connecting else { return }
+        logger.info("WS server close frame received: \(closeCode.rawValue)")
+        handleDisconnection(error: URLError(.networkConnectionLost))
     }
 }
 
@@ -341,6 +355,12 @@ public enum WebSocketMessage: Sendable {
 // MARK: - WebSocket Delegate
 
 private final class WebSocketDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
+    private let onClose: @Sendable (URLSessionWebSocketTask.CloseCode, Data?) -> Void
+    
+    init(onClose: @escaping @Sendable (URLSessionWebSocketTask.CloseCode, Data?) -> Void = { _, _ in }) {
+        self.onClose = onClose
+    }
+    
     func urlSession(
         _ session: URLSession,
         webSocketTask: URLSessionWebSocketTask,
@@ -355,6 +375,6 @@ private final class WebSocketDelegate: NSObject, URLSessionWebSocketDelegate, @u
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
-        // Connection closed
+        onClose(closeCode, reason)
     }
 }
