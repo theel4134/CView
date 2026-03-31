@@ -3,6 +3,7 @@
 
 import Foundation
 import AppKit   // NSImage
+import CViewCore
 
 /// 라이브 채널 썸네일 데이터를 제공하는 서비스
 ///
@@ -18,7 +19,7 @@ public actor LiveThumbnailService {
     public static let liveThumbnailTTL: TimeInterval = 90
 
     private let imageCache = ImageCacheService.shared
-    private let metricsBaseURL = URL(string: "https://cv.dododo.app")!
+    private let metricsBaseURL = URL(string: MetricsSettings.defaultServerURL)!
     private let session: URLSession
 
     private init() {

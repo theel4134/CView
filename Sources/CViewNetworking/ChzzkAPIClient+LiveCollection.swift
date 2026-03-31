@@ -169,7 +169,7 @@ extension ChzzkAPIClient {
 
     /// 사용자 상태 조회 (game server API)
     public func userStatus() async throws -> UserStatusInfo {
-        let url = URL(string: "https://comm-api.game.naver.com/nng_main/v1/user/getUserStatus")!
+        let url = Self.gameAPIBaseURL.appending(path: "v1/user/getUserStatus")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10

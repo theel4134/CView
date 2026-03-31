@@ -29,9 +29,10 @@ public actor MetricsWebSocketClient {
     
     // MARK: - Init
     
-    public init(serverURL: URL = URL(string: "wss://cv.dododo.app/ws")!) {
+    public init(serverURL: URL = URL(string: MetricsSettings.defaultWebSocketURL)!) {
         self.serverURL = serverURL
         let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
         config.waitsForConnectivity = true
         self.session = URLSession(configuration: config)
     }

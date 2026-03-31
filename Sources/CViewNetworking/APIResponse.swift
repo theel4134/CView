@@ -222,23 +222,20 @@ public struct UserStatusInfo: Decodable, Sendable {
 
 // MARK: - JSON Decoder Extension
 
-/// 날짜 파서 — DateFormatter/ISO8601DateFormatter는 thread-unsafe이므로
-/// 호출마다 새 인스턴스를 생성하되, 포맷 문자열은 상수로 공유한다.
+/// 날짜 파서 — static 인스턴스로 재사용. JSONDecoder는 단일 스레드에서 실행되므로 안전.
 private enum ChzzkDateParsers {
-    static func iso8601WithFrac() -> ISO8601DateFormatter {
+    nonisolated(unsafe) static let iso8601WithFrac: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
-    }
-    static func iso8601() -> ISO8601DateFormatter {
-        ISO8601DateFormatter()
-    }
-    static func legacy() -> DateFormatter {
+    }()
+    nonisolated(unsafe) static let iso8601 = ISO8601DateFormatter()
+    nonisolated(unsafe) static let legacy: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm:ss"
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
-    }
+    }()
 }
 
 extension JSONDecoder {
@@ -250,15 +247,15 @@ extension JSONDecoder {
             let dateString = try container.decode(String.self)
 
             // ISO 8601 (소수초 포함 및 미포함 순서로 시도)
-            if let date = ChzzkDateParsers.iso8601WithFrac().date(from: dateString) {
+            if let date = ChzzkDateParsers.iso8601WithFrac.date(from: dateString) {
                 return date
             }
-            if let date = ChzzkDateParsers.iso8601().date(from: dateString) {
+            if let date = ChzzkDateParsers.iso8601.date(from: dateString) {
                 return date
             }
 
             // yyyy-MM-dd HH:mm:ss
-            if let date = ChzzkDateParsers.legacy().date(from: dateString) {
+            if let date = ChzzkDateParsers.legacy.date(from: dateString) {
                 return date
             }
 

@@ -22,9 +22,15 @@ public actor MetricsAPIClient {
     private let appSecret: String
     
     public init(
-        baseURL: URL = URL(string: "https://cv.dododo.app")!,
+        baseURL: URL = URL(string: MetricsSettings.defaultServerURL)!,
         cache: ResponseCache = ResponseCache(),
-        appSecret: String = "dev-app-secret-change-in-production"
+        appSecret: String = {
+            #if DEBUG
+            return "dev-app-secret-change-in-production"
+            #else
+            return Bundle.main.object(forInfoDictionaryKey: "METRICS_APP_SECRET") as? String ?? ""
+            #endif
+        }()
     ) {
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = [

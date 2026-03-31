@@ -104,6 +104,8 @@ public enum SegmentFormat: Sendable, CustomStringConvertible {
 
 /// 종합 진단 결과
 public struct StreamDiagnosticResult: Sendable {
+    nonisolated(unsafe) private static let isoFormatter = ISO8601DateFormatter()
+
     public let m3u8: M3U8Analysis
     public let segments: [SegmentAnalysis]
     public let initSegment: SegmentAnalysis?
@@ -115,7 +117,7 @@ public struct StreamDiagnosticResult: Sendable {
         var lines: [String] = []
         lines.append("╔══════════════════════════════════════════╗")
         lines.append("║  Chzzk Stream Diagnostic Report          ║")
-        lines.append("║  \(ISO8601DateFormatter().string(from: timestamp))  ║")
+        lines.append("║  \(Self.isoFormatter.string(from: timestamp))  ║")
         lines.append("╚══════════════════════════════════════════╝")
         lines.append("")
         lines.append(m3u8.summary)

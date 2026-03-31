@@ -55,10 +55,14 @@ public struct WatchHistoryData: Sendable, Identifiable {
         return "\(minutes)분"
     }
 
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MM/dd HH:mm"
+        return f
+    }()
+
     public var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM/dd HH:mm"
-        return formatter.string(from: startedAt)
+        Self.dateFormatter.string(from: startedAt)
     }
 
     public init(

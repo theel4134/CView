@@ -187,6 +187,11 @@ public struct ChannelNotificationSettings: Codable, Sendable, Equatable {
 
 /// 메트릭 서버 전송 설정
 public struct MetricsSettings: Codable, Sendable, Equatable {
+    /// 기본 서버 URL (코드 전체에서 이 상수만 참조)
+    public static let defaultServerURL = "https://cv.dododo.app"
+    /// 기본 WebSocket URL
+    public static let defaultWebSocketURL = "wss://cv.dododo.app/ws"
+
     public var metricsEnabled: Bool
     public var serverURL: String
     public var forwardInterval: TimeInterval
@@ -194,7 +199,7 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
 
     public init(
         metricsEnabled: Bool = false,
-        serverURL: String = "https://cv.dododo.app",
+        serverURL: String = MetricsSettings.defaultServerURL,
         forwardInterval: TimeInterval = 5.0,
         pingInterval: TimeInterval = 30.0
     ) {

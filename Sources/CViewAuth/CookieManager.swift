@@ -13,6 +13,7 @@ public actor CookieManager {
     /// 네이버 인증에 필요한 쿠키 이름
     private static let requiredCookieNames = ["NID_AUT", "NID_SES"]
     private static let keychainKey = "naver_auth_cookies"
+    nonisolated(unsafe) private static let isoFormatter = ISO8601DateFormatter()
 
     public init(
         keychainService: KeychainService = KeychainService(),
@@ -54,7 +55,7 @@ public actor CookieManager {
             props["domain"] = cookie.domain
             props["path"] = cookie.path
             if let expires = cookie.expiresDate {
-                props["expires"] = ISO8601DateFormatter().string(from: expires)
+                props["expires"] = Self.isoFormatter.string(from: expires)
             }
             return props
         }
@@ -86,7 +87,7 @@ public actor CookieManager {
                 ]
 
                 if let expiresStr = props["expires"],
-                   let date = ISO8601DateFormatter().date(from: expiresStr) {
+                   let date = Self.isoFormatter.date(from: expiresStr) {
                     properties[.expires] = date
                 }
 

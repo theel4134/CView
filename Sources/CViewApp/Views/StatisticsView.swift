@@ -153,10 +153,14 @@ struct SessionStatsView: View {
         .contentBackground()
     }
     
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
     private var formattedLaunchTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: appState.launchTime)
+        Self.timeFormatter.string(from: appState.launchTime)
     }
     
     private func statsSection(_ title: String, icon: String, color: Color, @ViewBuilder content: () -> some View) -> some View {
