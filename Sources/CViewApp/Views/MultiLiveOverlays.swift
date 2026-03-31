@@ -80,6 +80,27 @@ struct MLControlOverlay: View {
 
             Spacer()
 
+            // 볼륨 슬라이더
+            if !session.isMuted {
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    Image(systemName: "speaker.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.5))
+                    Slider(
+                        value: Binding(
+                            get: { Double(session.playerViewModel.volume) },
+                            set: { session.playerViewModel.setVolume(Float($0)) }
+                        ),
+                        in: 0...1
+                    )
+                    .tint(DesignTokens.Colors.chzzkGreen)
+                    .frame(width: 100)
+                    Image(systemName: "speaker.wave.3.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+
             controlButton(
                 icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
             ) {
@@ -165,6 +186,11 @@ struct MLGridControlOverlay: View {
 
                 gridButtons
                 volumeSlider
+
+                // 더블클릭 힌트
+                Text(isFocused ? "더블클릭: 그리드 복귀" : "더블클릭: 확대")
+                    .font(DesignTokens.Typography.micro)
+                    .foregroundStyle(.white.opacity(0.4))
             }
         }
     }
@@ -384,6 +410,10 @@ struct MLAddChannelPanel: View {
             Rectangle()
                 .fill(DesignTokens.Glass.borderColor)
                 .frame(width: 0.5)
+        }
+        .onKeyPress(.escape) {
+            withAnimation(DesignTokens.Animation.snappy) { isPresented = false }
+            return .handled
         }
     }
 

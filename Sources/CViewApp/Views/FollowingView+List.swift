@@ -8,8 +8,16 @@ extension FollowingView {
 
     // MARK: - Category Filter Chips
 
+    private var maxVisibleChips: Int { 8 }
+
     var categoryFilterChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let visibleCategories = Array(liveCategoryCounts.prefix(maxVisibleChips))
+        let overflowCategories = liveCategoryCounts.count > maxVisibleChips
+            ? Array(liveCategoryCounts.dropFirst(maxVisibleChips))
+            : []
+        let isOverflowSelected = overflowCategories.contains { $0.name == selectedCategory }
+
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: DesignTokens.Spacing.xs) {
                 // 전체 칩
                 categoryChip(label: "전체", count: 0, isSelected: selectedCategory == nil) {
@@ -17,12 +25,60 @@ extension FollowingView {
                         selectedCategory = nil
                     }
                 }
-                ForEach(liveCategoryCounts, id: \.name) { cat in
+                ForEach(visibleCategories, id: \.name) { cat in
                     categoryChip(label: cat.name, count: cat.count, isSelected: selectedCategory == cat.name) {
                         withAnimation(DesignTokens.Animation.indicator) {
                             selectedCategory = selectedCategory == cat.name ? nil : cat.name
                         }
                     }
+                }
+                // 오버플로우 „더보기" 메뉴
+                if !overflowCategories.isEmpty {
+                    Menu {
+                        ForEach(overflowCategories, id: \.name) { cat in
+                            Button {
+                                withAnimation(DesignTokens.Animation.indicator) {
+                                    selectedCategory = selectedCategory == cat.name ? nil : cat.name
+                                }
+                            } label: {
+                                HStack {
+                                    Text(cat.name)
+                                    Spacer()
+                                    Text("\(cat.count)")
+                                        .foregroundStyle(.secondary)
+                                    if selectedCategory == cat.name {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("+\(overflowCategories.count)")
+                                .font(.system(size: layout.chipLabelSize + 1, weight: .semibold, design: .rounded))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .foregroundStyle(isOverflowSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, 6)
+                        .background {
+                            if isOverflowSelected {
+                                Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
+                            } else {
+                                Capsule().fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+                            }
+                        }
+                        .overlay {
+                            if isOverflowSelected {
+                                Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1)
+                            } else {
+                                Capsule().strokeBorder(DesignTokens.Glass.borderColor.opacity(0.15), lineWidth: 0.5)
+                            }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
             }
             .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)

@@ -243,6 +243,7 @@ extension FollowingView {
                     searchBarContent
                     HStack(spacing: DesignTokens.Spacing.xs) {
                         filterSegmentContent
+                        sortMenuButton
                         if activeFilterCount > 0 { activeFilterBadge }
                     }
                 }
@@ -250,6 +251,7 @@ extension FollowingView {
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     searchBarContent
                     filterSegmentContent
+                    sortMenuButton
                     if activeFilterCount > 0 { activeFilterBadge }
                 }
             }

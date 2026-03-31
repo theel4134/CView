@@ -149,6 +149,8 @@ struct FollowingView: View {
     @State var isSearchingChatChannels: Bool = false
     @State var newChatChannelId: String = ""
     @State var chatAddError: String?
+    @State var showDisconnectAllConfirm = false
+    @GestureState var chatSwipeDragOffset: CGFloat = 0
     @GestureState private var dualSplitDragOffset: CGFloat = 0
     // 반응형 그리드: 컨테이너 너비에 따라 열 수·페이지 크기 자동 조정
     @State var followingContentWidth: CGFloat = 800
@@ -286,11 +288,6 @@ struct FollowingView: View {
         .animation(DesignTokens.Animation.smooth, value: viewModel.followingChannels.isEmpty)
         .navigationTitle("")
         .toolbar(.hidden)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                sortMenuButton
-            }
-        }
         // 필터/정렬 관련 값 변경 시 1회만 recomputeFiltered() 호출되도록 통합
         .onChange(of: sortOrder) { _, _ in resetPaginationAndRecompute() }
         .onChange(of: filterLiveOnly) { _, _ in resetPaginationAndRecompute() }

@@ -315,30 +315,30 @@ struct LiveStreamView: View {
             // Stream offline
             if isStreamOffline || playerVM?.streamPhase == .streamEnded {
                 ZStack {
-                    Rectangle().fill(Color(hex: 0x1C1C1E))
+                    Rectangle().fill(DesignTokens.Colors.background)
                     RadialGradient(
-                        colors: [Color.white.opacity(0.03), Color.clear],
+                        colors: [DesignTokens.Colors.textPrimary.opacity(0.03), Color.clear],
                         center: .center, startRadius: 20, endRadius: 260
                     )
                     VStack(spacing: 22) {
                         ZStack {
                             Circle()
-                                .fill(Color.white.opacity(0.04))
+                                .fill(DesignTokens.Colors.textPrimary.opacity(0.04))
                                 .frame(width: 100, height: 100)
                             Circle()
-                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                                .stroke(DesignTokens.Colors.textPrimary.opacity(0.10), lineWidth: 1)
                                 .frame(width: 100, height: 100)
                             Image(systemName: "tv.slash")
                                 .font(DesignTokens.Typography.custom(size: 38, weight: .light))
-                                .foregroundStyle(.white.opacity(0.5))
+                                .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.5))
                         }
                         VStack(spacing: 8) {
                             Text("방송이 종료되었습니다")
                                 .font(DesignTokens.Typography.subhead)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
                             Text("스트리머가 방송을 종료했습니다.")
                                 .font(DesignTokens.Typography.bodyMedium)
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.6))
                         }
                         Button {
                             Task { await startStreamAndChat() }
@@ -349,12 +349,12 @@ struct LiveStreamView: View {
                                 Text("다시 확인")
                                     .font(DesignTokens.Typography.bodySemibold)
                             }
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DesignTokens.Colors.textPrimary)
                             .padding(.horizontal, DesignTokens.Spacing.xl)
                             .padding(.vertical, DesignTokens.Spacing.md)
                             .background(
-                                Capsule().fill(Color(hex: 0x2C2C2E))
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                                Capsule().fill(DesignTokens.Colors.surfaceElevated)
+                                    .overlay(Capsule().stroke(DesignTokens.Colors.textPrimary.opacity(0.18), lineWidth: 1))
                             )
                         }
                         .buttonStyle(.plain)

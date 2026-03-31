@@ -347,3 +347,32 @@ var hideFollowingList: Bool = false  // true → false
 | 자동 새로고침 주기 | — | 90초 |
 | 검색 디바운스 | — | 200ms |
 | 캐시 유효 시간 | — | 300초 (5분) |
+
+---
+
+## 8. 개선 이력
+
+### Round 1 (커밋 bee4738)
+15개 항목 적용: N-1, N-2, N-4, F-1, F-4, C-1, C-2, C-3, C-4, O-1, O-2, M-1, M-2, M-3, 검색 placeholder
+
+### Round 2
+9개 항목 적용:
+
+| ID | 항목 | 변경 파일 |
+|-----|------|-----------|
+| F-3 | 정렬 메뉴를 toolbar에서 searchAndFilterCard로 통합 | `FollowingView.swift`, `FollowingView+Header.swift` |
+| F-2 | 카테고리 칩 8개 초과 시 "+N 더보기" 메뉴로 전환 | `FollowingView+List.swift` |
+| ML-1 | 멀티채팅 전체 해제 시 확인 다이얼로그 추가 | `FollowingView.swift`, `FollowingView+MultiChat.swift` |
+| ML-2 | 채팅 탭 닫기 버튼 7pt/14×14 → 9pt/18×18 히트 타겟 확대 | `FollowingView+MultiChat.swift` |
+| ML-3 | MLControlOverlay(포커스 모드)에 볼륨 슬라이더 추가 | `MultiLiveOverlays.swift` |
+| ML-4 | 방송 종료 오버레이 하드코딩 색상 → DesignTokens로 교체 | `LiveStreamView.swift` |
+| ML-5 | 멀티라이브 그리드 호버 시 "더블클릭: 확대" 힌트 표시 | `MultiLiveOverlays.swift` |
+| ML-6 | 멀티채팅 스와이프 숨기기에 드래그 피드백(오프셋+투명도) 추가 | `FollowingView+MultiChat.swift`, `FollowingView.swift` |
+| ML-7 | MLAddChannelPanel에 Escape 키 닫기 핸들러 추가 | `MultiLiveOverlays.swift` |
+
+### 잔여 항목
+| ID | 항목 | 비고 |
+|-----|------|------|
+| N-3 | 사이드바 아이콘 변경 | 선택적 — 사용자 습관 변경 위험 |
+| P-1 | 페이지 전환 시 전체 그리드 리드로(가상화) | 높은 복잡도 |
+| P-2 | recomputeFiltered 연쇄 호출 최적화 | 성능 프로파일링 필요 |

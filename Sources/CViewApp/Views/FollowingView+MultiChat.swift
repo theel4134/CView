@@ -31,6 +31,12 @@ extension FollowingView {
         // 오른쪽 스와이프로 멀티채팅 숨기기
         .gesture(
             DragGesture(minimumDistance: 40)
+                .updating($chatSwipeDragOffset) { value, state, _ in
+                    let dx = value.translation.width
+                    if dx > 0 && abs(dx) > abs(value.translation.height) * 1.5 {
+                        state = dx
+                    }
+                }
                 .onEnded { value in
                     // 오른쪽으로 충분히 스와이프 + 수평 이동이 수직보다 큰 경우
                     if value.translation.width > 80 && abs(value.translation.width) > abs(value.translation.height) * 1.5 {
@@ -40,6 +46,8 @@ extension FollowingView {
                     }
                 }
         )
+        .offset(x: chatSwipeDragOffset * 0.3)
+        .opacity(chatSwipeDragOffset > 0 ? 1 - Double(chatSwipeDragOffset) / 300 : 1)
         .alert("채팅 연결 실패", isPresented: Binding(
             get: { chatAddError != nil },
             set: { if !$0 { chatAddError = nil } }
@@ -90,7 +98,7 @@ extension FollowingView {
                 // 전체 해제
                 if !chatSessionManager.sessions.isEmpty {
                     Button {
-                        Task { await chatSessionManager.disconnectAll() }
+                        showDisconnectAllConfirm = true
                     } label: {
                         Image(systemName: "xmark.circle")
                             .font(.system(size: 11, weight: .medium))
@@ -98,6 +106,18 @@ extension FollowingView {
                     }
                     .buttonStyle(.plain)
                     .help("전체 채널 해제")
+                    .confirmationDialog(
+                        "멀티채팅 전체 해제",
+                        isPresented: $showDisconnectAllConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("전체 해제", role: .destructive) {
+                            Task { await chatSessionManager.disconnectAll() }
+                        }
+                        Button("취소", role: .cancel) {}
+                    } message: {
+                        Text("\(chatSessionManager.sessions.count)개 채널의 채팅 연결을 모두 해제할까요?")
+                    }
                 }
 
                 // 채널 추가 버튼
@@ -172,9 +192,10 @@ extension FollowingView {
                     Task { await chatSessionManager.removeSession(channelId: session.id) }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 7, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .frame(width: 14, height: 14)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Circle())
                         .background(
                             isSelected ? Color.white.opacity(0.1) : Color.clear,
                             in: Circle()
