@@ -73,8 +73,8 @@ struct VODPlayerView: View {
             }
         }
         .background(.black)
-        .onAppear {
-            Task { await viewModel.startVOD(videoNo: videoNo) }
+        .task {
+            await viewModel.startVOD(videoNo: videoNo)
         }
         .onDisappear {
             viewModel.stop()

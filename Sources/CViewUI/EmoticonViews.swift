@@ -122,6 +122,9 @@ struct AnimatedGIFView: NSViewRepresentable {
 
     class Coordinator {
         var currentTask: Task<Void, Never>?
+        deinit {
+            currentTask?.cancel()
+        }
     }
 }
 

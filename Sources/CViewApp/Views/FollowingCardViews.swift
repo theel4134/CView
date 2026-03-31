@@ -11,7 +11,7 @@ import CViewUI
 @MainActor
 struct FollowingLiveCard: View, Equatable {
     nonisolated static func == (lhs: FollowingLiveCard, rhs: FollowingLiveCard) -> Bool {
-        lhs.channel == rhs.channel
+        lhs.channel == rhs.channel && lhs.layout == rhs.layout
     }
 
     let channel: LiveChannelItem

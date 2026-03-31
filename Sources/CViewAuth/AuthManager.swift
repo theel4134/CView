@@ -221,6 +221,14 @@ public actor AuthManager: AuthTokenProvider {
         
         // 아직 유효하면 갱신 불필요
         if !tokens.isExpired { return true }
+
+        // 동시 갱신 방지 — 다른 caller가 이미 갱신 중이면 대기 후 결과 반환
+        guard !isRefreshing else {
+            try? await Task.sleep(for: .milliseconds(200))
+            return _oauthTokens?.isExpired == false
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
         
         guard let refreshToken = tokens.refreshToken else {
             Log.auth.warning("No refresh token available")

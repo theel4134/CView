@@ -71,9 +71,9 @@ struct ClipPlayerView: View {
             }
         }
         .background(.black)
-        .onAppear {
+        .task {
             viewModel = ClipPlayerViewModel(apiClient: appState.apiClient)
-            Task { await viewModel.startClip(from: clipInfo) }
+            await viewModel.startClip(from: clipInfo)
         }
         .onDisappear {
             controlsTimer?.cancel()
