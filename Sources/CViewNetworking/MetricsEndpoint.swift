@@ -189,7 +189,14 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
         }
     }
     
-    public var requiresAuth: Bool { false }
+    public var requiresAuth: Bool {
+        switch method {
+        case .post, .put, .delete:
+            true
+        case .get:
+            false
+        }
+    }
     
     public var cachePolicy: CachePolicy {
         switch self {

@@ -73,6 +73,9 @@ struct CViewApplication: App {
                         await serviceContainer.register(AuthManager.self, instance: authManager)
                     }
 
+                    // JWT 토큰 사전 발급 (POST 요청 인증용)
+                    Task { await metricsClient.fetchJWT() }
+
                     // 앱 초기화 (내부적으로 모든 작업을 분리된 Task로 실행)
                     Task { await appState.initialize(apiClient: apiClient, authManager: authManager, metricsClient: metricsClient, metricsWebSocket: metricsWebSocket) }
 

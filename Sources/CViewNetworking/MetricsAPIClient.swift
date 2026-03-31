@@ -6,7 +6,7 @@ import CViewCore
 
 /// 메트릭 서버 API 클라이언트
 /// - ChzzkResponse 래퍼 없이 직접 JSON 디코딩
-/// - 인증 불필요 (public API)
+/// - POST/PUT/DELETE는 JWT 인증 필요
 /// - 서버 다운 시 non-blocking (옵셔널 리턴)
 public actor MetricsAPIClient {
     
@@ -15,9 +15,16 @@ public actor MetricsAPIClient {
     private let cache: ResponseCache
     private var maxRetries: Int = 2
     
+    // MARK: - JWT 인증
+    private var jwtToken: String?
+    private var jwtExpiresAt: Date?
+    private let deviceId: String
+    private let appSecret: String
+    
     public init(
         baseURL: URL = URL(string: "https://cv.dododo.app")!,
-        cache: ResponseCache = ResponseCache()
+        cache: ResponseCache = ResponseCache(),
+        appSecret: String = "dev-app-secret-change-in-production"
     ) {
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = [
@@ -32,11 +39,76 @@ public actor MetricsAPIClient {
         self.session = URLSession(configuration: config)
         self.baseURL = baseURL
         self.cache = cache
+        self.appSecret = appSecret
+        
+        // 고유 device ID 생성 (앱 생명주기 동안 유지)
+        if let stored = UserDefaults.standard.string(forKey: "cview_device_id") {
+            self.deviceId = stored
+        } else {
+            let newId = UUID().uuidString
+            UserDefaults.standard.set(newId, forKey: "cview_device_id")
+            self.deviceId = newId
+        }
     }
     
     /// 섛버 URL 동적 변경
     public func updateBaseURL(_ url: URL) {
         self.baseURL = url
+    }
+    
+    // MARK: - JWT Token Management
+    
+    /// JWT 토큰 발급 (POST /api/auth/token)
+    public func fetchJWT() async {
+        struct TokenRequest: Encodable {
+            let device_id: String
+            let app_secret: String
+        }
+        struct TokenResponse: Decodable {
+            let token: String
+            let expires_in: Int
+        }
+        
+        let url = baseURL.appending(path: "/api/auth/token")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(
+            TokenRequest(device_id: deviceId, app_secret: appSecret)
+        )
+        
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode) else {
+                Log.network.error("JWT 발급 실패 — HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+                return
+            }
+            let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
+            self.jwtToken = tokenResponse.token
+            self.jwtExpiresAt = Date().addingTimeInterval(TimeInterval(tokenResponse.expires_in))
+            Log.network.info("JWT 발급 완료 — 만료: \(tokenResponse.expires_in)초")
+        } catch {
+            Log.network.error("JWT 발급 오류: \(error.localizedDescription)")
+        }
+    }
+    
+    /// 유효한 JWT 토큰 반환 (만료 임박 시 재발급)
+    private func validToken() async -> String? {
+        // 만료 5분 전에 재발급
+        if let token = jwtToken, let exp = jwtExpiresAt, exp.timeIntervalSinceNow > 300 {
+            return token
+        }
+        await fetchJWT()
+        return jwtToken
+    }
+    
+    /// 요청에 JWT 인증 헤더 적용
+    private func applyAuth(to request: inout URLRequest, endpoint: MetricsEndpoint) async {
+        guard endpoint.requiresAuth else { return }
+        if let token = await validToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
     }
 
     /// 연결 테스트 (헬스체크 엔드포인트)
@@ -84,6 +156,7 @@ public actor MetricsAPIClient {
         if endpoint.body != nil {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
+        await applyAuth(to: &request, endpoint: endpoint)
         
         // 재시도 루프
         var lastError: Error?
@@ -93,6 +166,13 @@ public actor MetricsAPIClient {
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw APIError.invalidResponse
+                }
+                
+                // 401: 토큰 재발급 후 1회 재시도
+                if httpResponse.statusCode == 401 && endpoint.requiresAuth && attempt == 0 {
+                    self.jwtToken = nil
+                    await applyAuth(to: &request, endpoint: endpoint)
+                    continue
                 }
                 
                 guard (200...299).contains(httpResponse.statusCode) else {
@@ -144,11 +224,27 @@ public actor MetricsAPIClient {
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        await applyAuth(to: &request, endpoint: endpoint)
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+        
+        // 401: 토큰 재발급 후 1회 재시도
+        if httpResponse.statusCode == 401 && endpoint.requiresAuth {
+            self.jwtToken = nil
+            await applyAuth(to: &request, endpoint: endpoint)
+            let (retryData, retryResponse) = try await session.data(for: request)
+            guard let retryHttp = retryResponse as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            guard (200...299).contains(retryHttp.statusCode) else {
+                throw APIError.httpError(statusCode: retryHttp.statusCode)
+            }
+            return try JSONDecoder().decode(Res.self, from: retryData)
+        }
+        
         guard (200...299).contains(httpResponse.statusCode) else {
             throw APIError.httpError(statusCode: httpResponse.statusCode)
         }
@@ -168,11 +264,27 @@ public actor MetricsAPIClient {
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = endpoint.body
+        await applyAuth(to: &request, endpoint: endpoint)
         
         let (_, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+        
+        // 401: 토큰 재발급 후 1회 재시도
+        if httpResponse.statusCode == 401 && endpoint.requiresAuth {
+            self.jwtToken = nil
+            await applyAuth(to: &request, endpoint: endpoint)
+            let (_, retryResponse) = try await session.data(for: request)
+            guard let retryHttp = retryResponse as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            guard (200...299).contains(retryHttp.statusCode) else {
+                throw APIError.httpError(statusCode: retryHttp.statusCode)
+            }
+            return
+        }
+        
         guard (200...299).contains(httpResponse.statusCode) else {
             throw APIError.httpError(statusCode: httpResponse.statusCode)
         }
