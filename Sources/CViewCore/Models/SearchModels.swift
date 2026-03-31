@@ -34,8 +34,8 @@ public struct SearchResult<T: Sendable & Codable>: Sendable, Codable {
         size = (try? container.decode(Int.self, forKey: .size)) ?? 0
         totalCount = try? container.decode(Int.self, forKey: .totalCount)
         data = (try? container.decode([T].self, forKey: .data)) ?? []
-        // page는 Int, Object, null 모두 가능 — 유연하게 처리
-        page = try? container.decode(SearchPage.self, forKey: .page)
+        // page는 Object 또는 null — decodeIfPresent는 null/부재 모두 nil 반환
+        page = try? container.decodeIfPresent(SearchPage.self, forKey: .page)
     }
 }
 

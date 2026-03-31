@@ -276,6 +276,7 @@ public actor WebSocketService {
         // URLSessionWebSocketTask.sendPing의 completionHandler가 호출되지 않거나
         // 2회 호출되는 edge case 방지를 위해 UnsafeContinuation + Mutex guard 사용.
         let resumed = Mutex(false)
+        let timeoutTaskHolder = Mutex<Task<Void, Never>?>(nil)
         
         try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
             let resumeOnce: @Sendable (Error?) -> Void = { error in
@@ -285,6 +286,7 @@ public actor WebSocketService {
                     return false
                 }
                 guard !alreadyResumed else { return }
+                timeoutTaskHolder.withLock { $0?.cancel() }
                 if let error {
                     continuation.resume(throwing: error)
                 } else {
@@ -297,10 +299,11 @@ public actor WebSocketService {
             }
             
             // 10초 타임아웃: completionHandler가 호출되지 않는 경우 대비
-            Task {
+            let task = Task {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
                 resumeOnce(URLError(.timedOut))
             }
+            timeoutTaskHolder.withLock { $0 = task }
         }
     }
     

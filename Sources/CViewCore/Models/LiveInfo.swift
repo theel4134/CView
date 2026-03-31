@@ -212,7 +212,12 @@ public struct EncodingTrack: Sendable, Codable, Hashable {
         if let doubleVal = try? container.decode(Double.self, forKey: .videoFrameRate) {
             videoFrameRate = doubleVal
         } else if let strVal = try? container.decode(String.self, forKey: .videoFrameRate) {
-            videoFrameRate = Double(strVal)
+            if let parsed = Double(strVal) {
+                videoFrameRate = parsed
+            } else {
+                Log.general.debug("EncodingTrack: invalid videoFrameRate string '\(strVal)'")
+                videoFrameRate = nil
+            }
         } else {
             videoFrameRate = nil
         }
