@@ -145,7 +145,7 @@ extension FollowingView {
             spacing: layout.gridSpacing
         ) {
             ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
-                FollowingLiveCard(channel: channel, index: page * liveItemsPerPage + index, onPlay: {
+                FollowingLiveCard(channel: channel, index: index, onPlay: {
                     Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
                     showMultiLive = true
                 }, onPrefetch: { channelId in
@@ -158,6 +158,11 @@ extension FollowingView {
                     router.navigate(to: .live(channelId: channel.channelId))
                 }
                 .contextMenu {
+                    Button {
+                        router.navigate(to: .channelDetail(channelId: channel.channelId))
+                    } label: {
+                        Label("채널 정보 보기", systemImage: "person.crop.circle")
+                    }
                     if channel.isLive {
                         Button {
                             Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
@@ -166,8 +171,8 @@ extension FollowingView {
                             Label("멀티라이브에 추가", systemImage: "rectangle.split.2x2")
                         }
                         .disabled(!multiLiveManager.canAddSession)
-                        Divider()
                     }
+                    Divider()
                     channelNotificationMenu(channelId: channel.channelId, channelName: channel.channelName)
                 }
             }
@@ -192,7 +197,7 @@ extension FollowingView {
 
     var offlinePageHeight: CGFloat {
         let count = min(offlineItemsPerPage, max(1, totalOfflineCount))
-        let rowHeight: CGFloat = 44
+        let rowHeight: CGFloat = layout.offlineRowHeight
         return CGFloat(count) * rowHeight
     }
 

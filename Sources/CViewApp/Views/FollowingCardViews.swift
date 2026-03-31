@@ -130,6 +130,7 @@ struct FollowingLiveCard: View, Equatable {
                         .font(.system(size: layout.liveTitleFontSize, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
+                        .help(channel.liveTitle)
 
                     if let cat = channel.categoryName {
                         categoryTag(cat)
@@ -179,13 +180,13 @@ struct FollowingLiveCard: View, Equatable {
             let minutes = (Int(elapsed) % 3600) / 60
             let text = hours > 0 ? "\(hours)시간 \(minutes)분" : "\(minutes)분"
 
-            HStack(spacing: 2) {
+            HStack(spacing: 3) {
                 Image(systemName: "clock.fill")
-                    .font(.system(size: 6))
+                    .font(.system(size: 8))
                 Text(text)
-                    .font(.system(size: 8, weight: .medium, design: .rounded))
+                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(.white.opacity(0.9))
             .padding(.horizontal, 5)
             .padding(.vertical, 2.5)
             .background(.ultraThinMaterial, in: Capsule())
@@ -207,12 +208,17 @@ struct FollowingLiveCard: View, Equatable {
     // MARK: - Hover Overlay
 
     private var hoverOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.4)
-                .transition(.opacity)
+        VStack {
+            Spacer()
+            // 하단 그라디언트만 — 상단 배지(시청자수·업타임) 가리지 않음
+            ZStack {
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.55)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 70)
 
-            VStack(spacing: 10) {
-                // 메인: 멀티라이브에 추가
                 Button(action: onPlay) {
                     HStack(spacing: 6) {
                         Image(systemName: "rectangle.split.2x2.fill")
@@ -230,6 +236,7 @@ struct FollowingLiveCard: View, Equatable {
                     )
                 }
                 .buttonStyle(.plain)
+                .offset(y: 4)
             }
         }
         .transition(.opacity.animation(DesignTokens.Animation.micro))
@@ -277,9 +284,9 @@ struct FollowingLiveCard: View, Equatable {
 
             Spacer(minLength: 0)
 
-            // 호버 시 채널 뷰 힌트
+            // 호버 시 방송 보기 힌트
             if isHovered {
-                Text("클릭: 채널 보기")
+                Text("클릭: 방송 보기")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .transition(.opacity)
@@ -327,8 +334,8 @@ struct FollowingOfflineRow: View, Equatable {
                     )
                 )
                 .drawingGroup()
-                .grayscale(isHovered ? 0 : 0.5)
-                .opacity(isHovered ? 0.9 : 0.5)
+                .grayscale(isHovered ? 0 : 0.3)
+                .opacity(isHovered ? 0.9 : 0.65)
 
                 Circle()
                     .fill(DesignTokens.Colors.textTertiary.opacity(0.4))

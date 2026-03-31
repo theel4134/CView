@@ -202,7 +202,11 @@ struct FollowingView: View {
         if filterLiveOnly { channels = channels.filter { $0.isLive } }
         if let cat = selectedCategory { channels = channels.filter { $0.categoryName == cat } }
         if !searchText.isEmpty {
-            channels = channels.filter { $0.channelName.localizedCaseInsensitiveContains(searchText) }
+            channels = channels.filter { ch in
+                ch.channelName.localizedCaseInsensitiveContains(searchText)
+                || ch.liveTitle.localizedCaseInsensitiveContains(searchText)
+                || (ch.categoryName ?? "").localizedCaseInsensitiveContains(searchText)
+            }
         }
         cachedLive = channels.filter { $0.isLive }
         cachedAllOffline = channels.filter { !$0.isLive }
@@ -433,7 +437,8 @@ struct FollowingView: View {
             .overlay(alignment: .center) {
                 Capsule()
                     .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.6) : DesignTokens.Colors.textTertiary.opacity(0.3))
-                    .frame(width: 3, height: 28)
+                    .frame(width: isDraggingDivider ? 5 : 3, height: 36)
+                    .animation(DesignTokens.Animation.micro, value: isDraggingDivider)
             }
             .contentShape(Rectangle().inset(by: -4))
             .onHover { hovering in
@@ -560,6 +565,22 @@ struct FollowingView: View {
             }
             .padding(outerPad)
             .id(layout.sizeClass)
+        }
+        .onKeyPress(.leftArrow) {
+            guard !isSearchFocused else { return .ignored }
+            if livePageIndex > 0 {
+                withAnimation(DesignTokens.Animation.snappy) { livePageIndex -= 1 }
+                return .handled
+            }
+            return .ignored
+        }
+        .onKeyPress(.rightArrow) {
+            guard !isSearchFocused else { return .ignored }
+            if livePageIndex < totalLivePages - 1 {
+                withAnimation(DesignTokens.Animation.snappy) { livePageIndex += 1 }
+                return .handled
+            }
+            return .ignored
         }
     }
 

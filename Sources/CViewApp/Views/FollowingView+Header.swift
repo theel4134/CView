@@ -154,7 +154,7 @@ extension FollowingView {
                             .font(.system(size: 11, weight: .medium))
                     }
                     if !multiLiveManager.sessions.isEmpty {
-                        Text("\(multiLiveManager.sessions.count)")
+                        Text("\(multiLiveManager.sessions.count)/\(multiLiveManager.effectiveMaxSessions)")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -227,21 +227,63 @@ extension FollowingView {
 
     // MARK: - Search & Filter Card
 
+    /// 활성 필터 수 (검색 + 라이브필터 + 카테고리)
+    private var activeFilterCount: Int {
+        var count = 0
+        if !searchText.isEmpty { count += 1 }
+        if filterLiveOnly { count += 1 }
+        if selectedCategory != nil { count += 1 }
+        return count
+    }
+
     var searchAndFilterCard: some View {
         Group {
             if layout.sizeClass == .ultraCompact {
                 VStack(spacing: DesignTokens.Spacing.xs) {
                     searchBarContent
-                    filterSegmentContent
+                    HStack(spacing: DesignTokens.Spacing.xs) {
+                        filterSegmentContent
+                        if activeFilterCount > 0 { activeFilterBadge }
+                    }
                 }
             } else {
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     searchBarContent
                     filterSegmentContent
+                    if activeFilterCount > 0 { activeFilterBadge }
                 }
             }
         }
         .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)
+    }
+
+    /// 활성 필터 배지 — 클릭 시 모든 필터 초기화
+    private var activeFilterBadge: some View {
+        Button {
+            withAnimation(DesignTokens.Animation.snappy) {
+                searchText = ""
+                filterLiveOnly = false
+                selectedCategory = nil
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text("필터 \(activeFilterCount)개")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(DesignTokens.Colors.accentOrange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(DesignTokens.Colors.accentOrange.opacity(0.12))
+                    .overlay(Capsule().strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.25), lineWidth: 0.5))
+            )
+        }
+        .buttonStyle(.plain)
+        .transition(.scale.combined(with: .opacity))
+        .help("모든 필터 초기화")
     }
 
     var searchBarContent: some View {
@@ -254,7 +296,7 @@ extension FollowingView {
                         : DesignTokens.Colors.chzzkGreen
                 )
 
-            TextField("채널 검색...", text: $searchText)
+            TextField("채널, 방송 제목, 카테고리 검색...", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: layout.sizeClass == .ultraCompact ? 12 : 13, weight: .regular))
                 .focused($isSearchFocused)
