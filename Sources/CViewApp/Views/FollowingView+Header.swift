@@ -212,7 +212,7 @@ extension FollowingView {
                         hideFollowingList.toggle()
                     }
                 } label: {
-                    Image(systemName: hideFollowingList ? "sidebar.leading" : "sidebar.squares.leading")
+                    Image(systemName: hideFollowingList ? "sidebar.trailing" : "sidebar.squares.trailing")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }

@@ -109,6 +109,10 @@ struct FollowingView: View {
         get { ps.hideFollowingList }
         nonmutating set { ps.hideFollowingList = newValue }
     }
+    var followingListWidth: CGFloat {
+        get { ps.followingListWidth }
+        nonmutating set { ps.followingListWidth = newValue }
+    }
     // 멀티채팅 — 영속
     var showMultiChat: Bool {
         get { ps.showMultiChat }
@@ -331,35 +335,34 @@ struct FollowingView: View {
 
     // MARK: - Main Content (widget-style card layout)
 
-    private let mlPanelMaxRatio: CGFloat = 0.85
-    private let mlPanelMinWidth: CGFloat = 280
+    private let followingListMinWidth: CGFloat = 240
+    private let followingListMaxRatio: CGFloat = 0.45
 
     private var mainContent: some View {
         let hasSidePanel = showMultiLive || showMultiChat
 
         return GeometryReader { geo in
             let totalWidth = geo.size.width
-            let effectiveWidth = mlPanelWidth - dividerDragOffset
-            let clampedPanelWidth = min(max(effectiveWidth, mlPanelMinWidth), totalWidth * mlPanelMaxRatio)
-            let listWidth = totalWidth - clampedPanelWidth - 1 // 1 = divider
+            let effectiveListWidth = followingListWidth + dividerDragOffset
+            let clampedListWidth = min(max(effectiveListWidth, followingListMinWidth), totalWidth * followingListMaxRatio)
 
             HStack(spacing: 0) {
-                // 왼쪽: 라이브 채널 목록 — 고정 너비 (나머지를 패널에 양보)
-                if !hideFollowingList || !hasSidePanel {
-                    followingListContent
-                        .frame(width: hasSidePanel ? max(listWidth, 0) : nil)
-                        .frame(maxWidth: hasSidePanel ? nil : .infinity, maxHeight: .infinity)
+                // 왼쪽: 사이드 패널 (멀티라이브 또는 멀티채팅) — 메인 영역
+                if hasSidePanel {
+                    sidePanelContent(totalWidth: hideFollowingList ? totalWidth : totalWidth - clampedListWidth - 1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.move(edge: .leading).combined(with: .opacity))
                 }
 
-                // 오른쪽: 사이드 패널 (멀티라이브 또는 멀티채팅)
-                if hasSidePanel {
-                    if !hideFollowingList {
-                        mlDividerHandle
+                // 오른쪽: 라이브 채널 목록 — 토글 가능, 슬라이드 애니메이션
+                if !hideFollowingList || !hasSidePanel {
+                    if hasSidePanel && !hideFollowingList {
+                        followingListDividerHandle
                     }
 
-                    sidePanelContent(totalWidth: clampedPanelWidth)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    followingListContent
+                        .frame(width: hasSidePanel ? max(clampedListWidth, 0) : nil)
+                        .frame(maxWidth: hasSidePanel ? nil : .infinity, maxHeight: .infinity)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -422,7 +425,8 @@ struct FollowingView: View {
         }
     }
 
-    private var mlDividerHandle: some View {
+    /// 팔로잉 리스트 좌측 리사이즈 핸들 — 드래그로 오른쪽 패널 너비 조절
+    private var followingListDividerHandle: some View {
         Rectangle()
             .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.dividerColor.opacity(0.3))
             .frame(width: 1)
@@ -448,7 +452,7 @@ struct FollowingView: View {
                         isDraggingDivider = true
                     }
                     .onEnded { value in
-                        mlPanelWidth -= value.translation.width
+                        followingListWidth -= value.translation.width
                         isDraggingDivider = false
                     }
             )

@@ -45,7 +45,7 @@ struct MLTabBar: View {
     private var sidebarToggle: some View {
         if hideFollowingList, let toggle = onToggleFollowingList {
             Button(action: toggle) {
-                Image(systemName: "sidebar.leading")
+                Image(systemName: "sidebar.trailing")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .frame(width: 28, height: 28)
