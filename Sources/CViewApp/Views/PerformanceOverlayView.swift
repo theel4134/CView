@@ -106,7 +106,7 @@ struct PerformanceOverlayView: View {
             height: headerHeight + CGFloat(metricLines.count) * rowHeight
         )
         .padding(padding)
-        .background(Color(hex: 0x1C1C1E).opacity(0.92), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(DesignTokens.Colors.background.opacity(0.92), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(.green.opacity(0.18), lineWidth: 0.5)

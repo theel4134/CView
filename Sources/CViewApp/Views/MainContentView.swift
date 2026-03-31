@@ -368,7 +368,7 @@ struct SidebarView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(appState.userNickname ?? "사용자")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(DesignTokens.Typography.bodySemibold)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
@@ -379,14 +379,14 @@ struct SidebarView: View {
                             .fill(DesignTokens.Colors.live)
                             .frame(width: 6, height: 6)
                         Text("\(liveCount)채널 라이브")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.micro)
                             .foregroundStyle(DesignTokens.Colors.live)
                     } else {
                         Circle()
                             .fill(Color.green)
                             .frame(width: 6, height: 6)
                         Text("온라인")
-                            .font(.system(size: 11))
+                            .font(DesignTokens.Typography.micro)
                             .foregroundStyle(.tertiary)
                     }
                 }

@@ -202,15 +202,7 @@ struct LiveBadge: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.xs)
-        .background(
-            Capsule().fill(
-                LinearGradient(
-                    colors: [Color(hex: 0xFF3B30), Color(hex: 0xFF6259)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-        )
+        .background(Capsule().fill(DesignTokens.Gradients.live))
         .clipShape(Capsule())
         .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 6, y: 2)
         .onAppear {
@@ -247,7 +239,7 @@ struct StreamInfoBar: View {
             // Stream info badges with glass effect
             HStack(spacing: DesignTokens.Spacing.xs) {
                 if let quality = playerVM?.currentQuality {
-                    InfoBadge(text: quality.name, icon: "sparkles.tv", color: DesignTokens.Colors.accentBlue)
+                    InfoBadge(text: quality.name, icon: "sparkles", color: DesignTokens.Colors.accentBlue)
                 }
 
                 if let latency = playerVM?.formattedLatency, latency != "-" {

@@ -89,16 +89,7 @@ public struct LiveBadge: View {
         }
         .padding(.horizontal, compact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.md)
         .padding(.vertical, compact ? DesignTokens.Spacing.xxs : DesignTokens.Spacing.xs)
-        .background(
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [Color(hex: 0xFF3B30), Color(hex: 0xFF6259)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-        )
+        .background(Capsule().fill(DesignTokens.Gradients.live))
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .clipShape(Capsule())
         // drawingGroup 제거 — opaque:false는 offscreen Metal pass 추가 비용 발생

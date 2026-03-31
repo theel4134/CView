@@ -125,7 +125,7 @@ struct StreamingStatsView: View {
                     }
                 }
                 
-                statsSection("화질 정보", icon: "sparkles.tv", color: DesignTokens.Colors.accentBlue) {
+                statsSection("화질 정보", icon: "sparkles", color: DesignTokens.Colors.accentBlue) {
                     if let qualities = appState.playerViewModel?.availableQualities, !qualities.isEmpty {
                         VStack(spacing: DesignTokens.Spacing.xs) {
                             ForEach(qualities) { q in

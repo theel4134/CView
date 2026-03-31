@@ -393,11 +393,12 @@ struct MLTabChip: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(
                     isCloseHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary
                 )
-                .frame(width: 16, height: 16)
+                .frame(width: 18, height: 18)
+                .contentShape(Circle())
                 .background {
                     if isCloseHovered {
                         Circle().fill(DesignTokens.Colors.surfaceElevated.opacity(0.8))
@@ -487,7 +488,7 @@ struct MLTabChip: View {
                     .font(DesignTokens.Typography.micro)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .lineLimit(1)
-                    .frame(maxWidth: 82, alignment: .leading)
+                    .frame(maxWidth: 110, alignment: .leading)
                     .help(session.liveTitle)
             } else if session.viewerCount > 0 {
                 MLViewerCountText(session: session)
@@ -546,9 +547,9 @@ struct MLTabChip: View {
     private func reorderButton(icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 7, weight: .bold))
+                .font(.system(size: 8, weight: .bold))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .frame(width: 13, height: 13)
+                .frame(width: 15, height: 15)
                 .background(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
                         .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))

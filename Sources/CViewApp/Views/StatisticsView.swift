@@ -130,7 +130,7 @@ struct SessionStatsView: View {
                         StatCard(
                             title: "화질",
                             value: appState.playerViewModel?.currentQuality?.name ?? "-",
-                            icon: "sparkles.tv",
+                            icon: "sparkles",
                             color: .cyan
                         )
                         StatCard(
