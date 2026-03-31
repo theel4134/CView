@@ -27,7 +27,7 @@ final class FollowingViewState {
     var showMLSettings: Bool = false
     var mlPanelWidth: CGFloat = 560
     var hideFollowingList: Bool = false
-    var followingListWidth: CGFloat = 320
+    var followingListWidth: CGFloat = 480
 
     // MARK: - 멀티채팅
 
