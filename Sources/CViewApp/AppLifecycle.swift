@@ -62,7 +62,8 @@ extension AppState {
         terminateObserver = nc.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
-        ) { _ in
+        ) { [weak self] _ in
+            self?.multiLiveManager.isTerminating = true
             MultiLivePersistedState.clear()
         }
     }

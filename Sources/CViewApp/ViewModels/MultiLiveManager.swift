@@ -42,6 +42,9 @@ public final class MultiLiveManager {
     /// 현재 추가 중인 채널 ID 세트 (중복 추가 방지)
     private var addingChannelIds: Set<String> = []
 
+    /// 앱 종료 중 플래그 — saveState() 재호출 방지
+    var isTerminating = false
+
     /// 통합 엔진 풀 (VLC + AVPlayer)
     let enginePool = MultiLiveEnginePool(maxPoolSize: maxSessions)
 
@@ -488,6 +491,7 @@ public final class MultiLiveManager {
     // MARK: - 세션 지속성
 
     func saveState() {
+        guard !isTerminating else { return }
         guard !sessions.isEmpty else {
             MultiLivePersistedState.clear()
             return
