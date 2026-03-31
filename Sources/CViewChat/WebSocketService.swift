@@ -95,6 +95,8 @@ public actor WebSocketService {
     deinit {
         pingTask?.cancel()
         receiveTask?.cancel()
+        webSocket?.cancel(with: .goingAway, reason: nil)
+        session?.invalidateAndCancel()
         messageContinuation?.finish()
         stateContinuation?.finish()
     }

@@ -247,6 +247,10 @@ public final class ClipPlayerViewModel {
     
     /// 정지
     func stop() {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.onStateChange = nil
+            vlc.onTimeChange = nil
+        }
         playerEngine?.stop()
         playerEngine = nil
         playbackState = .idle

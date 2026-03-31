@@ -77,6 +77,10 @@ public actor ImageCacheService {
         }
     }
     
+    deinit {
+        pruneTask?.cancel()
+    }
+    
     // MARK: - Auto Prune Timer
     
     /// 주기적으로 만료된 디스크 캐시 엔트리를 정리

@@ -599,10 +599,15 @@ public final class HomeViewModel {
         guard let ws = wsClient else { return }
         wsStreamTask?.cancel()
         wsStreamTask = Task { [weak self] in
-            let stream = await ws.connect()
-            for await message in stream {
-                guard !Task.isCancelled else { break }
-                self?.handleWebSocketMessage(message)
+            while !Task.isCancelled {
+                guard let ws = self?.wsClient else { break }
+                let stream = await ws.connect()
+                for await message in stream {
+                    guard !Task.isCancelled else { return }
+                    self?.handleWebSocketMessage(message)
+                }
+                guard !Task.isCancelled else { return }
+                try? await Task.sleep(for: .seconds(5))
             }
         }
     }

@@ -60,6 +60,7 @@ public actor ChzzkAPIClient: APIClientProtocol {
 
     deinit {
         cachePurgeTask.cancel()
+        session.invalidateAndCancel()
     }
 
     // MARK: - APIClientProtocol

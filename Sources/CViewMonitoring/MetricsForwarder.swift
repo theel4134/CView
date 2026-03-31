@@ -562,6 +562,12 @@ public actor MetricsForwarder {
     /// 앱 종료 시 호출
     public func shutdown() async {
         await deactivateCurrentChannel()
+        forwardingTask?.cancel()
+        forwardingTask = nil
+        pingTask?.cancel()
+        pingTask = nil
+        syncStatusTask?.cancel()
+        syncStatusTask = nil
     }
 
     // MARK: - Sync Status Polling
