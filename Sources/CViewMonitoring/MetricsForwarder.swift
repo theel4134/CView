@@ -121,13 +121,15 @@ public actor MetricsForwarder {
                 channelId: channelId,
                 channelName: channelName
             )
-            if let response = try? await apiClient.cviewConnect(connectPayload) {
+            do {
+                let response = try await apiClient.cviewConnect(connectPayload)
                 if let serverId = response.clientId {
                     clientId = serverId
                 }
                 lastSyncData = response.syncData
-            } else {
+            } catch {
                 // CView API 미지원 서버 — /api/metrics 폴백
+                Log.network.debug("cviewConnect failed, falling back to legacy: \(error.localizedDescription)")
                 let payload = AppLatencyPayload(
                     channelId: channelId,
                     channelName: channelName,
@@ -135,7 +137,11 @@ public actor MetricsForwarder {
                     engine: "VLC",
                     latencySource: "native"
                 )
-                try? await apiClient.sendMetrics(payload)
+                do {
+                    try await apiClient.sendMetrics(payload)
+                } catch {
+                    Log.network.debug("Legacy metrics fallback failed: \(error.localizedDescription)")
+                }
             }
             await monitor.start()
             startForwarding()
@@ -151,7 +157,11 @@ public actor MetricsForwarder {
             await monitor.stop()
             if let channelId = activeChannelId {
                 let disconnectPayload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
-                try? await apiClient.cviewDisconnect(disconnectPayload)
+                do {
+                    try await apiClient.cviewDisconnect(disconnectPayload)
+                } catch {
+                    Log.network.debug("cviewDisconnect (toggle) failed: \(error.localizedDescription)")
+                }
             }
             lastRecommendation = nil
             lastSyncData = nil
@@ -213,7 +223,11 @@ public actor MetricsForwarder {
                 engine: "VLC",
                 latencySource: "native"
             )
-            try? await apiClient.sendMetrics(legacyPayload)
+            do {
+                try await apiClient.sendMetrics(legacyPayload)
+            } catch {
+                Log.network.debug("Legacy metrics fallback failed: \(error.localizedDescription)")
+            }
         }
 
         await monitor.start()
@@ -243,7 +257,11 @@ public actor MetricsForwarder {
 
         // CView 통합 연결 해제 API 사용 (서버 미지원 시 무시)
         let payload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
-        try? await apiClient.cviewDisconnect(payload)
+        do {
+            try await apiClient.cviewDisconnect(payload)
+        } catch {
+            Log.network.debug("cviewDisconnect (deactivate) failed: \(error.localizedDescription)")
+        }
 
         activeChannelId = nil
         activeChannelName = nil
@@ -427,8 +445,10 @@ public actor MetricsForwarder {
                     pdtTimestamp: pdtTimestampMs?.safeForJSON,
                     latencyMs: pdtLatMs?.safeForJSON ?? (metrics?.latencyMs ?? 0).safeForJSON
                 )
-                Task { [apiClient] in
-                    _ = try? await apiClient.hybridHeartbeat(hybridPayload)
+                do {
+                    _ = try await apiClient.hybridHeartbeat(hybridPayload)
+                } catch {
+                    Log.network.debug("Hybrid heartbeat failed: \(error.localizedDescription)")
                 }
             }
             
@@ -564,11 +584,14 @@ public actor MetricsForwarder {
 
     private func fetchSyncStatus() async {
         guard isEnabled, let channelId = activeChannelId else { return }
-        if let response = try? await apiClient.cviewSyncStatus(channelId: channelId) {
+        do {
+            let response = try await apiClient.cviewSyncStatus(channelId: channelId)
             lastSyncData = response.syncData
             if let rec = response.recommendation {
                 lastRecommendation = rec
             }
+        } catch {
+            Log.network.debug("Sync status fetch failed: \(error.localizedDescription)")
         }
     }
     

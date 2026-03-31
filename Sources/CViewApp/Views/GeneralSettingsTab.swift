@@ -105,7 +105,15 @@ struct GeneralSettingsTab: View {
         .onChange(of: settings.general) { _, _ in Task { await settings.save() } }
         .onChange(of: settings.appearance) { _, _ in Task { await settings.save() } }
         .onChange(of: settings.general.launchAtLogin) { _, newValue in
-            try? newValue ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                Log.app.warning("Login item \(newValue ? "register" : "unregister") failed: \(error.localizedDescription)")
+            }
         }
     }
 }

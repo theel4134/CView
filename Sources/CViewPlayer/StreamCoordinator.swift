@@ -184,6 +184,10 @@ public actor StreamCoordinator {
     }
     
     deinit {
+        // Task 조기 취소 — [weak self] guard 도달 대기 없이 즉시 중단
+        _qualityRecoveryTask?.cancel()
+        _manifestRefreshTask?.cancel()
+        _watchdogTask?.cancel()
         // 인스턴스별 프록시 정리 — 자신의 NWListener만 종료
         streamProxy.stop()
         hlsSession.invalidateAndCancel()

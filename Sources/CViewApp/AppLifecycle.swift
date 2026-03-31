@@ -11,7 +11,7 @@ extension AppState {
 
     /// 서버 401 응답(세션 만료) 알림 구독 — initialize()에서 한 번 호출
     func observeSessionExpiry() {
-        NotificationCenter.default.addObserver(
+        sessionExpiryObserver = NotificationCenter.default.addObserver(
             forName: .chzzkSessionExpired,
             object: nil,
             queue: .main
@@ -49,7 +49,7 @@ extension AppState {
         }
 
         // 창 최소화 복원 시 VLC drawable 재설정 (vout 컨텍스트 유효성 보장)
-        nc.addObserver(
+        deminiaturizeObserver = nc.addObserver(
             forName: NSWindow.didDeminiaturizeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
@@ -59,7 +59,7 @@ extension AppState {
         }
 
         // 앱 종료 시 멀티라이브 세션 상태 제거 — 재시작 시 빈 메인 화면으로 시작
-        nc.addObserver(
+        terminateObserver = nc.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { _ in

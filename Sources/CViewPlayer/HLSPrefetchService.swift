@@ -56,6 +56,7 @@ public actor HLSPrefetchService {
     }
     
     deinit {
+        for task in inFlightTasks.values { task.cancel() }
         hlsSession.invalidateAndCancel()
     }
 

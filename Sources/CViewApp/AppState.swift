@@ -81,6 +81,9 @@ final class AppState {
     /// 앱 활성/비활성 알림 옵저버
     var appActiveObserver: (any NSObjectProtocol)?
     var appResignObserver: (any NSObjectProtocol)?
+    var sessionExpiryObserver: (any NSObjectProtocol)?
+    var deminiaturizeObserver: (any NSObjectProtocol)?
+    var terminateObserver: (any NSObjectProtocol)?
 
     /// App Nap 방지 activity 토큰 — 재생 중 시스템 절전 및 스로틀링 방지
     var playbackActivity: NSObjectProtocol?

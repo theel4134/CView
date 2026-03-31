@@ -57,6 +57,7 @@ public actor PDTLatencyProvider {
     }
     
     deinit {
+        pollTask?.cancel()
         hlsSession.invalidateAndCancel()
     }
     
