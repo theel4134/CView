@@ -53,7 +53,7 @@ extension LocalStreamProxy {
                 return
             }
             
-            if isComplete && (data == nil || data!.isEmpty) {
+            if isComplete && (data?.isEmpty ?? true) {
                 connection.cancel()
                 return
             }

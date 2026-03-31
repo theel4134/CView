@@ -63,18 +63,18 @@ struct MLSettingsPanel: View {
             tabBar
             Divider()
             // ── 탭 콘텐츠 ──
-            if activeSession != nil {
+            if let activeSession {
                 ScrollView {
                     Group {
                         switch selectedTab {
-                        case .audio:      MLAudioTab(session: activeSession!, manager: manager)
+                        case .audio:      MLAudioTab(session: activeSession, manager: manager)
                         case .equalizer:  MLEqualizerTab(playerVM: playerVM)
                         case .video:      MLVideoTab(playerVM: playerVM)
-                        case .playback:   MLPlaybackTab(session: activeSession!, manager: manager)
+                        case .playback:   MLPlaybackTab(session: activeSession, manager: manager)
                         case .latency:    LatencySettingsCompact(settings: settingsStore) {
                                               playerVM?.applyLatencySettings(settingsStore.player)
                                           }
-                        case .network:    MLNetworkTab(session: activeSession!, settingsStore: settingsStore)
+                        case .network:    MLNetworkTab(session: activeSession, settingsStore: settingsStore)
                         case .tools:      MLToolsTab(playerVM: playerVM)
                         case .metrics:    MetricsForwardingStatusView()
                         }

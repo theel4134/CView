@@ -14,7 +14,11 @@ public actor KeychainService {
     public init(serviceName: String = "com.cview.auth") {
         self.serviceName = serviceName
 
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            Log.auth.error("Cannot access Application Support directory, using temporary directory")
+            self.storageDir = FileManager.default.temporaryDirectory.appendingPathComponent(".cview-auth")
+            return
+        }
         self.storageDir = appSupport.appendingPathComponent("CView").appendingPathComponent(".auth-store")
 
         // 디렉토리 생성

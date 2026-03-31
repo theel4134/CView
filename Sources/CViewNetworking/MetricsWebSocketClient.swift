@@ -99,9 +99,13 @@ public actor MetricsWebSocketClient {
     /// JSON 메시지 전송
     private func sendJSON(_ dict: [String: String]) async {
         guard let task = webSocketTask, !isManuallyDisconnected else { return }
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let text = String(data: data, encoding: .utf8) else { return }
-        try? await task.send(.string(text))
+        do {
+            let data = try JSONSerialization.data(withJSONObject: dict)
+            guard let text = String(data: data, encoding: .utf8) else { return }
+            try await task.send(.string(text))
+        } catch {
+            Log.network.debug("WebSocket JSON 전송 실패: \(error.localizedDescription, privacy: .public)")
+        }
     }
     
     // MARK: - Connection Management

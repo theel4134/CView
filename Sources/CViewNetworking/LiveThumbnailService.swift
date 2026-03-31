@@ -77,7 +77,7 @@ public actor LiveThumbnailService {
             guard let http = response as? HTTPURLResponse,
                   http.statusCode == 200 else { return nil }
 
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
             // 메트릭 서버 응답에서 썸네일 URL 추출 (여러 키 이름 시도)
             let thumbStr = json["thumbnailUrl"] as? String

@@ -58,7 +58,8 @@ public actor ImageCacheService {
     }
 
     private init() {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         diskCacheURL = cacheDir.appending(path: "com.cview.images", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
 

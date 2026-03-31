@@ -129,7 +129,7 @@ public actor MetricsForwarder {
                 lastSyncData = response.syncData
             } catch {
                 // CView API 미지원 서버 — /api/metrics 폴백
-                Log.network.debug("cviewConnect failed, falling back to legacy: \(error.localizedDescription)")
+                Log.network.warning("cviewConnect failed, falling back to legacy: \(error.localizedDescription)")
                 let payload = AppLatencyPayload(
                     channelId: channelId,
                     channelName: channelName,

@@ -428,7 +428,9 @@ struct ChannelInfoView: View {
                 vodPage = nextPage
                 if newVODs.count < 12 { hasMoreVODs = false }
             }
-        } catch { }
+        } catch {
+            Log.network.warning("VOD 목록 로드 실패: \(error.localizedDescription, privacy: .public)")
+        }
         isLoadingMoreVODs = false
     }
 
@@ -446,7 +448,9 @@ struct ChannelInfoView: View {
                 clipPage = nextPage
                 if newClips.count < 12 { hasMoreClips = false }
             }
-        } catch { }
+        } catch {
+            Log.network.warning("클립 목록 로드 실패: \(error.localizedDescription, privacy: .public)")
+        }
         isLoadingMoreClips = false
     }
 

@@ -236,7 +236,9 @@ final class MultiLiveSession: Identifiable {
                             uid: chatVM.currentUserUid,
                             channelId: _channelId
                         )
-                    } catch {}
+                    } catch {
+                        Log.chat.error("멀티라이브 채팅 연결 실패: \(error.localizedDescription, privacy: .public)")
+                    }
                 }
             }
         } catch {
@@ -463,7 +465,9 @@ final class MultiLiveSession: Identifiable {
                                 self.isOffline = false
                             }
                         }
-                    } catch {}
+                    } catch {
+                        Log.network.debug("멀티라이브 상태 폴링 실패 channelId=\(self.channelId, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    }
 
                     // VLC 엔진 헬스 체크 (오프라인 아닐 때)
                     guard !self.isOffline else { consecutiveErrors = 0; continue }
@@ -580,13 +584,22 @@ struct MultiLivePersistedState: Codable, Equatable {
     }
 
     func save() {
-        guard let data = try? JSONEncoder().encode(self) else { return }
-        UserDefaults.standard.set(data, forKey: Self.userDefaultsKey)
+        do {
+            let data = try JSONEncoder().encode(self)
+            UserDefaults.standard.set(data, forKey: Self.userDefaultsKey)
+        } catch {
+            Log.app.warning("멀티라이브 상태 저장 실패: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     static func load() -> MultiLivePersistedState? {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else { return nil }
-        return try? JSONDecoder().decode(MultiLivePersistedState.self, from: data)
+        do {
+            return try JSONDecoder().decode(MultiLivePersistedState.self, from: data)
+        } catch {
+            Log.app.warning("멀티라이브 상태 복원 실패: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     static func clear() {
