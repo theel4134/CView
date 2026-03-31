@@ -288,12 +288,14 @@ struct PlayerControlsBar: View {
 
                 if isVolumeHovered {
                     HStack(spacing: 6) {
-                        Slider(value: Binding(
-                            get: { Double(playerVM?.volume ?? 1.0) },
-                            set: { playerVM?.setVolume(Float($0)) }
-                        ), in: 0...1)
-                        .frame(width: 80)
-                        .tint(DesignTokens.Colors.chzzkGreen)
+                        OverlayVolumeSlider(
+                            value: Binding(
+                                get: { Double(playerVM?.volume ?? 1.0) },
+                                set: { playerVM?.setVolume(Float($0)) }
+                            ),
+                            trackColor: DesignTokens.Colors.chzzkGreen,
+                            width: 80
+                        )
                         .accessibilityLabel("볼륨")
                         .accessibilityValue("\(Int((playerVM?.volume ?? 1.0) * 100))%")
 
@@ -551,6 +553,59 @@ struct QualityRow: View {
         .customCursor(.pointingHand)
         .accessibilityLabel(quality.name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Custom Volume Slider (macOS Slider .tint() 렌더링 버그 대응)
+
+/// macOS 기본 Slider가 다크 오버레이 위에서 .tint()을 무시하고 노란색 트랙 + 🚫 렌더링되는 문제 해결
+struct OverlayVolumeSlider: View {
+    @Binding var value: Double
+    var trackColor: Color = DesignTokens.Colors.chzzkGreen
+    var width: CGFloat = 80
+    var trackHeight: CGFloat = 4
+
+    @State private var isDragging = false
+    @State private var isHovered = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let progress = CGFloat(max(0, min(1, value)))
+            let thumbSize: CGFloat = (isHovered || isDragging) ? 12 : 8
+
+            ZStack(alignment: .leading) {
+                // Background track
+                Capsule()
+                    .fill(.white.opacity(0.2))
+                    .frame(height: trackHeight)
+
+                // Filled track
+                Capsule()
+                    .fill(trackColor)
+                    .frame(width: max(trackHeight, w * progress), height: trackHeight)
+
+                // Thumb
+                Circle()
+                    .fill(.white)
+                    .frame(width: thumbSize, height: thumbSize)
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                    .offset(x: max(0, min(w - thumbSize, w * progress - thumbSize / 2)))
+                    .animation(DesignTokens.Animation.fast, value: isHovered)
+            }
+            .frame(height: max(trackHeight, 14))
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        isDragging = true
+                        value = max(0, min(1, Double(drag.location.x / w)))
+                    }
+                    .onEnded { _ in isDragging = false }
+            )
+            .onHover { isHovered = $0 }
+        }
+        .frame(width: width, height: 14)
     }
 }
 

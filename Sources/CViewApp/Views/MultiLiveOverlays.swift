@@ -86,15 +86,14 @@ struct MLControlOverlay: View {
                     Image(systemName: "speaker.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.5))
-                    Slider(
+                    OverlayVolumeSlider(
                         value: Binding(
                             get: { Double(session.playerViewModel.volume) },
                             set: { session.playerViewModel.setVolume(Float($0)) }
                         ),
-                        in: 0...1
+                        trackColor: DesignTokens.Colors.chzzkGreen,
+                        width: 100
                     )
-                    .tint(DesignTokens.Colors.chzzkGreen)
-                    .frame(width: 100)
                     Image(systemName: "speaker.wave.3.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.5))
@@ -224,15 +223,14 @@ struct MLGridControlOverlay: View {
                 Image(systemName: "speaker.fill")
                     .font(.system(size: 9))
                     .foregroundStyle(.white.opacity(0.45))
-                Slider(
+                OverlayVolumeSlider(
                     value: Binding(
                         get: { Double(session.playerViewModel.volume) },
                         set: { session.playerViewModel.setVolume(Float($0)) }
                     ),
-                    in: 0...1
+                    trackColor: DesignTokens.Colors.chzzkGreen,
+                    width: 86
                 )
-                .tint(DesignTokens.Colors.chzzkGreen)
-                .frame(width: 86)
                 Image(systemName: "speaker.wave.3.fill")
                     .font(.system(size: 9))
                     .foregroundStyle(.white.opacity(0.45))
