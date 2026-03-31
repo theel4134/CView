@@ -157,6 +157,11 @@ extension LocalStreamProxy {
             let elapsed = CFAbsoluteTimeGetCurrent() - requestStart
             
             guard let data, let httpResponse = response as? HTTPURLResponse else {
+                if let error {
+                    self.logger.warning("Proxy upstream error: \(error.localizedDescription, privacy: .public)")
+                } else {
+                    self.logger.warning("Proxy upstream: nil data or non-HTTP response")
+                }
                 self._netCounters.withLock { c in
                     c.totalRequests += 1
                     c.cacheMisses += 1

@@ -91,7 +91,12 @@ public struct ChatFilter: Sendable {
         self.isEnabled = isEnabled
         // regex 타입일 때 init에서 1회만 컴파일
         if case .regex(let pattern) = type {
-            self.compiledRegex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+            do {
+                self.compiledRegex = try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+            } catch {
+                Log.chat.warning("Chat filter regex compile failed: '\(pattern)' — \(error.localizedDescription)")
+                self.compiledRegex = nil
+            }
         } else {
             self.compiledRegex = nil
         }

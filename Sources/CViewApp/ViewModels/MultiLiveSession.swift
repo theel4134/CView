@@ -174,7 +174,7 @@ final class MultiLiveSession: Identifiable {
                     }
                 }
                 Task { @MainActor [weak self] in
-                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    guard let self else { return }
                     self.latestMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
@@ -188,7 +188,7 @@ final class MultiLiveSession: Identifiable {
                     }
                 }
                 Task { @MainActor [weak self] in
-                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    guard let self else { return }
                     self.latestAVMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
@@ -315,7 +315,7 @@ final class MultiLiveSession: Identifiable {
                     }
                 }
                 Task { @MainActor [weak self] in
-                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    guard let self else { return }
                     self.latestMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
@@ -329,21 +329,7 @@ final class MultiLiveSession: Identifiable {
                     }
                 }
                 Task { @MainActor [weak self] in
-                    guard let self, self.showStats || self.showNetworkMetrics else { return }
-                    self.latestAVMetrics = metrics
-                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
-                }
-            }
-
-            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
-            playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
-                Task {
-                    if await _forwarder2?.currentChannelId == sessionChannelId2 {
-                        await _forwarder2?.updateAVPlayerMetrics(metrics)
-                    }
-                }
-                Task { @MainActor [weak self] in
-                    guard let self, self.showStats || self.showNetworkMetrics else { return }
+                    guard let self else { return }
                     self.latestAVMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }

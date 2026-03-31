@@ -95,12 +95,20 @@ extension StreamCoordinator {
             case .switchUp(let bandwidth, let reason):
                 emitEvent(.abrDecision(.switchUp(toBandwidth: bandwidth, reason: reason)))
                 if let variant = _masterPlaylist?.variants.first(where: { $0.bandwidth == bandwidth }) {
-                    try? await switchQuality(to: variant)
+                    do {
+                        try await switchQuality(to: variant)
+                    } catch {
+                        logger.warning("ABR switchUp failed (\(reason)) \(bandwidth)bps: \(error.localizedDescription)")
+                    }
                 }
             case .switchDown(let bandwidth, let reason):
                 emitEvent(.abrDecision(.switchDown(toBandwidth: bandwidth, reason: reason)))
                 if let variant = _masterPlaylist?.variants.first(where: { $0.bandwidth == bandwidth }) {
-                    try? await switchQuality(to: variant)
+                    do {
+                        try await switchQuality(to: variant)
+                    } catch {
+                        logger.warning("ABR switchDown failed (\(reason)) \(bandwidth)bps: \(error.localizedDescription)")
+                    }
                 }
             case .maintain:
                 break

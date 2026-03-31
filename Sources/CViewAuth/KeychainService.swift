@@ -18,13 +18,21 @@ public actor KeychainService {
         self.storageDir = appSupport.appendingPathComponent("CView").appendingPathComponent(".auth-store")
 
         // 디렉토리 생성
-        try? FileManager.default.createDirectory(at: storageDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: storageDir, withIntermediateDirectories: true)
+        } catch {
+            Log.auth.warning("Auth store directory creation failed: \(error.localizedDescription)")
+        }
 
         // 디렉토리 숨김 처리 (.로 시작하므로 기본 숨김)
         var resourceValues = URLResourceValues()
         resourceValues.isExcludedFromBackup = true
         var mutableDir = storageDir
-        try? mutableDir.setResourceValues(resourceValues)
+        do {
+            try mutableDir.setResourceValues(resourceValues)
+        } catch {
+            Log.auth.debug("Auth store resource values failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - CRUD

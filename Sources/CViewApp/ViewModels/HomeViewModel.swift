@@ -546,14 +546,20 @@ public final class HomeViewModel {
             serverLastUpdate = Date()
             
             // health에서 uptime 보완
-            if let health = try? await client.fetchHealth() {
+            do {
+                let health = try await client.fetchHealth()
                 serverUptime = health.uptime ?? 0
+            } catch {
+                logger.debug("Health fetch failed (non-critical): \(error.localizedDescription)")
             }
             
             // legacy /api/stats에서 채널 상세·CView 요약 등 대시보드 전용 데이터 로드
-            if let stats = try? await client.fetchStats() {
+            do {
+                let stats = try await client.fetchStats()
                 serverStats = stats
                 serverChannelStats = stats.channelStats ?? []
+            } catch {
+                logger.debug("Stats fetch failed (non-critical): \(error.localizedDescription)")
             }
             
             recordLatencySnapshot()

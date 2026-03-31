@@ -46,15 +46,15 @@ public final class SettingsStore {
         guard let store = dataStore else { return }
 
         // 모든 설정 로드를 동시에 시작 — DataStore actor hop 5회→1회 수준으로 단축
-        async let p = try? store.loadSetting(key: "player", as: PlayerSettings.self)
-        async let c = try? store.loadSetting(key: "chat", as: ChatSettings.self)
-        async let g = try? store.loadSetting(key: "general", as: GeneralSettings.self)
-        async let a = try? store.loadSetting(key: "appearance", as: AppearanceSettings.self)
-        async let n = try? store.loadSetting(key: "network", as: NetworkSettings.self)
-        async let m = try? store.loadSetting(key: "metrics", as: MetricsSettings.self)
-        async let k = try? store.loadSetting(key: "keyboard", as: KeyboardShortcutSettings.self)
-        async let cn = try? store.loadSetting(key: "channelNotifications", as: ChannelNotificationSettings.self)
-        async let ml = try? store.loadSetting(key: "multiLive", as: MultiLiveSettings.self)
+        async let p = loadSettingLogged(from: store, key: "player", as: PlayerSettings.self)
+        async let c = loadSettingLogged(from: store, key: "chat", as: ChatSettings.self)
+        async let g = loadSettingLogged(from: store, key: "general", as: GeneralSettings.self)
+        async let a = loadSettingLogged(from: store, key: "appearance", as: AppearanceSettings.self)
+        async let n = loadSettingLogged(from: store, key: "network", as: NetworkSettings.self)
+        async let m = loadSettingLogged(from: store, key: "metrics", as: MetricsSettings.self)
+        async let k = loadSettingLogged(from: store, key: "keyboard", as: KeyboardShortcutSettings.self)
+        async let cn = loadSettingLogged(from: store, key: "channelNotifications", as: ChannelNotificationSettings.self)
+        async let ml = loadSettingLogged(from: store, key: "multiLive", as: MultiLiveSettings.self)
 
         // Equality 체크 — 동일 값 할당으로 인한 @Observable 재평가 방지
         if let val = await p, val != self.player { self.player = val }
@@ -68,6 +68,18 @@ public final class SettingsStore {
         if let val = await ml, val != self.multiLive { self.multiLive = val }
 
         Log.persistence.info("Settings loaded")
+    }
+
+    /// 설정 로드 + 에러 로깅 래퍼 (async let 병렬 로드 유지)
+    private func loadSettingLogged<T: Codable & Equatable & Sendable>(
+        from store: DataStore, key: String, as type: T.Type
+    ) async -> T? {
+        do {
+            return try await store.loadSetting(key: key, as: type)
+        } catch {
+            Log.persistence.warning("Setting '\(key)' load failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     /// 설정 저장 — 8개 설정을 병렬로 저장하여 총 대기 시간 단축

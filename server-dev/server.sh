@@ -12,6 +12,8 @@ REMOTE_PROJECT="/home/dodolab/docker"
 REMOTE_COLLECTOR="docker/chzzk-collector"
 REMOTE_STATSWEB="docker/cview-stats-web"
 REMOTE_NGINX="docker/nginx-ssl"
+REMOTE_PROMETHEUS="prometheus"
+REMOTE_GRAFANA="grafana"
 LOCAL_MIRROR="$(cd "$(dirname "$0")" && pwd)/mirror"
 
 # 색상
@@ -99,6 +101,22 @@ cmd_pull() {
         ok "scripts 완료"
     fi
 
+    if [[ "$target" == "all" || "$target" == "prometheus" ]]; then
+        info "prometheus 동기화..."
+        rsync -avz --delete \
+            "$SERVER:$REMOTE_PROJECT/$REMOTE_PROMETHEUS/" \
+            "$LOCAL_MIRROR/prometheus/"
+        ok "prometheus 완료"
+    fi
+
+    if [[ "$target" == "all" || "$target" == "grafana" ]]; then
+        info "grafana 동기화..."
+        rsync -avz --delete \
+            "$SERVER:$REMOTE_PROJECT/$REMOTE_GRAFANA/" \
+            "$LOCAL_MIRROR/grafana/"
+        ok "grafana 완료"
+    fi
+
     ok "Pull 완료: $LOCAL_MIRROR"
 }
 
@@ -145,6 +163,22 @@ cmd_push() {
         ok "docker-compose.yml 완료"
     fi
 
+    if [[ "$target" == "all" || "$target" == "prometheus" ]]; then
+        info "prometheus 업로드..."
+        rsync -avz --delete \
+            "$LOCAL_MIRROR/prometheus/" \
+            "$SERVER:$REMOTE_PROJECT/$REMOTE_PROMETHEUS/"
+        ok "prometheus 완료"
+    fi
+
+    if [[ "$target" == "all" || "$target" == "grafana" ]]; then
+        info "grafana 업로드..."
+        rsync -avz --delete \
+            "$LOCAL_MIRROR/grafana/" \
+            "$SERVER:$REMOTE_PROJECT/$REMOTE_GRAFANA/"
+        ok "grafana 완료"
+    fi
+
     ok "Push 완료"
 }
 
@@ -184,7 +218,19 @@ cmd_deploy() {
         collector) service="chzzk-metrics" ;;
         statsweb)  service="cview-stats-web" ;;
         nginx)     service="nginx-ssl" ;;
-        *)         err "알 수 없는 타겟: $target (collector|statsweb|nginx)"; exit 1 ;;
+        monitoring)
+            header "배포: 모니터링 스택 (prometheus + grafana + exporters)"
+            cmd_push "prometheus"
+            cmd_push "grafana"
+            cmd_push "compose"
+            ssh "$SERVER" "cd $REMOTE_PROJECT && mkdir -p data/prometheus-data data/grafana-data"
+            ssh "$SERVER" "cd $REMOTE_PROJECT && docker compose up -d prometheus grafana nginx-exporter postgres-exporter redis-exporter"
+            ok "모니터링 스택 배포 완료"
+            sleep 3
+            cmd_status
+            return
+            ;;
+        *)         err "알 수 없는 타겟: $target (collector|statsweb|nginx|monitoring)"; exit 1 ;;
     esac
 
     header "배포: $target → $service"
