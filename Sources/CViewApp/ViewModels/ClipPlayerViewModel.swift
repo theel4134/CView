@@ -47,6 +47,10 @@ public final class ClipPlayerViewModel {
     
     /// 클립 재생 시작 (URL 직접 제공)
     func startClip(config: ClipPlaybackConfig) async {
+        // 이전 재생 엔진 정리
+        playerEngine?.stop()
+        playerEngine = nil
+
         playbackState = .loading
         errorMessage = nil
         clipTitle = config.title

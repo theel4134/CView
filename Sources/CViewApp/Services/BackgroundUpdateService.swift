@@ -102,6 +102,10 @@ final class BackgroundUpdateService {
         if let obs = wakeObserver  { NSWorkspace.shared.notificationCenter.removeObserver(obs) }
         sleepObserver = nil
         wakeObserver  = nil
+        // 이전 상태 초기화 — restart 시 첫 폴링에서 정확한 diff 보장
+        previousOnlineIds = []
+        previousCategoryMap = [:]
+        previousTitleMap = [:]
     }
 
     /// 수동 새로고침

@@ -400,6 +400,7 @@ final class MultiLiveSession: Identifiable {
         await chatViewModel.disconnect()
         loadState = .idle
         latestMetrics = nil
+        latestAVMetrics = nil
         latestProxyStats = nil
     }
 

@@ -188,6 +188,11 @@ public final class VODPlayerViewModel {
     
     /// 정지 및 정리
     func stop() {
+        // 콜백 정리 — 엔진 해제 전 dangling callback 방지
+        if let av = playerEngine as? AVPlayerEngine {
+            av.onStateChange = nil
+            av.onTimeChange = nil
+        }
         playerEngine?.stop()
         playerEngine = nil
         playbackState = .idle

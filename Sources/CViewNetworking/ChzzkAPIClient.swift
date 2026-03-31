@@ -16,6 +16,8 @@ public actor ChzzkAPIClient: APIClientProtocol {
     let authProvider: (any AuthTokenProvider)?
     private let cache: ResponseCache
     private var maxRetries: Int = 3
+    /// 캐시 퍼지 주기 Task — deinit 시 취소
+    private let cachePurgeTask: Task<Void, Never>
     /// SSL 핀닝 델리게이트 — URLSession이 약한 참조하므로 강한 참조 유지 필요
     private let pinningDelegate: CertificatePinningDelegate
     /// Game API 기본 URL (chat access token 등)
@@ -49,11 +51,15 @@ public actor ChzzkAPIClient: APIClientProtocol {
         self.cache = cache
 
         // 5분 간격으로 만료된 응답 캐시 정리 (메모리 누수 방지)
-        Task { [cache] in
+        cachePurgeTask = Task { [cache] in
             for await _ in AsyncTimerSequence(interval: APIDefaults.cachePurgeInterval, tolerance: 30) {
                 await cache.purgeExpired(defaultTTL: APIDefaults.defaultCacheTTL)
             }
         }
+    }
+
+    deinit {
+        cachePurgeTask.cancel()
     }
 
     // MARK: - APIClientProtocol

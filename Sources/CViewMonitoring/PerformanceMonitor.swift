@@ -283,15 +283,10 @@ public actor PerformanceMonitor {
             queue: .global(qos: .utility)
         )
         source.setEventHandler { [weak self] in
-            guard let self else { return }
-            let level: String
-            let flags = source.data
-            if flags.contains(.critical) {
-                level = "CRITICAL"
-            } else {
-                level = "WARNING"
-            }
-            Task {
+            let isCritical = source.data.contains(.critical)
+            Task { [weak self] in
+                guard let self else { return }
+                let level = isCritical ? "CRITICAL" : "WARNING"
                 await self.logger.warning("🔴 메모리 압력 감지: \(level) — 캐시 정리 실행")
                 await self.onMemoryWarning?()
             }
