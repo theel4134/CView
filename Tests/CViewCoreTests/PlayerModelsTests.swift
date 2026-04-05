@@ -107,17 +107,19 @@ struct PlayerEngineTypeTests {
     func displayNames() {
         #expect(PlayerEngineType.vlc.displayName == "VLC (고급)")
         #expect(PlayerEngineType.avPlayer.displayName == "AVPlayer (기본·저전력)")
+        #expect(PlayerEngineType.hlsjs.displayName == "HLS.js (저지연)")
     }
 
     @Test("rawValue 매핑")
     func rawValues() {
         #expect(PlayerEngineType.vlc.rawValue == "VLC")
         #expect(PlayerEngineType.avPlayer.rawValue == "AVPlayer")
+        #expect(PlayerEngineType.hlsjs.rawValue == "HLS.js")
     }
 
     @Test("CaseIterable")
     func caseIterable() {
-        #expect(PlayerEngineType.allCases.count == 2)
+        #expect(PlayerEngineType.allCases.count == 3)
     }
 }
 

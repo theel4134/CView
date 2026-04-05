@@ -111,13 +111,13 @@ struct HomeView: View {
     func sectionHeader(title: String, subtitle: String?) -> some View {
         HStack(spacing: DesignTokens.Spacing.xs) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(DesignTokens.Typography.captionSemibold)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
 
             if let subtitle = subtitle {
                 Text("·  \(subtitle)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
+                    .font(DesignTokens.Typography.footnote)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
 
             Spacer()

@@ -58,7 +58,7 @@ struct SplashView: View {
                 AppIconView(size: 110, showLiveDot: true, animated: true)
                     .scaleEffect(phase == .initial ? 0.4 : 1.0)
                     .opacity(phase == .initial ? 0 : 1)
-                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.35), radius: 32)
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.35), radius: 16)
 
                 VStack(spacing: 6) {
                     Text("CView")

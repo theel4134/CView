@@ -225,6 +225,7 @@ public enum DesignTokens {
         public static let accentPurple = adaptive(dark: 0xBF5FFF, light: 0x7B3FA6)
         public static let accentPink   = adaptive(dark: 0xFF5FA0, light: 0xC93570)
         public static let accentOrange = adaptive(dark: 0xFF9F0A, light: 0xCC7A00)
+        public static let accentCyan   = adaptive(dark: 0x33CCEE, light: 0x1A8FA8)
 
         // ── On-surface ──
         public static let onPrimary    = adaptive(dark: 0x0A0A0A, light: 0x0A0A0A)
@@ -481,8 +482,8 @@ public enum DesignTokens {
         public static let micro: SwiftUI.Animation = .spring(response: 0.14, dampingFraction: 0.92)
         /// 인터랙티브 제스처 — 드래그 중 실시간 피드백
         public static let interactive: SwiftUI.Animation = .interactiveSpring(response: 0.15, dampingFraction: 0.9, blendDuration: 0.02)
-        /// 콘텐츠 뷰 전환 — 사이드바→디테일 (빠른 안착)
-        public static let contentTransition: SwiftUI.Animation = .spring(response: 0.24, dampingFraction: 0.90)
+        /// 콘텐츠 뷰 전환 — 사이드바→디테일 (자연스러운 안착)
+        public static let contentTransition: SwiftUI.Animation = .spring(response: 0.28, dampingFraction: 0.92)
         /// 사이드바 인디케이터 / matchedGeometry (정밀 안착)
         public static let indicator: SwiftUI.Animation = .spring(response: 0.22, dampingFraction: 0.88)
         /// 반복(pulse) — LiveBadge, RecordButton (reduceMotion 시 nil 사용)
@@ -506,6 +507,9 @@ public enum DesignTokens {
         /// 카드 등장 — 스태거 애니메이션에 적합한 탄성 spring
         public static let cardAppear: SwiftUI.Animation = .interpolatingSpring(stiffness: 300, damping: 24)
 
+        // ── macOS 26+ 최신 전환 ──
+        // 미사용 토큰 정리: dimTransition, staggerAppear, overlayBlur, elasticRelease 제거 (2026-04-04)
+
         /// reduceMotion 고려 — 모션 감소 설정 시 nil 반환 (즉시 전환)
         public static func motionSafe(_ animation: SwiftUI.Animation?) -> SwiftUI.Animation? {
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -524,7 +528,7 @@ public enum DesignTokens {
         /// Retina: 최소 1280px 권장 (원래 900)
         public static let minWindowWidth: CGFloat = 1000
         public static let minWindowHeight: CGFloat = 660
-        public static let chatPanelWidth: CGFloat = 340
+        public static let chatPanelWidth: CGFloat = 300
         public static let playerMinHeight: CGFloat = 420
         /// 카드 그리드 — 기본 컬럼 최소 폭
         public static let gridCardMinWidth: CGFloat = 220
@@ -534,6 +538,34 @@ public enum DesignTokens {
         public static let offlineAvatarSize: CGFloat = 36
         /// 온라인 카드 아바타 배지 크기
         public static let liveAvatarSize: CGFloat = 28
+    }
+
+    // MARK: - Border (선 두께 표준화)
+
+    public enum Border {
+        /// 0.5pt — 미세 테두리, 구분선
+        public static let thin: CGFloat = 0.5
+        /// 1pt — 기본 테두리
+        public static let medium: CGFloat = 1.0
+        /// 1.5pt — 강조 테두리, 포커스 링
+        public static let thick: CGFloat = 1.5
+    }
+
+    // MARK: - Opacity (표준화된 투명도 레벨)
+
+    public enum Opacity {
+        /// 0.06 — 극미세 배경 틴트
+        public static let subtle: Double = 0.06
+        /// 0.10 — 배지/토글 비활성 배경
+        public static let light: Double = 0.10
+        /// 0.12 — 배지/카운트 배경 기본
+        public static let medium: Double = 0.12
+        /// 0.15 — 선택 상태 배경
+        public static let heavy: Double = 0.15
+        /// 0.25 — 호버 오버레이
+        public static let overlay: Double = 0.25
+        /// 0.40 — Divider 기본
+        public static let divider: Double = 0.40
     }
 }
 
@@ -566,6 +598,47 @@ extension Color {
         let green = Double((hex >> 8) & 0xFF) / 255.0
         let blue = Double(hex & 0xFF) / 255.0
         self.init(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MARK: - Icon Button Style (통일된 아이콘 버튼 스타일)
+// ═══════════════════════════════════════════════════════════════════
+
+/// 28×28 아이콘 버튼 — 호버/프레스 피드백 포함
+public struct IconButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 28, height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                    .fill(isHovered
+                        ? DesignTokens.Colors.surfaceElevated
+                        : DesignTokens.Colors.surfaceElevated.opacity(0.5))
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(DesignTokens.Animation.micro, value: isHovered)
+            .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+    }
+}
+
+/// 캡슐형 액션 버튼 — 호버 시 미세 밝기 변화
+public struct HoverPillButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : (isHovered ? 0.9 : 1.0))
+            .animation(DesignTokens.Animation.micro, value: isHovered)
+            .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
+            .onHover { isHovered = $0 }
     }
 }
 

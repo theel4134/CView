@@ -1,11 +1,34 @@
 // MARK: - MultiChatView.swift
 // CViewApp - 멀티채팅 뷰
-// 여러 채널의 채팅을 동시에 표시
+// 여러 채널의 채팅을 동시에 표시 (사이드바/그리드/통합 모드)
 
 import SwiftUI
 import CViewCore
 import CViewNetworking
 import CViewUI
+
+/// 멀티채팅 레이아웃 모드
+enum MultiChatLayoutMode: String, CaseIterable {
+    case sidebar  // 사이드바 + 단일 채팅
+    case grid     // 그리드 동시 표시
+    case merged   // 통합 타임라인
+
+    var icon: String {
+        switch self {
+        case .sidebar: return "sidebar.left"
+        case .grid:    return "rectangle.split.2x2"
+        case .merged:  return "text.line.first.and.arrowtriangle.forward"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .sidebar: return "사이드바"
+        case .grid:    return "그리드"
+        case .merged:  return "통합"
+        }
+    }
+}
 
 /// 멀티채팅 뷰 - 사이드바(채널 목록) + 메인(선택된 채널 채팅)
 struct MultiChatView: View {
@@ -14,25 +37,23 @@ struct MultiChatView: View {
     @State private var showAddChannel = false
     @State private var showChatSettings = false
     @State private var addChannelError: String?
-    @State private var newChannelId = ""
-    @State private var channelSearchQuery = ""
-    @State private var channelSearchResults: [ChannelInfo] = []
-    @State private var isSearchingChannels = false
+    @State private var layoutMode: MultiChatLayoutMode = .sidebar
 
     var body: some View {
-        HSplitView {
-            // 채널 사이드바
-            channelSidebar
-                .frame(minWidth: 160, maxWidth: 220)
-
-            // 선택된 채널 채팅
-            if let session = sessionManager.selectedSession {
-                ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: { showChatSettings = true })
-            } else {
-                emptyState
+        Group {
+            switch layoutMode {
+            case .sidebar:
+                sidebarLayout
+            case .grid:
+                gridLayout
+            case .merged:
+                mergedLayout
             }
         }
         .frame(minWidth: 500, minHeight: 400)
+        .task {
+            sessionManager.configure(settingsStore: appState.settingsStore)
+        }
         .sheet(isPresented: $showChatSettings) {
             ChatSettingsView()
                 .environment(appState)
@@ -45,6 +66,248 @@ struct MultiChatView: View {
         } message: {
             Text(addChannelError ?? "")
         }
+        .sheet(isPresented: $showAddChannel) {
+            ChatChannelPickerView(
+                apiClient: appState.apiClient,
+                onChannelSelected: { channelId in await addChannel(channelId: channelId) },
+                onDismiss: { showAddChannel = false }
+            )
+        }
+    }
+
+    // MARK: - Sidebar Layout (기존)
+
+    private var sidebarLayout: some View {
+        HSplitView {
+            channelSidebar
+                .frame(minWidth: 160, maxWidth: 220)
+
+            if let session = sessionManager.selectedSession {
+                ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: { showChatSettings = true })
+            } else {
+                emptyState
+            }
+        }
+    }
+
+    // MARK: - Grid Layout (다중 채팅 동시 표시)
+
+    private var gridLayout: some View {
+        VStack(spacing: 0) {
+            gridToolbar
+            Divider()
+
+            if sessionManager.sessions.isEmpty {
+                emptyState
+            } else {
+                gridContent
+            }
+        }
+    }
+
+    private var gridToolbar: some View {
+        HStack(spacing: 8) {
+            layoutModePicker
+
+            Spacer()
+
+            Text("\(sessionManager.sessions.count)개 채널")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+
+            Button { showAddChannel = true } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+            }
+            .buttonStyle(.plain)
+
+            Button { Task { await sessionManager.reconnectAll() } } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+            }
+            .buttonStyle(.plain)
+            .disabled(sessionManager.sessions.isEmpty)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xs)
+        .background(DesignTokens.Colors.surfaceOverlay)
+    }
+
+    private var gridContent: some View {
+        GeometryReader { geo in
+            let sessions = sessionManager.sessions
+            let count = sessions.count
+
+            if count == 1 {
+                gridCell(session: sessions[0], width: geo.size.width, height: geo.size.height)
+            } else if count == 2 {
+                // 2개: 좌우 분할 + 리사이즈 디바이더
+                let leftW = geo.size.width * sessionManager.gridHorizontalRatio
+                HStack(spacing: 0) {
+                    gridCell(session: sessions[0], width: leftW, height: geo.size.height)
+                    MLResizeDivider(
+                        isHorizontal: true,
+                        containerLength: geo.size.width,
+                        currentRatio: sessionManager.gridHorizontalRatio,
+                        onRatioChange: { sessionManager.gridHorizontalRatio = $0 }
+                    )
+                    gridCell(session: sessions[1], width: geo.size.width - leftW, height: geo.size.height)
+                }
+            } else if count >= 3 {
+                // 3~4개: 상하 분할 (각 행은 좌우 균등)
+                let topH = geo.size.height * sessionManager.gridVerticalRatio
+                let botH = geo.size.height - topH
+                VStack(spacing: 0) {
+                    HStack(spacing: 1) {
+                        ForEach(0..<min(2, count), id: \.self) { i in
+                            gridCell(session: sessions[i], width: geo.size.width / CGFloat(min(2, count)), height: topH)
+                        }
+                    }
+                    .frame(height: topH)
+
+                    MLResizeDivider(
+                        isHorizontal: false,
+                        containerLength: geo.size.height,
+                        currentRatio: sessionManager.gridVerticalRatio,
+                        onRatioChange: { sessionManager.gridVerticalRatio = $0 }
+                    )
+
+                    HStack(spacing: 1) {
+                        let bottomSessions = Array(sessions.dropFirst(2))
+                        ForEach(0..<bottomSessions.count, id: \.self) { i in
+                            gridCell(session: bottomSessions[i], width: geo.size.width / CGFloat(bottomSessions.count), height: botH)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func gridCell(session: MultiChatSessionManager.ChatSession, width: CGFloat, height: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            // 채널 헤더
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(session.chatViewModel.connectionState.isConnected
+                        ? DesignTokens.Colors.chzzkGreen
+                        : DesignTokens.Colors.error)
+                    .frame(width: 5, height: 5)
+
+                Text(session.channelName)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text("\(session.chatViewModel.messageCount)")
+                    .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+
+                Button {
+                    Task { await sessionManager.removeSession(channelId: session.id) }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(DesignTokens.Typography.custom(size: 8, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(DesignTokens.Colors.surfaceBase)
+
+            Divider().opacity(DesignTokens.Opacity.divider)
+
+            ChatMessagesView(viewModel: session.chatViewModel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: width, height: height)
+        .background(DesignTokens.Colors.surfaceBase)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: DesignTokens.Border.thin)
+        )
+    }
+
+    private func gridColumns(for count: Int) -> Int {
+        switch count {
+        case 1:    return 1
+        case 2:    return 2
+        case 3, 4: return 2
+        default:   return min(4, count)
+        }
+    }
+
+    // MARK: - Merged Layout (통합 타임라인)
+
+    private var mergedLayout: some View {
+        VStack(spacing: 0) {
+            mergedToolbar
+            Divider()
+
+            if sessionManager.sessions.isEmpty {
+                emptyState
+            } else {
+                MergedChatView(sessionManager: sessionManager)
+            }
+        }
+    }
+
+    private var mergedToolbar: some View {
+        HStack(spacing: 8) {
+            layoutModePicker
+
+            Spacer()
+
+            Text("\(sessionManager.sessions.count)개 채널 통합")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+
+            Button { showAddChannel = true } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xs)
+        .background(DesignTokens.Colors.surfaceOverlay)
+    }
+
+    // MARK: - Layout Mode Picker
+
+    private var layoutModePicker: some View {
+        HStack(spacing: 2) {
+            ForEach(MultiChatLayoutMode.allCases, id: \.self) { mode in
+                Button {
+                    withAnimation(DesignTokens.Animation.snappy) {
+                        layoutMode = mode
+                    }
+                } label: {
+                    Image(systemName: mode.icon)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(layoutMode == mode
+                            ? DesignTokens.Colors.chzzkGreen
+                            : DesignTokens.Colors.textTertiary)
+                        .frame(width: 26, height: 22)
+                        .background(
+                            layoutMode == mode
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.12)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(mode.label)
+            }
+        }
+        .padding(2)
+        .background(DesignTokens.Colors.surfaceElevated.opacity(0.6), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
     }
 
     // MARK: - Channel Sidebar
@@ -58,6 +321,8 @@ struct MultiChatView: View {
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                 Spacer()
+
+                layoutModePicker
 
                 Button {
                     showAddChannel = true
@@ -118,6 +383,9 @@ struct MultiChatView: View {
                             }
                         }
                     }
+                    .onMove { source, destination in
+                        sessionManager.moveSession(from: source, to: destination)
+                    }
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
@@ -131,6 +399,17 @@ struct MultiChatView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button {
+                    Task { await sessionManager.reconnectAll() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                .disabled(sessionManager.sessions.isEmpty)
+                .help("전체 재연결")
+
                 Button(role: .destructive) {
                     Task { await sessionManager.disconnectAll() }
                 } label: {
@@ -144,141 +423,6 @@ struct MultiChatView: View {
             .padding(DesignTokens.Spacing.xs)
         }
         .background(DesignTokens.Colors.surfaceOverlay)
-        .sheet(isPresented: $showAddChannel) {
-            addChannelSheet
-        }
-    }
-
-    // MARK: - Add Channel Sheet
-
-    private var addChannelSheet: some View {
-        VStack(spacing: 16) {
-            Text("채널 추가")
-                .font(.headline)
-
-            // 채널 검색
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                TextField("채널명 검색 또는 채널 ID 입력", text: $channelSearchQuery)
-                    .textFieldStyle(.plain)
-                    .font(DesignTokens.Typography.captionMedium)
-                    .onSubmit { searchChannels() }
-                if isSearchingChannels {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .fill(DesignTokens.Colors.surfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
-                    )
-            )
-
-            // 검색 결과
-            if !channelSearchResults.isEmpty {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(channelSearchResults) { channel in
-                            Button {
-                                Task {
-                                    await addChannel(channelId: channel.channelId)
-                                    channelSearchQuery = ""
-                                    channelSearchResults = []
-                                    showAddChannel = false
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    if let url = channel.channelImageURL {
-                                        CachedAsyncImage(url: url) {
-                                            Circle().fill(DesignTokens.Colors.surfaceElevated)
-                                        }
-                                        .frame(width: 32, height: 32)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Circle().fill(DesignTokens.Colors.surfaceElevated)
-                                            .frame(width: 32, height: 32)
-                                            .overlay {
-                                                Image(systemName: "person.fill")
-                                                    .font(DesignTokens.Typography.caption)
-                                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                                            }
-                                    }
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(channel.channelName)
-                                            .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                                            .foregroundStyle(DesignTokens.Colors.textPrimary)
-                                        Text("팔로워 \(channel.followerCount.formatted())")
-                                            .font(DesignTokens.Typography.caption)
-                                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, DesignTokens.Spacing.xs)
-                                .padding(.vertical, DesignTokens.Spacing.xs)
-                                .background(DesignTokens.Colors.surfaceOverlay.opacity(0.001))
-                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .frame(maxHeight: 200)
-            }
-
-            Divider()
-
-            // 채널 ID 직접 입력
-            HStack(spacing: 8) {
-                TextField("채널 ID 직접 입력", text: $newChannelId)
-                    .textFieldStyle(.roundedBorder)
-                    .font(DesignTokens.Typography.caption)
-                Button("추가") {
-                    let channelId = newChannelId.trimmingCharacters(in: .whitespaces)
-                    guard !channelId.isEmpty else { return }
-                    Task {
-                        await addChannel(channelId: channelId)
-                        newChannelId = ""
-                        showAddChannel = false
-                    }
-                }
-                .disabled(newChannelId.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-
-            HStack {
-                Button("취소") {
-                    newChannelId = ""
-                    channelSearchQuery = ""
-                    channelSearchResults = []
-                    showAddChannel = false
-                }
-                .keyboardShortcut(.cancelAction)
-                Spacer()
-            }
-        }
-        .padding(DesignTokens.Spacing.xl)
-        .frame(width: 360)
-    }
-
-    private func searchChannels() {
-        let query = channelSearchQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty, let apiClient = appState.apiClient else { return }
-        isSearchingChannels = true
-        Task {
-            do {
-                let result = try await apiClient.searchChannels(keyword: query, size: 10)
-                channelSearchResults = result.data
-            } catch {
-                channelSearchResults = []
-            }
-            isSearchingChannels = false
-        }
     }
 
     // MARK: - Empty State
@@ -313,18 +457,35 @@ struct MultiChatView: View {
     // MARK: - Actions
 
     private func addChannel(channelId: String) async {
+        // 세션 수 사전 체크
+        guard sessionManager.canAddSession else {
+            addChannelError = "최대 \(MultiChatSessionManager.maxSessions)개 채널까지 추가할 수 있습니다."
+            return
+        }
+
         guard let apiClient = appState.apiClient else { return }
         do {
             let liveDetail = try await apiClient.liveDetail(channelId: channelId)
-            guard let chatChannelId = liveDetail.chatChannelId else { return }
+            guard let chatChannelId = liveDetail.chatChannelId else {
+                addChannelError = "채널 '\(channelId)'은(는) 현재 방송 중이 아닙니다."
+                return
+            }
             let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
             let channelName = liveDetail.channel?.channelName ?? channelId
-            await sessionManager.addSession(
+            let result = await sessionManager.addSession(
                 channelId: channelId,
                 channelName: channelName,
                 chatChannelId: chatChannelId,
                 accessToken: tokenInfo.accessToken
             )
+            switch result {
+            case .alreadyExists:
+                addChannelError = "'\(channelName)' 채널은 이미 추가되어 있습니다."
+            case .maxSessionsReached:
+                addChannelError = "최대 \(MultiChatSessionManager.maxSessions)개 채널까지 추가할 수 있습니다."
+            case .success, .connectionFailed:
+                break
+            }
         } catch {
             await MainActor.run {
                 addChannelError = "채널 '\(channelId)'에 연결할 수 없습니다: \(error.localizedDescription)"

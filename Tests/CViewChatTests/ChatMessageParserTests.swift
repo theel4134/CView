@@ -322,10 +322,11 @@ struct ChatMessageParserProfileTests {
         #expect(messages[0].nickname == "Unknown")
     }
 
-    @Test("Parse profile with badge dict")
+    @Test("Parse profile with subscription badge from streamingProperty")
     func parseBadge() throws {
+        let profileJson = #"{"nickname":"BadgeUser","streamingProperty":{"subscription":{"accumulativeMonth":3,"tier":1,"badge":{"imageUrl":"https://badge.example.com/sub.png"}}}}"#
         let json = """
-        {"cmd":93101,"bdy":[{"msg":"badged","uid":"u1","msgTime":1000,"profile":{"nickname":"BadgeUser","badge":{"subscriber":"https://badge.example.com/sub.png"}}}]}
+        {"cmd":93101,"bdy":[{"msg":"badged","uid":"u1","msgTime":1000,"profile":"\(jsonEscape(profileJson))"}]}
         """
         let event = try parser.parse(json)
         guard case .messages(let messages) = event else {
@@ -334,6 +335,22 @@ struct ChatMessageParserProfileTests {
         }
         #expect(messages[0].profile?.badge != nil)
         #expect(messages[0].profile?.badge?.imageURL?.absoluteString == "https://badge.example.com/sub.png")
+    }
+
+    @Test("Parse profile with viewerBadges")
+    func parseViewerBadges() throws {
+        let profileJson = #"{"nickname":"ViewerBadgeUser","viewerBadges":[{"badge":{"badgeId":"donation_newbie","imageUrl":"https://badge.example.com/fan.png","scope":"CHANNEL"},"type":"STANDARD"}]}"#
+        let json = """
+        {"cmd":93101,"bdy":[{"msg":"hi","uid":"u1","msgTime":1000,"profile":"\(jsonEscape(profileJson))"}]}
+        """
+        let event = try parser.parse(json)
+        guard case .messages(let messages) = event else {
+            Issue.record("Expected .messages event")
+            return
+        }
+        #expect(!messages[0].profile!.badges.isEmpty)
+        #expect(messages[0].profile?.badges.first?.imageURL?.absoluteString == "https://badge.example.com/fan.png")
+        #expect(messages[0].profile?.badges.first?.badgeId == "donation_newbie")
     }
 }
 

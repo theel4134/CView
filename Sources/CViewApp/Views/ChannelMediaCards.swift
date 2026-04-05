@@ -224,7 +224,7 @@ struct VODCard: View {
             )
         }
         .buttonStyle(.plain)
-        .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .onHover { isHovered = $0 }
         .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
@@ -317,7 +317,7 @@ struct ClipCard: View {
             )
         }
         .buttonStyle(.plain)
-        .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .onHover { isHovered = $0 }
         .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }

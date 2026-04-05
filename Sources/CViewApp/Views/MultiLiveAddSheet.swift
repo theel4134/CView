@@ -1,6 +1,6 @@
 // MARK: - MultiLiveAddSheet.swift
 // CViewApp — 멀티라이브 채널 추가 시트
-// 팔로잉 채널 + 라이브 검색 + 채널 ID 직접 입력
+// 단일 페이지 통합 피커: 검색 + 팔로잉 + 채널 ID 직접 입력
 
 import SwiftUI
 import CViewCore
@@ -12,71 +12,49 @@ struct MultiLiveAddSheet: View {
     @Environment(AppState.self) private var appState
     var isPresented: Binding<Bool>?
 
-    // 검색 상태
+    // 통합 검색 상태
     @State var searchQuery = ""
     @State var searchResults: [LiveInfo] = []
     @State var channelSearchResults: [ChannelInfo] = []
     @State var isSearching = false
     @State var hasSearched = false
     @State private var searchDebounceTask: Task<Void, Never>?
-    @State var recentSearches: [String] = []
 
     // 팔로잉 상태
     @State var followingChannels: [LiveChannelItem] = []
     @State var isLoadingFollowing = false
-    @State var followingFilter: FollowingFilter = .all
-    @State var followingSearchText = ""
+    @State var showLiveOnly = true
 
     // 공통 상태
     @State private var channelIdInput = ""
     @State private var addError: String?
     @State var addingChannelId: String?
     @State var recentlyAddedIds: Set<String> = []
-    @State private var selectedTab: AddSheetTab = .following
+    @State private var showDirectInput = false
 
-    private enum AddSheetTab: String, CaseIterable {
-        case following = "라이브"
-        case search = "검색"
-        case direct = "채널 ID"
-    }
-
-    enum FollowingFilter: String, CaseIterable {
-        case all = "전체"
-        case liveOnly = "라이브"
+    /// 검색 모드 여부 (검색어가 있으면 검색 결과, 없으면 팔로잉)
+    private var isSearchMode: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            tabPicker
-
-            Group {
-                switch selectedTab {
-                case .following:
-                    followingContent
-                case .search:
-                    searchContent
-                case .direct:
-                    directInputContent
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-
-            if let error = addError {
-                errorBanner(error)
-            }
+            header
+            searchBar
+            mainContent
+            if showDirectInput { directInputSection }
+            if let error = addError { errorBanner(error) }
         }
         .onChange(of: searchQuery) { debounceSearch() }
         .task { await loadFollowingChannels() }
+        .animation(DesignTokens.Animation.contentTransition, value: isSearchMode)
+        .animation(DesignTokens.Animation.fast, value: showLiveOnly)
     }
 
     // MARK: - 헤더
 
     private var header: some View {
         HStack(spacing: DesignTokens.Spacing.sm) {
-            Image(systemName: "rectangle.split.2x2.fill")
-                .font(.title3)
-                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-
             VStack(alignment: .leading, spacing: 1) {
                 Text("채널 추가")
                     .font(.headline)
@@ -111,6 +89,15 @@ struct MultiLiveAddSheet: View {
                 Circle()
                     .fill(i < manager.sessions.count ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary.opacity(0.3))
                     .frame(width: 6, height: 6)
+                    .scaleEffect(i < manager.sessions.count ? 1.0 : 0.7)
+                    .shadow(
+                        color: i < manager.sessions.count ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : .clear,
+                        radius: 3
+                    )
+                    .animation(
+                        DesignTokens.Animation.bouncy.delay(Double(i) * 0.06),
+                        value: manager.sessions.count
+                    )
             }
         }
         .padding(.horizontal, 10)
@@ -118,59 +105,183 @@ struct MultiLiveAddSheet: View {
         .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.6)))
     }
 
-    // MARK: - 탭 피커
+    // MARK: - 통합 검색바
 
-    private var tabPicker: some View {
-        HStack(spacing: 0) {
-            ForEach(AddSheetTab.allCases, id: \.self) { tab in
-                tabButton(tab)
-            }
-        }
-        .background(alignment: .bottom) {
-            GeometryReader { geo in
-                let tabWidth = geo.size.width / CGFloat(AddSheetTab.allCases.count)
-                let index = AddSheetTab.allCases.firstIndex(of: selectedTab) ?? 0
-                Capsule()
-                    .fill(DesignTokens.Colors.chzzkGreen)
-                    .frame(width: tabWidth * 0.45, height: 2.5)
-                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.3), radius: 3, y: 1)
-                    .offset(x: tabWidth * CGFloat(index) + tabWidth * 0.275)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-        }
-        .background(DesignTokens.Colors.surfaceElevated.opacity(0.5))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(DesignTokens.Glass.dividerColor)
-                .frame(height: 0.5)
-        }
-    }
-
-    private func tabButton(_ tab: AddSheetTab) -> some View {
-        let isSelected = selectedTab == tab
-        return Button {
-            withAnimation(DesignTokens.Animation.snappy) {
-                selectedTab = tab
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Text(tab.rawValue)
-                if tab == .following, !followingChannels.isEmpty {
-                    Text("\(followingChannels.count)")
-                        .font(DesignTokens.Typography.custom(size: 9, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5)))
+    private var searchBar: some View {
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                TextField("채널명 또는 방송 제목 검색", text: $searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    .onSubmit { performSearch() }
+                if isSearching {
+                    ProgressView().controlSize(.small)
+                } else if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                        searchResults = []
+                        channelSearchResults = []
+                        hasSearched = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .font(DesignTokens.Typography.subhead.weight(isSelected ? .semibold : .regular))
-            .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, DesignTokens.Spacing.md)
-            .contentShape(Rectangle())
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                    .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+            }
+
+            // 라이브만 토글 (팔로잉 모드일 때만)
+            if !isSearchMode {
+                Button {
+                    withAnimation(DesignTokens.Animation.fast) { showLiveOnly.toggle() }
+                } label: {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(showLiveOnly ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary.opacity(0.3))
+                            .frame(width: 5, height: 5)
+                        Text("LIVE")
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(showLiveOnly ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule().fill(
+                            showLiveOnly
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.10)
+                                : DesignTokens.Colors.surfaceOverlay.opacity(0.5)
+                        )
+                    )
+                    .overlay(
+                        Capsule().strokeBorder(
+                            showLiveOnly
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.22)
+                                : DesignTokens.Glass.borderColor,
+                            lineWidth: 0.5
+                        )
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            // ID 직접입력 토글
+            Button {
+                withAnimation(DesignTokens.Animation.fast) { showDirectInput.toggle() }
+            } label: {
+                Image(systemName: "link")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                    .foregroundStyle(showDirectInput ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                            .fill(showDirectInput
+                                  ? DesignTokens.Colors.chzzkGreen.opacity(0.10)
+                                  : DesignTokens.Colors.surfaceOverlay.opacity(0.5))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                            .strokeBorder(
+                                showDirectInput
+                                    ? DesignTokens.Colors.chzzkGreen.opacity(0.22)
+                                    : DesignTokens.Glass.borderColor,
+                                lineWidth: 0.5
+                            )
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("채널 ID 직접 입력")
+
+            // 새로고침
+            if !isSearchMode {
+                Button {
+                    Task { await loadFollowingChannels() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .frame(width: 30, height: 30)
+                        .symbolEffect(.rotate, isActive: isLoadingFollowing)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoadingFollowing)
+                .help("팔로잉 새로고침")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.sm)
+    }
+
+    // MARK: - 메인 콘텐츠 (팔로잉 or 검색 결과)
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if isSearchMode {
+            // 검색 모드
+            if isSearching && searchResults.isEmpty && channelSearchResults.isEmpty {
+                Spacer()
+                ProgressView()
+                    .controlSize(.regular)
+                    .tint(DesignTokens.Colors.chzzkGreen)
+                Spacer()
+            } else if searchResults.isEmpty && channelSearchResults.isEmpty && hasSearched {
+                Spacer()
+                noResultsView
+                Spacer()
+            } else if !searchResults.isEmpty || !channelSearchResults.isEmpty {
+                searchResultsList
+            } else {
+                Spacer()
+            }
+        } else {
+            // 팔로잉 모드 (기본)
+            if isLoadingFollowing && followingChannels.isEmpty {
+                Spacer()
+                ProgressView()
+                    .controlSize(.regular)
+                    .tint(DesignTokens.Colors.chzzkGreen)
+                    .transition(.opacity)
+                Spacer()
+            } else if followingChannels.isEmpty {
+                Spacer()
+                followingEmptyView
+                Spacer()
+            } else if filteredFollowingChannels.isEmpty {
+                Spacer()
+                VStack(spacing: DesignTokens.Spacing.sm) {
+                    Image(systemName: "tv.slash")
+                        .font(DesignTokens.Typography.custom(size: 24, weight: .light))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .phaseAnimator([false, true]) { content, phase in
+                            content
+                                .scaleEffect(phase ? 1.06 : 1.0)
+                                .opacity(phase ? 0.55 : 1.0)
+                        } animation: { _ in
+                            .easeInOut(duration: 2.0)
+                        }
+                    Text("라이브 중인 채널이 없습니다")
+                        .font(.caption)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                Spacer()
+            } else {
+                followingList
+            }
+        }
     }
 
     // MARK: - 공통 추가 버튼 라벨
@@ -182,13 +293,14 @@ struct MultiLiveAddSheet: View {
                 .controlSize(.small)
                 .tint(DesignTokens.Colors.chzzkGreen)
                 .frame(width: 52)
+                .transition(.blurReplace)
         } else if alreadyAdded {
-            HStack(spacing: 3) {
-                Image(systemName: "checkmark")
-                    .font(.caption2.weight(.bold))
-            }
-            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-            .frame(width: 52)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.callout.weight(.semibold))
+                .symbolEffect(.bounce, options: .speed(1.5), value: alreadyAdded)
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                .frame(width: 52)
+                .transition(.blurReplace)
         } else {
             Text("추가")
                 .font(DesignTokens.Typography.captionSemibold)
@@ -197,29 +309,24 @@ struct MultiLiveAddSheet: View {
                 .padding(.vertical, DesignTokens.Spacing.xs)
                 .background(Capsule().fill(DesignTokens.Colors.chzzkGreen))
                 .frame(width: 52)
+                .transition(.blurReplace)
         }
     }
 
-    // MARK: - 직접 입력 탭
+    // MARK: - 직접 입력 섹션 (접이식)
 
-    private var directInputContent: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-                Text("채널 ID를 입력하여 직접 추가")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                Text("치지직 채널 URL에서 채널 ID를 확인할 수 있습니다")
-                    .font(.caption)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private var directInputSection: some View {
+        VStack(spacing: DesignTokens.Spacing.sm) {
+            Rectangle()
+                .fill(DesignTokens.Glass.dividerColor)
+                .frame(height: 0.5)
 
             HStack(spacing: DesignTokens.Spacing.sm) {
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     Image(systemName: "link")
                         .font(.caption)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    TextField("채널 ID 입력", text: $channelIdInput)
+                    TextField("채널 ID 직접 입력", text: $channelIdInput)
                         .textFieldStyle(.plain)
                         .font(.callout.monospaced())
                         .onSubmit {
@@ -229,7 +336,7 @@ struct MultiLiveAddSheet: View {
                         }
                 }
                 .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                         .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
@@ -251,85 +358,17 @@ struct MultiLiveAddSheet: View {
                             Image(systemName: "plus.circle.fill")
                         }
                     }
-                    .frame(width: 32, height: 32)
+                    .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(DesignTokens.Colors.chzzkGreen)
                 .controlSize(.regular)
                 .disabled(channelIdInput.trimmingCharacters(in: .whitespaces).isEmpty || addingChannelId != nil || !manager.canAddSession)
             }
-
-            // 현재 세션 목록
-            if !manager.sessions.isEmpty {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-                    Text("현재 세션")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-
-                    ForEach(manager.sessions) { session in
-                        HStack(spacing: DesignTokens.Spacing.sm) {
-                            AsyncImage(url: session.profileImageURL) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Image(systemName: "person.circle.fill")
-                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            }
-                            .frame(width: 24, height: 24)
-                            .clipShape(Circle())
-
-                            Text(session.channelName)
-                                .font(.callout)
-                                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                                .lineLimit(1)
-
-                            Spacer()
-
-                            statusBadge(for: session)
-                        }
-                        .padding(.horizontal, DesignTokens.Spacing.sm)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                        )
-                    }
-                }
-            }
-
-            Spacer()
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.bottom, DesignTokens.Spacing.sm)
         }
-        .padding(DesignTokens.Spacing.lg)
-    }
-
-    @ViewBuilder
-    private func statusBadge(for session: MultiLiveSession) -> some View {
-        switch session.loadState {
-        case .playing:
-            HStack(spacing: 3) {
-                Circle().fill(DesignTokens.Colors.chzzkGreen).frame(width: 5, height: 5)
-                Text("LIVE")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-            }
-        case .loading:
-            ProgressView().controlSize(.mini)
-        case .error:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.caption2)
-                .foregroundStyle(.orange)
-        case .idle:
-            Text("대기")
-                .font(.caption2)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-        case .offline:
-            Image(systemName: "tv.slash")
-                .font(.caption2)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - 에러 배너
@@ -406,12 +445,6 @@ struct MultiLiveAddSheet: View {
         guard !query.isEmpty, let apiClient = appState.apiClient else { return }
         isSearching = true
         addError = nil
-
-        // 최근 검색어 추가 (최대 5개)
-        if !recentSearches.contains(query) {
-            recentSearches.insert(query, at: 0)
-            if recentSearches.count > 5 { recentSearches.removeLast() }
-        }
 
         Task {
             do {

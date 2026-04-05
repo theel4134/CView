@@ -1,5 +1,5 @@
 // MARK: - MultiLiveAddSheet+Search.swift
-// CViewApp — 멀티라이브 추가 시트: 검색 탭
+// CViewApp — 멀티라이브 추가 시트: 검색 결과 뷰
 
 import SwiftUI
 import CViewCore
@@ -7,70 +7,7 @@ import CViewNetworking
 
 extension MultiLiveAddSheet {
 
-    // MARK: - 검색 탭
-
-    var searchContent: some View {
-        VStack(spacing: 0) {
-            searchField
-                .padding(DesignTokens.Spacing.md)
-
-            if isSearching {
-                Spacer()
-                ProgressView()
-                    .controlSize(.regular)
-                    .tint(DesignTokens.Colors.chzzkGreen)
-                Spacer()
-            } else if searchResults.isEmpty && channelSearchResults.isEmpty && hasSearched {
-                Spacer()
-                noResultsView
-                Spacer()
-            } else if !searchResults.isEmpty || !channelSearchResults.isEmpty {
-                searchResultsList
-            } else {
-                Spacer()
-                searchPromptView
-                Spacer()
-            }
-        }
-    }
-
-    var searchField: some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
-            Image(systemName: "magnifyingglass")
-                .font(.body)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-
-            TextField("채널명 또는 방송 제목으로 검색", text: $searchQuery)
-                .textFieldStyle(.plain)
-                .font(.callout)
-                .onSubmit { performSearch() }
-
-            if !searchQuery.isEmpty {
-                Button {
-                    searchQuery = ""
-                    searchResults = []
-                    channelSearchResults = []
-                    hasSearched = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .transition(.opacity)
-            }
-        }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-        }
-    }
+    // MARK: - 검색 결과 리스트
 
     var searchResultsList: some View {
         ScrollView {
@@ -111,54 +48,6 @@ extension MultiLiveAddSheet {
             Spacer()
         }
         .padding(.vertical, DesignTokens.Spacing.xs)
-    }
-
-    var searchPromptView: some View {
-        VStack(spacing: DesignTokens.Spacing.md) {
-            Image(systemName: "tv")
-                .font(DesignTokens.Typography.custom(size: 28, weight: .light))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            Text("채널명 또는 방송 제목으로 검색하세요")
-                .font(.caption)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-
-            // 최근 검색어
-            if !recentSearches.isEmpty {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-                    HStack {
-                        Text("최근 검색")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        Spacer()
-                        Button {
-                            withAnimation(DesignTokens.Animation.fast) { recentSearches.removeAll() }
-                        } label: {
-                            Text("지우기")
-                                .font(.caption2)
-                                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    HStack(spacing: 6) {
-                        ForEach(recentSearches, id: \.self) { query in
-                            Button {
-                                searchQuery = query
-                            } label: {
-                                Text(query)
-                                    .font(.caption)
-                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 4)
-                                    .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5)))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding(.horizontal, DesignTokens.Spacing.lg)
-                .padding(.top, DesignTokens.Spacing.md)
-            }
-        }
     }
 
     var noResultsView: some View {

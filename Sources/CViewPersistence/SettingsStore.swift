@@ -18,6 +18,7 @@ public final class SettingsStore {
     public var keyboard: KeyboardShortcutSettings
     public var channelNotifications: ChannelNotificationSettings
     public var multiLive: MultiLiveSettings
+    public var multiChat: MultiChatSettings
 
     private var dataStore: DataStore?
     private var _saveDebounceTask: Task<Void, Never>?
@@ -33,6 +34,7 @@ public final class SettingsStore {
         self.keyboard = .default
         self.channelNotifications = .default
         self.multiLive = .default
+        self.multiChat = .default
     }
 
     /// DataStore 연결 후 설정 로드 (객체 교체 없이 in-place 업데이트)
@@ -55,6 +57,7 @@ public final class SettingsStore {
         async let k = loadSettingLogged(from: store, key: "keyboard", as: KeyboardShortcutSettings.self)
         async let cn = loadSettingLogged(from: store, key: "channelNotifications", as: ChannelNotificationSettings.self)
         async let ml = loadSettingLogged(from: store, key: "multiLive", as: MultiLiveSettings.self)
+        async let mc = loadSettingLogged(from: store, key: "multiChat", as: MultiChatSettings.self)
 
         // Equality 체크 — 동일 값 할당으로 인한 @Observable 재평가 방지
         if let val = await p, val != self.player { self.player = val }
@@ -66,6 +69,7 @@ public final class SettingsStore {
         if let val = await k, val != self.keyboard { self.keyboard = val }
         if let val = await cn, val != self.channelNotifications { self.channelNotifications = val }
         if let val = await ml, val != self.multiLive { self.multiLive = val }
+        if let val = await mc, val != self.multiChat { self.multiChat = val }
 
         Log.persistence.info("Settings loaded")
     }
@@ -97,6 +101,7 @@ public final class SettingsStore {
             let keyboardVal = self.keyboard
             let channelNotificationsVal = self.channelNotifications
             let multiLiveVal = self.multiLive
+            let multiChatVal = self.multiChat
 
             // DataStore는 actor이므로 순차 실행됨 — TaskGroup 오버헤드 없이 직접 호출
             try await store.saveSetting(key: "player", value: playerVal)
@@ -108,6 +113,7 @@ public final class SettingsStore {
             try await store.saveSetting(key: "keyboard", value: keyboardVal)
             try await store.saveSetting(key: "channelNotifications", value: channelNotificationsVal)
             try await store.saveSetting(key: "multiLive", value: multiLiveVal)
+            try await store.saveSetting(key: "multiChat", value: multiChatVal)
             Log.persistence.info("Settings saved")
         } catch {
             Log.persistence.error("Failed to save settings: \(error.localizedDescription)")
@@ -125,6 +131,7 @@ public final class SettingsStore {
         keyboard = .default
         channelNotifications = .default
         multiLive = .default
+        multiChat = .default
         await save()
     }
 

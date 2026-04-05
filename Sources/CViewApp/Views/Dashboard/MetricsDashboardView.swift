@@ -25,6 +25,9 @@ struct MetricsDashboardView: View {
         .task {
             await viewModel.loadServerStats()
         }
+        .refreshable {
+            await viewModel.loadServerStats()
+        }
     }
 
     // MARK: - Header
@@ -40,6 +43,33 @@ struct MetricsDashboardView: View {
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             Spacer()
+            
+            // WebSocket 연결 상태
+            HStack(spacing: 6) {
+                if viewModel.isWebSocketConnected {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    Text("실시간")
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                } else {
+                    Image(systemName: "bolt.slash.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text("폴링")
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                (viewModel.isWebSocketConnected ? DesignTokens.Colors.chzzkGreen : Color.gray)
+                    .opacity(0.12),
+                in: Capsule()
+            )
+            
             if let lastUpdate = viewModel.serverLastUpdate {
                 HStack(spacing: 6) {
                     Circle()
@@ -99,7 +129,6 @@ struct MetricsDashboardView: View {
                 Text(value)
                     .font(DesignTokens.Typography.subheadSemibold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    .contentTransition(.numericText())
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,7 +139,7 @@ struct MetricsDashboardView: View {
     // MARK: - Stats Cards
 
     private var statsCardsRow: some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: DesignTokens.Spacing.sm)], spacing: DesignTokens.Spacing.sm) {
             DashboardStatCard(
                 title: "총 수신",
                 value: formatLargeNumber(viewModel.serverTotalReceived),
@@ -123,43 +152,44 @@ struct MetricsDashboardView: View {
                 icon: "play.circle",
                 accentColor: .cyan
             )
-            if let webLat = viewModel.avgWebLatency {
-                DashboardStatCard(
-                    title: "웹 수집 레이턴시",
-                    value: String(format: "%.0fms", webLat),
-                    icon: "globe",
-                    subtitle: "평균",
-                    accentColor: .cyan
-                )
-            }
-            if let appLat = viewModel.avgAppLatency {
-                DashboardStatCard(
-                    title: "CView 레이턴시",
-                    value: String(format: "%.0fms", appLat),
-                    icon: "desktopcomputer",
-                    subtitle: "평균",
-                    accentColor: DesignTokens.Colors.chzzkGreen
-                )
-            }
+            DashboardStatCard(
+                title: "실시간 수신",
+                value: viewModel.wsMessageCount > 0 ? formatLargeNumber(viewModel.wsMessageCount) : "—",
+                icon: "bolt.circle",
+                subtitle: viewModel.wsMessageCount > 0 ? "WebSocket" : "대기 중",
+                accentColor: viewModel.wsMessageCount > 0 ? .yellow : .gray
+            )
+            DashboardStatCard(
+                title: "웹 수집 레이턴시",
+                value: viewModel.avgWebLatency.map { String(format: "%.0fms", $0) } ?? "—",
+                icon: "globe",
+                subtitle: viewModel.avgWebLatency != nil ? "평균" : "데이터 없음",
+                accentColor: viewModel.avgWebLatency != nil ? .cyan : .gray
+            )
+            DashboardStatCard(
+                title: "CView 레이턴시",
+                value: viewModel.avgAppLatency.map { String(format: "%.0fms", $0) } ?? "—",
+                icon: "desktopcomputer",
+                subtitle: viewModel.avgAppLatency != nil ? "평균" : "데이터 없음",
+                accentColor: viewModel.avgAppLatency != nil ? DesignTokens.Colors.chzzkGreen : .gray
+            )
             if let stats = viewModel.serverStats {
                 let platforms = stats.resolvedPlatforms
-                if !platforms.isEmpty {
-                    DashboardStatCard(
-                        title: "플랫폼",
-                        value: platforms.map { "\($0.key): \($0.value)" }.joined(separator: ", "),
-                        icon: "rectangle.stack",
-                        accentColor: .purple
-                    )
-                }
-            }
-            if let cview = viewModel.serverStats?.cviewSummary, (cview.connectedClients ?? 0) > 0 {
                 DashboardStatCard(
-                    title: "CView 클라이언트",
-                    value: "\(cview.connectedClients ?? 0)",
-                    icon: "monitor.and.phone",
-                    subtitle: cviewSyncLabel(cview),
-                    accentColor: .purple
+                    title: "플랫폼",
+                    value: platforms.isEmpty ? "—" : platforms.map { "\($0.key): \($0.value)" }.joined(separator: ", "),
+                    icon: "rectangle.stack",
+                    accentColor: platforms.isEmpty ? .gray : .purple
                 )
+            }
+            DashboardStatCard(
+                title: "CView 클라이언트",
+                value: "\(viewModel.serverStats?.cviewSummary?.connectedClients ?? 0)",
+                icon: "monitor.and.phone",
+                subtitle: viewModel.serverStats?.cviewSummary.map { cviewSyncLabel($0) } ?? "대기 중",
+                accentColor: (viewModel.serverStats?.cviewSummary?.connectedClients ?? 0) > 0 ? .purple : .gray
+            )
+            if let cview = viewModel.serverStats?.cviewSummary {
                 if let grade = cview.aggregate?.qualityGrade, grade != "-" {
                     DashboardStatCard(
                         title: "동기화 품질",
@@ -203,24 +233,39 @@ struct MetricsDashboardView: View {
             if viewModel.serverChannelStats.isEmpty {
                 emptyChartState
             } else {
-                Chart(viewModel.serverChannelStats) { stat in
-                    if let webAvg = stat.web?.avg {
-                        BarMark(
-                            x: .value("채널", stat.channelName ?? stat.channelId.prefix(8).description),
-                            y: .value("레이턴시", webAvg)
-                        )
-                        .foregroundStyle(.cyan.opacity(0.7))
-                        .position(by: .value("타입", "웹"))
+                let hasAnyData = viewModel.serverChannelStats.contains { $0.web?.avg != nil || $0.app?.avg != nil }
+                if !hasAnyData {
+                    emptyChartState
+                } else {
+                    Chart(viewModel.serverChannelStats) { stat in
+                        let channelName = stat.channelName ?? stat.channelId.prefix(8).description
+                        if let webAvg = stat.web?.avg {
+                            BarMark(
+                                x: .value("채널", channelName),
+                                y: .value("레이턴시", webAvg)
+                            )
+                            .foregroundStyle(.cyan.opacity(0.7))
+                            .position(by: .value("타입", "웹"))
+                            .annotation(position: .top, spacing: 2) {
+                                Text(String(format: "%.0f", webAvg))
+                                    .font(DesignTokens.Typography.custom(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            }
+                        }
+                        if let appAvg = stat.app?.avg {
+                            BarMark(
+                                x: .value("채널", channelName),
+                                y: .value("레이턴시", appAvg)
+                            )
+                            .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
+                            .position(by: .value("타입", "앱"))
+                            .annotation(position: .top, spacing: 2) {
+                                Text(String(format: "%.0f", appAvg))
+                                    .font(DesignTokens.Typography.custom(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            }
+                        }
                     }
-                    if let appAvg = stat.app?.avg {
-                        BarMark(
-                            x: .value("채널", stat.channelName ?? stat.channelId.prefix(8).description),
-                            y: .value("레이턴시", appAvg)
-                        )
-                        .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
-                        .position(by: .value("타입", "앱"))
-                    }
-                }
                 .chartXAxis {
                     AxisMarks { _ in
                         AxisValueLabel()
@@ -239,6 +284,8 @@ struct MetricsDashboardView: View {
                 }
                 .chartLegend(position: .bottom)
                 .frame(height: 140)
+                .drawingGroup()
+                }
             }
         }
         .padding(DesignTokens.Spacing.md)

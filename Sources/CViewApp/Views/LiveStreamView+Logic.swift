@@ -306,9 +306,9 @@ extension LiveStreamView {
         metricsFeedTask?.cancel()
         metricsFeedTask = Task { @MainActor in
             while !Task.isCancelled {
-                // [최적화] 1초 → 2초: VLC statTimer(2초)와 동기화, actor hop 50% 감소
-                // latency/buffer는 빠른 변동이 없으므로 2초 주기로 충분
-                try? await Task.sleep(for: .seconds(2))
+                // [최적화] 2초 → 5초: VLC statTimer(5초)와 동기화, actor hop 60% 감소
+                // latency/buffer는 빠른 변동이 없으므로 5초 주기로 충분
+                try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { break }
                 if let vm = playerVM {
                     let latency = vm.latencyInfo?.current ?? 0

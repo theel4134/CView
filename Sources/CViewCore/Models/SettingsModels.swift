@@ -298,6 +298,7 @@ public struct ChatSettings: Codable, Sendable, Equatable {
     public var showTimestamp: Bool
     public var showBadge: Bool
     public var highlightMentions: Bool
+    public var highlightRoles: Bool
     public var maxVisibleMessages: Int
     public var emoticonEnabled: Bool
     public var showDonation: Bool
@@ -328,6 +329,7 @@ public struct ChatSettings: Codable, Sendable, Equatable {
         showTimestamp: Bool = true,
         showBadge: Bool = true,
         highlightMentions: Bool = true,
+        highlightRoles: Bool = true,
         maxVisibleMessages: Int = 1000,
         emoticonEnabled: Bool = true,
         showDonation: Bool = true,
@@ -351,6 +353,7 @@ public struct ChatSettings: Codable, Sendable, Equatable {
         self.showTimestamp = showTimestamp
         self.showBadge = showBadge
         self.highlightMentions = highlightMentions
+        self.highlightRoles = highlightRoles
         self.maxVisibleMessages = maxVisibleMessages
         self.emoticonEnabled = emoticonEnabled
         self.showDonation = showDonation

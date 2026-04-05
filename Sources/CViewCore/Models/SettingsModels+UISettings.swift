@@ -242,9 +242,17 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
     public var chatOverlayOpacity: Double
     public var chatOverlayFontSize: Double
 
+    // MARK: - 대역폭 코디네이터 (flashls 기반)
+    /// 대역폭 코디네이터가 세션 간 대역폭을 자동 분배
+    public var bandwidthCoordinationEnabled: Bool
+    /// 화면 크기 기반 자동 화질 캡핑 (패인보다 높은 해상도 방지)
+    public var levelCappingEnabled: Bool
+    /// 선택 세션에 할당하는 대역폭 가중치 (1.0=균등, 2.0=2배)
+    public var selectedSessionBWWeight: Double
+
     public init(
         maxConcurrentSessions: Int = 4,
-        preferredEngine: PlayerEngineType = .avPlayer,
+        preferredEngine: PlayerEngineType = .vlc,
         defaultLayoutMode: MultiLiveLayoutMode = .preset,
         multiAudioEnabled: Bool = false,
         secondaryVolume: Float = 0.3,
@@ -253,7 +261,10 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
         autoReconnectMaxRetries: Int = 10,
         chatOverlayInGrid: Bool = false,
         chatOverlayOpacity: Double = 0.5,
-        chatOverlayFontSize: Double = 12
+        chatOverlayFontSize: Double = 12,
+        bandwidthCoordinationEnabled: Bool = true,
+        levelCappingEnabled: Bool = true,
+        selectedSessionBWWeight: Double = 1.5
     ) {
         self.maxConcurrentSessions = maxConcurrentSessions
         self.preferredEngine = preferredEngine
@@ -266,7 +277,39 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
         self.chatOverlayInGrid = chatOverlayInGrid
         self.chatOverlayOpacity = chatOverlayOpacity
         self.chatOverlayFontSize = chatOverlayFontSize
+        self.bandwidthCoordinationEnabled = bandwidthCoordinationEnabled
+        self.levelCappingEnabled = levelCappingEnabled
+        self.selectedSessionBWWeight = selectedSessionBWWeight
     }
 
     public static let `default` = MultiLiveSettings()
+}
+
+// MARK: - 멀티채팅 세션 영속성
+
+/// 저장용 멀티채팅 세션 정보
+public struct SavedChatSession: Codable, Sendable, Equatable, Hashable {
+    public let channelId: String
+    public let channelName: String
+
+    public init(channelId: String, channelName: String) {
+        self.channelId = channelId
+        self.channelName = channelName
+    }
+}
+
+/// 멀티채팅 세션 설정 (영속 저장용)
+public struct MultiChatSettings: Codable, Sendable, Equatable {
+    public var savedSessions: [SavedChatSession]
+    public var selectedChannelId: String?
+
+    public init(
+        savedSessions: [SavedChatSession] = [],
+        selectedChannelId: String? = nil
+    ) {
+        self.savedSessions = savedSessions
+        self.selectedChannelId = selectedChannelId
+    }
+
+    public static let `default` = MultiChatSettings()
 }

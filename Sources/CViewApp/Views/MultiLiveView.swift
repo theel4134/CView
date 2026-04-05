@@ -36,6 +36,12 @@ struct MultiLiveView: View {
                     isSettingsPanelOpen: showSettings
                 )
 
+                // 탭 모드 세션 정보 바
+                if !manager.isGridLayout || manager.sessions.count < 2,
+                   let active = manager.selectedSession {
+                    MLSessionInfoBar(session: active, manager: manager)
+                }
+
                 // ── 콘텐츠 ──
                 ZStack {
                     if manager.sessions.isEmpty {

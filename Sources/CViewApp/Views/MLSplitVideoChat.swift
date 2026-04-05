@@ -177,10 +177,10 @@ struct MLSplitVideoChat<VideoContent: View, ChatContent: View>: NSViewRepresenta
             return 200
         }
 
-        // 채팅 영역 최소 너비 (divider 최대 위치 = 전체 너비 - 200)
+        // 채팅 영역 최소 너비 (divider 최대 위치 = 전체 너비 - 120)
         @MainActor
         func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-            return splitView.bounds.width - 200
+            return splitView.bounds.width - 120
         }
 
         // 리사이즈 시 비디오 영역이 신축
@@ -198,7 +198,7 @@ struct MLSplitVideoChat<VideoContent: View, ChatContent: View>: NSViewRepresenta
                 let bounds = splitView.bounds
                 let dividerThickness = splitView.dividerThickness
                 // 채팅 너비를 유지하되 bounds를 초과하지 않도록 보정
-                let chatW = min(max(chatView.frame.width, 200), bounds.width - 200 - dividerThickness)
+                let chatW = min(max(chatView.frame.width, 120), bounds.width - 200 - dividerThickness)
                 let videoW = bounds.width - chatW - dividerThickness
                 videoView.frame = NSRect(x: 0, y: 0, width: videoW, height: bounds.height)
                 chatView.frame = NSRect(x: videoW + dividerThickness, y: 0, width: chatW, height: bounds.height)

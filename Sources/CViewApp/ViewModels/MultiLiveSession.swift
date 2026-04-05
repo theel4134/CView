@@ -53,6 +53,7 @@ final class MultiLiveSession: Identifiable {
     var loadState: MultiLiveLoadState = .idle
     var latestMetrics: VLCLiveMetrics?
     var latestAVMetrics: AVPlayerLiveMetrics?
+    var latestHLSJSMetrics: HLSJSLiveMetrics?
     var latestProxyStats: ProxyNetworkStats?
     var showStats: Bool = false
     var showNetworkMetrics: Bool = false
@@ -191,6 +192,19 @@ final class MultiLiveSession: Identifiable {
                     guard let self else { return }
                     self.latestAVMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                }
+            }
+
+            // HLS.js 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            playerViewModel.setHLSJSMetricsCallback { [weak self] metrics in
+                Task {
+                    if await _forwarder?.currentChannelId == sessionChannelId {
+                        await _forwarder?.updateHLSJSMetrics(metrics)
+                    }
+                }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.latestHLSJSMetrics = metrics
                 }
             }
 

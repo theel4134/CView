@@ -126,7 +126,7 @@ struct PopularClipsView: View {
                         endPoint: .trailing
                     )
                 )
-                .frame(height: 1)
+                .frame(height: DesignTokens.Spacing.xxs)
             
             // 탭 전환 컨텐츠
             switch selectedTab {

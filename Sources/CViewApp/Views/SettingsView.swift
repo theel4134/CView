@@ -1,5 +1,7 @@
 // MARK: - SettingsView.swift
-// CViewApp - 설정 뷰 컨테이너 (macOS System Settings 스타일)
+// CViewApp - 설정 뷰
+// 메인 앱: 사이드바 슬라이드 메뉴 → 디테일 영역에 콘텐츠만 표시
+// Settings 윈도우 (Cmd+,): 독립 사이드바 + 콘텐츠 레이아웃
 // 각 탭은 별도 파일로 분리됨:
 //   GeneralSettingsTab.swift, PlayerSettingsTab.swift, ChatSettingsTab.swift,
 //   NetworkSettingsTab.swift, PerformanceSettingsTab.swift, MetricsSettingsTab.swift
@@ -9,48 +11,48 @@ import SwiftUI
 import CViewCore
 import CViewPersistence
 
-// MARK: - Settings View
+// MARK: - Settings Content View (디테일 영역 전용 — 사이드바 없음)
+
+struct SettingsContentView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(AppRouter.self) private var router
+
+    var body: some View {
+        ZStack {
+            DesignTokens.Colors.background.ignoresSafeArea()
+
+            settingsTabContent(for: router.selectedSettingsTab, settings: appState.settingsStore)
+                .id(router.selectedSettingsTab)
+                .transition(.opacity.combined(with: .offset(y: 6)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentBackground()
+        .animation(DesignTokens.Animation.snappy, value: router.selectedSettingsTab)
+        .onChange(of: appState.settingsStore.chat) { _, newSettings in
+            appState.chatViewModel?.applySettings(newSettings)
+        }
+    }
+
+    @ViewBuilder
+    private func settingsTabContent(for tab: AppRouter.SettingsTab, settings: SettingsStore) -> some View {
+        switch tab {
+        case .general:      GeneralSettingsTab(settings: settings)
+        case .player:       PlayerSettingsTab(settings: settings)
+        case .chat:         ChatSettingsTab(settings: settings)
+        case .network:      NetworkSettingsTab(settings: settings)
+        case .performance:  PerformanceSettingsTab(settings: settings)
+        case .metrics:      MetricsSettingsTab(settings: settings)
+        case .multiLive:    MultiLiveSettingsTab(settings: settings)
+        }
+    }
+}
+
+// MARK: - Settings View (독립 Settings 윈도우용 — Cmd+, / 앱 메뉴)
 
 struct SettingsView: View {
 
     @Environment(AppState.self) private var appState
-    @State private var selectedTab: SettingsTab = .general
-
-    enum SettingsTab: String, CaseIterable, Identifiable {
-        case general  = "일반"
-        case player   = "플레이어"
-        case chat     = "채팅"
-        case network  = "네트워크"
-        case performance = "성능"
-        case metrics  = "메트릭"
-        case multiLive = "멀티라이브"
-
-        var id: String { rawValue }
-
-        var icon: String {
-            switch self {
-            case .general:      "gearshape.fill"
-            case .player:       "play.rectangle.fill"
-            case .chat:         "bubble.left.and.bubble.right.fill"
-            case .network:      "network"
-            case .performance:  "gauge.with.dots.needle.33percent"
-            case .metrics:      "chart.line.uptrend.xyaxis"
-            case .multiLive:    "square.grid.2x2.fill"
-            }
-        }
-
-        var color: Color {
-            switch self {
-            case .general:      DesignTokens.Colors.textSecondary
-            case .player:       Color.green
-            case .chat:         DesignTokens.Colors.accentPurple
-            case .network:      DesignTokens.Colors.accentBlue
-            case .performance:  DesignTokens.Colors.accentOrange
-            case .metrics:      Color(red: 0.2, green: 0.8, blue: 0.9)
-            case .multiLive:    Color.green
-            }
-        }
-    }
+    @State private var selectedTab: AppRouter.SettingsTab = .general
 
     var body: some View {
         HStack(spacing: 0) {
@@ -61,17 +63,12 @@ struct SettingsView: View {
             ZStack {
                 DesignTokens.Colors.background.ignoresSafeArea()
 
-                switch selectedTab {
-                case .general:      GeneralSettingsTab(settings: appState.settingsStore)
-                case .player:       PlayerSettingsTab(settings: appState.settingsStore)
-                case .chat:         ChatSettingsTab(settings: appState.settingsStore)
-                case .network:      NetworkSettingsTab(settings: appState.settingsStore)
-                case .performance:  PerformanceSettingsTab(settings: appState.settingsStore)
-                case .metrics:      MetricsSettingsTab(settings: appState.settingsStore)
-                case .multiLive:    MultiLiveSettingsTab(settings: appState.settingsStore)
-                }
+                settingsTabContent(for: selectedTab, settings: appState.settingsStore)
+                    .id(selectedTab)
+                    .transition(.opacity.combined(with: .offset(y: 6)))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(DesignTokens.Animation.snappy, value: selectedTab)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentBackground()
@@ -80,14 +77,27 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Sidebar
+    @ViewBuilder
+    private func settingsTabContent(for tab: AppRouter.SettingsTab, settings: SettingsStore) -> some View {
+        switch tab {
+        case .general:      GeneralSettingsTab(settings: settings)
+        case .player:       PlayerSettingsTab(settings: settings)
+        case .chat:         ChatSettingsTab(settings: settings)
+        case .network:      NetworkSettingsTab(settings: settings)
+        case .performance:  PerformanceSettingsTab(settings: settings)
+        case .metrics:      MetricsSettingsTab(settings: settings)
+        case .multiLive:    MultiLiveSettingsTab(settings: settings)
+        }
+    }
+
+    // MARK: - Sidebar (Settings 윈도우 전용)
 
     private var settingsSidebar: some View {
         VStack(spacing: 2) {
             VStack(spacing: 4) {
                 Image(systemName: "c.square.fill")
                     .font(DesignTokens.Typography.custom(size: 24))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 Text("CView")
                     .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
@@ -102,8 +112,8 @@ struct SettingsView: View {
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.bottom, DesignTokens.Spacing.xs)
 
-            ForEach(SettingsTab.allCases) { tab in
-                SidebarTabButton(tab: tab, isSelected: selectedTab == tab) {
+            ForEach(AppRouter.SettingsTab.allCases) { tab in
+                SettingsWindowTabButton(tab: tab, isSelected: selectedTab == tab) {
                     withAnimation(DesignTokens.Animation.snappy) { selectedTab = tab }
                 }
             }
@@ -116,10 +126,10 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Sidebar Tab Button
+// MARK: - Settings Window Tab Button (Cmd+, 윈도우 전용)
 
-private struct SidebarTabButton: View {
-    let tab: SettingsView.SettingsTab
+private struct SettingsWindowTabButton: View {
+    let tab: AppRouter.SettingsTab
     let isSelected: Bool
     let action: () -> Void
     @State private var isHovered = false

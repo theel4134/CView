@@ -194,8 +194,8 @@ public actor LowLatencyController {
         syncTask = Task { [weak self] in
             guard let self else { return }
             
-            // 2.0s: PID 제어 주기를 낮춰 CPU 절약. 2초 간격에서도 실시간 지연 보정 충분.
-            let timer = AsyncTimerSequence(interval: 2.0 as TimeInterval)
+            // 3.0s: PID 제어 주기를 낮춰 CPU 절약. 3초 간격에서도 실시간 지연 보정 충분.
+            let timer = AsyncTimerSequence(interval: 3.0 as TimeInterval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 

@@ -22,8 +22,8 @@ struct LiveStreamView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.openWindow) private var openWindow
 
-    @AppStorage("chatPanelWidth") private var savedChatWidth: Double = 340
-    @State private var liveChatWidth: Double = 340
+    @AppStorage("chatPanelWidth") private var savedChatWidth: Double = 300
+    @State private var liveChatWidth: Double = 300
     @State private var isDraggingChatResize = false
     @State private var showOverlay = true
     @State var isLoadingStream = false
@@ -62,7 +62,7 @@ struct LiveStreamView: View {
                     if chatVM?.displayMode == .overlay {
                         ChatOverlayView(chatVM: chatVM, containerSize: containerSize)
                             .allowsHitTesting(true)
-                            .transition(.opacity)
+                            .transition(.blurReplace)
                     }
                 }
                 .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
@@ -72,7 +72,7 @@ struct LiveStreamView: View {
                 // 사이드 모드: 드래그 핸들 + 채팅 패널
                 if chatVM?.displayMode == .side {
                     ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
-                        liveChatWidth = min(max(newWidth, 250), containerSize.width * 0.5)
+                        liveChatWidth = min(max(newWidth, 120), containerSize.width * 0.5)
                     } onDragEnd: {
                         savedChatWidth = liveChatWidth
                     }
@@ -100,7 +100,7 @@ struct LiveStreamView: View {
                     settingsStore: appState.settingsStore,
                     isPresented: $showSettings
                 )
-                .transition(.move(edge: .trailing))
+                .transition(.move(edge: .trailing).combined(with: .opacity))
                 .animation(DesignTokens.Animation.contentTransition, value: showSettings)
             }
         }
@@ -259,12 +259,15 @@ struct LiveStreamView: View {
             }
 
             // Stream alert overlay (후원/구독/공지 알림 토스트)
-            if let chatVM, !chatVM.streamAlerts.isEmpty {
+            // [MVVM] 애니메이션을 View 레이어에서 .animation(value:)로 구동
+            // ViewModel은 순수 상태 변이만 수행 → 관심사 분리 + 테스트 용이
+            if let chatVM {
                 StreamAlertOverlayView(
                     alerts: chatVM.streamAlerts,
                     onDismiss: { chatVM.dismissStreamAlert($0) }
                 )
                 .allowsHitTesting(!showOverlay)
+                .animation(DesignTokens.Animation.contentTransition, value: chatVM.streamAlerts)
             }
 
             // Buffering / Connecting / Reconnecting overlay

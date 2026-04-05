@@ -28,6 +28,7 @@
 		A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */; };
 		A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */; };
 		A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */; };
+			A1B2C3D4E5F60006BB660001 /* Sources/CViewApp/Views/ResizeDivider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60006AA660001 /* Sources/CViewApp/Views/ResizeDivider.swift */; };
 		A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */; };
              A1B2C3D4E5F60002BB220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift */; };
 		A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */; };
@@ -99,6 +100,8 @@
 		F2D063FE109ED88F00000001 /* Sources/CViewApp/Views/StreamLoadingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDCB3FCE46E4EDB00000001 /* Sources/CViewApp/Views/StreamLoadingOverlay.swift */; };
 		FDF40C1A2D801D341C3EFED2 /* Sources/CViewApp/Views/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B08923024BC3E319ABAF23 /* Sources/CViewApp/Views/MainContentView.swift */; };
 		FF11223344556677AABB0030 /* Sources/CViewApp/Views/MultiChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0030 /* Sources/CViewApp/Views/MultiChatView.swift */; };
+		FF11223344556677AABB0070 /* Sources/CViewApp/Views/MergedChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0070 /* Sources/CViewApp/Views/MergedChatView.swift */; };
+		FF11223344556677AABB0071 /* Sources/CViewApp/Views/ChatChannelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0071 /* Sources/CViewApp/Views/ChatChannelPickerView.swift */; };
 		FF11223344556677AABB0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift */; };
 		FF11223344556677AABB0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift */; };
 		FF11223344556677AABB0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift */; };
@@ -156,6 +159,7 @@
 		A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MetricsForwardingStatusView.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LatencySettingsContent.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingView.swift; sourceTree = SOURCE_ROOT; };
+			A1B2C3D4E5F60006AA660001 /* Sources/CViewApp/Views/ResizeDivider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ResizeDivider.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingCardViews.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SharedEffects.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220004 /* Sources/CViewApp/Views/ErrorStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ErrorStateView.swift; sourceTree = SOURCE_ROOT; };
@@ -217,6 +221,8 @@
 		EE11223344556677CCDD0099 /* Sources/CViewApp/Views/ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatOverlayView.swift; sourceTree = SOURCE_ROOT; };
 		EF161D8919053B290B75B5EB /* Sources/CViewApp/ViewModels/HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/HomeViewModel.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0030 /* Sources/CViewApp/Views/MultiChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiChatView.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0070 /* Sources/CViewApp/Views/MergedChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MergedChatView.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0071 /* Sources/CViewApp/Views/ChatChannelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatChannelPickerView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatUserProfileSheet.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MultiChatSessionManager.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/MultiLiveManager.swift; sourceTree = SOURCE_ROOT; };
@@ -362,6 +368,8 @@
 				DD11223344556677CCDD0097 /* Sources/CViewApp/Views/ChatInputView.swift */,
 				CC99887766554433CCDD0090 /* Sources/CViewApp/Views/ChatAutocompleteView.swift */,
 				FF11223344556677CCDD0030 /* Sources/CViewApp/Views/MultiChatView.swift */,
+				FF11223344556677CCDD0070 /* Sources/CViewApp/Views/MergedChatView.swift */,
+				FF11223344556677CCDD0071 /* Sources/CViewApp/Views/ChatChannelPickerView.swift */,
 				FF11223344556677CCDD0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift */,
 				FF11223344556677CCDD0035 /* Sources/CViewApp/Views/MultiLiveView.swift */,
 				FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */,
@@ -394,6 +402,7 @@
 				A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */,
 				A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */,
 				A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */,
+						A1B2C3D4E5F60006AA660001 /* Sources/CViewApp/Views/ResizeDivider.swift */,
 				FF11223344556677CCDD0044 /* Sources/CViewApp/Views/FollowingView+Header.swift */,
 				FF11223344556677CCDD0045 /* Sources/CViewApp/Views/FollowingView+List.swift */,
 				FF11223344556677CCDD0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift */,
@@ -640,6 +649,8 @@
 				DD11223344556677AABB0097 /* Sources/CViewApp/Views/ChatInputView.swift in Sources */,
 				CC99887766554433AABB0090 /* Sources/CViewApp/Views/ChatAutocompleteView.swift in Sources */,
 				FF11223344556677AABB0030 /* Sources/CViewApp/Views/MultiChatView.swift in Sources */,
+				FF11223344556677AABB0070 /* Sources/CViewApp/Views/MergedChatView.swift in Sources */,
+				FF11223344556677AABB0071 /* Sources/CViewApp/Views/ChatChannelPickerView.swift in Sources */,
 				FF11223344556677AABB0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift in Sources */,
 				FF11223344556677AABB0032 /* Sources/CViewApp/Services/MultiChatSessionManager.swift in Sources */,
 				FF11223344556677AABB0033 /* Sources/CViewApp/ViewModels/MultiLiveManager.swift in Sources */,
@@ -682,6 +693,7 @@
 				A1B2C3D4E5F60001BB110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */,					A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */,				A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */,
+						A1B2C3D4E5F60006BB660001 /* Sources/CViewApp/Views/ResizeDivider.swift in Sources */,
 				A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */,
 				A1B2C3D4E5F60002BB220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift in Sources */,
 				A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */,

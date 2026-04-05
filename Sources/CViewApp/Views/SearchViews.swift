@@ -45,8 +45,29 @@ struct SearchContentView: View {
     @Environment(AppRouter.self) private var router
     @State private var isSearchBarFocused = false
     @State private var selectedClip: ClipInfo?
+    @State private var selectedChannelId: String?
     
     var body: some View {
+        HStack(spacing: 0) {
+            // 왼쪽: 검색 리스트
+            searchListContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            // 오른쪽: 채널 상세 패널 (push-left 슬라이드)
+            if let channelId = selectedChannelId {
+                Divider()
+                
+                channelDetailPanel(channelId: channelId)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(DesignTokens.Animation.contentTransition, value: selectedChannelId)
+    }
+    
+    // MARK: - Search List Content
+    
+    private var searchListContent: some View {
         VStack(spacing: 0) {
             // Premium search bar
             searchBar
@@ -83,6 +104,53 @@ struct SearchContentView: View {
             } else {
                 searchResultsList
             }
+        }
+    }
+    
+    // MARK: - Channel Detail Panel
+    
+    @ViewBuilder
+    private func channelDetailPanel(channelId: String) -> some View {
+        VStack(spacing: 0) {
+            // 패널 헤더: 닫기 버튼
+            HStack {
+                Button {
+                    selectedChannelId = nil
+                } label: {
+                    HStack(spacing: DesignTokens.Spacing.xs) {
+                        Image(systemName: "chevron.left")
+                            .font(DesignTokens.Typography.captionSemibold)
+                        Text("검색 결과")
+                            .font(DesignTokens.Typography.captionMedium)
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                Button {
+                    router.navigate(to: .channelDetail(channelId: channelId))
+                    selectedChannelId = nil
+                } label: {
+                    HStack(spacing: DesignTokens.Spacing.xs) {
+                        Text("전체 화면")
+                            .font(DesignTokens.Typography.captionMedium)
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(DesignTokens.Typography.caption)
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+            .background(DesignTokens.Colors.surfaceBase)
+            
+            Divider()
+            
+            ChannelInfoView(channelId: channelId)
+                .id(channelId)
         }
     }
     
@@ -192,7 +260,7 @@ struct SearchContentView: View {
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
-        .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+        .shadow(color: DesignTokens.Colors.background.opacity(0.5), radius: 6, y: 4)
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.bottom, DesignTokens.Spacing.xs)
         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -342,8 +410,18 @@ struct SearchContentView: View {
                             EquatableSearchChannelRow(channel: channel)
                                 .equatable()
                                 .contentShape(Rectangle())
+                                .background(
+                                    selectedChannelId == channel.channelId
+                                        ? DesignTokens.Colors.chzzkGreen.opacity(0.08)
+                                        : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                                )
                                 .onTapGesture {
-                                    router.navigate(to: .channelDetail(channelId: channel.channelId))
+                                    if selectedChannelId == channel.channelId {
+                                        selectedChannelId = nil
+                                    } else {
+                                        selectedChannelId = channel.channelId
+                                    }
                                 }
                                 .onAppear {
                                     if channel.id == viewModel.channelResults.last?.id {

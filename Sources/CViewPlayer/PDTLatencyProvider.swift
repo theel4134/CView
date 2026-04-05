@@ -51,7 +51,7 @@ public actor PDTLatencyProvider {
     
     // MARK: - Init
     
-    public init(playlistURL: URL, pollInterval: TimeInterval = 2.0) {
+    public init(playlistURL: URL, pollInterval: TimeInterval = 4.0) {
         self.playlistURL = playlistURL
         self.pollInterval = pollInterval
     }

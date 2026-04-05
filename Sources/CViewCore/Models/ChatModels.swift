@@ -44,35 +44,86 @@ public enum MessageType: String, Sendable, Codable, Hashable {
     case notice
 }
 
+/// 사용자 역할 (치지직 채팅)
+public enum UserRole: String, Sendable, Codable, Hashable {
+    case streamer = "streamer"
+    case manager = "streaming_chat_manager"
+    case channelManager = "streaming_channel_manager"
+    case viewer = ""
+
+    public init(from code: String?) {
+        switch code {
+        case "streamer": self = .streamer
+        case let c? where c.contains("manager"): self = .manager
+        default: self = .viewer
+        }
+    }
+
+    /// SF Symbol 아이콘
+    public var iconName: String? {
+        switch self {
+        case .streamer: return "mic.circle.fill"
+        case .manager, .channelManager: return "wrench.and.screwdriver.fill"
+        case .viewer: return nil
+        }
+    }
+
+    /// 역할 표시 텍스트
+    public var displayLabel: String? {
+        switch self {
+        case .streamer: return "스트리머"
+        case .manager, .channelManager: return "매니저"
+        case .viewer: return nil
+        }
+    }
+
+    /// 특수 역할인지 여부
+    public var isSpecial: Bool {
+        self != .viewer
+    }
+}
+
 /// 채팅 프로필
 public struct ChatProfile: Sendable, Codable, Hashable {
     public let nickname: String
     public let profileImageURL: URL?
     public let userRoleCode: String?
+    public let userRole: UserRole
     public let badge: ChatBadge?
+    public let badges: [ChatBadge]
     public let title: ChatTitle?
+    public let activityBadges: [ChatBadge]
 
     public init(
         nickname: String,
         profileImageURL: URL? = nil,
         userRoleCode: String? = nil,
         badge: ChatBadge? = nil,
-        title: ChatTitle? = nil
+        badges: [ChatBadge] = [],
+        title: ChatTitle? = nil,
+        activityBadges: [ChatBadge] = []
     ) {
         self.nickname = nickname
         self.profileImageURL = profileImageURL
         self.userRoleCode = userRoleCode
+        self.userRole = UserRole(from: userRoleCode)
         self.badge = badge
+        self.badges = badges
         self.title = title
+        self.activityBadges = activityBadges
     }
 }
 
 /// 채팅 뱃지
 public struct ChatBadge: Sendable, Codable, Hashable {
     public let imageURL: URL?
+    public let badgeId: String?
+    public let altText: String?
 
-    public init(imageURL: URL? = nil) {
+    public init(imageURL: URL? = nil, badgeId: String? = nil, altText: String? = nil) {
         self.imageURL = imageURL
+        self.badgeId = badgeId
+        self.altText = altText
     }
 }
 

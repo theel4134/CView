@@ -1,5 +1,5 @@
 // MARK: - MultiLiveAddSheet+Following.swift
-// CViewApp — 멀티라이브 추가 시트: 팔로잉 탭
+// CViewApp — 멀티라이브 추가 시트: 팔로잉 콘텐츠
 
 import SwiftUI
 import CViewCore
@@ -7,93 +7,12 @@ import CViewNetworking
 
 extension MultiLiveAddSheet {
 
-    // MARK: - 팔로잉 탭
-
-    var followingContent: some View {
-        VStack(spacing: 0) {
-            // 필터 바
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                // 검색 필드
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.caption)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    TextField("채널명 검색", text: $followingSearchText)
-                        .textFieldStyle(.plain)
-                        .font(.caption)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(DesignTokens.Colors.surfaceOverlay.opacity(0.5))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                )
-
-                // 라이브/전체 필터
-                Picker("", selection: $followingFilter) {
-                    ForEach(FollowingFilter.allCases, id: \.self) { filter in
-                        Text(filter.rawValue).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 120)
-
-                // 새로고침
-                Button {
-                    Task { await loadFollowingChannels() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .rotationEffect(.degrees(isLoadingFollowing ? 360 : 0))
-                        .animation(isLoadingFollowing ? DesignTokens.Animation.loadingSpin : .default, value: isLoadingFollowing)
-                }
-                .buttonStyle(.plain)
-                .disabled(isLoadingFollowing)
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.sm)
-
-            // 콘텐츠
-            if isLoadingFollowing && followingChannels.isEmpty {
-                Spacer()
-                ProgressView()
-                    .controlSize(.regular)
-                    .tint(DesignTokens.Colors.chzzkGreen)
-                Spacer()
-            } else if followingChannels.isEmpty {
-                Spacer()
-                followingEmptyView
-                Spacer()
-            } else if filteredFollowingChannels.isEmpty {
-                Spacer()
-                VStack(spacing: DesignTokens.Spacing.sm) {
-                    Image(systemName: "magnifyingglass")
-                        .font(DesignTokens.Typography.custom(size: 24, weight: .light))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    Text("일치하는 채널이 없습니다")
-                        .font(.caption)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                Spacer()
-            } else {
-                followingList
-            }
-        }
-    }
+    // MARK: - 팔로잉 필터
 
     var filteredFollowingChannels: [LiveChannelItem] {
         var channels = followingChannels
-        if followingFilter == .liveOnly {
+        if showLiveOnly {
             channels = channels.filter { $0.isLive }
-        }
-        if !followingSearchText.isEmpty {
-            let query = followingSearchText.lowercased()
-            channels = channels.filter { $0.channelName.lowercased().contains(query) }
         }
         // 라이브 채널 상단 정렬 (라이브 우선, 시청자 수 내림차순)
         return channels.sorted { a, b in
@@ -102,11 +21,27 @@ extension MultiLiveAddSheet {
         }
     }
 
+    // MARK: - 팔로잉 리스트
+
     var followingList: some View {
         ScrollView {
             LazyVStack(spacing: DesignTokens.Spacing.xxs) {
-                ForEach(filteredFollowingChannels) { channel in
+                ForEach(Array(filteredFollowingChannels.enumerated()), id: \.element.id) { index, channel in
                     followingRow(channel: channel)
+                        .scrollTransition(.animated(DesignTokens.Animation.smooth)) { content, phase in
+                            content
+                                .opacity(phase.isIdentity ? 1 : 0)
+                                .scaleEffect(phase.isIdentity ? 1 : 0.96, anchor: .leading)
+                                .offset(y: phase.isIdentity ? 0 : 8)
+                        }
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .scale(scale: 0.96, anchor: .top))
+                                    .animation(DesignTokens.Animation.cardAppear.delay(min(Double(index) * 0.03, 0.15))),
+                                removal: .opacity.animation(DesignTokens.Animation.fast)
+                            )
+                        )
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
@@ -139,9 +74,11 @@ extension MultiLiveAddSheet {
                         Circle()
                             .fill(DesignTokens.Colors.chzzkGreen)
                             .frame(width: 8, height: 8)
+                            .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.6), radius: 3, x: 0, y: 0)
                             .overlay {
                                 Circle().strokeBorder(DesignTokens.Colors.surfaceOverlay, lineWidth: 1.5)
                             }
+                            .transition(.scale.combined(with: .opacity))
                     }
                 }
 
@@ -181,6 +118,7 @@ extension MultiLiveAddSheet {
                             .font(DesignTokens.Typography.custom(size: 8))
                         Text(channel.formattedViewerCount)
                             .font(.caption.monospacedDigit())
+                            .contentTransition(.numericText())
                     }
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
@@ -210,6 +148,13 @@ extension MultiLiveAddSheet {
             Image(systemName: "heart.slash")
                 .font(DesignTokens.Typography.custom(size: 28, weight: .light))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .phaseAnimator([false, true]) { content, phase in
+                    content
+                        .scaleEffect(phase ? 1.08 : 1.0)
+                        .opacity(phase ? 0.55 : 1.0)
+                } animation: { _ in
+                    .easeInOut(duration: 2.2)
+                }
             VStack(spacing: 4) {
                 Text("팔로잉 채널이 없습니다")
                     .font(.callout)
@@ -219,5 +164,6 @@ extension MultiLiveAddSheet {
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
         }
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }

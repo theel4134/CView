@@ -158,11 +158,13 @@ public actor MetricsWebSocketClient {
         webSocketTask = nil
         
         var attempt = 0
-        while !isManuallyDisconnected {
+        let maxAttempts = MetricsNetDefaults.maxReconnectAttempts
+        while !isManuallyDisconnected && attempt < maxAttempts {
             attempt += 1
             state = .reconnecting(attempt: attempt)
-            // 지수 백오프: 1, 4, 9, 16, 25, 30, 30, 30... 초
-            let delay = min(Double(attempt * attempt), MetricsNetDefaults.maxBackoffDelay)
+            // 지수 백오프: 2, 4, 8, 16, 30, 30... 초
+            let delay = min(pow(2.0, Double(attempt)), MetricsNetDefaults.maxBackoffDelay)
+            Log.network.info("WebSocket 재연결 시도 \(attempt)/\(maxAttempts) — \(String(format: "%.0f", delay))초 후")
             try? await Task.sleep(for: .seconds(delay))
             
             guard !isManuallyDisconnected else { return }

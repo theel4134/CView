@@ -429,6 +429,57 @@ struct ResponsiveFollowingLayout: Equatable {
         }
     }
 
+    // ─── 라이브 아바타 스트립 ───
+
+    var liveAvatarSize: CGFloat {
+        switch sizeClass {
+        case .ultraCompact: return 48
+        case .compact:  return 52
+        case .regular:  return 60
+        case .expanded: return 64
+        }
+    }
+
+    var liveAvatarRingWidth: CGFloat {
+        switch sizeClass {
+        case .ultraCompact: return 2
+        case .compact:  return 2.5
+        case .regular:  return 2.5
+        case .expanded: return 3
+        }
+    }
+
+    var liveAvatarNameFontSize: CGFloat {
+        switch sizeClass {
+        case .ultraCompact: return 9.5
+        case .compact:  return 10
+        case .regular:  return 10.5
+        case .expanded: return 11
+        }
+    }
+
+    var liveAvatarSpacing: CGFloat {
+        switch sizeClass {
+        case .ultraCompact: return 12
+        case .compact:  return 14
+        case .regular:  return 16
+        case .expanded: return 18
+        }
+    }
+
+    var liveAvatarViewerFontSize: CGFloat {
+        switch sizeClass {
+        case .ultraCompact: return 8
+        case .compact:  return 8.5
+        case .regular:  return 9
+        case .expanded: return 9.5
+        }
+    }
+
+    var liveAvatarItemWidth: CGFloat {
+        liveAvatarSize + liveAvatarRingWidth * 2 + 8
+    }
+
     // ─── 멀티 라이브 패널 ───
 
     var chatSidebarWidth: CGFloat {

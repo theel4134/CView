@@ -32,7 +32,7 @@ struct ChatPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignTokens.Colors.surfaceBase)
         .sheet(isPresented: Binding(
             get: { chatVM?.showExportSheet ?? false },
             set: { chatVM?.showExportSheet = $0 }
@@ -202,6 +202,8 @@ struct ChatMessagesView: View {
     @State private var scrollSuppressionCount = 0
     /// ScrollView 컨테이너의 실제 너비 — LazyVStack 콘텐츠에 명시적 너비 제약 전달용
     @State private var containerWidth: CGFloat = 300
+    /// ScrollView 컨테이너 높이 — 치지직 웹처럼 메시지를 하단 정렬하기 위한 minHeight
+    @State private var containerHeight: CGFloat = 400
 
     /// 스크롤 억제 중인지 여부
     private var isScrollSuppressed: Bool { scrollSuppressionCount > 0 }
@@ -230,21 +232,29 @@ struct ChatMessagesView: View {
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: containerHeight, alignment: .bottom)
                     .padding(.vertical, DesignTokens.Spacing.xs)
                 }
+                .scrollIndicators(.hidden)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
                 } action: { newWidth in
                     if newWidth > 0 { containerWidth = newWidth }
                 }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { newHeight in
+                    if newHeight > 0 { containerHeight = newHeight }
+                }
                 .defaultScrollAnchor(.bottom)
-                // Rebuilt scroll detection — 거리 기반 하단 감지
+                // Rebuilt scroll detection — 적응형 거리 기반 하단 감지
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     let maxScrollY = geometry.contentSize.height - geometry.containerSize.height
                     guard maxScrollY > 0 else { return true }
                     let distanceFromBottom = maxScrollY - geometry.contentOffset.y
-                    return distanceFromBottom <= 80
+                    // 컨테이너 높이 10% 기반 적응형 임계값 (40~120px)
+                    let threshold = max(40.0, min(geometry.containerSize.height * 0.1, 120.0))
+                    return distanceFromBottom <= threshold
                 } action: { oldValue, isNearBottom in
                     // oldValue == newValue → contentSize 변경에 의한 재계산, 실제 스크롤 아님
                     guard oldValue != isNearBottom else { return }
@@ -280,6 +290,13 @@ struct ChatMessagesView: View {
                     }
                     .animation(DesignTokens.Animation.snappy, value: viewModel?.isReplayMode)
                 }
+                // Esc 키로 replay mode 해제 + 하단 복귀
+                .onKeyPress(.escape) {
+                    guard let vm = viewModel, vm.isReplayMode else { return .ignored }
+                    vm.exitReplayMode()
+                    scrollToLatest(proxy: proxy)
+                    return .handled
+                }
             }
         } // VStack
     }
@@ -292,10 +309,12 @@ struct ChatMessagesView: View {
         // replay mode debounce 타스크가 대기 중이면 취소 — 프로그래밍적 스크롤 중 잘못된 진입 방지
         viewModel?.cancelReplayDebounce()
         scrollSuppressionCount += 1
-        proxy.scrollTo(lastId, anchor: .bottom)
-        // 스크롤 완료 후 억제 해제 — 배치 간격(100ms) + 렌더링 여유 충분히 확보
+        withAnimation(DesignTokens.Animation.chatScroll) {
+            proxy.scrollTo(lastId, anchor: .bottom)
+        }
+        // 스크롤 완료 후 억제 해제 — 배치 간격(250ms) + 렌더링 여유(50ms)
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(200))
+            try? await Task.sleep(for: .milliseconds(300))
             self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }
     }

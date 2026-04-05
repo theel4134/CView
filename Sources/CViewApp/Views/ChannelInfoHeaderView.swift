@@ -113,6 +113,7 @@ struct ChannelInfoHeroHeader: View {
             .clipped()
             .blur(radius: 8)
             .scaleEffect(1.05)
+            .drawingGroup(opaque: true)
         } else {
             LinearGradient(
                 colors: [DesignTokens.Colors.surfaceBase, DesignTokens.Colors.background],

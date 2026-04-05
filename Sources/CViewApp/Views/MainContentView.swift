@@ -51,8 +51,6 @@ struct MainContentView: View {
             NavigationStack(path: $router.path) {
                 detailView
                     .id(router.selectedSidebarItem)
-                    .transition(.opacity.combined(with: .scale(scale: 0.995, anchor: .top)))
-                    .animation(DesignTokens.Animation.contentTransition, value: router.selectedSidebarItem)
                     .navigationDestination(for: AppRoute.self) { route in
                         routeDestination(for: route)
                     }
@@ -108,7 +106,7 @@ struct MainContentView: View {
             }
             
         case .settings:
-            SettingsView()
+            SettingsContentView()
         }
     }
     
@@ -193,20 +191,29 @@ struct SidebarView: View {
         @Bindable var router = router
 
         VStack(spacing: 0) {
-            // 앱 헤더
+            // 앱 헤더 (변하지 않음)
             sidebarHeader
 
             Divider()
 
-            // 네비게이션 목록
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    sidebarSection(title: nil, items: primaryItems)
-                    sidebarSection(title: "탐색", items: discoverItems)
-                    sidebarSection(title: "기타", items: [.settings])
+            // 슬라이드 전환: 메인 메뉴 ↔ 설정 메뉴
+            ZStack {
+                if router.isInSettingsMode {
+                    settingsSidebarContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        ))
+                } else {
+                    mainSidebarContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading),
+                            removal: .move(edge: .leading)
+                        ))
                 }
-                .padding(.vertical, 8)
             }
+            .clipped()
+            .animation(DesignTokens.Animation.smooth, value: router.isInSettingsMode)
 
             Divider()
 
@@ -216,23 +223,168 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
+    // MARK: - Main Sidebar Content
+
+    private var mainSidebarContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                sidebarSection(title: nil, items: primaryItems)
+                sidebarSection(title: "탐색", items: discoverItems)
+                sidebarSection(title: "도구", items: [.metrics])
+                sidebarSection(title: nil, items: [.settings])
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    // MARK: - Settings Sidebar Content
+
+    private var settingsSidebarContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                // 뒤로가기 버튼
+                settingsBackButton
+                    .padding(.top, 4)
+                    .padding(.bottom, 4)
+
+                // 설정 섹션 헤더
+                Text("설정")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+                    .padding(.horizontal, DesignTokens.Spacing.lg + 2)
+                    .padding(.top, DesignTokens.Spacing.sm)
+                    .padding(.bottom, DesignTokens.Spacing.xs)
+
+                // 설정 탭 목록
+                ForEach(AppRouter.SettingsTab.allCases) { tab in
+                    settingsTabRow(tab)
+                }
+
+                // 버전 정보
+                settingsFooter
+                    .padding(.top, DesignTokens.Spacing.lg)
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    // MARK: - Settings Back Button
+
+    @ViewBuilder
+    private var settingsBackButton: some View {
+        @State var isBackHovered = false
+
+        Button {
+            withAnimation(DesignTokens.Animation.smooth) {
+                router.exitSettings()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Text("메뉴")
+                    .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, DesignTokens.Spacing.lg)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .customCursor(.pointingHand)
+    }
+
+    // MARK: - Settings Tab Row
+
+    @ViewBuilder
+    private func settingsTabRow(_ tab: AppRouter.SettingsTab) -> some View {
+        let isSelected = router.selectedSettingsTab == tab
+
+        Button {
+            withAnimation(DesignTokens.Animation.snappy) {
+                router.selectSettingsTab(tab)
+            }
+        } label: {
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(isSelected
+                              ? (colorScheme == .light ? tab.color.opacity(0.15) : tab.color)
+                              : tab.color.opacity(colorScheme == .light ? 0.18 : 0.15))
+                        .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
+                    Image(systemName: tab.icon)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(isSelected
+                                        ? (colorScheme == .light ? tab.color : .white)
+                                        : tab.color)
+                }
+                .shadow(color: isSelected ? tab.color.opacity(colorScheme == .light ? 0.15 : 0.28) : .clear, radius: 5, y: 2)
+
+                Text(tab.rawValue)
+                    .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    .tracking(0.1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(tab.color.opacity(0.10))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 1)
+        .animation(DesignTokens.Animation.fast, value: isSelected)
+    }
+
+    // MARK: - Settings Footer (Version)
+
+    private var settingsFooter: some View {
+        VStack(spacing: 4) {
+            Divider()
+                .padding(.horizontal, DesignTokens.Spacing.lg)
+                .padding(.bottom, DesignTokens.Spacing.sm)
+
+            HStack(spacing: 6) {
+                Image(systemName: "c.square.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                Text("CView v2.0")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
     // MARK: - App Header
 
     private var sidebarHeader: some View {
         HStack(spacing: DesignTokens.Spacing.sm + 2) {
             Image(systemName: "play.tv.fill")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                .background(DesignTokens.Colors.chzzkGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("CView")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .font(DesignTokens.Typography.bodySemibold)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Text("치지직 뷰어")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .font(DesignTokens.Typography.custom(size: 11))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
 
             Spacer()
@@ -248,8 +400,8 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.xxs) {
             if let title = title {
                 Text(title.uppercased())
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(DesignTokens.Typography.microSemibold)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .tracking(0.8)
                     .padding(.horizontal, DesignTokens.Spacing.lg + 2)
                     .padding(.top, DesignTokens.Spacing.lg + 2)
@@ -276,18 +428,18 @@ struct SidebarView: View {
                 // 아이콘 배경
                 ZStack {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                        .fill(isSelected ? (colorScheme == .light ? iconColor(for: item).opacity(0.15) : Color.accentColor) : iconBackground(for: item))
+                        .fill(isSelected ? (colorScheme == .light ? iconColor(for: item).opacity(0.15) : DesignTokens.Colors.chzzkGreen) : iconBackground(for: item))
                         .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
                     Image(systemName: item.icon)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(isSelected ? (colorScheme == .light ? iconColor(for: item) : .white) : iconColor(for: item))
                 }
-                .shadow(color: isSelected ? Color.accentColor.opacity(colorScheme == .light ? 0.15 : 0.28) : .clear, radius: 5, y: 2)
+                .shadow(color: isSelected ? DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.15 : 0.28) : .clear, radius: 5, y: 2)
 
                 // 레이블
                 Text(item.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .primary : Color(nsColor: .secondaryLabelColor))
+                    .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
                     .tracking(0.1)
 
                 Spacer()
@@ -295,7 +447,7 @@ struct SidebarView: View {
                 // 라이브 뱃지
                 if liveCount > 0 {
                     Text("\(liveCount)")
-                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                        .font(DesignTokens.Typography.microSemibold.monospacedDigit())
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -308,8 +460,8 @@ struct SidebarView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.10))
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(DesignTokens.Colors.chzzkGreen.opacity(0.10))
                 }
             }
             .contentShape(Rectangle())
@@ -317,7 +469,7 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
-        .animation(.easeInOut(duration: 0.14), value: isSelected)
+        .animation(DesignTokens.Animation.fast, value: isSelected)
     }
 
     // MARK: - Icon Styling
@@ -401,7 +553,7 @@ struct SidebarView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(isLogoutHovered ? .secondary : .tertiary)
                     .frame(width: 28, height: 28)
-                    .background(isLogoutHovered ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.fill.quaternary), in: RoundedRectangle(cornerRadius: 6))
+                    .background(isLogoutHovered ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.fill.quaternary), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                     .scaleEffect(isLogoutHovered ? 1.06 : 1.0)
                     .animation(DesignTokens.Animation.fast, value: isLogoutHovered)
             }
@@ -420,19 +572,19 @@ struct SidebarView: View {
             HStack(spacing: 11) {
                 ZStack {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                        .fill(Color.accentColor.opacity(isLoginHovered ? 0.18 : 0.12))
+                        .fill(DesignTokens.Colors.chzzkGreen.opacity(isLoginHovered ? 0.18 : 0.12))
                         .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
                     Image(systemName: "person.crop.circle")
                         .font(.system(size: 15))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 }
                 Text("로그인")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .font(DesignTokens.Typography.captionMedium)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(isLoginHovered ? .secondary : .tertiary)
+                    .font(DesignTokens.Typography.microSemibold)
+                    .foregroundStyle(isLoginHovered ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.textTertiary)
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm + 2)

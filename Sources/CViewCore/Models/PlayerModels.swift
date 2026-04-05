@@ -130,11 +130,13 @@ public struct PlaybackOptions: Sendable {
 public enum PlayerEngineType: String, Sendable, Codable, CaseIterable {
     case vlc = "VLC"
     case avPlayer = "AVPlayer"
+    case hlsjs = "HLS.js"
 
     public var displayName: String {
         switch self {
         case .vlc: "VLC (고급)"
         case .avPlayer: "AVPlayer (기본·저전력)"
+        case .hlsjs: "HLS.js (저지연)"
         }
     }
 }

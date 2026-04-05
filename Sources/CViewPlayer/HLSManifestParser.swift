@@ -43,6 +43,11 @@ public struct MediaPlaylist: Sendable {
     public let preloadHint: PreloadHint?
     public let isEndList: Bool
     public let isLowLatency: Bool
+
+    // flashls Manifest 참조: 추가 메타데이터
+    public let version: Int?
+    public let playlistType: PlaylistType?
+    public let discontinuitySequence: Int
     
     public var totalDuration: Double {
         segments.reduce(0) { $0 + $1.duration }
@@ -52,6 +57,24 @@ public struct MediaPlaylist: Sendable {
     public var endTime: Double {
         guard let last = segments.last else { return 0 }
         return last.startTime + last.duration
+    }
+
+    /// VOD/EVENT/LIVE 판별
+    public enum PlaylistType: String, Sendable {
+        case vod = "VOD"
+        case event = "EVENT"
+    }
+
+    /// AES-128 암호화 정보 (flashls Manifest 참조)
+    public struct EncryptionInfo: Sendable, Equatable {
+        public let method: EncryptionMethod
+        public let uri: URL
+        public let iv: Data?
+
+        public enum EncryptionMethod: String, Sendable {
+            case aes128 = "AES-128"
+            case sampleAES = "SAMPLE-AES"
+        }
     }
     
     public struct Segment: Sendable, Identifiable {
@@ -63,6 +86,8 @@ public struct MediaPlaylist: Sendable {
         public let discontinuity: Bool
         public let byteRange: ByteRange?
         public let parts: [PartialSegment]
+        public let encryptionInfo: EncryptionInfo?
+        public let discontinuitySequence: Int
     }
     
     public struct PartialSegment: Sendable, Identifiable {
@@ -187,6 +212,13 @@ public struct HLSManifestParser: Sendable {
         var preloadHint: MediaPlaylist.PreloadHint?
         var isEndList = false
         var isLowLatency = false
+
+        // flashls Manifest 참조: 추가 메타데이터
+        var version: Int?
+        var playlistType: MediaPlaylist.PlaylistType?
+        var discontinuitySequence: Int = 0
+        var currentEncryption: MediaPlaylist.EncryptionInfo?
+        var continuityIndex: Int = 0
         
         // Current segment parsing state
         var currentDuration: Double = 0
@@ -202,10 +234,40 @@ public struct HLSManifestParser: Sendable {
             
             if trimmed.hasPrefix("#EXT-X-TARGETDURATION:") {
                 targetDuration = Double(trimmed.dropFirst("#EXT-X-TARGETDURATION:".count)) ?? 0
+
+            } else if trimmed.hasPrefix("#EXT-X-VERSION:") {
+                version = Int(trimmed.dropFirst("#EXT-X-VERSION:".count))
+
+            } else if trimmed.hasPrefix("#EXT-X-PLAYLIST-TYPE:") {
+                let typeStr = String(trimmed.dropFirst("#EXT-X-PLAYLIST-TYPE:".count))
+                    .trimmingCharacters(in: .whitespaces)
+                playlistType = MediaPlaylist.PlaylistType(rawValue: typeStr)
+
+            } else if trimmed.hasPrefix("#EXT-X-DISCONTINUITY-SEQUENCE:") {
+                discontinuitySequence = Int(trimmed.dropFirst("#EXT-X-DISCONTINUITY-SEQUENCE:".count)) ?? 0
+                continuityIndex = discontinuitySequence
                 
             } else if trimmed.hasPrefix("#EXT-X-MEDIA-SEQUENCE:") {
                 mediaSequence = Int(trimmed.dropFirst("#EXT-X-MEDIA-SEQUENCE:".count)) ?? 0
                 segmentIndex = mediaSequence
+
+            } else if trimmed.hasPrefix("#EXT-X-KEY:") {
+                // flashls Manifest.as 참조: AES-128 암호화 키 파싱
+                let attrs = parseAttributes(String(trimmed.dropFirst("#EXT-X-KEY:".count)))
+                let method = attrs["METHOD"] ?? "NONE"
+                if method == "NONE" {
+                    currentEncryption = nil
+                } else if let encMethod = MediaPlaylist.EncryptionInfo.EncryptionMethod(rawValue: method),
+                          let uriStr = attrs["URI"] {
+                    let keyURL = resolveURL(uriStr, base: baseURL)
+                    // flashls: IV 미제공 시 시퀀스 번호를 big-endian 16바이트로 변환하여 IV로 사용
+                    let iv: Data? = attrs["IV"].flatMap { parseHexIV($0) }
+                    currentEncryption = MediaPlaylist.EncryptionInfo(
+                        method: encMethod,
+                        uri: keyURL,
+                        iv: iv
+                    )
+                }
                 
             } else if trimmed.hasPrefix("#EXTINF:") {
                 let durationStr = String(trimmed.dropFirst("#EXTINF:".count))
@@ -220,6 +282,7 @@ public struct HLSManifestParser: Sendable {
                 
             } else if trimmed == "#EXT-X-DISCONTINUITY" {
                 currentDiscontinuity = true
+                continuityIndex += 1
                 
             } else if trimmed.hasPrefix("#EXT-X-BYTERANGE:") {
                 currentByteRange = parseByteRange(String(trimmed.dropFirst("#EXT-X-BYTERANGE:".count)))
@@ -270,6 +333,18 @@ public struct HLSManifestParser: Sendable {
                 
             } else if !trimmed.hasPrefix("#") && !trimmed.isEmpty {
                 // Segment URI
+                // flashls: IV 미제공 시 시퀀스 번호를 big-endian 16바이트 IV로 사용
+                let effectiveEncryption: MediaPlaylist.EncryptionInfo?
+                if let enc = currentEncryption, enc.iv == nil {
+                    effectiveEncryption = MediaPlaylist.EncryptionInfo(
+                        method: enc.method,
+                        uri: enc.uri,
+                        iv: sequenceNumberToIV(segmentIndex)
+                    )
+                } else {
+                    effectiveEncryption = currentEncryption
+                }
+
                 let segment = MediaPlaylist.Segment(
                     id: segmentIndex,
                     duration: currentDuration,
@@ -278,7 +353,9 @@ public struct HLSManifestParser: Sendable {
                     programDateTime: currentPDT,
                     discontinuity: currentDiscontinuity,
                     byteRange: currentByteRange,
-                    parts: currentParts
+                    parts: currentParts,
+                    encryptionInfo: effectiveEncryption,
+                    discontinuitySequence: continuityIndex
                 )
                 
                 segments.append(segment)
@@ -303,7 +380,10 @@ public struct HLSManifestParser: Sendable {
             serverControl: serverControl,
             preloadHint: preloadHint,
             isEndList: isEndList,
-            isLowLatency: isLowLatency
+            isLowLatency: isLowLatency,
+            version: version,
+            playlistType: playlistType,
+            discontinuitySequence: discontinuitySequence
         )
     }
     
@@ -377,5 +457,40 @@ public struct HLSManifestParser: Sendable {
         guard let length = Int(parts[0]) else { return nil }
         let offset = parts.count > 1 ? Int(parts[1]) : nil
         return MediaPlaylist.ByteRange(length: length, offset: offset)
+    }
+
+    // MARK: - AES-128 Helpers (flashls Manifest.as 참조)
+
+    /// "0x..." 형식의 16진수 IV 문자열을 16바이트 Data로 변환
+    private func parseHexIV(_ hex: String) -> Data? {
+        var hexStr = hex.trimmingCharacters(in: .whitespaces)
+        if hexStr.hasPrefix("0x") || hexStr.hasPrefix("0X") {
+            hexStr = String(hexStr.dropFirst(2))
+        }
+        // 32자 미만이면 앞에 0을 패딩하여 16바이트(32 hex chars)로 맞춤
+        while hexStr.count < 32 { hexStr = "0" + hexStr }
+        guard hexStr.count == 32 else { return nil }
+
+        var data = Data(capacity: 16)
+        var index = hexStr.startIndex
+        for _ in 0..<16 {
+            let nextIndex = hexStr.index(index, offsetBy: 2)
+            guard let byte = UInt8(hexStr[index..<nextIndex], radix: 16) else { return nil }
+            data.append(byte)
+            index = nextIndex
+        }
+        return data
+    }
+
+    /// flashls: IV 미제공 시 시퀀스 번호를 big-endian 16바이트로 변환하여 IV로 사용
+    private func sequenceNumberToIV(_ seqNum: Int) -> Data {
+        var data = Data(repeating: 0, count: 16)
+        var value = UInt64(seqNum)
+        // big-endian: 하위 8바이트에 시퀀스 번호 저장
+        for i in stride(from: 15, through: 8, by: -1) {
+            data[i] = UInt8(value & 0xFF)
+            value >>= 8
+        }
+        return data
     }
 }

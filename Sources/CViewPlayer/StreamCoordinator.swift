@@ -160,6 +160,11 @@ public actor StreamCoordinator {
         guard let master = _masterPlaylist else { return [] }
         return master.variants.map { qualityFromVariant($0) }
     }
+
+    /// 대역폭 코디네이터에서 할당된 최대 비트레이트를 ABR에 전달
+    public func setMaxAllowedBitrate(_ maxBps: Double) async {
+        await abrController?.setMaxAllowedBitrate(maxBps)
+    }
     
     /// bandwidth로 variant를 찾아 품질 전환
     public func switchQualityByBandwidth(_ bandwidth: Int) async throws {

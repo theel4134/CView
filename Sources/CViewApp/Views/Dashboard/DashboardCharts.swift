@@ -66,6 +66,7 @@ struct ViewerTrendChart: View {
                     plotArea.background(Color.clear)
                 }
                 .frame(height: 140)
+                .drawingGroup()
             }
         }
         .padding(DesignTokens.Spacing.md)
@@ -134,6 +135,7 @@ struct CategoryBarChart: View {
                     plotArea.background(Color.clear)
                 }
                 .frame(height: CGFloat(categories.count) * 32 + 16)
+                .drawingGroup()
             }
         }
         .padding(DesignTokens.Spacing.md)
@@ -192,28 +194,32 @@ struct LatencyComparisonChart: View {
                 }
             }
             
-            if history.count < 2 {
+            if history.isEmpty {
                 latencyEmptyState
             } else {
                 Chart {
                     ForEach(history) { entry in
-                        LineMark(
-                            x: .value("시간", entry.timestamp),
-                            y: .value("레이턴시", entry.webLatency),
-                            series: .value("종류", "웹")
-                        )
-                        .foregroundStyle(.cyan)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
+                        if let web = entry.webLatency {
+                            LineMark(
+                                x: .value("시간", entry.timestamp),
+                                y: .value("레이턴시", web),
+                                series: .value("종류", "웹")
+                            )
+                            .foregroundStyle(.cyan)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                            .interpolationMethod(.catmullRom)
+                        }
                         
-                        LineMark(
-                            x: .value("시간", entry.timestamp),
-                            y: .value("레이턴시", entry.appLatency),
-                            series: .value("종류", "앱")
-                        )
-                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
+                        if let app = entry.appLatency {
+                            LineMark(
+                                x: .value("시간", entry.timestamp),
+                                y: .value("레이턴시", app),
+                                series: .value("종류", "앱")
+                            )
+                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                            .interpolationMethod(.catmullRom)
+                        }
                     }
                 }
                 .chartXAxis {
@@ -236,6 +242,7 @@ struct LatencyComparisonChart: View {
                     plotArea.background(Color.clear)
                 }
                 .frame(height: 140)
+                .drawingGroup()
             }
         }
         .padding(DesignTokens.Spacing.md)
@@ -319,6 +326,7 @@ struct CategoryTypeDonutChart: View {
                         .cornerRadius(DesignTokens.Radius.xs)
                     }
                     .frame(width: 110, height: 110)
+                    .drawingGroup()
 
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(distribution) { item in
@@ -438,6 +446,7 @@ struct ViewerDistributionChart: View {
                 }
                 .chartPlotStyle { plotArea in plotArea.background(Color.clear) }
                 .frame(height: 120)
+                .drawingGroup()
             }
         }
         .padding(DesignTokens.Spacing.md)

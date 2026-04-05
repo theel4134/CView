@@ -131,10 +131,9 @@ struct ClipGridCard: View {
             }
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
-        }
+        .onHover { isHovered = $0 }
         .customCursor(.pointingHand)
+        .animation(DesignTokens.Animation.fast, value: isHovered)
         // Metal 3: hover scaleEffect+동적 shadow 제거 — GPU blur+scale 연산 방지
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -245,10 +244,9 @@ struct ClipListRow: View {
             }
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(DesignTokens.Animation.indicator) { isHovered = hovering }
-        }
+        .onHover { isHovered = $0 }
         .customCursor(.pointingHand)
+        .animation(DesignTokens.Animation.indicator, value: isHovered)
     }
     
     private var thumbnailPlaceholder: some View {

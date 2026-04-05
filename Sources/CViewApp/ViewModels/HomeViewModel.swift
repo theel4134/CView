@@ -62,7 +62,14 @@ public final class HomeViewModel {
     public var activeAppChannelCount: Int = 0
     /// 서버 마지막 갱신 시각
     public var serverLastUpdate: Date?
+    /// WebSocket 연결 상태
+    public var isWebSocketConnected = false
+    /// WebSocket 실시간 수신 카운터 (세션 내)
+    public var wsMessageCount: Int = 0
+    @ObservationIgnored private var _wsMessageCountRaw: Int = 0
+    @ObservationIgnored private var _lastWsCountFlush: Date = .distantPast
     
+    private var lastLatencySnapshotTime: Date?
     private var metricsPollingTask: Task<Void, Never>?
     private var wsStreamTask: Task<Void, Never>?
     private var autoRefreshTask: Task<Void, Never>?
@@ -562,7 +569,7 @@ public final class HomeViewModel {
                 logger.debug("Stats fetch failed (non-critical): \(error.localizedDescription)")
             }
             
-            recordLatencySnapshot()
+            recordLatencySnapshot(force: true)
             logger.info("메트릭 서버 통계 로드 (v4.5): 활성 \(overview.data?.activeChannels ?? 0)채널, 라이브 \(overview.data?.liveCount ?? 0)")
         } catch {
             // v4.5 실패 시 legacy /api/stats 폴백
@@ -574,7 +581,7 @@ public final class HomeViewModel {
                 serverUptime = stats.resolvedUptime
                 serverTotalReceived = stats.resolvedTotalReceived
                 serverLastUpdate = Date()
-                recordLatencySnapshot()
+                recordLatencySnapshot(force: true)
                 logger.info("메트릭 서버 통계 로드 (legacy): \(self.serverChannelStats.count) 채널")
             } catch {
                 isMetricsServerOnline = false
@@ -583,13 +590,15 @@ public final class HomeViewModel {
         }
     }
     
-    /// 30초 주기 메트릭 폴링 시작
+    /// 30초 주기 메트릭 폴링 시작 (WebSocket 연결 시 90초로 자동 완속)
     private func startMetricsPolling() {
         metricsPollingTask?.cancel()
         metricsPollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.loadServerStats()
-                try? await Task.sleep(for: .seconds(30))
+                // WebSocket 연결 시 실시간 데이터가 오므로 폴링 간격 증가
+                let interval: Duration = (self?.isWebSocketConnected == true) ? .seconds(90) : .seconds(30)
+                try? await Task.sleep(for: interval)
             }
         }
     }
@@ -601,11 +610,21 @@ public final class HomeViewModel {
         wsStreamTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let ws = self?.wsClient else { break }
+                self?.isWebSocketConnected = true
                 let stream = await ws.connect()
                 for await message in stream {
                     guard !Task.isCancelled else { return }
+                    self?._wsMessageCountRaw += 1
+                    // 5초마다 UI 카운터 갱신 (매 메시지 렌더링 방지)
+                    let now = Date()
+                    if let s = self, now.timeIntervalSince(s._lastWsCountFlush) >= 5 {
+                        s.wsMessageCount = s._wsMessageCountRaw
+                        s.serverLastUpdate = now
+                        s._lastWsCountFlush = now
+                    }
                     self?.handleWebSocketMessage(message)
                 }
+                self?.isWebSocketConnected = false
                 guard !Task.isCancelled else { return }
                 try? await Task.sleep(for: .seconds(5))
             }
@@ -620,20 +639,64 @@ public final class HomeViewModel {
             if let total = msg.totalReceived {
                 serverTotalReceived = total
             }
+            // serverLastUpdate는 WS 카운터 플러시 시에만 갱신하여 렌더링 절약
+            
         case "metric":
-            // 실시간 메트릭 → 개별 채널 데이터는 다음 폴링에서 반영
-            break
+            // 실시간 메트릭 → 채널 통계 즉시 반영
+            applyRealtimeMetric(msg)
+            
         case "app_active_channels":
             activeAppChannelCount = msg.channels?.count ?? 0
+            
         default:
             break
         }
     }
     
-    /// 레이턴시 스냅샷 기록
-    private func recordLatencySnapshot() {
-        guard let web = avgWebLatency, let app = avgAppLatency else { return }
+    /// WebSocket metric 메시지 → 채널 통계 실시간 업데이트
+    @MainActor
+    private func applyRealtimeMetric(_ msg: MetricsWebSocketMessage) {
+        // data 필드 또는 최상위에서 채널 정보 추출
+        let channelId = msg.data?.channelId ?? msg.channelId
+        let latency = msg.data?.latency ?? msg.latency
+        let platform = msg.data?.platform ?? msg.platform
+        let channelName = msg.data?.channelName ?? msg.channelName
+        
+        guard let channelId, let latency else { return }
+        
+        // 기존 채널 찾기 또는 새로 추가
+        if let idx = serverChannelStats.firstIndex(where: { $0.channelId == channelId }) {
+            var stat = serverChannelStats[idx]
+            // 플랫폼별 레이턴시 업데이트
+            if platform == "web" || msg.source == "web" {
+                stat = stat.withUpdatedWebLatency(latency)
+            } else {
+                stat = stat.withUpdatedAppLatency(latency)
+            }
+            serverChannelStats[idx] = stat
+        } else if let channelName {
+            // 새 채널 — 최소 데이터로 항목 추가
+            let isWeb = platform == "web" || msg.source == "web"
+            let newStat = ChannelStatsItem.makeMinimal(
+                channelId: channelId,
+                channelName: channelName,
+                latency: latency,
+                isWeb: isWeb
+            )
+            serverChannelStats.append(newStat)
+        }
+        
+        recordLatencySnapshot()
+    }
+    
+    /// 레이턴시 스냅샷 기록 (최소 10초 간격으로 쓰로틀링)
+    private func recordLatencySnapshot(force: Bool = false) {
         let now = Date()
+        if !force, let last = lastLatencySnapshotTime, now.timeIntervalSince(last) < 10 { return }
+        let web = avgWebLatency
+        let app = avgAppLatency
+        guard web != nil || app != nil else { return }
+        lastLatencySnapshotTime = now
         latencyHistory.append(LatencyHistoryEntry(timestamp: now, webLatency: web, appLatency: app))
         if latencyHistory.count > 30 {
             latencyHistory.removeFirst(latencyHistory.count - 30)

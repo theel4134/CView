@@ -93,17 +93,9 @@ struct FollowingView: View {
         get { ps.showMultiLive }
         nonmutating set { ps.showMultiLive = newValue }
     }
-    var showMLAddChannel: Bool {
-        get { ps.showMLAddChannel }
-        nonmutating set { ps.showMLAddChannel = newValue }
-    }
     var showMLSettings: Bool {
         get { ps.showMLSettings }
         nonmutating set { ps.showMLSettings = newValue }
-    }
-    var mlPanelWidth: CGFloat {
-        get { ps.mlPanelWidth }
-        nonmutating set { ps.mlPanelWidth = newValue }
     }
     var hideFollowingList: Bool {
         get { ps.hideFollowingList }
@@ -137,23 +129,25 @@ struct FollowingView: View {
     @State private var _searchDebounceTask: Task<Void, Never>?
     @State private var _resizeDebounceTask: Task<Void, Never>?
     @State var mlAddError: String?
-    @State private var isDraggingDivider: Bool = false
-    @GestureState private var dividerDragOffset: CGFloat = 0
+    @State private var dividerDragOffset: CGFloat = 0
     @FocusState var isSearchFocused: Bool
     @State var skeletonAppeared = false
 
     var multiLiveManager: MultiLiveManager { appState.multiLiveManager }
 
-    @State var chatSearchQuery: String = ""
-    @State var chatSearchResults: [ChannelInfo] = []
-    @State var isSearchingChatChannels: Bool = false
-    @State var newChatChannelId: String = ""
     @State var chatAddError: String?
     @State var showDisconnectAllConfirm = false
+    @State var showMergedChat = false
+    /// 채팅 세션 복원 진행 중 플래그 — 멀티라이브 onChange 중복 추가 방지
+    @State private var isRestoringChatSessions = false
     @GestureState var chatSwipeDragOffset: CGFloat = 0
-    @GestureState private var dualSplitDragOffset: CGFloat = 0
+    @State private var dualSplitDragOffset: CGFloat = 0
+    @State var livePageDragOffset: CGFloat = 0
+    @State var offlinePageDragOffset: CGFloat = 0
     // 반응형 그리드: 컨테이너 너비에 따라 열 수·페이지 크기 자동 조정
     @State var followingContentWidth: CGFloat = 800
+    /// P2-3: 윈도우 리사이즈 시 팔로잉 리스트 폭 비례 조정을 위한 이전 너비 추적
+    @State private var previousTotalWidth: CGFloat = 0
 
     /// 반응형 레이아웃 토큰 — followingContentWidth 변경 시 자동 재계산
     var layout: ResponsiveFollowingLayout {
@@ -200,25 +194,31 @@ struct FollowingView: View {
 
     /// 필터/정렬 조건이 바뀔 때만 재산출 — body 중복 연산 방지
     private func recomputeFiltered() {
-        var channels = sortOrder.sort(viewModel.followingChannels)
+        let allChannels = viewModel.followingChannels
+
+        // 카테고리 계수를 먼저 산출 (필터 적용 전 전체 라이브 기준)
+        var counts: [String: Int] = [:]
+        for ch in allChannels where ch.isLive {
+            if let cat = ch.categoryName {
+                counts[cat, default: 0] += 1
+            }
+        }
+        cachedLiveCategoryCounts = counts.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+
+        // 정렬 → 필터 적용
+        var channels = sortOrder.sort(allChannels)
         if filterLiveOnly { channels = channels.filter { $0.isLive } }
         if let cat = selectedCategory { channels = channels.filter { $0.categoryName == cat } }
         if !searchText.isEmpty {
+            let query = searchText.lowercased()
             channels = channels.filter { ch in
-                ch.channelName.localizedCaseInsensitiveContains(searchText)
-                || ch.liveTitle.localizedCaseInsensitiveContains(searchText)
-                || (ch.categoryName ?? "").localizedCaseInsensitiveContains(searchText)
+                ch.channelName.lowercased().contains(query)
+                || ch.liveTitle.lowercased().contains(query)
+                || (ch.categoryName ?? "").lowercased().contains(query)
             }
         }
         cachedLive = channels.filter { $0.isLive }
         cachedAllOffline = channels.filter { !$0.isLive }
-
-        var counts: [String: Int] = [:]
-        viewModel.followingChannels
-            .filter { $0.isLive }
-            .compactMap { $0.categoryName }
-            .forEach { counts[$0, default: 0] += 1 }
-        cachedLiveCategoryCounts = counts.map { ($0.key, $0.value) }.sorted { $0.count > $1.count }
     }
 
     /// 페이지 리셋 + 필터 재계산 (정렬/필터 조건 변경 시 사용)
@@ -281,13 +281,8 @@ struct FollowingView: View {
                 }
             } else {
                 mainContent
-                    .transition(.opacity)
             }
         }
-        .animation(DesignTokens.Animation.smooth, value: viewModel.isLoadingFollowing)
-        .animation(DesignTokens.Animation.smooth, value: viewModel.followingChannels.isEmpty)
-        .navigationTitle("")
-        .toolbar(.hidden)
         // 필터/정렬 관련 값 변경 시 1회만 recomputeFiltered() 호출되도록 통합
         .onChange(of: sortOrder) { _, _ in resetPaginationAndRecompute() }
         .onChange(of: filterLiveOnly) { _, _ in resetPaginationAndRecompute() }
@@ -308,9 +303,10 @@ struct FollowingView: View {
         .onChange(of: offlinePageIndex) { _, newPage in
             prefetchAdjacentOfflinePages(around: newPage)
         }
-        // 멀티라이브 세션 추가 시 → 멀티채팅에도 자동 추가
+        // 멀티라이브 세션 추가 시 → 멀티채팅에도 자동 추가 (복원 중에는 스킵)
         .onChange(of: multiLiveManager.sessions.count) { oldCount, newCount in
             guard newCount > oldCount else { return }
+            guard !isRestoringChatSessions else { return }
             let existingChatIds = Set(chatSessionManager.sessions.map { $0.id })
             let newSessions = multiLiveManager.sessions.filter { !existingChatIds.contains($0.channelId) }
             for session in newSessions {
@@ -318,19 +314,41 @@ struct FollowingView: View {
                 Task { await addChatChannel(channelId: channelId) }
             }
             if !newSessions.isEmpty {
-                showMultiChat = true
+                withAnimation(DesignTokens.Animation.snappy) {
+                    showMultiChat = true
+                }
             }
         }
         .task {
-            // 데이터 있고 캐시가 5분 이내면 재로드 스킵
-            let isFresh = viewModel.followingCachedAt.map { Date().timeIntervalSince($0) < 300 } ?? false
-            guard viewModel.followingChannels.isEmpty || !isFresh else {
-                recomputeFiltered()
-                return
+            // 멀티채팅 세션 복원 (SettingsStore 연결 + 저장된 세션 재연결)
+            if chatSessionManager.sessions.isEmpty {
+                chatSessionManager.configure(settingsStore: appState.settingsStore)
+                isRestoringChatSessions = true
+                await restoreSavedChatSessions()
+                isRestoringChatSessions = false
             }
-            guard !viewModel.isLoadingFollowing else { return }
-            await viewModel.loadFollowingChannels()
+
+            // [최적화] 캐시 데이터가 있으면 즉시 렌더링 → 백그라운드 갱신
+            if !viewModel.followingChannels.isEmpty {
+                recomputeFiltered()
+                let isFresh = viewModel.followingCachedAt.map { Date().timeIntervalSince($0) < 300 } ?? false
+                if isFresh { return }
+                // 캐시가 오래된 경우 백그라운드에서 갱신 (스켈레톤 표시 없이)
+                guard !viewModel.isLoadingFollowing else { return }
+                await viewModel.loadFollowingChannels()
+            } else {
+                guard !viewModel.isLoadingFollowing else { return }
+                await viewModel.loadFollowingChannels()
+            }
         }
+        .modifier(PanelKeyboardShortcuts(
+            showMultiLive: showMultiLive,
+            showMultiChat: showMultiChat,
+            hideFollowingList: Binding(get: { hideFollowingList }, set: { hideFollowingList = $0 }),
+            followingListWidth: Binding(get: { followingListWidth }, set: { followingListWidth = $0 }),
+            dualPanelSplitRatio: Binding(get: { dualPanelSplitRatio }, set: { dualPanelSplitRatio = $0 }),
+            followingListMinWidth: followingListMinWidth
+        ))
     }
 
 
@@ -338,6 +356,9 @@ struct FollowingView: View {
 
     private let followingListMinWidth: CGFloat = 240
     private let followingListMaxRatio: CGFloat = 0.45
+    private let sidePanelMinWidth: CGFloat = 400
+    private let dualLiveMinWidth: CGFloat = 300
+    private let dualChatMinWidth: CGFloat = 300
 
     private var mainContent: some View {
         let hasSidePanel = showMultiLive || showMultiChat
@@ -345,32 +366,54 @@ struct FollowingView: View {
         return GeometryReader { geo in
             let totalWidth = geo.size.width
             let effectiveListWidth = followingListWidth + dividerDragOffset
-            let clampedListWidth = min(max(effectiveListWidth, followingListMinWidth), totalWidth * followingListMaxRatio)
+            // 사이드 패널 최소 폭을 보장하는 최대 리스트 폭 계산
+            let maxListWidth = hasSidePanel ? totalWidth - sidePanelMinWidth : totalWidth
+            let clampedListWidth = min(
+                max(effectiveListWidth, followingListMinWidth),
+                min(totalWidth * followingListMaxRatio, maxListWidth)
+            )
 
             HStack(spacing: 0) {
-                // 왼쪽: 사이드 패널 (멀티라이브 또는 멀티채팅) — 메인 영역
-                if hasSidePanel {
-                    sidePanelContent(totalWidth: hideFollowingList ? totalWidth : totalWidth - clampedListWidth - 1)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                }
-
-                // 오른쪽: 라이브 채널 목록 — 토글 가능, 슬라이드 애니메이션
+                // 왼쪽: 라이브 채널 목록 — 패널 열림 시 왼쪽으로 밀리는 레이아웃
                 if !hideFollowingList || !hasSidePanel {
-                    if hasSidePanel && !hideFollowingList {
-                        followingListDividerHandle
-                    }
-
                     followingListContent
                         .frame(width: hasSidePanel ? max(clampedListWidth, 0) : nil)
                         .frame(maxWidth: hasSidePanel ? nil : .infinity, maxHeight: .infinity)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+
+                    if hasSidePanel && !hideFollowingList {
+                        followingListDividerHandle
+                    }
+                }
+
+                // 오른쪽: 사이드 패널 (멀티라이브 또는 멀티채팅) — push left 슬라이드
+                if hasSidePanel {
+                    sidePanelContent(totalWidth: hideFollowingList ? totalWidth : totalWidth - clampedListWidth - 1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
+            // P2-3: 윈도우 리사이즈 시 팔로잉 리스트 비례 조정
+            .onAppear { previousTotalWidth = totalWidth }
+            .onChange(of: totalWidth) { oldW, newW in
+                // 디바이더 드래그 중이거나 사이드 패널 없으면 비례 조정 불필요
+                guard dividerDragOffset == 0, hasSidePanel, !hideFollowingList else {
+                    previousTotalWidth = newW
+                    return
+                }
+                let prevW = previousTotalWidth > 0 ? previousTotalWidth : oldW
+                guard prevW > 0, abs(newW - prevW) > 2 else { return }
+                let ratio = followingListWidth / prevW
+                let newWidth = newW * ratio
+                let newMaxList = newW - sidePanelMinWidth
+                followingListWidth = min(max(newWidth, followingListMinWidth), min(newW * followingListMaxRatio, newMaxList))
+                previousTotalWidth = newW
+            }
         }
-        .animation(isDraggingDivider ? nil : DesignTokens.Animation.normal, value: showMultiLive)
-        .animation(isDraggingDivider ? nil : DesignTokens.Animation.normal, value: showMultiChat)
-        .animation(isDraggingDivider ? nil : DesignTokens.Animation.normal, value: hideFollowingList)
+        // 패널 토글 시 push-left 슬라이드 애니메이션
+        .animation(dividerDragOffset != 0 ? nil : DesignTokens.Animation.contentTransition, value: hideFollowingList)
+        .animation(DesignTokens.Animation.contentTransition, value: showMultiLive)
+        .animation(DesignTokens.Animation.contentTransition, value: showMultiChat)
     }
 
     /// 멀티라이브 + 멀티채팅 동시 또는 단독 표시
@@ -381,7 +424,10 @@ struct FollowingView: View {
             GeometryReader { geo in
                 let panelW = geo.size.width
                 let effectiveRatio = dualPanelSplitRatio + (dualSplitDragOffset / panelW)
-                let clampedRatio = min(max(effectiveRatio, 0.25), 0.75)
+                // 최소 폭 기반 비율 제약: 멀티라이브 ≥ 300pt, 멀티채팅 ≥ 300pt (치지직 웹 기준)
+                let minLiveRatio = panelW > 0 ? dualLiveMinWidth / panelW : 0.25
+                let maxLiveRatio = panelW > 0 ? 1 - (dualChatMinWidth / panelW) : 0.80
+                let clampedRatio = min(max(effectiveRatio, max(minLiveRatio, 0.25)), min(maxLiveRatio, 0.80))
                 let liveW = panelW * clampedRatio
                 let chatW = panelW * (1 - clampedRatio)
 
@@ -390,34 +436,28 @@ struct FollowingView: View {
                         .frame(width: max(liveW - 1, 0))
                         .frame(maxHeight: .infinity)
 
-                    // 분할 핸들
-                    Rectangle()
-                        .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
-                        .frame(width: 1)
-                        .overlay(alignment: .center) {
-                            Capsule()
-                                .fill(DesignTokens.Colors.textTertiary.opacity(0.3))
-                                .frame(width: 3, height: 28)
+                    // 분할 핸들 — 공통 ResizeDivider 사용
+                    ResizeDivider(
+                        isHorizontal: true,
+                        dragOffset: $dualSplitDragOffset,
+                        onDragEnd: { translation in
+                            let delta = translation / panelW
+                            let newMinLive = panelW > 0 ? dualLiveMinWidth / panelW : 0.25
+                            let newMaxLive = panelW > 0 ? 1 - (dualChatMinWidth / panelW) : 0.80
+                            dualPanelSplitRatio = min(max(dualPanelSplitRatio + delta, max(newMinLive, 0.25)), min(newMaxLive, 0.80))
+                        },
+                        onDoubleClick: {
+                            dualPanelSplitRatio = FollowingViewState.defaultDualPanelSplitRatio
                         }
-                        .contentShape(Rectangle().inset(by: -4))
-                        .onHover { h in
-                            if h { NSCursor.resizeLeftRight.set() } else { NSCursor.arrow.set() }
-                        }
-                        .gesture(
-                            DragGesture(minimumDistance: 1)
-                                .updating($dualSplitDragOffset) { value, state, _ in
-                                    state = value.translation.width
-                                }
-                                .onEnded { value in
-                                    let delta = value.translation.width / panelW
-                                    dualPanelSplitRatio = min(max(dualPanelSplitRatio + delta, 0.25), 0.75)
-                                }
-                        )
+                    )
 
                     multiChatInlinePanel
                         .frame(width: max(chatW - 1, 0))
                         .frame(maxHeight: .infinity)
                 }
+                // 사이드 패널 너비 추적 (치지직 웹 크기 프리셋 계산용)
+                .onAppear { ps.currentSidePanelWidth = panelW }
+                .onChange(of: panelW) { _, w in ps.currentSidePanelWidth = w }
             }
         } else if showMultiLive {
             multiLiveInlinePanel
@@ -426,38 +466,18 @@ struct FollowingView: View {
         }
     }
 
-    /// 팔로잉 리스트 좌측 리사이즈 핸들 — 드래그로 오른쪽 패널 너비 조절
+    /// 팔로잉 리스트 우측 리사이즈 핸들 — 드래그로 리스트 패널 너비 조절
     private var followingListDividerHandle: some View {
-        Rectangle()
-            .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.dividerColor.opacity(0.3))
-            .frame(width: 1)
-            .overlay(alignment: .center) {
-                Capsule()
-                    .fill(isDraggingDivider ? DesignTokens.Colors.chzzkGreen.opacity(0.6) : DesignTokens.Colors.textTertiary.opacity(0.3))
-                    .frame(width: isDraggingDivider ? 5 : 3, height: 36)
-                    .animation(DesignTokens.Animation.micro, value: isDraggingDivider)
+        ResizeDivider(
+            isHorizontal: true,
+            dragOffset: $dividerDragOffset,
+            onDragEnd: { translation in
+                followingListWidth += translation
+            },
+            onDoubleClick: {
+                followingListWidth = FollowingViewState.defaultFollowingListWidth
             }
-            .contentShape(Rectangle().inset(by: -4))
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.resizeLeftRight.set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .updating($dividerDragOffset) { value, state, _ in
-                        state = value.translation.width
-                    }
-                    .onChanged { _ in
-                        isDraggingDivider = true
-                    }
-                    .onEnded { value in
-                        followingListWidth -= value.translation.width
-                        isDraggingDivider = false
-                    }
-            )
+        )
     }
 
     // MARK: - Following List Content
@@ -503,10 +523,10 @@ struct FollowingView: View {
                         emptySearchResult
                     }
                 } else {
-                    // ── 라이브 채널 카드 그리드 (위젯 카드)
+                    // ── 라이브 채널 아바타 스트립 (프로필 이미지 기반 빠른 탐색)
                     if !cachedLive.isEmpty {
                         widgetCard {
-                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
                                 sectionHeader(
                                     icon: "dot.radiowaves.left.and.right",
                                     title: "라이브 중",
@@ -514,19 +534,22 @@ struct FollowingView: View {
                                     color: DesignTokens.Colors.live
                                 )
 
-                                livePagingView
-
-                                if totalLivePages > 1 {
-                                    pageNavigator(
-                                        currentPage: Binding(
-                                            get: { ps.livePageIndex },
-                                            set: { ps.livePageIndex = $0 }
-                                        ),
-                                        totalPages: totalLivePages,
-                                        accentColor: DesignTokens.Colors.live
-                                    )
-                                }
+                                liveAvatarStrip
                             }
+                        }
+
+                        // ── 라이브 채널 썸네일 그리드 (페이징)
+                        livePagingView
+
+                        if totalLivePages > 1 {
+                            pageNavigator(
+                                currentPage: Binding(
+                                    get: { ps.livePageIndex },
+                                    set: { ps.livePageIndex = $0 }
+                                ),
+                                totalPages: totalLivePages,
+                                accentColor: DesignTokens.Colors.chzzkGreen
+                            )
                         }
                     }
 
@@ -566,7 +589,7 @@ struct FollowingView: View {
         .onKeyPress(.leftArrow) {
             guard !isSearchFocused else { return .ignored }
             if livePageIndex > 0 {
-                withAnimation(DesignTokens.Animation.snappy) { livePageIndex -= 1 }
+                withAnimation(DesignTokens.Animation.smooth) { livePageIndex -= 1 }
                 return .handled
             }
             return .ignored
@@ -574,7 +597,7 @@ struct FollowingView: View {
         .onKeyPress(.rightArrow) {
             guard !isSearchFocused else { return .ignored }
             if livePageIndex < totalLivePages - 1 {
-                withAnimation(DesignTokens.Animation.snappy) { livePageIndex += 1 }
+                withAnimation(DesignTokens.Animation.smooth) { livePageIndex += 1 }
                 return .handled
             }
             return .ignored
@@ -626,5 +649,62 @@ struct FollowingView: View {
         Task.detached(priority: .utility) {
             await ImageCacheService.shared.prefetchAndDecode(urls)
         }
+    }
+}
+
+// MARK: - P3-1: Panel Keyboard Shortcuts
+
+/// 패널 크기 조절 키보드 숏컷 ViewModifier — body 타입체크 부하 분리용
+private struct PanelKeyboardShortcuts: ViewModifier {
+    let showMultiLive: Bool
+    let showMultiChat: Bool
+    @Binding var hideFollowingList: Bool
+    @Binding var followingListWidth: CGFloat
+    @Binding var dualPanelSplitRatio: CGFloat
+    let followingListMinWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .onKeyPress(characters: CharacterSet(charactersIn: "[]\\")) { keyPress in
+                let key = keyPress.characters
+                let mods = keyPress.modifiers
+
+                if key == "[" && mods == [.command, .option] {
+                    guard showMultiLive && showMultiChat else { return .ignored }
+                    withAnimation(DesignTokens.Animation.normal) {
+                        dualPanelSplitRatio = max(dualPanelSplitRatio - 0.05, 0.25)
+                    }
+                    return .handled
+                }
+                if key == "]" && mods == [.command, .option] {
+                    guard showMultiLive && showMultiChat else { return .ignored }
+                    withAnimation(DesignTokens.Animation.normal) {
+                        dualPanelSplitRatio = min(dualPanelSplitRatio + 0.05, 0.80)
+                    }
+                    return .handled
+                }
+                if key == "[" && mods == .command {
+                    guard showMultiLive || showMultiChat, !hideFollowingList else { return .ignored }
+                    withAnimation(DesignTokens.Animation.normal) {
+                        followingListWidth = max(followingListWidth - 20, followingListMinWidth)
+                    }
+                    return .handled
+                }
+                if key == "]" && mods == .command {
+                    guard showMultiLive || showMultiChat, !hideFollowingList else { return .ignored }
+                    withAnimation(DesignTokens.Animation.normal) {
+                        followingListWidth += 20
+                    }
+                    return .handled
+                }
+                if key == "\\" && mods == .command {
+                    guard showMultiLive || showMultiChat else { return .ignored }
+                    withAnimation(DesignTokens.Animation.normal) {
+                        hideFollowingList.toggle()
+                    }
+                    return .handled
+                }
+                return .ignored
+            }
     }
 }

@@ -453,10 +453,9 @@ struct SimpleChannelRow: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
-        .onHover { hovering in
-            withAnimation(DesignTokens.Animation.fast) { isHovered = hovering }
-        }
+        .onHover { isHovered = $0 }
         .customCursor(.pointingHand)
+        .animation(DesignTokens.Animation.fast, value: isHovered)
     }
     
     private var channelPlaceholder: some View {

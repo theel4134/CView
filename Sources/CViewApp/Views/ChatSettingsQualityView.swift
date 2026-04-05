@@ -282,6 +282,17 @@ struct ChatSettingsView: View {
                 ))
                 .toggleStyle(.switch).tint(DesignTokens.Colors.accentOrange).labelsHidden()
             }
+
+            ChatSettingsDivider()
+
+            ChatSettingsRow(label: "역할 강조", icon: "person.badge.shield.checkmark.fill", iconColor: DesignTokens.Colors.chzzkGreen,
+                            description: "스트리머/매니저 메시지 배경 강조") {
+                Toggle("", isOn: Binding(
+                    get: { vm.highlightRoles },
+                    set: { vm.highlightRoles = $0; saveToStore(vm) }
+                ))
+                .toggleStyle(.switch).tint(DesignTokens.Colors.chzzkGreen).labelsHidden()
+            }
         }
     }
 

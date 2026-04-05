@@ -412,12 +412,16 @@ public struct ChatMessageParser: Sendable {
         }
     }
     
+    /// 프로세스 단위 단조 증가 시퀀스 — 동일 uid+msgTime 메시지의 ID 충돌 방지
+    private nonisolated(unsafe) static var _msgSequence: UInt64 = 0
+
     private func parseSingleMessage(_ dict: [String: AnyCodable]) -> ChatMessage? {
         let msg = dict["msg"]?.stringValue ?? ""
         let uid = dict["uid"]?.stringValue ?? ""
         let msgTime = dict["msgTime"]?.intValue ?? 0
-        // 고유 ID 생성: uid + msgTime 조합 (msgStatusType은 항상 "NORMAL"이므로 사용 불가)
-        let msgId = uid.isEmpty ? UUID().uuidString : "\(uid)_\(msgTime)"
+        // 고유 ID 생성: uid + msgTime + 단조 시퀀스 (동일 ms 메시지 ID 충돌 완전 방지)
+        Self._msgSequence &+= 1
+        let msgId = uid.isEmpty ? UUID().uuidString : "\(uid)_\(msgTime)_\(Self._msgSequence)"
         
         // Parse profile from extras
         let parsedProfile = parseProfile(dict["profile"])
@@ -445,9 +449,11 @@ public struct ChatMessageParser: Sendable {
         let chatProfile = ChatProfile(
             nickname: nickname,
             profileImageURL: parsedProfile.profileImageUrl.flatMap { URL(string: $0) },
-            userRoleCode: parsedProfile.isStreamer ? "streamer" : (parsedProfile.isManager ? "manager" : nil),
+            userRoleCode: parsedProfile.userRoleCode,
             badge: parsedProfile.badges.first,
-            title: nil
+            badges: parsedProfile.badges,
+            title: parsedProfile.title,
+            activityBadges: parsedProfile.activityBadges
         )
         
         let chatExtras = ChatExtras(
@@ -470,7 +476,10 @@ public struct ChatMessageParser: Sendable {
     private struct ParsedProfile {
         var nickname: String = "Unknown"
         var profileImageUrl: String? = nil
+        var userRoleCode: String? = nil
         var badges: [ChatBadge] = []
+        var activityBadges: [ChatBadge] = []
+        var title: ChatTitle? = nil
         var isStreamer: Bool = false
         var isManager: Bool = false
         var isVerified: Bool = false
@@ -486,13 +495,68 @@ public struct ChatMessageParser: Sendable {
         if let jsonStr = value.stringValue,
            let data = jsonStr.data(using: .utf8),
            let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            // Convert to AnyCodable dict (simplified)
-            dict = nil // Fallback
+            // JSON 문자열 파싱 경로 — 전체 파싱 지원
+            dict = nil
             result.nickname = parsed["nickname"] as? String ?? "Unknown"
             result.profileImageUrl = parsed["profileImageUrl"] as? String
             if let userRole = parsed["userRoleCode"] as? String {
+                result.userRoleCode = userRole
                 result.isStreamer = userRole == "streamer"
                 result.isManager = userRole == "streaming_chat_manager" || userRole == "manager"
+            }
+            // 뱃지 파싱 (JSON string path)
+            // 1) badge 필드 (구형 호환 — 보통 null)
+            if let badgeDict = parsed["badge"] as? [String: Any],
+               let imgUrl = badgeDict["imageUrl"] as? String ?? badgeDict["imageURL"] as? String {
+                result.badges.append(ChatBadge(
+                    imageURL: URL(string: imgUrl),
+                    badgeId: badgeDict["badgeId"] as? String
+                ))
+            }
+            // 2) streamingProperty.subscription.badge (구독 뱃지)
+            if let streamProp = parsed["streamingProperty"] as? [String: Any],
+               let subscription = streamProp["subscription"] as? [String: Any],
+               let subBadge = subscription["badge"] as? [String: Any],
+               let subURL = subBadge["imageUrl"] as? String ?? subBadge["imageURL"] as? String {
+                let tier = subscription["tier"] as? Int
+                let months = subscription["accumulativeMonth"] as? Int
+                result.badges.append(ChatBadge(
+                    imageURL: URL(string: subURL),
+                    badgeId: "subscription_\(tier ?? 0)",
+                    altText: months.map { "\($0)개월 구독" }
+                ))
+            }
+            // 3) viewerBadges (채널 뱃지 — 후원, 활동 등)
+            if let viewerBadges = parsed["viewerBadges"] as? [[String: Any]] {
+                for vb in viewerBadges {
+                    if let badgeInfo = vb["badge"] as? [String: Any],
+                       let url = badgeInfo["imageUrl"] as? String ?? badgeInfo["imageURL"] as? String {
+                        result.badges.append(ChatBadge(
+                            imageURL: URL(string: url),
+                            badgeId: badgeInfo["badgeId"] as? String,
+                            altText: badgeInfo["badgeId"] as? String
+                        ))
+                    }
+                }
+            }
+            // 칭호 파싱 (JSON string path)
+            if let titleDict = parsed["title"] as? [String: Any] {
+                let name = titleDict["name"] as? String ?? ""
+                if !name.isEmpty {
+                    result.title = ChatTitle(name: name, color: titleDict["color"] as? String)
+                }
+            }
+            // 활동 뱃지 파싱 (JSON string path)
+            if let actBadges = parsed["activityBadges"] as? [[String: Any]] {
+                for badge in actBadges {
+                    if let url = badge["imageUrl"] as? String ?? badge["imageURL"] as? String {
+                        result.activityBadges.append(ChatBadge(
+                            imageURL: URL(string: url),
+                            badgeId: badge["badgeId"] as? String,
+                            altText: badge["title"] as? String ?? badge["badgeNo"] as? String
+                        ))
+                    }
+                }
             }
             return result
         } else {
@@ -505,14 +569,66 @@ public struct ChatMessageParser: Sendable {
         result.profileImageUrl = profileDict["profileImageUrl"]?.stringValue
         
         if let role = profileDict["userRoleCode"]?.stringValue {
+            result.userRoleCode = role
             result.isStreamer = role == "streamer"
             result.isManager = role.contains("manager")
         }
         
-        if let badgeArray = profileDict["badge"]?.dictValue {
-            for (key, val) in badgeArray {
-                if let url = val.stringValue {
-                    result.badges.append(ChatBadge(imageURL: URL(string: url)))
+        // 뱃지 파싱 (AnyCodable dict path)
+        // 1) badge 필드 (구형 호환 — 보통 null)
+        if let badgeDict = profileDict["badge"]?.dictValue,
+           let imgUrl = badgeDict["imageUrl"]?.stringValue ?? badgeDict["imageURL"]?.stringValue {
+            result.badges.append(ChatBadge(
+                imageURL: URL(string: imgUrl),
+                badgeId: badgeDict["badgeId"]?.stringValue
+            ))
+        }
+        // 2) streamingProperty.subscription.badge (구독 뱃지)
+        if let streamProp = profileDict["streamingProperty"]?.dictValue,
+           let subscription = streamProp["subscription"]?.dictValue,
+           let subBadge = subscription["badge"]?.dictValue,
+           let subURL = subBadge["imageUrl"]?.stringValue ?? subBadge["imageURL"]?.stringValue {
+            let tier = subscription["tier"]?.intValue
+            let months = subscription["accumulativeMonth"]?.intValue
+            result.badges.append(ChatBadge(
+                imageURL: URL(string: subURL),
+                badgeId: "subscription_\(tier ?? 0)",
+                altText: months.map { "\($0)개월 구독" }
+            ))
+        }
+        // 3) viewerBadges (채널 뱃지 — 후원, 활동 등)
+        if let viewerBadges = profileDict["viewerBadges"]?.arrayValue {
+            for vb in viewerBadges {
+                if let vbDict = vb.dictValue,
+                   let badgeInfo = vbDict["badge"]?.dictValue,
+                   let url = badgeInfo["imageUrl"]?.stringValue ?? badgeInfo["imageURL"]?.stringValue {
+                    result.badges.append(ChatBadge(
+                        imageURL: URL(string: url),
+                        badgeId: badgeInfo["badgeId"]?.stringValue,
+                        altText: badgeInfo["badgeId"]?.stringValue
+                    ))
+                }
+            }
+        }
+        
+        // 칭호 파싱 (AnyCodable dict path)
+        if let titleDict = profileDict["title"]?.dictValue {
+            let name = titleDict["name"]?.stringValue ?? ""
+            if !name.isEmpty {
+                result.title = ChatTitle(name: name, color: titleDict["color"]?.stringValue)
+            }
+        }
+        
+        // 활동 뱃지 파싱 (AnyCodable dict path)
+        if let actBadges = profileDict["activityBadges"]?.arrayValue {
+            for badge in actBadges {
+                if let dict = badge.dictValue,
+                   let url = dict["imageUrl"]?.stringValue ?? dict["imageURL"]?.stringValue {
+                    result.activityBadges.append(ChatBadge(
+                        imageURL: URL(string: url),
+                        badgeId: dict["badgeId"]?.stringValue,
+                        altText: dict["title"]?.stringValue ?? dict["badgeNo"]?.stringValue
+                    ))
                 }
             }
         }

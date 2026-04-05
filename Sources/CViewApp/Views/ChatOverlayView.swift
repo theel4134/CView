@@ -202,6 +202,7 @@ struct ChatOverlayMessagesView: View {
 
     @State private var isScrollViewVisible = true
     @State private var scrollSuppressionCount = 0
+    @State private var containerHeight: CGFloat = 300
 
     private var isScrollSuppressed: Bool { scrollSuppressionCount > 0 }
 
@@ -216,16 +217,24 @@ struct ChatOverlayMessagesView: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, minHeight: containerHeight, alignment: .bottom)
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xxs)
             }
             .defaultScrollAnchor(.bottom)
             .scrollIndicators(.hidden)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                if newHeight > 0 { containerHeight = newHeight }
+            }
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 let maxScrollY = geometry.contentSize.height - geometry.containerSize.height
                 guard maxScrollY > 0 else { return true }
                 let distanceFromBottom = maxScrollY - geometry.contentOffset.y
-                return distanceFromBottom <= 80
+                // 컨테이너 높이 10% 기반 적응형 임계값 (40~120px)
+                let threshold = max(40.0, min(geometry.containerSize.height * 0.1, 120.0))
+                return distanceFromBottom <= threshold
             } action: { oldValue, isNearBottom in
                 guard oldValue != isNearBottom else { return }
                 guard isScrollViewVisible, !isScrollSuppressed else { return }
@@ -233,16 +242,7 @@ struct ChatOverlayMessagesView: View {
             }
             .onAppear {
                 isScrollViewVisible = true
-                if viewModel?.isAutoScrollEnabled == true,
-                   let lastId = viewModel?.messages.last?.id {
-                    viewModel?.cancelReplayDebounce()
-                    scrollSuppressionCount += 1
-                    proxy.scrollTo(lastId, anchor: .bottom)
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(300))
-                        self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
-                    }
-                }
+                overlayScrollToLatest(proxy: proxy)
             }
             .onDisappear {
                 isScrollViewVisible = false
@@ -250,29 +250,14 @@ struct ChatOverlayMessagesView: View {
             .onChange(of: viewModel?.messages.last?.id) { _, _ in
                 guard viewModel?.isAutoScrollEnabled == true,
                       viewModel?.isReplayMode != true else { return }
-                if let lastId = viewModel?.messages.last?.id {
-                    viewModel?.cancelReplayDebounce()
-                    scrollSuppressionCount += 1
-                    proxy.scrollTo(lastId, anchor: .bottom)
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(300))
-                        self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
-                    }
-                }
+                overlayScrollToLatest(proxy: proxy)
             }
             // 리플레이 모드 표시 (간소화)
             .overlay(alignment: .bottom) {
                 if let vm = viewModel, vm.isReplayMode {
                     Button {
                         vm.exitReplayMode()
-                        if let lastId = vm.messages.last?.id {
-                            scrollSuppressionCount += 1
-                            proxy.scrollTo(lastId, anchor: .bottom)
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(300))
-                                self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
-                            }
-                        }
+                        overlayScrollToLatest(proxy: proxy)
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.down")
@@ -291,6 +276,21 @@ struct ChatOverlayMessagesView: View {
                     .padding(.bottom, 4)
                 }
             }
+        }
+    }
+
+    // MARK: - Scroll Helpers
+
+    private func overlayScrollToLatest(proxy: ScrollViewProxy) {
+        guard let lastId = viewModel?.messages.last?.id else { return }
+        viewModel?.cancelReplayDebounce()
+        scrollSuppressionCount += 1
+        withAnimation(DesignTokens.Animation.chatScroll) {
+            proxy.scrollTo(lastId, anchor: .bottom)
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }
     }
 }

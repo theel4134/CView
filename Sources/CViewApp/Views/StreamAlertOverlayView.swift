@@ -152,9 +152,9 @@ private struct StreamAlertCard: View {
                         .strokeBorder(tierColor.opacity(0.3), lineWidth: 0.5)
                 }
         }
-        .compositingGroup()
-        // [GPU 최적화] 이중 shadow → 단일 통합 — GPU 합성 패스 1개 절감
-        .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 3)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
+        // [GPU 최적화] compositingGroup 제거 + shadow radius 축소 — 오프스크린 렌더 패스 절감
+        .shadow(color: .black.opacity(0.35), radius: 6, x: 0, y: 3)
     }
 
     // MARK: - Donation Tier Helpers

@@ -83,10 +83,10 @@ public struct ViewerBucket: Identifiable, Sendable {
 public struct LatencyHistoryEntry: Identifiable, Sendable {
     public let id = UUID()
     public let timestamp: Date
-    public let webLatency: Double
-    public let appLatency: Double
+    public let webLatency: Double?
+    public let appLatency: Double?
 
-    public init(timestamp: Date, webLatency: Double, appLatency: Double) {
+    public init(timestamp: Date, webLatency: Double?, appLatency: Double?) {
         self.timestamp = timestamp
         self.webLatency = webLatency
         self.appLatency = appLatency

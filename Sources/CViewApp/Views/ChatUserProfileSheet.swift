@@ -42,6 +42,60 @@ struct ChatUserProfileSheet: View {
                     .font(DesignTokens.Typography.custom(size: 16, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
+                // 역할 표시
+                if let roleLabel = message.userRole.displayLabel,
+                   let roleIcon = message.userRole.iconName {
+                    HStack(spacing: 4) {
+                        Image(systemName: roleIcon)
+                            .font(.system(size: 10, weight: .bold))
+                        Text(roleLabel)
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(message.userRole == .streamer
+                        ? DesignTokens.Colors.chzzkGreen
+                        : Color(hex: 0x5C9DFF))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        (message.userRole == .streamer
+                            ? DesignTokens.Colors.chzzkGreen
+                            : Color(hex: 0x5C9DFF)).opacity(0.12),
+                        in: Capsule()
+                    )
+                }
+
+                // 칭호 표시
+                if let titleName = message.titleName, !titleName.isEmpty {
+                    let titleCol: Color = {
+                        if let hex = message.titleColor,
+                           let val = UInt(hex.replacingOccurrences(of: "#", with: ""), radix: 16) {
+                            return Color(hex: val)
+                        }
+                        return DesignTokens.Colors.textSecondary
+                    }()
+                    Text(titleName)
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                        .foregroundStyle(titleCol)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(titleCol.opacity(0.12), in: Capsule())
+                }
+
+                // 뱃지 목록
+                if !message.badges.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(Array(message.badges.prefix(5).enumerated()), id: \.offset) { _, badge in
+                            if let url = badge.imageURL {
+                                CachedAsyncImage(url: url) {
+                                    EmptyView()
+                                }
+                                .frame(width: 20, height: 20)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                        }
+                    }
+                }
+
                 Text(message.userId)
                     .font(DesignTokens.Typography.custom(size: 10, design: .monospaced))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)

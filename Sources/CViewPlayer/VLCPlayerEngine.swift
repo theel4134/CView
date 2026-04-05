@@ -60,6 +60,22 @@ public enum QualityAdaptationAction: Sendable {
     case upgrade(reason: String)
 }
 
+// MARK: - 세션 계층 (멀티라이브 3-Tier)
+
+/// 멀티라이브 리소스 배분을 위한 세션 계층.
+/// - active: 선택된 포그라운드 세션 (1080p, 최고 품질)
+/// - visible: 그리드에 보이지만 비선택 (480p, 성능 우선)
+/// - hidden: 화면에 보이지 않음 (비디오 비활성화, 오디오만 또는 완전 중단)
+public enum SessionTier: Int, Sendable, Comparable {
+    case active = 0    // Tier 1: 선택 세션
+    case visible = 1   // Tier 2: 가시 비선택
+    case hidden = 2    // Tier 3: 비가시
+
+    public static func < (lhs: SessionTier, rhs: SessionTier) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 // MARK: - 스트리밍 프로파일
 
 /// VLC 스트리밍 시나리오별 캐싱 프로파일.
@@ -122,18 +138,19 @@ public enum VLCStreamingProfile: Sendable {
         case .multiLive:  return 1  // 다중 세션 GPU/CPU 경합 방지, VideoToolbox 주체
         }
     }
-    /// HLS adaptive 최대 해상도 — 멀티라이브 그리드 셀에서는 720p로 제한
+    /// HLS adaptive 최대 해상도 — 멀티라이브 그리드 셀에서는 해상도 제한
     /// isSelected: 현재 선택된(포그라운드) 세션 여부
+    /// [Opt] 멀티라이브 비선택 세션: 720p→480p — GPU 디코딩 부하 40% 절감
     func adaptiveMaxWidth(isSelected: Bool) -> Int {
         switch self {
         case .ultraLow, .lowLatency: return 1920
-        case .multiLive: return isSelected ? 1920 : 1280
+        case .multiLive: return isSelected ? 1920 : 854
         }
     }
     func adaptiveMaxHeight(isSelected: Bool) -> Int {
         switch self {
         case .ultraLow, .lowLatency: return 1080
-        case .multiLive: return isSelected ? 1080 : 720
+        case .multiLive: return isSelected ? 1080 : 480
         }
     }
     /// 늦은 프레임 드롭 여부
@@ -161,6 +178,14 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     /// 멀티라이브에서 현재 선택된(포그라운드) 세션인지 여부
     /// adaptive 해상도 결정에 사용 — 그리드 셀은 720p, 선택 세션은 1080p
     public var isSelectedSession: Bool = true
+
+    /// 현재 세션 계층 (멀티라이브 3-Tier 리소스 관리)
+    /// .active = 선택 세션 (1080p), .visible = 보이지만 비선택 (480p), .hidden = 비가시
+    public var sessionTier: SessionTier = .active
+
+    /// 대역폭 코디네이터가 설정하는 최대 적응 해상도 높이 (0 = 제한 없음)
+    /// 화면 캡핑(flashls capLevelToStage) 적용 시 사용
+    public var maxAdaptiveHeight: Int = 0
 
     /// 내부 VLCMediaPlayer 인스턴스 (PiP 등 직접 접근이 필요한 경우 사용)
     public var mediaPlayer: VLCMediaPlayer { player }
@@ -247,6 +272,10 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     // collectMetrics() player.videoSize 캐싱 (MainActor 동기 호출 최소화)
     var _cachedVideoSize: CGSize = .zero
     var _cachedResolutionString: String? = nil
+
+    // [Opt-B3] 통계 기반 화질 적응 — 연속 품질 저하/안정 카운터
+    var _qualityDegradeCount: Int = 0   // 연속 프레임 드롭 감지 횟수
+    var _qualityStableCount: Int = 0    // 연속 안정 감지 횟수
 
     // mediaPlayerTimeChanged 스로틀링 — 초당 10~30회 콜백을 1초 간격으로 제한
     var _lastTimeChangeNotify: UInt64 = 0

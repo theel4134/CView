@@ -12,10 +12,12 @@ public actor MultiLiveEnginePool {
     private var idleEngines: [PlayerEngineType: [any PlayerEngineProtocol]] = [
         .vlc: [],
         .avPlayer: [],
+        .hlsjs: [],
     ]
     private var activeCount: [PlayerEngineType: Int] = [
         .vlc: 0,
         .avPlayer: 0,
+        .hlsjs: 0,
     ]
     private let logger = AppLogger.player
 
@@ -25,7 +27,7 @@ public actor MultiLiveEnginePool {
 
     /// 전체 활성 엔진 수 (타입 무관)
     public var totalActiveCount: Int {
-        (activeCount[.vlc] ?? 0) + (activeCount[.avPlayer] ?? 0)
+        (activeCount[.vlc] ?? 0) + (activeCount[.avPlayer] ?? 0) + (activeCount[.hlsjs] ?? 0)
     }
 
     /// 타입별 미리 엔진 생성
@@ -54,7 +56,7 @@ public actor MultiLiveEnginePool {
         }
 
         // 전체 풀 한도 체크
-        let totalIdle = (idleEngines[.vlc]?.count ?? 0) + (idleEngines[.avPlayer]?.count ?? 0)
+        let totalIdle = (idleEngines[.vlc]?.count ?? 0) + (idleEngines[.avPlayer]?.count ?? 0) + (idleEngines[.hlsjs]?.count ?? 0)
         guard totalActiveCount + totalIdle < maxPoolSize else {
             logger.warning("EnginePool: maxPoolSize(\(self.maxPoolSize)) 도달 — acquire 거부")
             return nil
@@ -76,6 +78,9 @@ public actor MultiLiveEnginePool {
         } else if let av = engine as? AVPlayerEngine {
             type = .avPlayer
             await MainActor.run { av.resetForReuse() }
+        } else if let hlsjs = engine as? HLSJSPlayerEngine {
+            type = .hlsjs
+            await MainActor.run { hlsjs.resetForReuse() }
         } else {
             return
         }
@@ -99,15 +104,18 @@ public actor MultiLiveEnginePool {
                     await MainActor.run { vlc.resetForReuse() }
                 } else if let av = engine as? AVPlayerEngine {
                     await MainActor.run { av.resetForReuse() }
+                } else if let hlsjs = engine as? HLSJSPlayerEngine {
+                    await MainActor.run { hlsjs.resetForReuse() }
                 }
             }
             logger.info("EnginePool: drain \(type.rawValue) ×\(engines.count)")
         }
         idleEngines[.vlc]?.removeAll()
         idleEngines[.avPlayer]?.removeAll()
+        idleEngines[.hlsjs]?.removeAll()
     }
 
-    /// 엔진 팩토리 — VLC는 MainActor에서 생성 필요
+    /// 엔진 팩토리 — VLC/HLS.js는 MainActor에서 생성 필요 (NSView 포함)
     private static func makeEngine(type: PlayerEngineType) async -> any PlayerEngineProtocol {
         switch type {
         case .vlc:
@@ -116,6 +124,10 @@ public actor MultiLiveEnginePool {
             return engine
         case .avPlayer:
             let engine = await MainActor.run { AVPlayerEngine() }
+            return engine
+        case .hlsjs:
+            let engine = await MainActor.run { HLSJSPlayerEngine() }
+            await MainActor.run { engine.streamingProfile = .multiLive }
             return engine
         }
     }

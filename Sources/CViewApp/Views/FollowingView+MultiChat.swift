@@ -13,10 +13,13 @@ extension FollowingView {
             // 채팅 탭 바
             multiChatTabBar
 
-            // 채팅 콘텐츠 영역 — leading 정렬로 중앙 정렬 방지
+            // 채팅 콘텐츠 영역
             if chatSessionManager.sessions.isEmpty {
                 chatEmptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if showMergedChat {
+                MergedChatView(sessionManager: chatSessionManager)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else if let session = chatSessionManager.selectedSession {
                 ChatPanelView(chatVM: session.chatViewModel, onOpenSettings: { showChatSettings = true })
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -67,7 +70,12 @@ extension FollowingView {
             get: { ps.showChatAddChannel },
             set: { ps.showChatAddChannel = $0 }
         )) {
-            chatAddChannelSheet
+            ChatChannelPickerView(
+                apiClient: appState.apiClient,
+                onChannelSelected: { channelId in await addChatChannel(channelId: channelId) },
+                onDismiss: { showChatAddChannel = false },
+                sheetWidth: layout.chatAddSheetWidth
+            )
         }
     }
 
@@ -77,23 +85,55 @@ extension FollowingView {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.accentOrange)
 
                 Text("멀티채팅")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DesignTokens.Typography.footnoteMedium)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                 if !chatSessionManager.sessions.isEmpty {
                     Text("\(chatSessionManager.sessions.count)")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .rounded))
                         .foregroundStyle(DesignTokens.Colors.accentOrange)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(DesignTokens.Colors.accentOrange.opacity(0.12), in: Capsule())
+                        .background(DesignTokens.Colors.accentOrange.opacity(DesignTokens.Opacity.medium), in: Capsule())
                 }
 
                 Spacer()
+
+                // 통합 모드 토글
+                if chatSessionManager.sessions.count >= 2 {
+                    Button {
+                        withAnimation(DesignTokens.Animation.snappy) {
+                            showMergedChat.toggle()
+                        }
+                    } label: {
+                        Image(systemName: showMergedChat
+                            ? "text.line.first.and.arrowtriangle.forward"
+                            : "text.line.first.and.arrowtriangle.forward")
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                            .foregroundStyle(showMergedChat
+                                ? DesignTokens.Colors.accentOrange
+                                : DesignTokens.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(showMergedChat ? "개별 채널 보기" : "통합 타임라인")
+                }
+
+                // 전체 재연결
+                if !chatSessionManager.sessions.isEmpty {
+                    Button {
+                        Task { await chatSessionManager.reconnectAll() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    }
+                    .buttonStyle(.plain)
+                    .help("전체 채널 재연결")
+                }
 
                 // 전체 해제
                 if !chatSessionManager.sessions.isEmpty {
@@ -101,7 +141,7 @@ extension FollowingView {
                         showDisconnectAllConfirm = true
                     } label: {
                         Image(systemName: "xmark.circle")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -125,7 +165,7 @@ extension FollowingView {
                     showChatAddChannel = true
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.accentOrange)
                 }
                 .buttonStyle(.plain)
@@ -138,7 +178,7 @@ extension FollowingView {
                     }
                 } label: {
                     Image(systemName: "chevron.right.2")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(DesignTokens.Typography.microSemibold)
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -151,8 +191,30 @@ extension FollowingView {
             if !chatSessionManager.sessions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 4) {
-                        ForEach(chatSessionManager.sessions) { session in
+                        ForEach(Array(chatSessionManager.sessions.enumerated()), id: \.element.id) { index, session in
                             multiChatTab(session)
+                                .contextMenu {
+                                    if index > 0 {
+                                        Button {
+                                            chatSessionManager.moveSession(from: IndexSet([index]), to: index - 1)
+                                        } label: {
+                                            Label("왼쪽으로 이동", systemImage: "arrow.left")
+                                        }
+                                    }
+                                    if index < chatSessionManager.sessions.count - 1 {
+                                        Button {
+                                            chatSessionManager.moveSession(from: IndexSet([index]), to: index + 2)
+                                        } label: {
+                                            Label("오른쪽으로 이동", systemImage: "arrow.right")
+                                        }
+                                    }
+                                    Divider()
+                                    Button(role: .destructive) {
+                                        Task { await chatSessionManager.removeSession(channelId: session.id) }
+                                    } label: {
+                                        Label("채널 제거", systemImage: "minus.circle")
+                                    }
+                                }
                         }
                     }
                     .padding(.horizontal, 10)
@@ -160,7 +222,7 @@ extension FollowingView {
                 }
             }
 
-            Divider().opacity(0.4)
+            Divider().opacity(DesignTokens.Opacity.divider)
         }
         .background(DesignTokens.Colors.surfaceBase.opacity(0.95))
     }
@@ -178,12 +240,12 @@ extension FollowingView {
                     .frame(width: 5, height: 5)
 
                 Text(session.channelName)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: isSelected ? .semibold : .regular))
                     .lineLimit(1)
 
                 if session.chatViewModel.messageCount > 0 {
                     Text("\(session.chatViewModel.messageCount)")
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
                         .foregroundStyle(isSelected ? DesignTokens.Colors.accentOrange : DesignTokens.Colors.textTertiary)
                 }
 
@@ -192,7 +254,7 @@ extension FollowingView {
                     Task { await chatSessionManager.removeSession(channelId: session.id) }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                         .frame(width: 18, height: 18)
                         .contentShape(Circle())
@@ -207,15 +269,15 @@ extension FollowingView {
             .padding(.vertical, 5)
             .background(
                 isSelected
-                    ? DesignTokens.Colors.accentOrange.opacity(0.15)
-                    : DesignTokens.Colors.surfaceElevated.opacity(0.6),
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    ? DesignTokens.Colors.accentOrange.opacity(DesignTokens.Opacity.heavy)
+                    : DesignTokens.Colors.surfaceElevated.opacity(0.5),
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                     .strokeBorder(
                         isSelected ? DesignTokens.Colors.accentOrange.opacity(0.3) : Color.clear,
-                        lineWidth: 0.5
+                        lineWidth: DesignTokens.Border.thin
                     )
             )
             .foregroundStyle(
@@ -223,6 +285,7 @@ extension FollowingView {
             )
         }
         .buttonStyle(.plain)
+        .help(session.chatViewModel.connectionState.displayText)
     }
 
     // MARK: - Chat Empty State
@@ -230,20 +293,20 @@ extension FollowingView {
     var chatEmptyState: some View {
         VStack(spacing: DesignTokens.Spacing.md) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 32, weight: .ultraLight))
+                .font(DesignTokens.Typography.display.weight(.ultraLight))
                 .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.4))
             Text("멀티채팅")
-                .font(.system(size: 15, weight: .semibold))
+                .font(DesignTokens.Typography.bodySemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
             Text("여러 채널의 채팅을 동시에\n모니터링할 수 있습니다")
-                .font(.system(size: 12, weight: .regular))
+                .font(DesignTokens.Typography.footnote)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .multilineTextAlignment(.center)
             Button {
                 showChatAddChannel = true
             } label: {
                 Label("채널 추가", systemImage: "plus")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DesignTokens.Typography.footnoteMedium)
             }
             .buttonStyle(.borderedProminent)
             .tint(DesignTokens.Colors.accentOrange)
@@ -252,143 +315,25 @@ extension FollowingView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Chat Add Channel Sheet
-
-    var chatAddChannelSheet: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            Text("채팅 채널 추가")
-                .font(.system(size: 15, weight: .semibold))
-
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                TextField("채널명 검색 또는 채널 ID 입력", text: $chatSearchQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12, weight: .regular))
-                    .onSubmit { searchChatChannels() }
-                if isSearchingChatChannels {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
-                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.6))
-            )
-
-            // 검색 결과
-            if !chatSearchResults.isEmpty {
-                ScrollView {
-                    LazyVStack(spacing: DesignTokens.Spacing.xxs) {
-                        ForEach(chatSearchResults) { channel in
-                            Button {
-                                Task {
-                                    await addChatChannel(channelId: channel.channelId)
-                                    chatSearchQuery = ""
-                                    chatSearchResults = []
-                                    showChatAddChannel = false
-                                }
-                            } label: {
-                                HStack(spacing: DesignTokens.Spacing.sm) {
-                                    if let url = channel.channelImageURL {
-                                        CachedAsyncImage(url: url) {
-                                            Circle().fill(DesignTokens.Colors.surfaceElevated)
-                                        }
-                                        .frame(width: 28, height: 28)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Circle().fill(DesignTokens.Colors.surfaceElevated)
-                                            .frame(width: 28, height: 28)
-                                            .overlay {
-                                                Image(systemName: "person.fill")
-                                                    .font(DesignTokens.Typography.micro)
-                                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                                            }
-                                    }
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(channel.channelName)
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundStyle(DesignTokens.Colors.textPrimary)
-                                        Text("팔로워 \(channel.followerCount.formatted())")
-                                            .font(.system(size: 9, weight: .regular))
-                                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, DesignTokens.Spacing.xs)
-                                .padding(.vertical, DesignTokens.Spacing.xs)
-                                .background(DesignTokens.Colors.surfaceOverlay.opacity(0.001))
-                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .frame(maxHeight: 200)
-            }
-
-            Divider()
-
-            // 직접 입력
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                TextField("채널 ID 직접 입력", text: $newChatChannelId)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-                Button("추가") {
-                    let channelId = newChatChannelId.trimmingCharacters(in: .whitespaces)
-                    guard !channelId.isEmpty else { return }
-                    Task {
-                        await addChatChannel(channelId: channelId)
-                        newChatChannelId = ""
-                        showChatAddChannel = false
-                    }
-                }
-                .disabled(newChatChannelId.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-
-            HStack {
-                Button("취소") {
-                    newChatChannelId = ""
-                    chatSearchQuery = ""
-                    chatSearchResults = []
-                    showChatAddChannel = false
-                }
-                .keyboardShortcut(.cancelAction)
-                Spacer()
-            }
-        }
-        .padding(DesignTokens.Spacing.xl)
-        .frame(width: layout.chatAddSheetWidth)
-    }
-
     // MARK: - Chat Actions
 
-    func searchChatChannels() {
-        let query = chatSearchQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty, let apiClient = appState.apiClient else { return }
-        isSearchingChatChannels = true
-        Task {
-            do {
-                let result = try await apiClient.searchChannels(keyword: query, size: 10)
-                chatSearchResults = result.data
-            } catch {
-                chatSearchResults = []
-            }
-            isSearchingChatChannels = false
-        }
-    }
-
     func addChatChannel(channelId: String) async {
+        // 세션 수 사전 체크
+        guard chatSessionManager.canAddSession else {
+            chatAddError = "최대 \(MultiChatSessionManager.maxSessions)개 채널까지 추가할 수 있습니다."
+            return
+        }
+
         guard let apiClient = appState.apiClient else { return }
         do {
             let liveDetail = try await apiClient.liveDetail(channelId: channelId)
-            guard let chatChannelId = liveDetail.chatChannelId else { return }
+            guard let chatChannelId = liveDetail.chatChannelId else {
+                chatAddError = "채널 '\(channelId)'은(는) 현재 방송 중이 아닙니다."
+                return
+            }
             let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
             let channelName = liveDetail.channel?.channelName ?? channelId
-            await chatSessionManager.addSession(
+            let result = await chatSessionManager.addSession(
                 channelId: channelId,
                 channelName: channelName,
                 chatChannelId: chatChannelId,
@@ -397,8 +342,63 @@ extension FollowingView {
                 uid: appState.userChannelId,
                 nickname: appState.userNickname
             )
+            switch result {
+            case .alreadyExists:
+                chatAddError = "'\(channelName)' 채널은 이미 추가되어 있습니다."
+            case .maxSessionsReached:
+                chatAddError = "최대 \(MultiChatSessionManager.maxSessions)개 채널까지 추가할 수 있습니다."
+            case .success, .connectionFailed:
+                break
+            }
         } catch {
             chatAddError = "채널 '\(channelId)'에 연결할 수 없습니다: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Session Restore
+
+    /// 저장된 멀티채팅 세션 복원 (앱 시작 시 호출)
+    func restoreSavedChatSessions() async {
+        let saved = chatSessionManager.savedSessions
+        guard !saved.isEmpty else { return }
+
+        guard let apiClient = appState.apiClient else { return }
+
+        var restoredAny = false
+        let lastSelected = chatSessionManager.savedSelectedChannelId
+
+        for session in saved {
+            do {
+                let liveDetail = try await apiClient.liveDetail(channelId: session.channelId)
+                guard let chatChannelId = liveDetail.chatChannelId else { continue }
+                let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
+                let channelName = liveDetail.channel?.channelName ?? session.channelName
+                let result = await chatSessionManager.addSession(
+                    channelId: session.channelId,
+                    channelName: channelName,
+                    chatChannelId: chatChannelId,
+                    accessToken: tokenInfo.accessToken,
+                    extraToken: tokenInfo.extraToken,
+                    uid: appState.userChannelId,
+                    nickname: appState.userNickname
+                )
+                if case .success = result {
+                    restoredAny = true
+                }
+            } catch {
+                // 방송 종료 등으로 연결 실패 — 무시하고 다음 채널 시도
+                continue
+            }
+        }
+
+        // 마지막 선택 채널 복원
+        if let lastSelected, chatSessionManager.sessions.contains(where: { $0.id == lastSelected }) {
+            chatSessionManager.selectChannel(lastSelected)
+        }
+
+        // 복원된 세션이 있으면 멀티채팅 패널 표시
+        if restoredAny {
+            showMultiChat = true
         }
     }
 }

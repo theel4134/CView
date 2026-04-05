@@ -33,7 +33,6 @@ struct DashboardStatCard: View {
                 Text(value)
                     .font(DesignTokens.Typography.display)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    .contentTransition(.numericText())
 
                 Spacer()
 

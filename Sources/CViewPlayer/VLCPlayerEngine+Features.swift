@@ -80,6 +80,8 @@ extension VLCPlayerEngine {
             self?._lastBufferingDecodedCount = 0
             self?._bufferingFilterStartTime = nil
             self?._zeroFrameCount = 0
+            self?._qualityDegradeCount = 0
+            self?._qualityStableCount = 0
             p.delegate = nil
             p.stop()
             p.drawable = nil
@@ -102,6 +104,7 @@ extension VLCPlayerEngine {
         onPlaybackStalled = nil
         streamingProfile = .multiLive
         isSelectedSession = true
+        sessionTier = .active
     }
 
     /// 비디오 트랙 활성화/비활성화
@@ -120,6 +123,73 @@ extension VLCPlayerEngine {
             }
         } else {
             player.deselectAllVideoTracks()
+        }
+    }
+
+    // MARK: - 3-Tier 세션 계층 관리
+
+    /// 멀티라이브 세션 계층을 업데이트하여 리소스를 동적으로 배분한다.
+    ///
+    /// - `.active`: 선택된 세션 — 풀 해상도(1080p), 정상 통계 수집
+    /// - `.visible`: 보이지만 비선택 — 저해상도(480p), 축소된 통계/타이밍
+    /// - `.hidden`: 화면 밖 — 비디오 트랙 비활성화로 디코딩/렌더링 CPU 제거
+    ///
+    /// hidden → visible/active 전환 시 비디오 트랙 재활성화 (키프레임 대기 0.5~2초)
+    public func updateSessionTier(_ newTier: SessionTier) {
+        let oldTier = sessionTier
+        guard oldTier != newTier else { return }
+        sessionTier = newTier
+
+        // isSelectedSession도 동기화
+        isSelectedSession = (newTier == .active)
+
+        let doUpdate = { [weak self] in
+            guard let self else { return }
+            let state = self.player.state
+            guard state != .stopped && state != .stopping else { return }
+
+            switch newTier {
+            case .active:
+                // Tier 1: 비디오 트랙 활성화 + 정상 타이밍 복원
+                if oldTier == .hidden {
+                    self.setVideoTrackEnabled(true)
+                }
+                self.player.minimalTimePeriod = 500_000  // 기본값 복원
+                self.player.timeChangeUpdateInterval = 1.0
+
+                // 통계 수집 주기 정상화
+                self.startStatsTimer()
+                Log.player.info("[Tier] → active: video ON, timing normal")
+
+            case .visible:
+                // Tier 2: 비디오 유지 + 축소 타이밍
+                if oldTier == .hidden {
+                    self.setVideoTrackEnabled(true)
+                }
+                self.player.minimalTimePeriod = 1_000_000  // 1초
+                self.player.timeChangeUpdateInterval = 5.0
+
+                // 통계 수집 주기 축소
+                self.startStatsTimer()
+                Log.player.info("[Tier] → visible: video ON, timing reduced")
+
+            case .hidden:
+                // Tier 3: 비디오 트랙 비활성화 → VideoToolbox 세션 중단 + 렌더링 제거
+                self.setVideoTrackEnabled(false)
+                self.player.minimalTimePeriod = 2_000_000  // 2초
+                self.player.timeChangeUpdateInterval = 10.0
+
+                // 통계 수집 중단 (비가시 세션에 불필요)
+                self.statsTask?.cancel()
+                self.statsTask = nil
+                Log.player.info("[Tier] → hidden: video OFF, stats stopped")
+            }
+        }
+
+        if Thread.isMainThread {
+            doUpdate()
+        } else {
+            DispatchQueue.main.async { doUpdate() }
         }
     }
 
@@ -206,7 +276,7 @@ extension VLCPlayerEngine {
 
     func startStatsTimer() {
         statsTask?.cancel()
-        let interval: UInt64 = streamingProfile == .multiLive ? 10_000_000_000 : 3_000_000_000
+        let interval: UInt64 = streamingProfile == .multiLive ? 10_000_000_000 : 5_000_000_000
         statsTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: interval)
@@ -277,9 +347,18 @@ extension VLCPlayerEngine {
         )
         onVLCMetrics?(metrics)
 
-        // 재생 정체 감지
+        // [Opt-B3] 통계 기반 자동 화질 적응
+        // 프레임 드롭/지연이 급증하면 downgrade 요청, 안정적이면 upgrade 요청
         let currentPhase = _state.withLock { $0.currentPhase }
         if case .playing = currentPhase {
+            evaluateQualityAdaptation(
+                droppedDelta: droppedDelta,
+                lateDelta: lateDelta,
+                decodedDelta: decodedDelta,
+                demuxCorruptDelta: demuxCorruptDelta
+            )
+
+            // 재생 정체 감지
             if decodedDelta <= 0 {
                 _zeroFrameCount += 1
                 if _zeroFrameCount >= _zeroFrameStallThreshold {
@@ -291,6 +370,49 @@ extension VLCPlayerEngine {
             }
         } else {
             _zeroFrameCount = 0
+        }
+    }
+
+    // MARK: - 통계 기반 화질 적응
+
+    /// 프레임 드롭/지연 통계를 분석하여 StreamCoordinator에 화질 변경을 요청한다.
+    /// - 연속 2회 이상 프레임 품질 저하 → downgrade 요청
+    /// - 연속 6회 안정 → upgrade 요청 (과도한 토글 방지)
+    @MainActor
+    func evaluateQualityAdaptation(
+        droppedDelta: Int,
+        lateDelta: Int,
+        decodedDelta: Int,
+        demuxCorruptDelta: Int
+    ) {
+        // hidden 세션에서는 화질 적응 불필요
+        guard sessionTier != .hidden else { return }
+
+        let isDropping = droppedDelta > 3 || lateDelta > 5
+        let isCorrupted = demuxCorruptDelta > 0
+        let isStarved = decodedDelta <= 0
+
+        if isDropping || isCorrupted || isStarved {
+            _qualityStableCount = 0
+            _qualityDegradeCount += 1
+            if _qualityDegradeCount >= 2 {
+                _qualityDegradeCount = 0
+                let reason: String
+                if isStarved { reason = "decode_stall" }
+                else if isCorrupted { reason = "demux_corrupt(\(demuxCorruptDelta))" }
+                else { reason = "frame_loss(drop=\(droppedDelta),late=\(lateDelta))" }
+                Log.player.warning("[QualityAdapt] ⬇ downgrade: \(reason)")
+                onQualityAdaptationRequest?(.downgrade(reason: reason))
+            }
+        } else {
+            _qualityDegradeCount = 0
+            _qualityStableCount += 1
+            // 6회 연속 안정 (단일=30초, 멀티=60초) → 화질 복원 시도
+            if _qualityStableCount >= 6 {
+                _qualityStableCount = 0
+                Log.player.info("[QualityAdapt] ⬆ upgrade: stable_\(self.streamingProfile == .multiLive ? "60s" : "30s")")
+                onQualityAdaptationRequest?(.upgrade(reason: "stable"))
+            }
         }
     }
 }

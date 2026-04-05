@@ -109,6 +109,43 @@ struct MultiLiveSettingsTab: View {
                     }
                 }
 
+                // MARK: - 대역폭 조율 (flashls 기반)
+                SettingsSection(title: "대역폭 조율", icon: "chart.bar.fill", color: Color.cyan) {
+                    SettingsRow("대역폭 자동 분배",
+                                description: "세션 간 대역폭을 자동으로 분배하여 전체 안정성을 높입니다",
+                                icon: "arrow.triangle.branch", iconColor: Color.cyan) {
+                        Toggle("", isOn: $settings.multiLive.bandwidthCoordinationEnabled)
+                            .toggleStyle(.switch)
+                            .tint(Color.cyan)
+                            .labelsHidden()
+                    }
+                    RowDivider()
+                    SettingsRow("화면 크기 화질 캡핑",
+                                description: "패인 크기보다 높은 해상도를 제한하여 대역폭을 절약합니다",
+                                icon: "rectangle.compress.vertical", iconColor: Color.cyan) {
+                        Toggle("", isOn: $settings.multiLive.levelCappingEnabled)
+                            .toggleStyle(.switch)
+                            .tint(Color.cyan)
+                            .labelsHidden()
+                            .disabled(!settings.multiLive.bandwidthCoordinationEnabled)
+                    }
+                    RowDivider()
+                    SettingsRow("선택 세션 대역폭 가중치",
+                                description: "선택된 채널에 더 많은 대역폭을 할당 (1.0=균등)",
+                                icon: "star.fill", iconColor: Color.yellow) {
+                        HStack(spacing: 6) {
+                            Slider(value: $settings.multiLive.selectedSessionBWWeight, in: 1.0...3.0, step: 0.1)
+                                .frame(width: 110)
+                                .tint(Color.cyan)
+                                .disabled(!settings.multiLive.bandwidthCoordinationEnabled)
+                            Text(String(format: "×%.1f", settings.multiLive.selectedSessionBWWeight))
+                                .font(DesignTokens.Typography.custom(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                .frame(width: 42, alignment: .trailing)
+                        }
+                    }
+                }
+
                 // MARK: - 채팅
                 SettingsSection(title: "채팅", icon: "bubble.left.and.bubble.right.fill", color: DesignTokens.Colors.accentBlue) {
                     SettingsRow("그리드 채팅 오버레이",

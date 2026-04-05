@@ -4,9 +4,16 @@
 // 엔진 독립적인 녹화 구현: HLS playlist URL에서 세그먼트를 순차 다운로드하여
 // MPEG-TS 파일로 연결 저장한다.
 // VLC/AVPlayer 모두에서 폴백으로 사용 가능.
+//
+// v2 개선사항 (flashls FragmentLoader/AES 참조):
+// - AES-128-CBC 암호화 세그먼트 복호화 지원
+// - 세그먼트 단위 지수 백오프 재시도 (flashls _fraghandleIOError)
+// - PTS 정규화 유틸리티 연동
 
 import Foundation
 import CViewCore
+import CryptoKit
+import CommonCrypto
 import os.log
 
 // MARK: - Recording State
@@ -127,26 +134,58 @@ public actor StreamRecordingService {
     /// m3u8 playlist를 주기적으로 폴링하여 새 세그먼트를 다운로드
     private func segmentPollingLoop(playlistURL: URL) async {
         let pollInterval: Duration = .seconds(2)
+        let parser = HLSManifestParser()
         
         while !Task.isCancelled && state == .recording {
             do {
-                let segmentURLs = try await fetchSegmentURLs(from: playlistURL)
+                let segments = try await fetchParsedSegments(from: playlistURL, parser: parser)
                 
-                for segmentURL in segmentURLs {
+                for segment in segments {
                     guard !Task.isCancelled && state == .recording else { break }
                     
-                    let uri = segmentURL.absoluteString
+                    let uri = segment.uri.absoluteString
                     guard !downloadedSegmentURIs.contains(uri) else { continue }
                     
-                    // 세그먼트 다운로드 및 기록
+                    // flashls FragmentLoader 참조: 세그먼트 단위 지수 백오프 재시도
+                    var data: Data?
+                    var retryTimeout: TimeInterval = 1.0
+                    let maxRetries = 3
+
+                    for attempt in 0..<maxRetries {
+                        do {
+                            let (downloaded, _) = try await session.data(from: segment.uri)
+                            data = downloaded
+                            break
+                        } catch {
+                            if Task.isCancelled { break }
+                            if attempt < maxRetries - 1 {
+                                logger.warning("세그먼트 다운로드 실패 (시도 \(attempt + 1)/\(maxRetries)): \(error.localizedDescription, privacy: .public)")
+                                // flashls: retryTimeout = min(64s, 2 × previous)
+                                try? await Task.sleep(for: .seconds(retryTimeout))
+                                retryTimeout = min(64.0, retryTimeout * 2.0)
+                            } else {
+                                logger.warning("세그먼트 다운로드 최종 실패: \(error.localizedDescription, privacy: .public)")
+                            }
+                        }
+                    }
+
+                    guard var segmentData = data else { continue }
+
+                    // AES-128-CBC 복호화 (flashls AES.as 참조)
+                    if let encryption = segment.encryptionInfo {
+                        do {
+                            segmentData = try await decryptSegment(segmentData, encryption: encryption)
+                        } catch {
+                            logger.warning("세그먼트 복호화 실패: \(error.localizedDescription, privacy: .public)")
+                            continue
+                        }
+                    }
+
                     do {
-                        let (data, _) = try await session.data(from: segmentURL)
-                        try writeData(data)
+                        try writeData(segmentData)
                         downloadedSegmentURIs.insert(uri)
                     } catch {
-                        if !Task.isCancelled {
-                            logger.warning("세그먼트 다운로드 실패: \(error.localizedDescription, privacy: .public)")
-                        }
+                        logger.warning("세그먼트 쓰기 실패: \(error.localizedDescription, privacy: .public)")
                     }
                 }
             } catch {
@@ -158,8 +197,99 @@ public actor StreamRecordingService {
             try? await Task.sleep(for: pollInterval)
         }
     }
+
+    // MARK: - Parsed Segment Fetching
+
+    /// HLSManifestParser를 사용하여 세그먼트 정보 (암호화 포함) 추출
+    private func fetchParsedSegments(
+        from playlistURL: URL,
+        parser: HLSManifestParser
+    ) async throws -> [MediaPlaylist.Segment] {
+        let (data, _) = try await session.data(from: playlistURL)
+        guard let content = String(data: data, encoding: .utf8) else { return [] }
+
+        // 마스터 플레이리스트 감지 → 첫 번째 variant의 미디어 플레이리스트로 재귀
+        if content.contains("#EXT-X-STREAM-INF") {
+            let master = try parser.parseMasterPlaylist(content: content, baseURL: playlistURL)
+            // 비트레이트 내림차순 정렬 → 첫 번째(최고 화질) 사용
+            if let firstVariant = master.variants.first {
+                return try await fetchParsedSegments(from: firstVariant.uri, parser: parser)
+            }
+            return []
+        }
+
+        let media = try parser.parseMediaPlaylist(content: content, baseURL: playlistURL)
+        return media.segments
+    }
+
+    // MARK: - AES-128-CBC Decryption (flashls AES.as 참조)
+
+    /// AES-128-CBC 세그먼트 복호화 — CryptoKit 하드웨어 가속 사용
+    /// flashls의 CBC 복호화 + PKCS7 unpadding을 Swift native로 구현
+    private func decryptSegment(_ data: Data, encryption: MediaPlaylist.EncryptionInfo) async throws -> Data {
+        guard encryption.method == .aes128 else {
+            throw PlayerError.recordingFailed("지원하지 않는 암호화 방식: \(encryption.method.rawValue)")
+        }
+
+        // 키 다운로드 (캐시)
+        let keyData = try await fetchEncryptionKey(url: encryption.uri)
+        guard keyData.count == 16 else {
+            throw PlayerError.recordingFailed("잘못된 AES 키 크기: \(keyData.count) bytes")
+        }
+
+        guard let iv = encryption.iv, iv.count == 16 else {
+            throw PlayerError.recordingFailed("IV가 없거나 크기가 잘못됨")
+        }
+
+        // AES-128-CBC 복호화 — CommonCrypto 사용 (CryptoKit의 AES.GCM이 아닌 CBC 모드)
+        let decrypted = try aes128CBCDecrypt(data: data, key: keyData, iv: iv)
+        return decrypted
+    }
+
+    /// AES 키 캐시 — 동일 URL의 키를 반복 다운로드하지 않음
+    private var keyCache: [URL: Data] = [:]
+
+    private func fetchEncryptionKey(url: URL) async throws -> Data {
+        if let cached = keyCache[url] { return cached }
+        let (data, _) = try await session.data(from: url)
+        keyCache[url] = data
+        return data
+    }
+
+    /// AES-128-CBC 복호화 + PKCS7 unpadding (flashls AES._decryptCBC + unpad)
+    private func aes128CBCDecrypt(data: Data, key: Data, iv: Data) throws -> Data {
+        // CommonCrypto를 사용한 CBC 복호화
+        let bufferSize = data.count + kCCBlockSizeAES128
+        var outData = Data(count: bufferSize)
+        var outLength = 0
+
+        let status = outData.withUnsafeMutableBytes { outBytes in
+            data.withUnsafeBytes { inBytes in
+                key.withUnsafeBytes { keyBytes in
+                    iv.withUnsafeBytes { ivBytes in
+                        CCCrypt(
+                            CCOperation(kCCDecrypt),
+                            CCAlgorithm(kCCAlgorithmAES128),
+                            CCOptions(kCCOptionPKCS7Padding),
+                            keyBytes.baseAddress, kCCKeySizeAES128,
+                            ivBytes.baseAddress,
+                            inBytes.baseAddress, data.count,
+                            outBytes.baseAddress, bufferSize,
+                            &outLength
+                        )
+                    }
+                }
+            }
+        }
+
+        guard status == kCCSuccess else {
+            throw PlayerError.recordingFailed("AES 복호화 실패 (CCCrypt status: \(status))")
+        }
+
+        return outData.prefix(outLength)
+    }
     
-    /// m3u8 playlist에서 세그먼트 URL 목록 추출
+    /// m3u8 playlist에서 세그먼트 URL 목록 추출 (레거시 호환용)
     private func fetchSegmentURLs(from playlistURL: URL) async throws -> [URL] {
         let (data, _) = try await session.data(from: playlistURL)
         guard let content = String(data: data, encoding: .utf8) else { return [] }

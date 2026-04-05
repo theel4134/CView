@@ -50,6 +50,9 @@ public actor MetricsForwarder {
     /// AVPlayerEngine에서 주기적으로 전달받는 최신 AVPlayer 통계 (nil = 아직 수신 전)
     private var latestAVPlayerMetrics: AVPlayerLiveMetrics?
 
+    /// HLSJSPlayerEngine에서 주기적으로 전달받는 최신 HLS.js 통계 (nil = 아직 수신 전)
+    private var latestHLSJSMetrics: HLSJSLiveMetrics?
+
     /// 서버 동기화 추천에 따른 재생 속도 변경 콜백
     /// MetricsForwarder → 외부 PlayerEngine 연결용
     private var onSyncSpeedChange: (@Sendable (Float) -> Void)?
@@ -94,7 +97,7 @@ public actor MetricsForwarder {
         apiClient: MetricsAPIClient,
         monitor: PerformanceMonitor,
         isEnabled: Bool = false,
-        forwardInterval: TimeInterval = 8.0,
+        forwardInterval: TimeInterval = 15.0,
         pingInterval: TimeInterval = 30.0
     ) {
         self.apiClient = apiClient
@@ -246,6 +249,7 @@ public actor MetricsForwarder {
         // 엔진별 메트릭 캐시 클리어
         latestVLCMetrics = nil
         latestAVPlayerMetrics = nil
+        latestHLSJSMetrics = nil
 
         guard let channelId = activeChannelId, isEnabled else {
             activeChannelId = nil
@@ -325,6 +329,21 @@ public actor MetricsForwarder {
         )
     }
 
+    /// HLSJSPlayerEngine.onHLSJSMetrics 콜백에서 호출합니다.
+    /// PerformanceMonitor를 업데이트하고 최신 HLS.js 통계를 캐싱합니다.
+    public func updateHLSJSMetrics(_ metrics: HLSJSLiveMetrics) async {
+        latestHLSJSMetrics = metrics
+        await monitor.updateVLCMetricsBatch(
+            fps: metrics.fps,
+            droppedFrames: metrics.droppedFramesDelta,
+            networkBytes: 0,
+            bufferHealth: metrics.bufferHealth * 100,  // 0-1 → 0-100%
+            resolution: metrics.resolution,
+            inputBitrateKbps: metrics.bitrateKbps,
+            networkSpeedBytesPerSec: 0
+        )
+    }
+
     // MARK: - Metrics Forwarding
 
     private func startForwarding() {
@@ -351,10 +370,12 @@ public actor MetricsForwarder {
         let metrics = await monitor.currentMetrics
         let vlc = latestVLCMetrics
         let avp = latestAVPlayerMetrics
+        let hlsjs = latestHLSJSMetrics
 
-        // 엔진 판별: VLC 메트릭이 있으면 VLC, AVPlayer 메트릭이 있으면 AVPlayer
-        let isAVPlayerEngine = vlc == nil && avp != nil
-        let engineName = isAVPlayerEngine ? "AVPlayer" : "VLC"
+        // 엔진 판별: HLS.js 메트릭이 있으면 HLS.js, AVPlayer 메트릭이 있으면 AVPlayer, 그 외 VLC
+        let isHLSJSEngine = hlsjs != nil
+        let isAVPlayerEngine = !isHLSJSEngine && vlc == nil && avp != nil
+        let engineName = isHLSJSEngine ? "HLS.js" : (isAVPlayerEngine ? "AVPlayer" : "VLC")
 
         // VLC 통계가 있으면 CView 하트비트에 포함
         let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
@@ -368,7 +389,33 @@ public actor MetricsForwarder {
 
         // NaN/Infinity 방어: finite 값만 전송, 비유한 값은 기본값으로 대체
         let payload: CViewHeartbeatPayload
-        if isAVPlayerEngine, let avp {
+        if isHLSJSEngine, let hlsjs {
+            // HLS.js 엔진 — HLSJSLiveMetrics 기반 하트비트
+            payload = CViewHeartbeatPayload(
+                clientId: clientId,
+                channelId: channelId,
+                channelName: channelName,
+                latency: (hlsjs.latency * 1000.0).safeForJSON, // sec → ms
+                resolution: hlsjs.resolution,
+                bitrate: Int(hlsjs.bitrateKbps.safeForJSON),
+                fps: hlsjs.fps.safeForJSON,
+                bufferHealth: (hlsjs.bufferHealth * 100).safeForJSON,
+                playbackRate: Double(hlsjs.playbackRate).safeForJSON,
+                droppedFrames: hlsjs.droppedFramesDelta,
+                healthScore: hlsjs.healthScore.safeForJSON,
+                engine: engineName,
+                vlcMetrics: nil,
+                targetLatency: targetLatencyMs,
+                connectionState: hlsjs.bufferHealth > 0.5 ? "connected" : "degraded",
+                connectionQuality: hlsjs.bufferHealth > 0.7 ? "excellent" : hlsjs.bufferHealth > 0.3 ? "good" : "poor",
+                isBuffering: hlsjs.bufferHealth < 0.3,
+                latePictures: nil,
+                currentTime: playbackTime?.safeForJSON,
+                pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                pdtLatency: pdtLatMs?.safeForJSON,
+                latencyUnit: "ms"
+            )
+        } else if isAVPlayerEngine, let avp {
             // AVPlayer 엔진 — AVPlayerLiveMetrics 기반 하트비트
             payload = CViewHeartbeatPayload(
                 clientId: clientId,

@@ -21,6 +21,23 @@ public enum ABRDefaults {
     public static let switchDownThreshold: Double = 0.8
     /// 최소 품질 전환 간격 (초)
     public static let minSwitchInterval: TimeInterval = 5.0
+
+    // MARK: Buffer-Aware ABR (flashls AutoLevelManager 참조)
+
+    /// 동적 switchUp 상대 비트레이트 차이 최대값 (flashls: 0.5)
+    public static let maxSwitchUpRatio: Double = 0.5
+    /// 동적 switchDown 최소 보장 비율 (flashls: 2 × minGap)
+    public static let minSwitchDownRatio: Double = 0.1
+    /// 긴급 강등 시 최소 버퍼 비율 — bufferRatio < 이 값이면 즉시 강등
+    /// flashls: 2 × bitrate[j] / lastBandwidth
+    public static let emergencyBufferRatio: Double = 2.0
+    /// 버퍼 인지형 ABR 사용 시 최소 필요 샘플 수
+    public static let bufferAwareMinSamples: Int = 3
+
+    // MARK: Dynamic Buffer Management (flashls AutoBufferManager 참조)
+
+    /// 대역폭 히스토리 링 버퍼 최대 크기
+    public static let bandwidthHistoryMaxSize: Int = 30
 }
 
 // MARK: - VLC Player Engine
@@ -122,11 +139,32 @@ public enum StreamDefaults {
     public static let maxConsecutiveEngineErrors: Int = 2
 }
 
+// MARK: - Multi-Live Bandwidth Coordinator (flashls 참조)
+
+public enum MultiLiveBWDefaults {
+    /// 대역폭 안전 계수 (총 대역폭의 75% 사용)
+    public static let safetyFactor: Double = 0.75
+    /// 스트림당 최소 보장 대역폭 (300kbps)
+    public static let minPerStreamBitrate: Double = 300_000
+    /// 집계 대역폭 히스토리 크기 (flashls: 30 samples)
+    public static let historySize: Int = 30
+    /// 버퍼 저수위 임계값 (초) — buffering 진입
+    public static let lowBufferThreshold: TimeInterval = 3.0
+    /// 버퍼 고수위 임계값 (초) — playing 복귀 (히스테리시스)
+    public static let highBufferThreshold: TimeInterval = 6.0
+    /// 선택 세션 대역폭 가중치 (1.5 = 50% 더 할당)
+    public static let selectedSessionWeight: Double = 1.5
+    /// 긴급 강등 평균 버퍼 임계값 (초)
+    public static let emergencyBufferThreshold: TimeInterval = 2.0
+    /// 코디네이터 업데이트 주기 (초)
+    public static let updateIntervalSecs: TimeInterval = 5.0
+}
+
 // MARK: - UI Defaults
 
 public enum UIDefaults {
     /// 채팅 패널 너비
-    public static let chatPaneWidth: CGFloat = 340
+    public static let chatPaneWidth: CGFloat = 300
     /// 볼륨 증감 스텝
     public static let volumeStep: Float = 0.05
     /// 재생 속도 옵션

@@ -11,6 +11,7 @@ struct PlayerEngineBadge: View {
         switch engineType {
         case .vlc:      "VLC"
         case .avPlayer: "AVPlayer"
+        case .hlsjs:    "HLS.js"
         }
     }
 
@@ -18,6 +19,7 @@ struct PlayerEngineBadge: View {
         switch engineType {
         case .vlc:      Color(red: 1.0, green: 0.55, blue: 0.0)   // VLC 오렌지
         case .avPlayer: Color(red: 0.24, green: 0.52, blue: 1.0)  // 시스템 블루
+        case .hlsjs:    Color(red: 0.0, green: 0.78, blue: 0.55)  // 저지연 그린
         }
     }
 

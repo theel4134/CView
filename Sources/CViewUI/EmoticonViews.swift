@@ -166,13 +166,18 @@ public struct ChatContentRenderer: View {
     let content: String
     let emojis: [String: String]
     let fontSize: CGFloat
+    let nicknamePrefix: String?
+    let nicknameColor: Color?
 
     private let parser = EmoticonParser()
 
-    public init(content: String, emojis: [String: String] = [:], fontSize: CGFloat = 13) {
+    public init(content: String, emojis: [String: String] = [:], fontSize: CGFloat = 13,
+                nicknamePrefix: String? = nil, nicknameColor: Color? = nil) {
         self.content = content
         self.emojis = emojis
         self.fontSize = fontSize
+        self.nicknamePrefix = nicknamePrefix
+        self.nicknameColor = nicknameColor
     }
 
     public var body: some View {
@@ -180,12 +185,29 @@ public struct ChatContentRenderer: View {
 
         if segments.count == 1, case .text(let text) = segments.first {
             // 단순 텍스트 — 최적화 경로 (이모티콘 뷰/레이아웃 비용 없음)
-            Text(text)
-                .font(DesignTokens.Typography.custom(size: fontSize))
-                .fixedSize(horizontal: false, vertical: true)
+            if let nickname = nicknamePrefix {
+                // 닉네임 + 메시지 Text 연결 → 줄바꿈 시 자연스럽게 흐름
+                (Text(nickname)
+                    .font(DesignTokens.Typography.custom(size: fontSize, weight: .semibold))
+                    .foregroundStyle(nicknameColor ?? DesignTokens.Colors.textPrimary)
+                 + Text(": ")
+                    .font(DesignTokens.Typography.custom(size: fontSize, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
+                 + Text(text)
+                    .font(DesignTokens.Typography.custom(size: fontSize))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.88)))
+                    .lineSpacing(2)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(text)
+                    .font(DesignTokens.Typography.custom(size: fontSize))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else {
             // 텍스트+이모티콘 혼합 — FlowLayout 줄바꿈
-            FlowContentView(segments: segments, fontSize: fontSize)
+            FlowContentView(segments: segments, fontSize: fontSize,
+                            nicknamePrefix: nicknamePrefix, nicknameColor: nicknameColor)
         }
     }
 }
@@ -197,16 +219,39 @@ public struct ChatContentRenderer: View {
 private struct FlowContentView: View {
     let segments: [ChatContentSegment]
     let fontSize: CGFloat
+    let nicknamePrefix: String?
+    let nicknameColor: Color?
+
+    init(segments: [ChatContentSegment], fontSize: CGFloat,
+         nicknamePrefix: String? = nil, nicknameColor: Color? = nil) {
+        self.segments = segments
+        self.fontSize = fontSize
+        self.nicknamePrefix = nicknamePrefix
+        self.nicknameColor = nicknameColor
+    }
 
     // 단어 단위 + 이모티콘 토큰 (FlowLayout 배치용)
     private struct Token: Identifiable {
         let id: String
-        enum Kind { case word(String), emoticon(URL) }
+        enum Kind {
+            case word(String)
+            case emoticon(URL)
+            case styledWord(String, Font.Weight, Color)
+        }
         let kind: Kind
     }
 
     private var tokens: [Token] {
         var result: [Token] = []
+
+        // 닉네임 프리픽스 토큰 삽입
+        if let nickname = nicknamePrefix {
+            result.append(Token(
+                id: "nick-0",
+                kind: .styledWord(nickname + ": ", .semibold, nicknameColor ?? DesignTokens.Colors.textPrimary)
+            ))
+        }
+
         for seg in segments {
             switch seg {
             case .text(let text):
@@ -242,6 +287,11 @@ private struct FlowContentView: View {
                 case .emoticon(let url):
                     EmoticonImageView(url: url, size: floor(fontSize * 1.5))
                         .padding(.horizontal, DesignTokens.Spacing.xxs)
+                case .styledWord(let text, let weight, let color):
+                    Text(text)
+                        .font(DesignTokens.Typography.custom(size: fontSize, weight: weight))
+                        .foregroundStyle(color)
+                        .fixedSize()
                 }
             }
         }
@@ -254,7 +304,7 @@ struct WrappingHStack: View {
     let fontSize: CGFloat
 
     var body: some View {
-        FlowContentView(segments: segments, fontSize: fontSize)
+        FlowContentView(segments: segments, fontSize: fontSize, nicknamePrefix: nil, nicknameColor: nil)
     }
 }
 

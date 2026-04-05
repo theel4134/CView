@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+video {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+</style>
+</head>
+<body>
+<video id="video" playsinline autoplay muted></video>
+<script src="hls.min.js"></script>
+<script>
+'use strict';
+
+// ─── 상태 ───────────────────────────────────────────────
+let hls = null;
+const video = document.getElementById('video');
+let metricsTimer = null;
+let prevDropped = 0;
+let currentProfile = 'lowLatency'; // ultraLow | lowLatency | multiLive
+let _pendingVolume = 1.0;   // 자동재생 성공 후 복원할 볼륨
+let _pendingMuted = false;   // 자동재생 성공 후 복원할 음소거 상태
+let _stallRecoveryCount = 0; // 버퍼 stall 연속 복구 시도 횟수
+let _lastStallRecoveryTime = 0; // 마지막 stall 복구 시각 (ms)
+
+// ─── 프로파일 설정 ─────────────────────────────────────
+const PROFILES = {
+    ultraLow: {
+        lowLatencyMode: true,
+        liveSyncDurationCount: 1,
+        liveMaxLatencyDurationCount: 3,
+        liveSyncOnStallIncrementCount: 0.5,
+        liveBackBufferLength: 3,
+        maxBufferLength: 4,
+        maxMaxBufferLength: 8,
+        maxBufferSize: 10 * 1024 * 1024,
+        maxBufferHole: 1.5,
+    },
+    lowLatency: {
+        lowLatencyMode: true,
+        liveSyncDurationCount: 2,
+        liveMaxLatencyDurationCount: 5,
+        liveSyncOnStallIncrementCount: 1,
+        liveBackBufferLength: 5,
+        maxBufferLength: 8,
+        maxMaxBufferLength: 15,
+        maxBufferSize: 30 * 1024 * 1024,
+        maxBufferHole: 1.5,
+    },
+    multiLive: {
+        lowLatencyMode: true,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 8,
+        liveSyncOnStallIncrementCount: 1,
+        liveBackBufferLength: 3,
+        maxBufferLength: 6,
+        maxMaxBufferLength: 10,
+        maxBufferSize: 15 * 1024 * 1024,
+        maxBufferHole: 1.5,
+    }
+};
+
+// ─── Swift 브릿지 ──────────────────────────────────────
+function postToSwift(type, data) {
+    try {
+        window.webkit.messageHandlers.player.postMessage({ type, data });
+    } catch (e) { /* 브릿지 없을 때 무시 */ }
+}
+
+// ─── 소스 로드 ─────────────────────────────────────────
+function loadSource(url, profile) {
+    destroyHls();
+    currentProfile = profile || 'lowLatency';
+    _stallRecoveryCount = 0;
+    _lastStallRecoveryTime = 0;
+    const cfg = PROFILES[currentProfile] || PROFILES.lowLatency;
+
+    if (!Hls.isSupported()) {
+        // MSE 미지원 시 네이티브 HLS 폴백
+        video.src = url;
+        video.play().catch(() => {});
+        postToSwift('error', { fatal: true, type: 'NOT_SUPPORTED', details: 'MSE not supported' });
+        return;
+    }
+
+    hls = new Hls({
+        // LL-HLS 핵심 설정
+        lowLatencyMode: cfg.lowLatencyMode,
+        liveSyncDurationCount: cfg.liveSyncDurationCount,
+        liveMaxLatencyDurationCount: cfg.liveMaxLatencyDurationCount,
+        liveSyncOnStallIncrementCount: cfg.liveSyncOnStallIncrementCount,
+        backBufferLength: cfg.liveBackBufferLength,
+
+        // 버퍼 관리
+        maxBufferLength: cfg.maxBufferLength,
+        maxMaxBufferLength: cfg.maxMaxBufferLength,
+        maxBufferSize: cfg.maxBufferSize,
+        maxBufferHole: cfg.maxBufferHole,
+
+        // A/V 동기화: 짧은 비디오 트랙을 오디오 길이에 맞춰 늘림 (버퍼 갭 방지)
+        stretchShortVideoTrack: true,
+
+        // 디코딩 최적화
+        enableWorker: true,
+        progressive: true,
+        capLevelToPlayerSize: true,
+        startLevel: -1,
+
+        // ABR 설정
+        abrEwmaDefaultEstimate: 3000000,
+        abrEwmaDefaultEstimateMax: 5000000,
+        abrBandWidthFactor: 0.95,
+        abrBandWidthUpFactor: 0.7,
+        testBandwidth: true,
+
+        // 네트워크
+        manifestLoadingTimeOut: 10000,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingTimeOut: 10000,
+        fragLoadingTimeOut: 20000,
+
+        // 디버그 (프로덕션에서는 끄기)
+        debug: false,
+    });
+
+    // ─── 이벤트 핸들러 ──────────────────────────────────
+    hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+        postToSwift('manifestParsed', {
+            levels: data.levels.length,
+            audioTracks: data.audioTracks ? data.audioTracks.length : 0,
+        });
+        // 자동재생: 먼저 muted로 재생 시도 → 성공 후 복원
+        video.muted = true;
+        video.play().then(function() {
+            video.muted = _pendingMuted;
+            video.volume = _pendingVolume;
+            postToSwift('playStarted', { muted: video.muted, volume: video.volume });
+        }).catch(function(err) {
+            postToSwift('error', {
+                fatal: false, type: 'AUTOPLAY_BLOCKED',
+                details: err.message || 'autoplay rejected'
+            });
+            // muted 실패 시 — video 이벤트 기반 재시도
+            video.addEventListener('canplay', function retryPlay() {
+                video.removeEventListener('canplay', retryPlay);
+                video.muted = true;
+                video.play().then(function() {
+                    video.muted = _pendingMuted;
+                    video.volume = _pendingVolume;
+                    postToSwift('playStarted', { muted: video.muted, volume: video.volume });
+                }).catch(function() {});
+            });
+        });
+    });
+
+    hls.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+        const level = hls.levels[data.level];
+        if (level) {
+            postToSwift('levelSwitched', {
+                level: data.level,
+                width: level.width,
+                height: level.height,
+                bitrate: level.bitrate,
+            });
+        }
+    });
+
+    hls.on(Hls.Events.ERROR, function(event, data) {
+        postToSwift('error', {
+            fatal: data.fatal,
+            type: data.type,
+            details: data.details,
+        });
+
+        if (data.fatal) {
+            switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                    hls.startLoad();
+                    break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                    hls.recoverMediaError();
+                    break;
+                default:
+                    destroyHls();
+                    postToSwift('fatalError', { type: data.type, details: data.details });
+                    break;
+            }
+        } else if (data.details === 'bufferStalledError' || data.details === 'bufferNudgeOnStall') {
+            // non-fatal 버퍼 stall 자체 복구: 라이브 엣지로 seek + play 재시도
+            var now = Date.now();
+            if (now - _lastStallRecoveryTime > 5000) { // 5초 쿨다운
+                _lastStallRecoveryTime = now;
+                _stallRecoveryCount++;
+                if (_stallRecoveryCount <= 5) {
+                    // 라이브 엣지로 점프
+                    if (hls.liveSyncPosition !== undefined && hls.liveSyncPosition > 0) {
+                        video.currentTime = hls.liveSyncPosition;
+                    }
+                    video.play().catch(function() {});
+                    postToSwift('error', { fatal: false, type: 'STALL_RECOVERY', details: 'seek to live edge (attempt ' + _stallRecoveryCount + ')' });
+                } else {
+                    // 5회 초과: recoverMediaError로 MSE 복구
+                    _stallRecoveryCount = 0;
+                    hls.recoverMediaError();
+                    postToSwift('error', { fatal: false, type: 'STALL_RECOVERY', details: 'recoverMediaError after 5 failed seeks' });
+                }
+            }
+        }
+    });
+
+    hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
+        postToSwift('fragLoaded', {
+            duration: data.frag.duration,
+            sn: data.frag.sn,
+            level: data.frag.level,
+            loadTime: data.stats ? data.stats.loading.end - data.stats.loading.start : 0,
+        });
+    });
+
+    // SourceBuffer 생성 후 모드를 'sequence'로 변경 → 타임스탬프 갭 자동 해소
+    hls.on(Hls.Events.BUFFER_CREATED, function(event, data) {
+        try {
+            for (var type in data.tracks) {
+                var sb = data.tracks[type].buffer;
+                if (sb && sb.mode !== 'sequence') {
+                    sb.mode = 'sequence';
+                }
+            }
+        } catch(e) {
+            postToSwift('error', { fatal: false, type: 'BUFFER_MODE', details: e.message || 'mode change failed' });
+        }
+    });
+
+    hls.loadSource(url);
+    hls.attachMedia(video);
+
+    // ─── video 네이티브 stall 감지 & 자동 복구 ─────────────
+    var _waitingTimer = null;
+    video.addEventListener('waiting', function() {
+        // 버퍼링 시작 — 5초 후에도 재생 재개 안 되면 라이브 엣지로 seek
+        if (_waitingTimer) clearTimeout(_waitingTimer);
+        _waitingTimer = setTimeout(function() {
+            _waitingTimer = null;
+            if (!hls || video.paused) return;
+            if (video.readyState <= 2) { // HAVE_CURRENT_DATA 이하 = 데이터 부족
+                var now = Date.now();
+                if (now - _lastStallRecoveryTime > 5000) {
+                    _lastStallRecoveryTime = now;
+                    _stallRecoveryCount++;
+                    if (hls.liveSyncPosition !== undefined && hls.liveSyncPosition > 0) {
+                        video.currentTime = hls.liveSyncPosition;
+                    }
+                    video.play().catch(function() {});
+                    postToSwift('error', { fatal: false, type: 'STALL_RECOVERY', details: 'waiting timeout → seek to live edge (attempt ' + _stallRecoveryCount + ')' });
+                }
+            }
+        }, 5000);
+    });
+    video.addEventListener('playing', function() {
+        if (_waitingTimer) { clearTimeout(_waitingTimer); _waitingTimer = null; }
+        _stallRecoveryCount = 0; // 재생 재개 시 stall 카운터 리셋
+    });
+
+    startMetrics();
+}
+
+// ─── 백그라운드/포그라운드 전환 감지 ────────────────────
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && hls && !video.paused) {
+        // 포그라운드 복귀: 라이브 엣지로 즉시 점프
+        seekToLiveEdge();
+    }
+});
+
+// ─── 재생 제어 ─────────────────────────────────────────
+function play() { video.play().catch(() => {}); }
+function pause() { video.pause(); }
+function stop() { video.pause(); destroyHls(); }
+function seek(time) { video.currentTime = time; }
+function seekToLiveEdge() {
+    if (!hls) return;
+    if (hls.liveSyncPosition !== undefined && hls.liveSyncPosition > 0) {
+        video.currentTime = hls.liveSyncPosition;
+    }
+    video.play().catch(function() {});
+}
+function setVolume(vol) {
+    _pendingVolume = Math.max(0, Math.min(1, vol));
+    video.volume = _pendingVolume;
+}
+function setMuted(muted) {
+    _pendingMuted = !!muted;
+    video.muted = _pendingMuted;
+}
+function setRate(rate) { video.playbackRate = rate; }
+
+function setMaxBitrate(maxKbps) {
+    if (hls && maxKbps > 0) {
+        hls.config.maxMaxBufferLength = PROFILES[currentProfile].maxMaxBufferLength;
+        // capLevel 방식으로 bitrate 제한
+        const levels = hls.levels || [];
+        for (let i = levels.length - 1; i >= 0; i--) {
+            if ((levels[i].bitrate / 1000) <= maxKbps) {
+                hls.autoLevelCapping = i;
+                break;
+            }
+        }
+    }
+}
+
+function setMaxResolution(maxHeight) {
+    if (hls && maxHeight > 0) {
+        const levels = hls.levels || [];
+        for (let i = levels.length - 1; i >= 0; i--) {
+            if (levels[i].height <= maxHeight) {
+                hls.autoLevelCapping = i;
+                break;
+            }
+        }
+    }
+}
+
+// ─── 메트릭 수집 (2초 주기) ─────────────────────────────
+function startMetrics() {
+    stopMetrics();
+    metricsTimer = setInterval(collectMetrics, 2000);
+}
+
+function stopMetrics() {
+    if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; }
+}
+
+function collectMetrics() {
+    if (!video || !hls) return;
+
+    // FPS & 드롭 프레임 — video.getVideoPlaybackQuality() (표준 API)
+    let fps = 0, dropped = 0, droppedDelta = 0;
+    if (typeof video.getVideoPlaybackQuality === 'function') {
+        const q = video.getVideoPlaybackQuality();
+        dropped = q.droppedVideoFrames || 0;
+        droppedDelta = dropped - prevDropped;
+        prevDropped = dropped;
+        // FPS 근사치: totalVideoFrames / (creationTime→now elapsed) → 실시간 FPS는
+        // 정확하지 않으므로 현재 레벨의 frameRate 사용
+        const level = hls.levels[hls.currentLevel];
+        fps = (level && level.frameRate) ? level.frameRate : 0;
+    }
+
+    // 비트레이트 (hls.js 대역폭 추정)
+    const bwEstimate = hls.bandwidthEstimate || 0; // bps
+    const bitrateKbps = bwEstimate / 1000;
+
+    // 레이턴시 (라이브)
+    let latency = 0;
+    if (hls.latency !== undefined && hls.latency !== null) {
+        latency = hls.latency;
+    }
+
+    // 버퍼 길이
+    let bufferLength = 0;
+    if (video.buffered.length > 0) {
+        bufferLength = video.buffered.end(video.buffered.length - 1) - video.currentTime;
+    }
+
+    // 해상도
+    let resolution = null;
+    if (video.videoWidth > 0) {
+        resolution = video.videoWidth + 'x' + video.videoHeight;
+    }
+
+    // 버퍼 건강도 (0-1)
+    const targetBuffer = PROFILES[currentProfile].maxBufferLength || 8;
+    const bufferHealth = Math.min(1.0, Math.max(0.0, bufferLength / targetBuffer));
+
+    // 현재 레벨
+    const currentLevel = hls.currentLevel !== undefined ? hls.currentLevel : -1;
+
+    // 세그먼트 길이
+    let fragDuration = 0;
+    const level = hls.levels[hls.currentLevel];
+    if (level && level.details && level.details.targetduration) {
+        fragDuration = level.details.targetduration;
+    }
+
+    postToSwift('metrics', {
+        fps: fps,
+        droppedFrames: dropped,
+        droppedFramesDelta: droppedDelta,
+        bitrateKbps: bitrateKbps,
+        latency: latency,
+        bufferLength: bufferLength,
+        resolution: resolution,
+        playbackRate: video.playbackRate,
+        bufferHealth: bufferHealth,
+        currentLevel: currentLevel,
+        fragmentDuration: fragDuration,
+        currentTime: video.currentTime,
+        paused: video.paused,
+    });
+}
+
+// ─── 정리 ──────────────────────────────────────────────
+function destroyHls() {
+    stopMetrics();
+    prevDropped = 0;
+    if (hls) {
+        hls.destroy();
+        hls = null;
+    }
+}
+
+// ─── Swift에서 호출 가능한 API 알림 ─────────────────────
+postToSwift('ready', { hlsSupported: typeof Hls !== 'undefined' && Hls.isSupported() });
+</script>
+</body>
+</html>

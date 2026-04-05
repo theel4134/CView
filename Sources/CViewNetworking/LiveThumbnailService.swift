@@ -51,7 +51,7 @@ public actor LiveThumbnailService {
     public func thumbnailImage(channelId: String, fallbackUrl: URL?) async -> NSImage? {
         // 1. 메트릭 서버 경로
         if let data = await fetchFromMetrics(channelId: channelId) {
-            return await Task.detached(priority: .userInitiated) {
+            return await Task.detached(priority: .utility) {
                 NSImage(data: data)
             }.value
         }

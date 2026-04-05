@@ -153,14 +153,15 @@ struct StreamLoadingOverlay: View {
                 Text(phaseTitle)
                     .font(DesignTokens.Typography.custom(size: 15, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .contentTransition(.numericText())
                     .id(phaseTitle)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .transition(.blurReplace)
 
                 Text(phaseSubtitle)
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(Color.white.opacity(0.50))
                     .id(phaseSubtitle)
-                    .transition(.opacity)
+                    .transition(.blurReplace)
             }
             .animation(DesignTokens.Animation.spring, value: phaseTitle)
         }

@@ -75,6 +75,7 @@ extension ChatViewModel {
             logger.info("User penalized: \(userId)")
 
         case .systemMessage(let msg):
+            guard !msg.isEmpty else { return }
             let systemItem = ChatMessageItem.system(msg)
             messages.append(systemItem)
 
@@ -218,6 +219,7 @@ extension ChatViewModel {
     /// Schedule a single batch-flush task.
     func scheduleBatchFlush() {
         guard batchFlushTask == nil else { return }
+        guard !pendingMessages.isEmpty else { return }
         let interval = isBackgroundMode ? backgroundFlushIntervalNs : batchFlushIntervalNs
         batchFlushTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: interval)
@@ -230,18 +232,32 @@ extension ChatViewModel {
     func flushPendingMessages() {
         batchFlushTask = nil
         guard !pendingMessages.isEmpty else { return }
-        for msg in pendingMessages {
+
+        // recentChat + chatMessage 이벤트 겹침으로 인한 중복 메시지 필터링
+        let uniqueMessages = pendingMessages.filter { seenMessageIDs.insert($0.id).inserted }
+
+        // seenMessageIDs 무한 증가 방지 (링 버퍼 용량의 2배까지만 유지)
+        if seenMessageIDs.count > 400 {
+            seenMessageIDs.removeAll(keepingCapacity: true)
+        }
+
+        guard !uniqueMessages.isEmpty else {
+            pendingMessages.removeAll(keepingCapacity: true)
+            return
+        }
+
+        for msg in uniqueMessages {
             if msg.type == .donation || msg.type == .subscription {
                 ttsService.enqueue(msg)
             }
         }
-        trackRecentChatters(from: pendingMessages)
-        appendToHistory(pendingMessages)
+        trackRecentChatters(from: uniqueMessages)
+        appendToHistory(uniqueMessages)
         if isReplayMode {
-            unreadCount += pendingMessages.count
+            unreadCount += uniqueMessages.count
         }
-        updateIncrementalStats(with: pendingMessages)
-        messages.append(contentsOf: pendingMessages)
+        updateIncrementalStats(with: uniqueMessages)
+        messages.append(contentsOf: uniqueMessages)
         pendingMessages.removeAll(keepingCapacity: true)
     }
 

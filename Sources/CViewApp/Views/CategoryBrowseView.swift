@@ -490,7 +490,6 @@ private struct CategoryGridCard: View {
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                        .shadow(color: .black.opacity(0.7), radius: 4)
                     HStack(spacing: 4) {
                         Circle()
                             .fill(DesignTokens.Colors.live)
@@ -511,7 +510,6 @@ private struct CategoryGridCard: View {
                             Circle()
                                 .fill(DesignTokens.Colors.live)
                                 .frame(width: 5, height: 5)
-                                .shadow(color: DesignTokens.Colors.live.opacity(0.9), radius: 3)
                             Text("\(liveCount)")
                                 .font(DesignTokens.Typography.micro)
                                 .foregroundStyle(DesignTokens.Colors.textOnOverlay)
@@ -586,14 +584,12 @@ private struct CategoryChannelCard: View {
                         .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
-                        .shadow(color: .black.opacity(0.6), radius: 4)
                 }
                 Text(channel.liveTitle)
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .shadow(color: .black.opacity(0.5), radius: 3)
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.bottom, DesignTokens.Spacing.md)

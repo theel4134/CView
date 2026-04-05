@@ -13,6 +13,8 @@ struct MLTabBar: View {
     var hideFollowingList: Bool = false
     var onToggleFollowingList: (() -> Void)? = nil
 
+    @State private var showStopAllConfirm = false
+
     private var layoutModeIcon: String {
         switch manager.gridLayoutMode {
         case .preset:    return "rectangle.grid.2x2"
@@ -23,12 +25,12 @@ struct MLTabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebarToggle
             tabScrollArea
             Spacer(minLength: 0)
             gridToolbar
             settingsArea
             addChannelArea
+            sidebarToggle
         }
         .frame(height: 36)
         .background { DesignTokens.Colors.surfaceBase }
@@ -46,7 +48,7 @@ struct MLTabBar: View {
         if hideFollowingList, let toggle = onToggleFollowingList {
             Button(action: toggle) {
                 Image(systemName: "sidebar.trailing")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
@@ -56,7 +58,7 @@ struct MLTabBar: View {
             }
             .buttonStyle(.plain)
             .help("팔로잉 목록 보이기")
-            .padding(.leading, DesignTokens.Spacing.sm)
+            .padding(.trailing, DesignTokens.Spacing.sm)
         }
     }
 
@@ -208,6 +210,26 @@ struct MLTabBar: View {
                 help: "멀티라이브 설정"
             ) { onSettings?() }
             .padding(.trailing, DesignTokens.Spacing.xxs)
+
+            // 전체 해제
+            MLToolButton(
+                icon: "xmark.circle",
+                isActive: false,
+                help: "전체 채널 해제"
+            ) { showStopAllConfirm = true }
+            .padding(.trailing, DesignTokens.Spacing.xxs)
+            .confirmationDialog(
+                "멀티라이브 전체 해제",
+                isPresented: $showStopAllConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("전체 해제", role: .destructive) {
+                    Task { await manager.stopAll() }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("\(manager.sessions.count)개 채널의 스트림을 모두 해제할까요?")
+            }
         }
     }
 
@@ -215,40 +237,38 @@ struct MLTabBar: View {
 
     @ViewBuilder
     private var addChannelArea: some View {
-        if manager.sessions.count < MultiLiveManager.maxSessions {
-            if !manager.sessions.isEmpty { mlDivider }
-            Button(action: onAdd) {
-                HStack(spacing: 4) {
-                    Image(systemName: isAddPanelOpen ? "xmark" : "plus")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text(isAddPanelOpen ? "닫기" : "추가")
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(
-                    isAddPanelOpen ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.chzzkGreen
-                )
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule().fill(
-                        isAddPanelOpen
-                            ? DesignTokens.Colors.surfaceElevated.opacity(0.6)
-                            : DesignTokens.Colors.chzzkGreen.opacity(0.10)
-                    )
-                )
-                .overlay(
-                    Capsule().strokeBorder(
-                        isAddPanelOpen
-                            ? DesignTokens.Glass.borderColor
-                            : DesignTokens.Colors.chzzkGreen.opacity(0.22),
-                        lineWidth: 0.5
-                    )
-                )
+        if !manager.sessions.isEmpty { mlDivider }
+        Button(action: onAdd) {
+            HStack(spacing: 4) {
+                Image(systemName: isAddPanelOpen ? "list.bullet" : "plus")
+                    .font(DesignTokens.Typography.microSemibold)
+                Text(isAddPanelOpen ? "채널 목록" : "추가")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
             }
-            .buttonStyle(.plain)
-            .padding(.trailing, DesignTokens.Spacing.sm)
-            .animation(DesignTokens.Animation.fast, value: isAddPanelOpen)
+            .foregroundStyle(
+                isAddPanelOpen ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.chzzkGreen
+            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(
+                    isAddPanelOpen
+                        ? DesignTokens.Colors.surfaceElevated.opacity(0.6)
+                        : DesignTokens.Colors.chzzkGreen.opacity(0.10)
+                )
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    isAddPanelOpen
+                        ? DesignTokens.Glass.borderColor
+                        : DesignTokens.Colors.chzzkGreen.opacity(0.22),
+                    lineWidth: 0.5
+                )
+            )
         }
+        .buttonStyle(.plain)
+        .padding(.trailing, DesignTokens.Spacing.sm)
+        .animation(DesignTokens.Animation.fast, value: isAddPanelOpen)
     }
 
     // MARK: - Divider Helper
@@ -273,7 +293,7 @@ private struct MLToolButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 11, weight: .medium))
+                .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                 .foregroundStyle(
                     isActive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary
                 )
@@ -319,7 +339,8 @@ struct MLTabChip: View {
             chipContent
         }
         .buttonStyle(.plain)
-        .onHover { h in withAnimation(DesignTokens.Animation.fast) { isHovered = h } }
+        .onHover { isHovered = $0 }
+        .animation(DesignTokens.Animation.fast, value: isHovered)
         .contextMenu { contextMenuItems }
     }
 
@@ -365,11 +386,11 @@ struct MLTabChip: View {
         if isGridMode {
             if manager.isMultiAudioMode {
                 Image(systemName: manager.isAudioEnabled(for: session) ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                    .font(.system(size: 8, weight: .medium))
+                    .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
                     .foregroundStyle(manager.isAudioEnabled(for: session) ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
             } else if isAudioActive {
                 Image(systemName: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 8, weight: .medium))
+                    .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen)
             }
         }
@@ -393,7 +414,7 @@ struct MLTabChip: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .semibold))
+                .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
                 .foregroundStyle(
                     isCloseHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary
                 )
@@ -547,7 +568,7 @@ struct MLTabChip: View {
     private func reorderButton(icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 8, weight: .bold))
+                .font(DesignTokens.Typography.custom(size: 8, weight: .bold))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .frame(width: 15, height: 15)
                 .background(

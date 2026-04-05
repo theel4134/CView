@@ -12,7 +12,7 @@ extension FollowingView {
             mlVideoContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(!multiLiveManager.sessions.isEmpty ? Color.black : DesignTokens.Colors.background)
+        .background(!multiLiveManager.sessions.isEmpty ? DesignTokens.Colors.background : DesignTokens.Colors.background)
         .task {
             if multiLiveManager.sessions.isEmpty {
                 await multiLiveManager.restoreState(appState: appState)
@@ -40,13 +40,13 @@ extension FollowingView {
                     set: { multiLiveManager.isGridLayout = $0 }
                 ),
                 onAdd: { withAnimation(DesignTokens.Animation.snappy) {
-                    showMLAddChannel.toggle()
-                    if showMLAddChannel { showMLSettings = false }
+                    hideFollowingList.toggle()
+                    if !hideFollowingList { showMLSettings = false }
                 }},
-                isAddPanelOpen: showMLAddChannel,
+                isAddPanelOpen: !hideFollowingList,
                 onSettings: { withAnimation(DesignTokens.Animation.snappy) {
                     showMLSettings.toggle()
-                    if showMLSettings { showMLAddChannel = false }
+                    if showMLSettings { hideFollowingList = true }
                 }},
                 isSettingsPanelOpen: showMLSettings,
                 hideFollowingList: hideFollowingList,
@@ -56,6 +56,12 @@ extension FollowingView {
                     }
                 }
             )
+
+            // 탭 모드 세션 정보 바
+            if !multiLiveManager.isGridLayout || multiLiveManager.sessions.count < 2,
+               let active = multiLiveManager.selectedSession {
+                MLSessionInfoBar(session: active, manager: multiLiveManager)
+            }
 
             // 콘텐츠 영역
             mlVideoMainArea
@@ -67,21 +73,6 @@ extension FollowingView {
             // 비디오 영역 — 비디오 콘텐츠에는 애니메이션 전파 차단
             mlVideoOnlyArea
                 .transaction { $0.animation = nil }
-
-            // 채널 추가 슬라이드 패널
-            if showMLAddChannel {
-                MLAddChannelPanel(
-                    manager: multiLiveManager,
-                    appState: appState,
-                    isPresented: Binding(
-                        get: { ps.showMLAddChannel },
-                        set: { ps.showMLAddChannel = $0 }
-                    ),
-                    onError: { mlAddError = $0 }
-                )
-                .environment(appState)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
 
             // 설정 슬라이드 패널
             if showMLSettings {
@@ -96,8 +87,7 @@ extension FollowingView {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .animation(DesignTokens.Animation.contentTransition, value: showMLAddChannel)
-        .animation(DesignTokens.Animation.contentTransition, value: showMLSettings)
+        // [60fps] 패널 슬라이드는 withAnimation 호출부에서 제어 — 비디오 영역 전파 방지
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -108,13 +98,13 @@ extension FollowingView {
             if multiLiveManager.sessions.isEmpty {
                 MLEmptyState(onAdd: {
                     withAnimation(DesignTokens.Animation.snappy) {
-                        showMLAddChannel = true
+                        hideFollowingList = false
                     }
                 })
             } else if multiLiveManager.isGridLayout && multiLiveManager.sessions.count >= 2 {
                 MLGridLayout(manager: multiLiveManager, appState: appState, onAdd: {
                     withAnimation(DesignTokens.Animation.snappy) {
-                        showMLAddChannel = true
+                        hideFollowingList = false
                     }
                 })
             } else {

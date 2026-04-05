@@ -293,7 +293,7 @@ struct MLEmptyState: View {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 )
-                .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 8)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DesignTokens.Colors.background)
@@ -354,7 +354,8 @@ struct MLEmptyState: View {
             .background(
                 Capsule()
                     .fill(DesignTokens.Colors.chzzkGreen)
-                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(isAddHovered ? 0.5 : 0.3), radius: isAddHovered ? 12 : 8, y: 3)
+                    // [GPU 최적화] radius 고정 → blur 캐시 재사용, opacity만 애니메이션
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(isAddHovered ? 0.5 : 0.2), radius: 8, y: 3)
             )
             .scaleEffect(isAddHovered ? 1.05 : 1.0)
         }

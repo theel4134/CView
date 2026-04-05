@@ -18,6 +18,7 @@ struct ChatRenderConfig: Equatable, Sendable {
     let emoticonEnabled: Bool
     let lineSpacing: CGFloat
     let highlightMentions: Bool
+    let highlightRoles: Bool
     let currentUserNickname: String
 
     @MainActor
@@ -28,19 +29,20 @@ struct ChatRenderConfig: Equatable, Sendable {
         self.emoticonEnabled = vm.emoticonEnabled
         self.lineSpacing = vm.lineSpacing
         self.highlightMentions = vm.highlightMentions
+        self.highlightRoles = vm.highlightRoles
         self.currentUserNickname = vm.currentUserNickname ?? ""
     }
 
     static let `default` = ChatRenderConfig(
         fontSize: 13, showTimestamp: true, showBadge: true,
         emoticonEnabled: true, lineSpacing: 2.0, highlightMentions: true,
-        currentUserNickname: ""
+        highlightRoles: true, currentUserNickname: ""
     )
 
     init(
         fontSize: CGFloat, showTimestamp: Bool, showBadge: Bool,
         emoticonEnabled: Bool, lineSpacing: CGFloat, highlightMentions: Bool,
-        currentUserNickname: String
+        highlightRoles: Bool = true, currentUserNickname: String
     ) {
         self.fontSize = fontSize
         self.showTimestamp = showTimestamp
@@ -48,6 +50,7 @@ struct ChatRenderConfig: Equatable, Sendable {
         self.emoticonEnabled = emoticonEnabled
         self.lineSpacing = lineSpacing
         self.highlightMentions = highlightMentions
+        self.highlightRoles = highlightRoles
         self.currentUserNickname = currentUserNickname
     }
 }
@@ -97,50 +100,84 @@ struct ChatMessageRow: View {
                     .padding(.trailing, 6)
             }
 
-            // 뱃지
-            if showBadge, let badgeURL = message.badgeImageURL {
-                CachedAsyncImage(url: badgeURL) {
-                    EmptyView()
-                }
-                .frame(width: 16, height: 16)
-                .padding(.trailing, 4)
+            // 역할 아이콘 (스트리머/매니저)
+            if let iconName = message.userRole.iconName {
+                Image(systemName: iconName)
+                    .font(.system(size: max(messageFontSize - 2, 10), weight: .bold))
+                    .foregroundStyle(roleIconColor)
+                    .padding(.trailing, 3)
             }
 
-            // 닉네임 + 메시지 (치지직 스타일: 닉네임: 메시지)
+            // 뱃지 이미지 (다중 뱃지 지원)
+            if showBadge {
+                let allBadges = message.badges.isEmpty
+                    ? (message.badgeImageURL.map { [ChatBadge(imageURL: $0)] } ?? [])
+                    : message.badges
+                ForEach(Array(allBadges.prefix(3).enumerated()), id: \.offset) { _, badge in
+                    if let url = badge.imageURL {
+                        let isSubBadge = badge.badgeId?.hasPrefix("subscription") == true
+                        let tierStyle = isSubBadge ? subscriptionBadgeTier(months: message.subscriptionMonths ?? 0) : nil
+                        CachedAsyncImage(url: url) {
+                            if let alt = badge.altText {
+                                Text(alt)
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    .frame(width: 16, height: 16)
+                                    .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: 3))
+                            } else {
+                                EmptyView()
+                            }
+                        }
+                        .frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .overlay {
+                            if let tier = tierStyle {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .strokeBorder(tier.color, lineWidth: tier.glow ? 1.5 : 1)
+                            }
+                        }
+                        .shadow(color: tierStyle?.glow == true ? tierStyle!.color.opacity(0.6) : .clear, radius: tierStyle?.glow == true ? 3 : 0)
+                        .padding(.trailing, 2)
+                    }
+                }
+            }
+
+            // 칭호 (타이틀)
+            if let titleName = message.titleName, !titleName.isEmpty {
+                Text(titleName)
+                    .font(.system(size: max(messageFontSize - 3, 9), weight: .semibold))
+                    .foregroundStyle(titleDisplayColor)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(titleDisplayColor.opacity(0.12), in: Capsule())
+                    .padding(.trailing, 4)
+            }
+
+            // 닉네임 + 메시지 (Text 연결: 줄바꿈 시 자연스럽게 흐름)
             let useEmoji = emojiEnabled && !message.emojis.isEmpty
             if !useEmoji {
                 (Text(message.nickname)
                     .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .semibold))
                     .foregroundStyle(nicknameColor)
-                + Text(": ")
+                 + Text(": ")
                     .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .regular))
                     .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
-                + Text(message.content)
+                 + Text(message.content)
                     .font(DesignTokens.Typography.custom(size: messageFontSize))
                     .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.88)))
                     .lineSpacing(spacing)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                    .onTapGesture { showProfile = true }
             } else {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(message.nickname)
-                        .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .semibold))
-                        .foregroundStyle(nicknameColor)
-                        .fixedSize()
-                    Text(": ")
-                        .font(DesignTokens.Typography.custom(size: messageFontSize, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.6))
-                        .fixedSize()
-                    ChatContentRenderer(
-                        content: message.content,
-                        emojis: message.emojis,
-                        fontSize: messageFontSize
-                    )
-                    .lineSpacing(spacing)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .onTapGesture { showProfile = true }
+                ChatContentRenderer(
+                    content: message.content,
+                    emojis: message.emojis,
+                    fontSize: messageFontSize,
+                    nicknamePrefix: message.nickname,
+                    nicknameColor: nicknameColor
+                )
+                .lineSpacing(spacing)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
@@ -153,13 +190,19 @@ struct ChatMessageRow: View {
                 .fill(
                     isMentioned
                         ? DesignTokens.Colors.accentOrange.opacity(0.10)
-                        : (isHovered ? Color.primary.opacity(0.04) : .clear)
+                        : (roleHighlightColor ?? (isHovered ? Color.primary.opacity(0.04) : .clear))
                 )
         )
         .overlay(
             isMentioned
                 ? RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                     .strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.35), lineWidth: 1)
+                : nil
+        )
+        .overlay(
+            !isMentioned && config.highlightRoles && message.userRole.isSpecial
+                ? RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                    .strokeBorder(roleIconColor.opacity(0.15), lineWidth: 0.5)
                 : nil
         )
         .contentShape(Rectangle())
@@ -296,6 +339,17 @@ struct ChatMessageRow: View {
     }
 
     // MARK: - Subscription Tier Helpers
+
+    /// 구독 뱃지 인라인 테두리/글로우 스타일 (개월별 차등)
+    private func subscriptionBadgeTier(months: Int) -> (color: Color, glow: Bool) {
+        switch months {
+        case ..<1:  return (DesignTokens.Colors.chzzkGreen, false)
+        case ..<3:  return (Color(hex: 0xC0C0C0), false)  // 실버
+        case ..<6:  return (Color(hex: 0xFFD700), false)   // 골드
+        case ..<12: return (Color(hex: 0xB9F2FF), false)   // 다이아몬드
+        default:    return (Color(hex: 0xFFD700), true)    // 크라운 + 글로우
+        }
+    }
 
     private func subscriptionColor(months: Int) -> Color {
         switch months {
@@ -507,8 +561,45 @@ struct ChatMessageRow: View {
         }
     }
 
-    /// djb2 해시 — 실행마다 동일한 닉네임에 동일한 색상 보장 (hashValue는 런타임마다 달라짐)
+    /// 역할 기반 닉네임 색상 (스트리머=치지직그린, 매니저=파란색, 일반=해시 기반)
     private var nicknameColor: Color {
+        switch message.userRole {
+        case .streamer: return DesignTokens.Colors.chzzkGreen
+        case .manager, .channelManager: return Color(hex: 0x5C9DFF)
+        case .viewer: return hashBasedNicknameColor
+        }
+    }
+
+    /// 역할 아이콘 색상
+    private var roleIconColor: Color {
+        switch message.userRole {
+        case .streamer: return DesignTokens.Colors.chzzkGreen
+        case .manager, .channelManager: return Color(hex: 0x5C9DFF)
+        case .viewer: return DesignTokens.Colors.textTertiary
+        }
+    }
+
+    /// 칭호 표시 색상 (hex → Color 변환, 기본 textSecondary)
+    private var titleDisplayColor: Color {
+        if let hex = message.titleColor,
+           let value = UInt(hex.replacingOccurrences(of: "#", with: ""), radix: 16) {
+            return Color(hex: value)
+        }
+        return DesignTokens.Colors.textSecondary
+    }
+
+    /// 스트리머/매니저 메시지 배경 색상 (설정에서 비활성화 가능)
+    private var roleHighlightColor: Color? {
+        guard config.highlightRoles else { return nil }
+        switch message.userRole {
+        case .streamer: return DesignTokens.Colors.chzzkGreen.opacity(0.06)
+        case .manager, .channelManager: return Color(hex: 0x5C9DFF).opacity(0.06)
+        case .viewer: return nil
+        }
+    }
+
+    /// djb2 해시 — 실행마다 동일한 닉네임에 동일한 색상 보장 (hashValue는 런타임마다 달라짐)
+    private var hashBasedNicknameColor: Color {
         var hash: UInt64 = 5381
         for ch in message.nickname.utf8 {
             hash = ((hash &<< 5) &+ hash) &+ UInt64(ch)

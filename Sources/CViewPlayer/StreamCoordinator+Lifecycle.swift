@@ -35,7 +35,10 @@ extension StreamCoordinator {
                                 await self?.triggerReconnect(reason: "CDN 403 토큰 만료 감지")
                             }
                         }
-                        let engineLabel = isVLCEngine ? "VLC" : "AVPlayer"
+                        let engineLabel: String
+                        if isVLCEngine { engineLabel = "VLC" }
+                        else if playerEngine is HLSJSPlayerEngine { engineLabel = "HLS.js" }
+                        else { engineLabel = "AVPlayer" }
                         logger.info("CDN proxy active (\(engineLabel, privacy: .public)): \(host, privacy: .public) → localhost:\(self.streamProxy.port, privacy: .public)")
                     } catch {
                         logger.warning("CDN proxy failed: \(error.localizedDescription, privacy: .public)")
@@ -101,10 +104,11 @@ extension StreamCoordinator {
                     }
                 }
             } else {
-                // AVPlayer: 마스터 URL을 프록시 경유로 전달 (AVPlayer 내장 ABR 활용)
+                // AVPlayer / HLS.js: 마스터 URL을 프록시 경유로 전달 (내장 ABR 활용)
                 if let prefetchedMaster = _masterPlaylist, !prefetchedMaster.variants.isEmpty {
                     await resolveAVPlayerInitialQuality(from: prefetchedMaster)
-                } else {
+                } else if !(playerEngine is HLSJSPlayerEngine) {
+                    // HLS.js는 자체적으로 매니페스트를 파싱하므로 별도 해석 불필요
                     await resolveAVPlayerManifest(from: url)
                 }
 

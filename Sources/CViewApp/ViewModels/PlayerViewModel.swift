@@ -123,6 +123,9 @@ public final class PlayerViewModel {
         if let vlc = engine as? VLCPlayerEngine {
             self.currentEngineType = .vlc
             vlc.streamingProfile = .multiLive
+        } else if let hlsjs = engine as? HLSJSPlayerEngine {
+            self.currentEngineType = .hlsjs
+            hlsjs.streamingProfile = .multiLive
         } else {
             self.currentEngineType = .avPlayer
         }
@@ -146,6 +149,10 @@ public final class PlayerViewModel {
         case .avPlayer:
             let e = AVPlayerEngine()
             e.catchupConfig = .lowLatency
+            return e
+        case .hlsjs:
+            let e = HLSJSPlayerEngine()
+            e.streamingProfile = .lowLatency
             return e
         }
     }
@@ -178,6 +185,19 @@ public final class PlayerViewModel {
             }
         } else {
             avEngine.onAVMetrics = nil
+        }
+    }
+
+    // MARK: - HLS.js 메트릭 콜백
+
+    public func setHLSJSMetricsCallback(_ callback: (@Sendable (HLSJSLiveMetrics) -> Void)?) {
+        guard let hlsjs = playerEngine as? HLSJSPlayerEngine else { return }
+        if let callback = callback {
+            hlsjs.onHLSJSMetrics = { metrics in
+                callback(metrics)
+            }
+        } else {
+            hlsjs.onHLSJSMetrics = nil
         }
     }
 
@@ -319,6 +339,11 @@ public final class PlayerViewModel {
             }
         }
 
+        // HLS.js: 라이브 엣지로 seek (백그라운드 동안 쌓인 버퍼 스킵)
+        if let hlsEngine = engine as? HLSJSPlayerEngine {
+            hlsEngine.seekToLiveEdge()
+        }
+
         // StreamCoordinator를 통한 재생 복구 (엔진 상태 체크 + 매니페스트 갱신)
         if let coordinator = streamCoordinator {
             Task { await coordinator.recoverFromBackground() }
@@ -391,6 +416,33 @@ public final class PlayerViewModel {
             }
         }
 
+        // HLS.js onStateChange 콜백 연결
+        if let hlsjs = engine as? HLSJSPlayerEngine {
+            hlsjs.onStateChange = { [weak self] phase in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch phase {
+                    case .playing:
+                        self._bufferingDebounceTask?.cancel()
+                        self._bufferingDebounceTask = nil
+                        self._lastPlayingTime = Date()
+                        self.streamPhase = .playing
+                        self.errorMessage = nil
+                        self.onPlaybackStateChanged?()
+                    case .error:
+                        self.streamPhase = .error("HLS.js 재생 오류")
+                        self.errorMessage = "HLS.js 재생 오류"
+                    default:
+                        break
+                    }
+                }
+            }
+            hlsjs.onPlaybackStalled = { [weak coordinator] in
+                guard let coordinator else { return }
+                Task { await coordinator.triggerReconnect(reason: "HLS.js playback stall") }
+            }
+        }
+
         startEventListening(coordinator)
 
         do {
@@ -402,6 +454,11 @@ public final class PlayerViewModel {
                 vlc.onStateChange = nil
                 vlc.onVLCMetrics = nil
                 vlc.onPlaybackStalled = nil
+            }
+            if let hlsjs = engine as? HLSJSPlayerEngine {
+                hlsjs.onStateChange = nil
+                hlsjs.onHLSJSMetrics = nil
+                hlsjs.onPlaybackStalled = nil
             }
             // eventTask 정리 — coordinator 이벤트 리스닝 중단
             eventTask?.cancel()
@@ -419,6 +476,12 @@ public final class PlayerViewModel {
             vlc.onStateChange = nil
             vlc.onVLCMetrics = nil
             vlc.onPlaybackStalled = nil
+        }
+        // HLS.js 콜백 정리
+        if let hlsjs = playerEngine as? HLSJSPlayerEngine {
+            hlsjs.onStateChange = nil
+            hlsjs.onHLSJSMetrics = nil
+            hlsjs.onPlaybackStalled = nil
         }
         
         uptimeTask?.cancel(); uptimeTask = nil

@@ -32,6 +32,7 @@ public final class ChatViewModel {
     public var showBadge: Bool = true
     public var lineSpacing: CGFloat = 2.0
     public var highlightMentions: Bool = true
+    public var highlightRoles: Bool = true
     public var emoticonEnabled: Bool = true
     public var showDonation: Bool = true
 
@@ -171,6 +172,9 @@ public final class ChatViewModel {
     var moderationService: ChatModerationService?
     let logger = AppLogger.chat
     
+    /// 재연결을 위한 마지막 연결 설정
+    var lastConnectionConfig: (chatChannelId: String, accessToken: String, extraToken: String?, uid: String?, channelId: String?)?
+    
     /// TTS 서비스 (후원/구독 메시지 음성 읽기)
     let ttsService = ChatTTSService()
     
@@ -201,9 +205,9 @@ public final class ChatViewModel {
     /// Active batch‐flush timer task.
     @ObservationIgnored var batchFlushTask: Task<Void, Never>?
     /// Batch flush interval in nanoseconds.
-    /// [Freeze Fix] 100ms → 250ms: 멀티라이브 4세션 시 40 mutations/s → 16 mutations/s
+    /// [Freeze Fix] 250ms → 500ms: 멀티라이브 4세션 시 16 mutations/s → 8 mutations/s
     /// MainActor @Observable 업데이트 빈도를 줄여 UI 이벤트 루프 포화 방지
-    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 250_000_000
+    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 500_000_000
     
     // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
     
@@ -219,6 +223,9 @@ public final class ChatViewModel {
     
     /// 구독 메시지 수 (증분 캐시)
     public internal(set) var subscriptionCount: Int = 0
+
+    /// 메시지 중복 방지용 최근 ID 세트 (recentChat + chatMessage 겹침 방지)
+    @ObservationIgnored var seenMessageIDs = Set<String>()
     
     // MARK: - Initialization
     
@@ -234,6 +241,7 @@ public final class ChatViewModel {
         showTimestamp = settings.showTimestamp
         showBadge = settings.showBadge
         highlightMentions = settings.highlightMentions
+        highlightRoles = settings.highlightRoles
         maxVisibleMessages = settings.maxVisibleMessages
         emoticonEnabled = settings.emoticonEnabled
         showDonation = settings.showDonation
@@ -261,6 +269,7 @@ public final class ChatViewModel {
         s.showTimestamp = showTimestamp
         s.showBadge = showBadge
         s.highlightMentions = highlightMentions
+        s.highlightRoles = highlightRoles
         s.maxVisibleMessages = maxVisibleMessages
         s.emoticonEnabled = emoticonEnabled
         s.showDonation = showDonation
@@ -289,6 +298,9 @@ public final class ChatViewModel {
     ) async {
         // Clean up existing
         await disconnect()
+        
+        // 재연결을 위해 설정 저장
+        lastConnectionConfig = (chatChannelId, accessToken, extraToken, uid, channelId)
         
         // 메시지 초기화 (채널 전환 시 이전 채널 메시지 제거)
         messages.removeAll()
@@ -340,6 +352,18 @@ public final class ChatViewModel {
         moderationService = nil
         
         connectionState = .disconnected
+    }
+    
+    /// 마지막 설정으로 재연결
+    public func reconnect() async {
+        guard let config = lastConnectionConfig else { return }
+        await connect(
+            chatChannelId: config.chatChannelId,
+            accessToken: config.accessToken,
+            extraToken: config.extraToken,
+            uid: config.uid,
+            channelId: config.channelId
+        )
     }
     
     // MARK: - Message Sending
@@ -456,6 +480,7 @@ public final class ChatViewModel {
     public func clearMessages() {
         messages.removeAll()
         pendingMessages.removeAll(keepingCapacity: true)
+        seenMessageIDs.removeAll(keepingCapacity: true)
         batchFlushTask?.cancel()
         batchFlushTask = nil
         messageCount = 0
@@ -554,26 +579,22 @@ public final class ChatViewModel {
             streamAlerts.removeFirst()
         }
 
-        withAnimation(DesignTokens.Animation.contentTransition) {
-            streamAlerts.append(alert)
-        }
+        // [MVVM] 순수 상태 변이 — 애니메이션은 View 레이어에서 .animation(value:)로 처리
+        streamAlerts.append(alert)
 
         // 자동 해제 타이머
         let alertId = alert.id
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Self.alertDismissDelay))
             guard let self else { return }
-            withAnimation(DesignTokens.Animation.contentTransition) {
-                self.streamAlerts.removeAll { $0.id == alertId }
-            }
+            self.streamAlerts.removeAll { $0.id == alertId }
         }
     }
 
     /// 수동으로 알림 해제
     public func dismissStreamAlert(_ id: String) {
-        withAnimation(DesignTokens.Animation.contentTransition) {
-            streamAlerts.removeAll { $0.id == id }
-        }
+        // [MVVM] 순수 상태 변이 — 애니메이션은 View 레이어에서 처리
+        streamAlerts.removeAll { $0.id == id }
     }
 
     // State for export sheet

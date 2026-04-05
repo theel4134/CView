@@ -18,6 +18,59 @@ public struct ChannelStatsItem: Codable, Sendable, Identifiable {
     public let delta: DeltaStats?
     public let broadcast: BroadcastStats?
     public let createdAt: Double?
+    
+    // MARK: - Real-time Update Helpers
+    
+    /// 웹 레이턴시가 업데이트된 복사본 반환
+    public func withUpdatedWebLatency(_ latency: Double) -> ChannelStatsItem {
+        let newWeb = LatencyStats(
+            avg: web.map { ($0.avg ?? latency + latency) / 2.0 } ?? latency,
+            min: web.map { Swift.min($0.min ?? latency, latency) } ?? latency,
+            max: web.map { Swift.max($0.max ?? latency, latency) } ?? latency,
+            samples: (web?.samples ?? 0) + 1,
+            last: latency,
+            lastUpdate: nil,
+            lastUpdated: Date().timeIntervalSince1970,
+            lastLatencySource: web?.lastLatencySource
+        )
+        let newDelta: DeltaStats? = if let appAvg = app?.avg {
+            DeltaStats(current: latency - (app?.last ?? appAvg), avg: newWeb.avg.map { $0 - appAvg }, webAvg: newWeb.avg, appAvg: appAvg)
+        } else {
+            delta
+        }
+        return ChannelStatsItem(channelId: channelId, channelName: channelName, resolution: resolution, fps: fps, bitrate: bitrate, quality: quality, web: newWeb, app: app, delta: newDelta, broadcast: broadcast, createdAt: createdAt)
+    }
+    
+    /// 앱 레이턴시가 업데이트된 복사본 반환
+    public func withUpdatedAppLatency(_ latency: Double) -> ChannelStatsItem {
+        let newApp = LatencyStats(
+            avg: app.map { ($0.avg ?? latency + latency) / 2.0 } ?? latency,
+            min: app.map { Swift.min($0.min ?? latency, latency) } ?? latency,
+            max: app.map { Swift.max($0.max ?? latency, latency) } ?? latency,
+            samples: (app?.samples ?? 0) + 1,
+            last: latency,
+            lastUpdate: nil,
+            lastUpdated: Date().timeIntervalSince1970,
+            lastLatencySource: app?.lastLatencySource
+        )
+        let newDelta: DeltaStats? = if let webAvg = web?.avg {
+            DeltaStats(current: (web?.last ?? webAvg) - latency, avg: webAvg - (newApp.avg ?? latency), webAvg: webAvg, appAvg: newApp.avg)
+        } else {
+            delta
+        }
+        return ChannelStatsItem(channelId: channelId, channelName: channelName, resolution: resolution, fps: fps, bitrate: bitrate, quality: quality, web: web, app: newApp, delta: newDelta, broadcast: broadcast, createdAt: createdAt)
+    }
+    
+    /// 최소 데이터로 새 항목 생성
+    public static func makeMinimal(channelId: String, channelName: String, latency: Double, isWeb: Bool) -> ChannelStatsItem {
+        let stats = LatencyStats(avg: latency, min: latency, max: latency, samples: 1, last: latency, lastUpdate: nil, lastUpdated: Date().timeIntervalSince1970, lastLatencySource: nil)
+        return ChannelStatsItem(
+            channelId: channelId, channelName: channelName,
+            resolution: nil, fps: nil, bitrate: nil, quality: nil,
+            web: isWeb ? stats : nil, app: isWeb ? nil : stats,
+            delta: nil, broadcast: nil, createdAt: Date().timeIntervalSince1970
+        )
+    }
 }
 
 public struct LatencyStats: Codable, Sendable {

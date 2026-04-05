@@ -55,7 +55,7 @@ extension FollowingView {
                     } label: {
                         HStack(spacing: 4) {
                             Text("+\(overflowCategories.count)")
-                                .font(.system(size: layout.chipLabelSize + 1, weight: .semibold, design: .rounded))
+                                .font(DesignTokens.Typography.custom(size: layout.chipLabelSize + 1, weight: .semibold, design: .rounded))
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 8, weight: .bold))
                         }
@@ -72,8 +72,6 @@ extension FollowingView {
                         .overlay {
                             if isOverflowSelected {
                                 Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1)
-                            } else {
-                                Capsule().strokeBorder(DesignTokens.Glass.borderColor.opacity(0.15), lineWidth: 0.5)
                             }
                         }
                     }
@@ -84,27 +82,18 @@ extension FollowingView {
             .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)
             .padding(.vertical, DesignTokens.Spacing.xxs)
         }
-        .drawingGroup()
-        .mask(
-            HStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: 16)
-                Rectangle().fill(.black)
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: 16)
-            }
-        )
+        .scrollClipDisabled(false)
     }
 
     func categoryChip(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Text(label)
-                    .font(.system(size: layout.chipLabelSize + 1, weight: isSelected ? .bold : .medium))
+                    .font(DesignTokens.Typography.custom(size: layout.chipLabelSize + 1, weight: isSelected ? .bold : .medium))
                     .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: layout.chipCountSize + 1, weight: .bold, design: .rounded))
+                        .font(DesignTokens.Typography.custom(size: layout.chipCountSize + 1, weight: .bold, design: .rounded))
                         .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.8) : DesignTokens.Colors.textTertiary)
                 }
             }
@@ -120,8 +109,6 @@ extension FollowingView {
             .overlay {
                 if isSelected {
                     Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1)
-                } else {
-                    Capsule().strokeBorder(DesignTokens.Glass.borderColor.opacity(0.15), lineWidth: 0.5)
                 }
             }
         }
@@ -133,49 +120,146 @@ extension FollowingView {
     func sectionHeader(icon: String, title: String, count: Int, color: Color) -> some View {
         HStack(spacing: DesignTokens.Spacing.sm) {
             // 좌측 accent bar
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
                 .fill(color)
-                .frame(width: 4, height: 20)
-                .shadow(color: color.opacity(0.3), radius: 3)
+                .frame(width: 3, height: 20)
 
             Image(systemName: icon)
                 .font(.system(size: layout.sectionIconSize + 1, weight: .semibold))
                 .foregroundStyle(color)
 
             Text(title)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(DesignTokens.Typography.custom(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
 
+            // 카운트 배지
             Text("\(count)")
-                .font(.system(size: layout.sectionCountSize + 1, weight: .bold, design: .rounded))
+                .font(DesignTokens.Typography.custom(size: layout.sectionCountSize + 1, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
+                .contentTransition(.numericText())
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(color.opacity(0.12), in: Capsule())
+                .background(color.opacity(0.10), in: Capsule())
 
             Spacer()
         }
+    }
+
+    // MARK: - Live Avatar Strip (프로필 이미지 기반 수평 스크롤)
+
+    var liveAvatarStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: layout.liveAvatarSpacing) {
+                ForEach(Array(cachedLive.enumerated()), id: \.element.id) { index, channel in
+                    FollowingLiveAvatarItem(
+                        channel: channel,
+                        index: index,
+                        onPlay: {
+                            Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
+                            showMultiLive = true
+                        },
+                        layout: layout
+                    )
+                    .equatable()
+                    .onTapGesture {
+                        router.navigate(to: .live(channelId: channel.channelId))
+                    }
+                    .contextMenu {
+                        Button {
+                            router.navigate(to: .channelDetail(channelId: channel.channelId))
+                        } label: {
+                            Label("채널 정보 보기", systemImage: "person.crop.circle")
+                        }
+                        if channel.isLive {
+                            Button {
+                                Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
+                                showMultiLive = true
+                            } label: {
+                                Label("멀티라이브에 추가", systemImage: "rectangle.split.2x2")
+                            }
+                            .disabled(!multiLiveManager.canAddSession)
+                        }
+                        Divider()
+                        channelNotificationMenu(channelId: channel.channelId, channelName: channel.channelName)
+                    }
+                }
+            }
+            .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+        }
+        .scrollClipDisabled(false)
     }
 
     // MARK: - Live Paging View
 
     var livePagingView: some View {
         GeometryReader { geo in
-            let cardHeight = livecardHeight(for: geo.size.width)
+            let pageWidth = geo.size.width
+            let cardHeight = livecardHeight(for: pageWidth)
             let maxRows = Int(ceil(Double(min(liveItemsPerPage, totalLiveCount)) / Double(liveColumns)))
             let spacing: CGFloat = layout.gridSpacing
             let gridHeight = CGFloat(max(maxRows, 1)) * (cardHeight + spacing) - spacing + DesignTokens.Spacing.xs * 2
 
-            liveGridPage(livePageIndex)
-                .frame(width: geo.size.width, height: gridHeight, alignment: .top)
-                .drawingGroup()
-                .id(livePageIndex)
-                .transition(.opacity)
-                .animation(DesignTokens.Animation.gridPageTransition, value: livePageIndex)
-                .preference(key: LiveGridHeightKey.self, value: gridHeight)
+            // 현재 페이지 ± 1 동시 렌더 — 슬라이딩 전환
+            let pages = liveVisiblePages
+            let firstPage = pages.first ?? livePageIndex
+
+            // 경계 저항감: 첫/마지막 페이지 과도 드래그 시 로그 감쇠
+            let clampedDrag: CGFloat = {
+                let raw = livePageDragOffset
+                let atStart = livePageIndex == 0 && raw > 0
+                let atEnd = livePageIndex >= totalLivePages - 1 && raw < 0
+                if atStart || atEnd {
+                    let sign: CGFloat = raw > 0 ? 1 : -1
+                    return sign * min(abs(raw), pageWidth * 0.15) * 0.4
+                }
+                return raw
+            }()
+
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(pages, id: \.self) { page in
+                    liveGridPage(page)
+                        .frame(width: pageWidth, height: gridHeight, alignment: .top)
+                }
+            }
+            .offset(x: -CGFloat(livePageIndex - firstPage) * pageWidth + clampedDrag)
+            .gesture(
+                totalLivePages > 1 ?
+                DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) * 1.2 else { return }
+                        livePageDragOffset = value.translation.width
+                    }
+                    .onEnded { value in
+                        let threshold: CGFloat = pageWidth * 0.18
+                        let velocity = value.predictedEndTranslation.width - value.translation.width
+                        var newPage = livePageIndex
+
+                        if value.translation.width < -threshold || velocity < -150 {
+                            newPage = min(livePageIndex + 1, totalLivePages - 1)
+                        } else if value.translation.width > threshold || velocity > 150 {
+                            newPage = max(livePageIndex - 1, 0)
+                        }
+
+                        withAnimation(DesignTokens.Animation.gridPageTransition) {
+                            livePageIndex = newPage
+                            livePageDragOffset = 0
+                        }
+                    }
+                : nil
+            )
+            .animation(
+                livePageDragOffset != 0
+                    ? DesignTokens.Animation.interactive
+                    : DesignTokens.Animation.gridPageTransition,
+                value: livePageDragOffset
+            )
+            .animation(DesignTokens.Animation.gridPageTransition, value: livePageIndex)
+            .preference(key: LiveGridHeightKey.self, value: gridHeight)
         }
         .frame(height: computedLiveGridHeight)
         .clipped()
+        .contentShape(Rectangle())
         .onPreferenceChange(LiveGridHeightKey.self) { height in
             if abs(height - computedLiveGridHeight) > 1 {
                 DispatchQueue.main.async {
@@ -183,6 +267,16 @@ extension FollowingView {
                 }
             }
         }
+    }
+
+    /// 현재 페이지 ± 1 범위의 유효 페이지 인덱스
+    private var liveVisiblePages: [Int] {
+        let maxPage = totalLivePages - 1
+        let clampedIndex = min(max(0, livePageIndex), maxPage)
+        let lower = max(0, clampedIndex - 1)
+        let upper = min(maxPage, clampedIndex + 1)
+        guard lower <= upper else { return [0] }
+        return Array(lower...upper)
     }
 
     /// 실제 컨테이너 너비로 16:9 카드 높이 계산
@@ -240,15 +334,70 @@ extension FollowingView {
 
     var offlinePagingView: some View {
         GeometryReader { geo in
-            offlineListPage(offlinePageIndex)
-                .frame(width: geo.size.width)
-                .drawingGroup()
-                .id(offlinePageIndex)
-                .transition(.opacity)
-                .animation(DesignTokens.Animation.gridPageTransition, value: offlinePageIndex)
+            let pageWidth = geo.size.width
+            let pages = offlineVisiblePages
+            let firstPage = pages.first ?? offlinePageIndex
+
+            let clampedDrag: CGFloat = {
+                let raw = offlinePageDragOffset
+                let atStart = offlinePageIndex == 0 && raw > 0
+                let atEnd = offlinePageIndex >= totalOfflinePages - 1 && raw < 0
+                if atStart || atEnd {
+                    let sign: CGFloat = raw > 0 ? 1 : -1
+                    return sign * min(abs(raw), pageWidth * 0.15) * 0.4
+                }
+                return raw
+            }()
+
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(pages, id: \.self) { page in
+                    offlineListPage(page)
+                        .frame(width: pageWidth)
+                }
+            }
+            .offset(x: -CGFloat(offlinePageIndex - firstPage) * pageWidth + clampedDrag)
+            .gesture(
+                totalOfflinePages > 1 ?
+                DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) * 1.2 else { return }
+                        offlinePageDragOffset = value.translation.width
+                    }
+                    .onEnded { value in
+                        let threshold: CGFloat = pageWidth * 0.18
+                        let velocity = value.predictedEndTranslation.width - value.translation.width
+                        var newPage = offlinePageIndex
+
+                        if value.translation.width < -threshold || velocity < -150 {
+                            newPage = min(offlinePageIndex + 1, totalOfflinePages - 1)
+                        } else if value.translation.width > threshold || velocity > 150 {
+                            newPage = max(offlinePageIndex - 1, 0)
+                        }
+
+                        withAnimation(DesignTokens.Animation.gridPageTransition) {
+                            offlinePageIndex = newPage
+                            offlinePageDragOffset = 0
+                        }
+                    }
+                : nil
+            )
+            .animation(
+                offlinePageDragOffset != 0
+                    ? DesignTokens.Animation.interactive
+                    : DesignTokens.Animation.gridPageTransition,
+                value: offlinePageDragOffset
+            )
+            .animation(DesignTokens.Animation.gridPageTransition, value: offlinePageIndex)
         }
         .frame(height: offlinePageHeight)
         .clipped()
+        .contentShape(Rectangle())
+    }
+
+    /// 오프라인 현재 페이지 ± 1 범위
+    private var offlineVisiblePages: [Int] {
+        let range = max(0, offlinePageIndex - 1)...min(totalOfflinePages - 1, offlinePageIndex + 1)
+        return Array(range)
     }
 
     var offlinePageHeight: CGFloat {
@@ -322,7 +471,7 @@ extension FollowingView {
             Spacer()
 
             Button {
-                withAnimation(DesignTokens.Animation.snappy) {
+                withAnimation(DesignTokens.Animation.gridPageTransition) {
                     currentPage.wrappedValue = max(0, currentPage.wrappedValue - 1)
                 }
             } label: {
@@ -353,10 +502,9 @@ extension FollowingView {
                         Capsule()
                             .fill(page == currentPage.wrappedValue ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.20))
                             .frame(width: page == currentPage.wrappedValue ? layout.pageIndicatorWidth : 6, height: 6)
-                            .shadow(color: page == currentPage.wrappedValue ? accentColor.opacity(0.3) : .clear, radius: 3)
                             .animation(DesignTokens.Animation.micro, value: currentPage.wrappedValue)
                             .onTapGesture {
-                                withAnimation(DesignTokens.Animation.snappy) {
+                                withAnimation(DesignTokens.Animation.gridPageTransition) {
                                     currentPage.wrappedValue = page
                                 }
                             }
@@ -369,7 +517,7 @@ extension FollowingView {
             }
 
             Button {
-                withAnimation(DesignTokens.Animation.snappy) {
+                withAnimation(DesignTokens.Animation.gridPageTransition) {
                     currentPage.wrappedValue = min(totalPages - 1, currentPage.wrappedValue + 1)
                 }
             } label: {
@@ -417,11 +565,6 @@ extension FollowingView {
                         ) {
                             ForEach(0..<8, id: \.self) { idx in
                                 SkeletonLiveCard(layout: layout)
-                                    .opacity(skeletonAppeared ? 1 : 0)
-                                    .animation(
-                                        DesignTokens.Animation.normal.delay(Double(idx) * 0.03),
-                                        value: skeletonAppeared
-                                    )
                             }
                         }
                     }
@@ -556,22 +699,14 @@ extension FollowingView {
         .buttonStyle(.plain)
     }
 
-    /// 위젯 카드 래퍼 (모던 글래스 카드)
+    /// 위젯 카드 래퍼 (모던 미니멀 카드 — 경량 렌더링)
     func widgetCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
             .padding(layout.cardPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
+            .background {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
-                    .fill(DesignTokens.Colors.surfaceBase.opacity(0.7))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
-                            .strokeBorder(
-                                DesignTokens.Glass.borderColor.opacity(0.35),
-                                lineWidth: 0.5
-                            )
-                    )
-            )
-            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+                    .fill(DesignTokens.Colors.surfaceBase.opacity(0.65))
+            }
     }
 }

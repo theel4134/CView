@@ -52,6 +52,15 @@ public final class AppRouter {
     /// Selected sidebar item
     public var selectedSidebarItem: SidebarItem = .home
     
+    /// Settings mode — sidebar slides to show settings tabs
+    public var isInSettingsMode: Bool = false
+    
+    /// Selected settings tab (when in settings mode)
+    public var selectedSettingsTab: SettingsTab = .general
+    
+    /// Previous sidebar item before entering settings (for back navigation)
+    private var previousSidebarItem: SidebarItem = .home
+    
     /// Sheet presentation
     public var presentedSheet: SheetRoute?
     
@@ -82,6 +91,44 @@ public final class AppRouter {
             case .recentFavorites: "clock.arrow.circlepath"
             case .metrics: "chart.bar.xaxis"
             case .settings: "gearshape.fill"
+            }
+        }
+    }
+    
+    // MARK: - Settings Tab
+    
+    public enum SettingsTab: String, CaseIterable, Identifiable {
+        case general     = "일반"
+        case player      = "플레이어"
+        case chat        = "채팅"
+        case network     = "네트워크"
+        case performance = "성능"
+        case metrics     = "메트릭"
+        case multiLive   = "멀티라이브"
+        
+        public var id: String { rawValue }
+        
+        public var icon: String {
+            switch self {
+            case .general:      "gearshape.fill"
+            case .player:       "play.rectangle.fill"
+            case .chat:         "bubble.left.and.bubble.right.fill"
+            case .network:      "network"
+            case .performance:  "gauge.with.dots.needle.33percent"
+            case .metrics:      "chart.line.uptrend.xyaxis"
+            case .multiLive:    "square.grid.2x2.fill"
+            }
+        }
+        
+        public var color: Color {
+            switch self {
+            case .general:      .gray
+            case .player:       .green
+            case .chat:         .purple
+            case .network:      .blue
+            case .performance:  .orange
+            case .metrics:      .cyan
+            case .multiLive:    .green
             }
         }
     }
@@ -161,11 +208,43 @@ public final class AppRouter {
     }
     
     public func selectSidebar(_ item: SidebarItem) {
-        withAnimation(DesignTokens.Animation.contentTransition) {
+        if item == .settings {
+            enterSettings()
+        } else {
+            isInSettingsMode = false
             selectedSidebarItem = item
+            if !path.isEmpty {
+                path = NavigationPath()
+            }
         }
+    }
+    
+    /// Enter settings mode with slide animation
+    public func enterSettings() {
+        if selectedSidebarItem != .settings {
+            previousSidebarItem = selectedSidebarItem
+        }
+        selectedSidebarItem = .settings
+        isInSettingsMode = true
         if !path.isEmpty {
             path = NavigationPath()
+        }
+    }
+    
+    /// Exit settings mode, return to previous sidebar item
+    public func exitSettings() {
+        isInSettingsMode = false
+        selectedSidebarItem = previousSidebarItem
+        if !path.isEmpty {
+            path = NavigationPath()
+        }
+    }
+    
+    /// Select a settings tab (within settings mode)
+    public func selectSettingsTab(_ tab: SettingsTab) {
+        selectedSettingsTab = tab
+        if !isInSettingsMode {
+            enterSettings()
         }
     }
     

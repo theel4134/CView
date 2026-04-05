@@ -20,6 +20,10 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
     public let profileImageUrl: String?
     public let isNotice: Bool
     public let isSystem: Bool
+    public let userRole: UserRole
+    public let badges: [ChatBadge]
+    public let titleName: String?
+    public let titleColor: String?
 
     public init(from message: ChatMessage, isNotice: Bool = false) {
         self.id = message.id
@@ -36,6 +40,10 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
         self.profileImageUrl = message.profile?.profileImageURL?.absoluteString
         self.isNotice = isNotice
         self.isSystem = false
+        self.userRole = message.profile?.userRole ?? .viewer
+        self.badges = (message.profile?.badges ?? []) + (message.profile?.activityBadges ?? [])
+        self.titleName = message.profile?.title?.name
+        self.titleColor = message.profile?.title?.color
     }
 
     public static func system(_ message: String) -> ChatMessageItem {
@@ -53,7 +61,11 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
             subscriptionMonths: nil,
             profileImageUrl: nil,
             isNotice: false,
-            isSystem: true
+            isSystem: true,
+            userRole: .viewer,
+            badges: [],
+            titleName: nil,
+            titleColor: nil
         )
     }
 
@@ -63,7 +75,11 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
         emojis: [String: String], donationAmount: Int?, donationType: String?,
         subscriptionMonths: Int?,
         profileImageUrl: String?,
-        isNotice: Bool, isSystem: Bool
+        isNotice: Bool, isSystem: Bool,
+        userRole: UserRole = .viewer,
+        badges: [ChatBadge] = [],
+        titleName: String? = nil,
+        titleColor: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -79,6 +95,10 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
         self.profileImageUrl = profileImageUrl
         self.isNotice = isNotice
         self.isSystem = isSystem
+        self.userRole = userRole
+        self.badges = badges
+        self.titleName = titleName
+        self.titleColor = titleColor
     }
 
     /// 시간 포맷터: 새 인스턴스 생성 대신 정적 재사용

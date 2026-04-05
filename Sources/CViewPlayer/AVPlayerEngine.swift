@@ -268,11 +268,13 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             // 일시정지 중에도 세그먼트 다운로드 유지 → 재개 시 버퍼링 없이 즉시 재생
             item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
 
-            // 멀티라이브 배경 세션: 최고 화질 불필요 → 720p 수준 대역폭 제한으로
-            // 네트워크 경합 및 CPU 디코딩 부하 감소 (활성 전환 시 0으로 복원)
+            // 멀티라이브 배경 세션: 최고 화질 불필요 → 480p 수준 대역폭 제한으로
+            // 네트워크 경합 및 GPU 디코딩 부하 감소 (활성 전환 시 0으로 복원)
+            // [Opt] 720p→480p: 디코딩 픽셀 수 55% 감소, 4세션 동시 시 CPU 부하 크게 완화
             if isBackgroundMode {
-                item.preferredPeakBitRate = 3_000_000  // ~720p 상한
-                item.preferredMaximumResolution = CGSize(width: 1280, height: 720)
+                item.preferredPeakBitRate = 2_000_000  // ~480p 상한
+                item.preferredMaximumResolution = CGSize(width: 854, height: 480)
+                item.preferredForwardBufferDuration = 10  // 백그라운드: 버퍼 축소로 메모리 절감
             }
         } else {
             player.automaticallyWaitsToMinimizeStalling = true

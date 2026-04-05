@@ -112,9 +112,9 @@ public actor PerformanceMonitor {
     // MARK: - Control
     
     /// Start collecting metrics
-    /// interval 기본값 8.0: VLC statTimer(3~6초)보다 느린 주기로 CPU 오버헤드 최소화.
-    /// 성능 오버레이는 실시간 디버깅용이 아닌 추세 확인용이므로 8초면 충분.
-    public func start(interval: TimeInterval = 8.0) {
+    /// interval 기본값 10.0: VLC statTimer(5초)보다 느린 주기로 CPU 오버헤드 최소화.
+    /// 성능 오버레이는 실시간 디버깅용이 아닌 추세 확인용이므로 10초면 충분.
+    public func start(interval: TimeInterval = 10.0) {
         guard !isRunning else { return }
         isRunning = true
         

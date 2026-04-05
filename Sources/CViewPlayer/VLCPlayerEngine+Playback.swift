@@ -68,6 +68,17 @@ extension VLCPlayerEngine {
         applyMediaOptions(media, profile: profile)
 
         player.media = media
+        // [Opt-A1/A2] VLC 내부 타이밍 이벤트 빈도 감소 — 멀티라이브 CPU 절감
+        // minimalTimePeriod: VLC 내부 타이머 최소 주기 (µs). 기본 500,000(0.5s)
+        // timeChangeUpdateInterval: delegate 시간 변경 콜백 간격 (초). 기본 1.0s
+        if profile == .multiLive {
+            player.minimalTimePeriod = 1_000_000  // 1초 — 타이밍 이벤트 50% 감소
+            if !isSelectedSession {
+                player.timeChangeUpdateInterval = 5.0  // 비선택: 5초 간격 (80% 감소)
+            } else {
+                player.timeChangeUpdateInterval = 2.0  // 선택: 2초 간격
+            }
+        }
         player.play()
         Log.player.debug("[DIAG] player.play() called — state=\(self.player.state.rawValue) media=\(url.lastPathComponent, privacy: .public) retry=\(retryAttempt)")
         startStatsTimer()
@@ -189,10 +200,20 @@ extension VLCPlayerEngine {
         media.addOption(":avcodec-fast=1")
         media.addOption(":http-reconnect")
         let maxW = profile.adaptiveMaxWidth(isSelected: isSelectedSession)
-        let maxH = profile.adaptiveMaxHeight(isSelected: isSelectedSession)
+        var maxH = profile.adaptiveMaxHeight(isSelected: isSelectedSession)
+        // 대역폭 코디네이터의 화면 캡핑이 설정된 경우 더 제한적인 값 사용
+        if maxAdaptiveHeight > 0 {
+            maxH = min(maxH, maxAdaptiveHeight)
+        }
         media.addOption(":adaptive-maxwidth=\(maxW)")
         media.addOption(":adaptive-maxheight=\(maxH)")
-        media.addOption(":adaptive-logic=highest")
+        // [Opt-A3] 멀티라이브 비선택 세션: predictive 알고리즘으로 대역폭 예측 기반 리버퍼링 감소
+        // 선택 세션 및 단일 스트림: highest로 최고 화질 유지
+        if profile == .multiLive && !isSelectedSession {
+            media.addOption(":adaptive-logic=predictive")
+        } else {
+            media.addOption(":adaptive-logic=highest")
+        }
         media.addOption(":deinterlace=0")
         media.addOption(":postproc-q=0")
         media.addOption(":clock-jitter=\(profile.clockJitter)")
@@ -209,8 +230,20 @@ extension VLCPlayerEngine {
         } else {
             media.addOption(":prefetch-buffer-size=393216")
         }
+        // [Opt-A4] 루프필터 스킵 — VideoToolbox 활성 시 GPU 처리되어 무시되지만
+        // SW 폴백 시 CPU 5~15% 절감 보험. multiLive: 전체 스킵, 그 외: Non-ref만.
+        if profile == .multiLive {
+            media.addOption(":avcodec-skiploopfilter=4")  // All
+        } else {
+            media.addOption(":avcodec-skiploopfilter=1")  // Non-ref only
+        }
         if profile == .multiLive {
             media.addOption(":avcodec-skip-idct=4")
+        }
+        // [Opt-A5] 멀티라이브 비선택: B프레임 디코딩 스킵 — 시각적 끊김 미미(480p)
+        // VLC 레벨 프레임 스킵은 VideoToolbox에도 일부 효과 (프레임 미전달)
+        if profile == .multiLive && !isSelectedSession {
+            media.addOption(":avcodec-skip-frame=1")  // B-frames skip
         }
     }
 }

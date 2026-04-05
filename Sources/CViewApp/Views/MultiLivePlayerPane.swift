@@ -245,7 +245,47 @@ struct MLGridCell: View {
     }
 
     var body: some View {
-        ZStack {
+        VStack(spacing: 0) {
+            // 채널 헤더 (멀티채팅 스타일)
+            HStack(spacing: 6) {
+                // 오디오 활성 표시
+                if isAudioActive && !session.isMuted {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(DesignTokens.Typography.micro)
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                }
+
+                Text(session.channelName.isEmpty ? session.channelId : session.channelName)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .lineLimit(1)
+
+                if !session.liveTitle.isEmpty {
+                    Text("·")
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text(session.liveTitle)
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if session.viewerCount > 0 {
+                    Text(session.formattedViewerCount)
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(DesignTokens.Colors.surfaceBase)
+
+            Divider().opacity(DesignTokens.Opacity.divider)
+
+            // 비디오 영역
+            ZStack {
             // [크래시 방지] GeometryReader + 명시적 .frame(width:height:) 조합은
             // NSViewRepresentable의 AppKit 레이아웃 사이클과 충돌하여 constraint 재진입 크래시를 유발한다.
             // PlayerContainerView는 autoresizingMask [.width, .height]로 부모를 꽉 채우므로
@@ -254,42 +294,6 @@ struct MLGridCell: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
                 .clipped()
-                .overlay(alignment: .topLeading) {
-                    // 채널명 + 라이브 제목 미니 배지 (오버레이 숨김 시 표시)
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.xxs) {
-                        HStack(spacing: DesignTokens.Spacing.xs) {
-                            // 오디오 활성 표시
-                            if isAudioActive && !session.isMuted {
-                                Image(systemName: "speaker.wave.2.fill")
-                                    .font(DesignTokens.Typography.micro)
-                                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                            }
-                            Text(session.channelName.isEmpty ? session.channelId : session.channelName)
-                                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                                .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                                .lineLimit(1)
-                        }
-                        if !session.liveTitle.isEmpty {
-                            Text(session.liveTitle)
-                                .font(DesignTokens.Typography.custom(size: 9, weight: .regular))
-                                .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.7))
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(.horizontal, DesignTokens.Spacing.sm)
-                    .padding(.vertical, DesignTokens.Spacing.xs)
-                    .background {
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                            .fill(Color.black.opacity(0.6))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                                    .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
-                            }
-                    }
-                    .padding(DesignTokens.Spacing.sm)
-                    .opacity(showOverlay ? 0 : 1)
-                    .animation(DesignTokens.Animation.micro, value: showOverlay)
-                }
                 // 오디오 활성 셀 테두리 강조
                 .overlay {
                     RoundedRectangle(cornerRadius: 0)
@@ -408,8 +412,8 @@ struct MLGridCell: View {
                 )
                 .transition(.opacity.animation(DesignTokens.Animation.fast))
             }
-        }
-        .contentShape(Rectangle())
+            } // ZStack (비디오 영역)
+            .contentShape(Rectangle())
         .onHover { h in
             hideTask?.cancel()
             if h {
@@ -439,6 +443,7 @@ struct MLGridCell: View {
         .onDisappear { hideTask?.cancel(); hideTask = nil }
         // [리사이즈 최적화] 그리드 셀에 전파되는 implicit 애니메이션 차단
         .transaction { $0.animation = nil }
+        } // VStack
     }
 
     private func scheduleHide() {
@@ -446,6 +451,65 @@ struct MLGridCell: View {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
             withAnimation { showOverlay = false }
+        }
+    }
+}
+
+
+// MARK: - Session Info Bar (탭 모드용 — 채널명 + 라이브 제목 + 시청자 수)
+/// 탭 모드에서 MLTabBar 아래에 표시되는 세션 정보 바.
+/// 그리드 모드에서는 MLGridCell 헤더가 대신 사용되므로 표시하지 않음.
+struct MLSessionInfoBar: View {
+    let session: MultiLiveSession
+    let manager: MultiLiveManager
+
+    private var isAudioActive: Bool {
+        (manager.audioSessionId ?? manager.selectedSessionId) == session.id
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // 오디오 활성 표시
+            if isAudioActive && !session.isMuted {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(DesignTokens.Typography.micro)
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+            }
+
+            Text(session.channelName.isEmpty ? session.channelId : session.channelName)
+                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .lineLimit(1)
+
+            if !session.liveTitle.isEmpty {
+                Text("·")
+                    .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                Text(session.liveTitle)
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if session.viewerCount > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "person.fill")
+                        .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
+                    Text(session.formattedViewerCount)
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
+                }
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(DesignTokens.Colors.surfaceBase)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DesignTokens.Glass.dividerColor.opacity(0.2))
+                .frame(height: 0.5)
         }
     }
 }
@@ -483,7 +547,7 @@ private struct MLSessionStatusOverlay: View {
                 } placeholder: { Color.clear }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
-                .drawingGroup(opaque: true) // [GPU 최적화] blur 결과를 Metal 텍스처로 캐시
+                .drawingGroup(opaque: true)
             }
 
             Color.black.opacity(overlayOpacity)
@@ -506,6 +570,7 @@ private struct MLSessionStatusOverlay: View {
                     Image(systemName: icon)
                         .font(DesignTokens.Typography.custom(size: 32, weight: .light))
                         .foregroundStyle(iconColor)
+                        .symbolEffect(.pulse)
                 }
 
                 // 텍스트 영역

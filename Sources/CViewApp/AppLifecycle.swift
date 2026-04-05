@@ -65,6 +65,10 @@ extension AppState {
         ) { [weak self] _ in
             self?.multiLiveManager.isTerminating = true
             MultiLivePersistedState.clear()
+            // 멀티채팅 저장 세션도 초기화 — 재시작 시 빈 대기 화면으로 시작
+            self?.settingsStore.multiChat.savedSessions = []
+            self?.settingsStore.multiChat.selectedChannelId = nil
+            self?.settingsStore.scheduleDebouncedSave()
         }
     }
 

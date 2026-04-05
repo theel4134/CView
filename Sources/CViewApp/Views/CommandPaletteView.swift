@@ -247,7 +247,7 @@ struct CommandPaletteView: View {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                 .strokeBorder(DesignTokens.Colors.border.opacity(0.4), lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.35), radius: 30, y: 10)
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 10)
         .onAppear {
             isSearchFocused = true
             selectedIndex = 0

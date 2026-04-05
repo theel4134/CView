@@ -51,7 +51,7 @@ struct CViewApplication: App {
             MainContentView()
                 .environment(router)
                 .environment(appState)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 960, maxWidth: .infinity, minHeight: 540, maxHeight: .infinity)
                 // 60fps: 트랜잭션 기본값 — 모든 암묵적 애니메이션에 spring 적용
                 .transaction { t in
                     if t.animation == nil {
@@ -96,7 +96,8 @@ struct CViewApplication: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(width: 1280, height: 720)
+        .windowResizability(.automatic)
         .commands {
             appCommands
         }
@@ -191,9 +192,14 @@ struct CViewApplication: App {
             Divider()
 
             Button("전체 화면") {
-                appState.playerViewModel?.toggleFullscreen()
+                NSApp?.keyWindow?.toggleFullScreen(nil)
             }
             .keyboardShortcut("f", modifiers: [.command, .control])
+
+            Button("플레이어 전체 화면") {
+                appState.playerViewModel?.toggleFullscreen()
+            }
+            .keyboardShortcut("f", modifiers: [.command, .shift])
         }
 
         CommandGroup(after: .toolbar) {

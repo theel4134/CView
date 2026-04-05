@@ -76,6 +76,10 @@ let package = Package(
                 "CViewNetworking",
                 .product(name: "VLCKitSPM", package: "VLCKitSPM"),
             ],
+            resources: [
+                .copy("Resources/hlsjs-player.html"),
+                .copy("Resources/hls.min.js"),
+            ],
             swiftSettings: commonSwiftSettings
         ),
 
