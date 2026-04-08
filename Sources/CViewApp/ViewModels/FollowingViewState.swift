@@ -60,6 +60,9 @@ final class FollowingViewState {
     var showMultiLive: Bool = true
     var showMLSettings: Bool = false
     var showMultiChat: Bool = true
+
+    /// PiP 모드 활성 여부 (비영속 — 멀티라이브 → PiP 자동 전환 시 true)
+    var isMultiLivePiPMode: Bool = false
     var hideFollowingList: Bool = true {
         didSet { UserDefaults.standard.set(hideFollowingList, forKey: Keys.hideFollowingList) }
     }

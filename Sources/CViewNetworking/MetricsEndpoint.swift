@@ -220,4 +220,15 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             .reloadIgnoringCache
         }
     }
+    
+    /// nginx /api/stats/ → stats-web 라우팅과 충돌하는 엔드포인트는
+    /// 포트 8443 (메트릭 서버 직접)으로 요청해야 한다.
+    public var usesDirectMetricsServer: Bool {
+        switch self {
+        case .stats:
+            true
+        default:
+            false
+        }
+    }
 }

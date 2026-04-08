@@ -106,7 +106,8 @@ struct MLCustomGridLayout: View {
     var onAdd: (() -> Void)? = nil
 
     var body: some View {
-        let sessions = manager.sessions
+        // [Fix] 세션 배열 스냅샷 캡처 — 렌더링 중 배열 변경에 의한 인덱스 초과 크래시 방지
+        let sessions = Array(manager.sessions)
         let count = sessions.count
 
         if count <= 1 {
@@ -119,10 +120,10 @@ struct MLCustomGridLayout: View {
                     isFocused: false
                 )
             }
-        } else if count == 2 {
+        } else if count == 2, let s0 = sessions[safe: 0], let s1 = sessions[safe: 1] {
             HStack(spacing: 0) {
                 MLGridCell(
-                    session: sessions[0],
+                    session: s0,
                     manager: manager,
                     appState: appState,
                     focusedSessionId: $focusedSessionId,
@@ -140,20 +141,22 @@ struct MLCustomGridLayout: View {
                 )
 
                 MLGridCell(
-                    session: sessions[1],
+                    session: s1,
                     manager: manager,
                     appState: appState,
                     focusedSessionId: $focusedSessionId,
                     isFocused: false
                 )
             }
-        } else {
+        } else if count >= 3 {
             // 3~4개: 상하 분할 + 좌우 분할
+            let topRow = Array(sessions.prefix(min(2, count)))
+            let bottomRow = count > 2 ? Array(sessions.dropFirst(2)) : []
             VStack(spacing: 0) {
                 HStack(spacing: gridGap) {
-                    ForEach(0..<min(2, count), id: \.self) { i in
+                    ForEach(topRow) { session in
                         MLGridCell(
-                            session: sessions[i],
+                            session: session,
                             manager: manager,
                             appState: appState,
                             focusedSessionId: $focusedSessionId,
@@ -173,9 +176,9 @@ struct MLCustomGridLayout: View {
                 )
 
                 HStack(spacing: gridGap) {
-                    ForEach(2..<count, id: \.self) { i in
+                    ForEach(bottomRow) { session in
                         MLGridCell(
-                            session: sessions[i],
+                            session: session,
                             manager: manager,
                             appState: appState,
                             focusedSessionId: $focusedSessionId,

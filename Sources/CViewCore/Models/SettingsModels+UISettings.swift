@@ -189,6 +189,8 @@ public struct ChannelNotificationSettings: Codable, Sendable, Equatable {
 public struct MetricsSettings: Codable, Sendable, Equatable {
     /// 기본 서버 URL (코드 전체에서 이 상수만 참조)
     public static let defaultServerURL = "https://cv.dododo.app"
+    /// 메트릭 서버 직접 접근 URL (nginx stats-web 라우팅 우회)
+    public static let defaultDirectServerURL = "https://cv.dododo.app:8443"
     /// 기본 WebSocket URL
     public static let defaultWebSocketURL = "wss://cv.dododo.app/ws"
 

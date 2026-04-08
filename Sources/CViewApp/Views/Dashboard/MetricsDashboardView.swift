@@ -233,13 +233,16 @@ struct MetricsDashboardView: View {
             if viewModel.serverChannelStats.isEmpty {
                 emptyChartState
             } else {
-                let hasAnyData = viewModel.serverChannelStats.contains { $0.web?.avg != nil || $0.app?.avg != nil }
+                let hasAnyData = viewModel.serverChannelStats.contains { ch in
+                    ((ch.web?.samples ?? 0) > 0 && ch.web?.avg != nil) ||
+                    ((ch.app?.samples ?? 0) > 0 && ch.app?.avg != nil)
+                }
                 if !hasAnyData {
                     emptyChartState
                 } else {
                     Chart(viewModel.serverChannelStats) { stat in
                         let channelName = stat.channelName ?? stat.channelId.prefix(8).description
-                        if let webAvg = stat.web?.avg {
+                        if let web = stat.web, (web.samples ?? 0) > 0, let webAvg = web.avg {
                             BarMark(
                                 x: .value("채널", channelName),
                                 y: .value("레이턴시", webAvg)
@@ -252,7 +255,7 @@ struct MetricsDashboardView: View {
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                         }
-                        if let appAvg = stat.app?.avg {
+                        if let app = stat.app, (app.samples ?? 0) > 0, let appAvg = app.avg {
                             BarMark(
                                 x: .value("채널", channelName),
                                 y: .value("레이턴시", appAvg)
@@ -455,11 +458,12 @@ struct MetricsDashboardView: View {
     }
 
     private func latencyColumn(title: String, stats: LatencyStats?, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let hasSamples = (stats?.samples ?? 0) > 0
+        return VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
                 .foregroundStyle(color)
-            if let stats {
+            if let stats, hasSamples {
                 if let avg = stats.avg {
                     Text(String(format: "%.0fms", avg))
                         .font(DesignTokens.Typography.custom(size: 14, weight: .bold, design: .monospaced))

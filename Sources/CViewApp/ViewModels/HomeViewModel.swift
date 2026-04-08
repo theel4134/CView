@@ -96,16 +96,22 @@ public final class HomeViewModel {
     public private(set) var followingTotalViewers: Int = 0
     public private(set) var topThreeChannels: [LiveChannelItem] = []
 
-    /// 서버 채널 중 평균 웹 레이턴시
+    /// 서버 채널 중 평균 웹 레이턴시 (samples > 0인 채널만)
     public var avgWebLatency: Double? {
-        let vals = serverChannelStats.compactMap { $0.web?.avg }
+        let vals = serverChannelStats.compactMap { ch -> Double? in
+            guard let web = ch.web, (web.samples ?? 0) > 0, let avg = web.avg else { return nil }
+            return avg
+        }
         guard !vals.isEmpty else { return nil }
         return vals.reduce(0, +) / Double(vals.count)
     }
     
-    /// 서버 채널 중 평균 앱 레이턴시
+    /// 서버 채널 중 평균 앱 레이턴시 (samples > 0인 채널만)
     public var avgAppLatency: Double? {
-        let vals = serverChannelStats.compactMap { $0.app?.avg }
+        let vals = serverChannelStats.compactMap { ch -> Double? in
+            guard let app = ch.app, (app.samples ?? 0) > 0, let avg = app.avg else { return nil }
+            return avg
+        }
         guard !vals.isEmpty else { return nil }
         return vals.reduce(0, +) / Double(vals.count)
     }

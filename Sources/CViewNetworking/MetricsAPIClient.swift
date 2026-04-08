@@ -12,6 +12,7 @@ public actor MetricsAPIClient {
     
     private let session: URLSession
     private var baseURL: URL
+    private var directBaseURL: URL   // 메트릭 서버 직접 (포트 8443)
     private let cache: ResponseCache
     private var maxRetries: Int = 2
     
@@ -23,6 +24,7 @@ public actor MetricsAPIClient {
     
     public init(
         baseURL: URL = URL(string: MetricsSettings.defaultServerURL)!,
+        directBaseURL: URL = URL(string: MetricsSettings.defaultDirectServerURL)!,
         cache: ResponseCache = ResponseCache(),
         appSecret: String = {
             #if DEBUG
@@ -44,6 +46,7 @@ public actor MetricsAPIClient {
         
         self.session = URLSession(configuration: config)
         self.baseURL = baseURL
+        self.directBaseURL = directBaseURL
         self.cache = cache
         self.appSecret = appSecret
         
@@ -57,9 +60,13 @@ public actor MetricsAPIClient {
         }
     }
     
-    /// 섛버 URL 동적 변경
+    /// 서버 URL 동적 변경
     public func updateBaseURL(_ url: URL) {
         self.baseURL = url
+        // directBaseURL은 포트 8443으로 재구성
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.port = 8443
+        self.directBaseURL = components.url ?? url
     }
     
     // MARK: - JWT Token Management
@@ -147,8 +154,9 @@ public actor MetricsAPIClient {
             }
         }
         
-        // URL 구성
-        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        // URL 구성 — nginx /api/stats/ 라우팅 충돌 엔드포인트는 직접 포트 사용
+        let effectiveBaseURL = endpoint.usesDirectMetricsServer ? directBaseURL : baseURL
+        var urlComponents = URLComponents(url: effectiveBaseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = endpoint.queryItems
         
         guard let url = urlComponents.url else {

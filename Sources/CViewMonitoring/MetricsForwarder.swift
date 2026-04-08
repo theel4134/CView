@@ -53,6 +53,25 @@ public actor MetricsForwarder {
     /// HLSJSPlayerEngine에서 주기적으로 전달받는 최신 HLS.js 통계 (nil = 아직 수신 전)
     private var latestHLSJSMetrics: HLSJSLiveMetrics?
 
+    // MARK: - Multi-Live Channel State
+
+    /// 멀티라이브 부가 채널의 메트릭 상태 (주 채널은 기존 activeChannelId로 관리)
+    private struct MultiLiveChannelState {
+        let channelId: String
+        let channelName: String
+        var vlcMetrics: VLCLiveMetrics?
+        var avPlayerMetrics: AVPlayerLiveMetrics?
+        var hlsjsMetrics: HLSJSLiveMetrics?
+        var currentTimeCallback: (@Sendable () async -> Double)?
+        var pdtLatencyCallback: (@Sendable () async -> Double?)?
+        /// 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 VLC 세션에서 latencyInfo.current 사용
+        var latencyMsCallback: (@Sendable () async -> Double)?
+        var targetLatencyMs: Double?
+    }
+
+    /// 멀티라이브 부가 채널 목록 (선택된 주 채널 제외)
+    private var multiLiveChannels: [String: MultiLiveChannelState] = [:]
+
     /// 서버 동기화 추천에 따른 재생 속도 변경 콜백
     /// MetricsForwarder → 외부 PlayerEngine 연결용
     private var onSyncSpeedChange: (@Sendable (Float) -> Void)?
@@ -65,6 +84,9 @@ public actor MetricsForwarder {
 
     /// PDT 기반 레이턴시 조회 콜백 (seconds, nil = PDT 미지원)
     private var pdtLatencyCallback: (@Sendable () async -> Double?)?
+
+    /// 레이턴시(ms) 직접 조회 콜백 — PDT/AVPlayer 미지원 VLC 세션용 (latencyInfo.current 기반)
+    private var latencyMsCallback: (@Sendable () async -> Double)?
 
     /// 동기화 상태 조회 Task (ping 주기와 동일)
     private var syncStatusTask: Task<Void, Never>?
@@ -166,6 +188,11 @@ public actor MetricsForwarder {
                     Log.network.debug("cviewDisconnect (toggle) failed: \(error.localizedDescription)")
                 }
             }
+            // 멀티라이브 부가 채널도 해제
+            for channelId in multiLiveChannels.keys {
+                let payload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
+                try? await apiClient.cviewDisconnect(payload)
+            }
             lastRecommendation = nil
             lastSyncData = nil
         }
@@ -178,7 +205,7 @@ public actor MetricsForwarder {
         pingInterval = ping
 
         // 현재 실행 중이면 재시작
-        if changed && isEnabled && activeChannelId != nil {
+        if changed && isEnabled && (activeChannelId != nil || !multiLiveChannels.isEmpty) {
             startForwarding()
             startPing()
         }
@@ -241,15 +268,24 @@ public actor MetricsForwarder {
 
     /// 채널 시청 종료 시 호출
     public func deactivateCurrentChannel() async {
-        stopForwarding()
-        stopPing()
-        stopSyncStatusPolling()
-        await monitor.stop()
+        // 멀티라이브 부가 채널이 남아있으면 포워딩 유지
+        if multiLiveChannels.isEmpty {
+            stopForwarding()
+            stopPing()
+            stopSyncStatusPolling()
+            await monitor.stop()
+        } else {
+            // 주 채널만 해제 — 동기화 폴링만 중단
+            stopSyncStatusPolling()
+        }
 
         // 엔진별 메트릭 캐시 클리어
         latestVLCMetrics = nil
         latestAVPlayerMetrics = nil
         latestHLSJSMetrics = nil
+        currentTimeCallback = nil
+        pdtLatencyCallback = nil
+        latencyMsCallback = nil
 
         guard let channelId = activeChannelId, isEnabled else {
             activeChannelId = nil
@@ -344,6 +380,160 @@ public actor MetricsForwarder {
         )
     }
 
+    // MARK: - Multi-Live Channel Management
+
+    /// 멀티라이브 채널 등록 — 메트릭 전송 대상으로 추가
+    /// 주 채널과 동일하면 스킵 (activateChannel로 이미 관리됨)
+    public func registerMultiLiveChannel(channelId: String, channelName: String) async {
+        if channelId == activeChannelId { return }
+        guard multiLiveChannels[channelId] == nil else { return }
+
+        multiLiveChannels[channelId] = MultiLiveChannelState(
+            channelId: channelId,
+            channelName: channelName
+        )
+
+        guard isEnabled else { return }
+
+        // 서버에 채널 연결 알림
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0"
+        let payload = CViewConnectPayload(
+            clientId: clientId,
+            appVersion: appVersion,
+            channelId: channelId,
+            channelName: channelName
+        )
+        do {
+            _ = try await apiClient.cviewConnect(payload)
+        } catch {
+            Log.network.debug("Multi-live channel connect failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 멀티라이브 채널 해제 — 메트릭 전송 중단
+    public func unregisterMultiLiveChannel(channelId: String) async {
+        guard multiLiveChannels.removeValue(forKey: channelId) != nil else { return }
+        guard isEnabled else { return }
+
+        let payload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
+        do {
+            try await apiClient.cviewDisconnect(payload)
+        } catch {
+            Log.network.debug("Multi-live channel disconnect failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 멀티라이브 주 채널 전환 — 기존 주 채널은 부가 채널로 이동, 새 채널이 주 채널로 승격
+    public func switchPrimaryChannel(channelId: String, channelName: String) async {
+        // 이미 동일 채널이면 무시
+        guard channelId != activeChannelId else { return }
+
+        // 현재 주 채널을 부가 채널로 이동 (메트릭 캐시 유지)
+        if let oldId = activeChannelId, let oldName = activeChannelName {
+            multiLiveChannels[oldId] = MultiLiveChannelState(
+                channelId: oldId,
+                channelName: oldName,
+                vlcMetrics: latestVLCMetrics,
+                avPlayerMetrics: latestAVPlayerMetrics,
+                hlsjsMetrics: latestHLSJSMetrics,
+                currentTimeCallback: currentTimeCallback,
+                pdtLatencyCallback: pdtLatencyCallback,
+                latencyMsCallback: latencyMsCallback,
+                targetLatencyMs: targetLatencyMs
+            )
+        }
+
+        // 새 채널을 부가 목록에서 제거 (중복 전송 방지) + 메트릭 캐시 복원
+        let restoredState = multiLiveChannels.removeValue(forKey: channelId)
+
+        // 주 채널 업데이트
+        activeChannelId = channelId
+        activeChannelName = channelName
+        latestVLCMetrics = restoredState?.vlcMetrics
+        latestAVPlayerMetrics = restoredState?.avPlayerMetrics
+        latestHLSJSMetrics = restoredState?.hlsjsMetrics
+        currentTimeCallback = restoredState?.currentTimeCallback
+        pdtLatencyCallback = restoredState?.pdtLatencyCallback
+        latencyMsCallback = restoredState?.latencyMsCallback
+        targetLatencyMs = restoredState?.targetLatencyMs
+
+        // 포워딩이 아직 안 돌고 있으면 시작
+        if isEnabled && forwardingTask == nil {
+            await monitor.start()
+            startForwarding()
+            startPing()
+            startSyncStatusPolling()
+        }
+    }
+
+    /// 멀티라이브 채널별 VLC 메트릭 업데이트
+    public func updateVLCMetrics(_ metrics: VLCLiveMetrics, forChannel channelId: String) async {
+        if channelId == activeChannelId {
+            await updateVLCMetrics(metrics)
+        } else if multiLiveChannels[channelId] != nil {
+            multiLiveChannels[channelId]?.vlcMetrics = metrics
+        }
+    }
+
+    /// 멀티라이브 채널별 AVPlayer 메트릭 업데이트
+    public func updateAVPlayerMetrics(_ metrics: AVPlayerLiveMetrics, forChannel channelId: String) async {
+        if channelId == activeChannelId {
+            await updateAVPlayerMetrics(metrics)
+        } else if multiLiveChannels[channelId] != nil {
+            multiLiveChannels[channelId]?.avPlayerMetrics = metrics
+        }
+    }
+
+    /// 멀티라이브 채널별 HLS.js 메트릭 업데이트
+    public func updateHLSJSMetrics(_ metrics: HLSJSLiveMetrics, forChannel channelId: String) async {
+        if channelId == activeChannelId {
+            await updateHLSJSMetrics(metrics)
+        } else if multiLiveChannels[channelId] != nil {
+            multiLiveChannels[channelId]?.hlsjsMetrics = metrics
+        }
+    }
+
+    /// 멀티라이브 채널별 재생 위치 콜백 등록
+    public func setCurrentTimeCallback(_ callback: @escaping @Sendable () async -> Double, forChannel channelId: String) {
+        if channelId == activeChannelId {
+            currentTimeCallback = callback
+        } else {
+            multiLiveChannels[channelId]?.currentTimeCallback = callback
+        }
+    }
+
+    /// 멀티라이브 채널별 PDT 레이턴시 콜백 등록
+    public func setPDTLatencyCallback(_ callback: @escaping @Sendable () async -> Double?, forChannel channelId: String) {
+        if channelId == activeChannelId {
+            pdtLatencyCallback = callback
+        } else {
+            multiLiveChannels[channelId]?.pdtLatencyCallback = callback
+        }
+    }
+
+    /// 멀티라이브 채널별 목표 레이턴시 설정
+    public func setTargetLatency(_ ms: Double, forChannel channelId: String) {
+        if channelId == activeChannelId {
+            targetLatencyMs = ms
+        } else {
+            multiLiveChannels[channelId]?.targetLatencyMs = ms
+        }
+    }
+
+    /// 멀티라이브 채널별 레이턴시(ms) 직접 조회 콜백 등록 — latencyInfo 기반
+    public func setLatencyMsCallback(_ callback: @escaping @Sendable () async -> Double, forChannel channelId: String) {
+        if channelId == activeChannelId {
+            latencyMsCallback = callback
+        } else {
+            multiLiveChannels[channelId]?.latencyMsCallback = callback
+        }
+    }
+
+    /// 레이턴시(ms) 직접 조회 콜백 등록 (싱글라이브 호환)
+    public func setLatencyMsCallback(_ callback: @escaping @Sendable () async -> Double) {
+        latencyMsCallback = callback
+    }
+
     // MARK: - Metrics Forwarding
 
     private func startForwarding() {
@@ -353,6 +543,8 @@ public actor MetricsForwarder {
                 try? await Task.sleep(for: .seconds(self.forwardInterval))
                 guard !Task.isCancelled else { break }
                 await self.forwardCurrentMetrics()
+                // 멀티라이브 부가 채널 메트릭도 전송
+                await self.forwardMultiLiveMetrics()
             }
         }
     }
@@ -443,11 +635,14 @@ public actor MetricsForwarder {
             )
         } else {
             // VLC 엔진 — 기존 VLC 기반 하트비트
+            // 레이턴시 우선순위: PDT → latencyMsCallback → PerformanceMonitor
+            let directLatencyMs = await latencyMsCallback?()
+            let effectiveLatencyMs = pdtLatMs ?? directLatencyMs ?? metrics?.latencyMs ?? 0
             payload = CViewHeartbeatPayload(
                 clientId: clientId,
                 channelId: channelId,
                 channelName: channelName,
-                latency: (metrics?.latencyMs ?? 0).safeForJSON,
+                latency: effectiveLatencyMs.safeForJSON,
                 resolution: vlc?.resolution,
                 bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
                 fps: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
@@ -483,6 +678,7 @@ public actor MetricsForwarder {
             
             // PDT 또는 position 데이터가 있으면 hybrid-heartbeat도 전송
             if pdtLatMs != nil || playbackTime != nil {
+                let directLat = await latencyMsCallback?()
                 let hybridPayload = HybridHeartbeatPayload(
                     channelId: channelId,
                     clientId: clientId,
@@ -490,7 +686,7 @@ public actor MetricsForwarder {
                     engine: engineName,
                     vlcPosition: playbackTime?.safeForJSON,
                     pdtTimestamp: pdtTimestampMs?.safeForJSON,
-                    latencyMs: pdtLatMs?.safeForJSON ?? (metrics?.latencyMs ?? 0).safeForJSON
+                    latencyMs: pdtLatMs?.safeForJSON ?? directLat?.safeForJSON ?? (metrics?.latencyMs ?? 0).safeForJSON
                 )
                 do {
                     _ = try await apiClient.hybridHeartbeat(hybridPayload)
@@ -565,6 +761,127 @@ public actor MetricsForwarder {
             }
         }
     }
+
+    // MARK: - Multi-Live Metrics Forwarding
+
+    /// 멀티라이브 부가 채널 메트릭 일괄 전송
+    private func forwardMultiLiveMetrics() async {
+        guard isEnabled, !multiLiveChannels.isEmpty else { return }
+        for (_, channelState) in multiLiveChannels {
+            await forwardMultiLiveChannelMetrics(channelState)
+        }
+    }
+
+    /// 개별 멀티라이브 채널의 메트릭을 하트비트로 전송
+    private func forwardMultiLiveChannelMetrics(_ ch: MultiLiveChannelState) async {
+        let vlc = ch.vlcMetrics
+        let avp = ch.avPlayerMetrics
+        let hlsjs = ch.hlsjsMetrics
+
+        let isHLSJSEngine = hlsjs != nil
+        let isAVPEngine = !isHLSJSEngine && vlc == nil && avp != nil
+        let engineName = isHLSJSEngine ? "HLS.js" : (isAVPEngine ? "AVPlayer" : "VLC")
+
+        let playbackTime = await ch.currentTimeCallback?()
+        let pdtLat = await ch.pdtLatencyCallback?()
+        let pdtLatMs = pdtLat.map { $0 * 1000.0 }
+        let pdtTimestampMs = pdtLat.map { _ in Date().timeIntervalSince1970 * 1000.0 }
+
+        let payload: CViewHeartbeatPayload
+        if isHLSJSEngine, let hlsjs {
+            payload = CViewHeartbeatPayload(
+                clientId: clientId,
+                channelId: ch.channelId,
+                channelName: ch.channelName,
+                latency: (hlsjs.latency * 1000.0).safeForJSON,
+                resolution: hlsjs.resolution,
+                bitrate: Int(hlsjs.bitrateKbps.safeForJSON),
+                fps: hlsjs.fps.safeForJSON,
+                bufferHealth: (hlsjs.bufferHealth * 100).safeForJSON,
+                playbackRate: Double(hlsjs.playbackRate).safeForJSON,
+                droppedFrames: hlsjs.droppedFramesDelta,
+                healthScore: hlsjs.healthScore.safeForJSON,
+                engine: engineName,
+                vlcMetrics: nil,
+                targetLatency: ch.targetLatencyMs,
+                connectionState: hlsjs.bufferHealth > 0.5 ? "connected" : "degraded",
+                connectionQuality: hlsjs.bufferHealth > 0.7 ? "excellent" : hlsjs.bufferHealth > 0.3 ? "good" : "poor",
+                isBuffering: hlsjs.bufferHealth < 0.3,
+                latePictures: nil,
+                currentTime: playbackTime?.safeForJSON,
+                pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                pdtLatency: pdtLatMs?.safeForJSON,
+                latencyUnit: "ms"
+            )
+        } else if isAVPEngine, let avp {
+            payload = CViewHeartbeatPayload(
+                clientId: clientId,
+                channelId: ch.channelId,
+                channelName: ch.channelName,
+                latency: (avp.measuredLatency * 1000.0).safeForJSON,
+                resolution: avp.resolution,
+                bitrate: Int(avp.bitrateKbps.safeForJSON),
+                fps: nil,
+                bufferHealth: (avp.bufferHealth * 100).safeForJSON,
+                playbackRate: Double(avp.playbackRate).safeForJSON,
+                droppedFrames: avp.droppedFramesDelta,
+                healthScore: avp.healthScore.safeForJSON,
+                engine: engineName,
+                vlcMetrics: nil,
+                targetLatency: ch.targetLatencyMs,
+                connectionState: avp.bufferHealth > 0.5 ? "connected" : "degraded",
+                connectionQuality: avp.bufferHealth > 0.7 ? "excellent" : avp.bufferHealth > 0.3 ? "good" : "poor",
+                isBuffering: avp.bufferHealth < 0.3,
+                latePictures: nil,
+                currentTime: playbackTime?.safeForJSON,
+                pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                pdtLatency: pdtLatMs?.safeForJSON,
+                latencyUnit: "ms"
+            )
+        } else {
+            let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
+            // 레이턴시 우선순위: PDT → latencyMsCallback
+            let directLatencyMs = await ch.latencyMsCallback?()
+            let effectiveLatencyMs = pdtLatMs ?? directLatencyMs ?? 0
+            payload = CViewHeartbeatPayload(
+                clientId: clientId,
+                channelId: ch.channelId,
+                channelName: ch.channelName,
+                latency: effectiveLatencyMs.safeForJSON,
+                resolution: vlc?.resolution,
+                bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
+                fps: vlc?.fps.safeForJSON,
+                bufferHealth: vlc.map { ($0.bufferHealth * 100).safeForJSON },
+                playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
+                droppedFrames: vlc?.droppedFramesDelta,
+                healthScore: vlc.map { $0.healthScore.safeForJSON },
+                engine: engineName,
+                vlcMetrics: vlcPayload,
+                targetLatency: ch.targetLatencyMs,
+                connectionState: vlc.map { $0.bufferHealth < 0.1 ? "poor" : "connected" } ?? "unknown",
+                connectionQuality: vlc.map { $0.healthScore >= 0.9 ? "excellent" : ($0.healthScore >= 0.7 ? "good" : "fair") } ?? "unknown",
+                isBuffering: vlc.map { $0.bufferHealth < 0.3 },
+                latePictures: vlc?.latePicturesDelta,
+                currentTime: playbackTime?.safeForJSON,
+                pdtTimestamp: pdtTimestampMs?.safeForJSON,
+                pdtLatency: pdtLatMs?.safeForJSON,
+                latencyUnit: "ms"
+            )
+        }
+
+        do {
+            _ = try await apiClient.cviewHeartbeat(payload)
+            totalSent += 1
+            lastSentAt = Date()
+        } catch is DecodingError {
+            totalSent += 1
+            lastSentAt = Date()
+        } catch {
+            totalErrors += 1
+            lastErrorAt = Date()
+            lastErrorMessage = error.localizedDescription
+        }
+    }
     
     // MARK: - Keep-alive Ping
     
@@ -608,6 +925,15 @@ public actor MetricsForwarder {
     
     /// 앱 종료 시 호출
     public func shutdown() async {
+        // 멀티라이브 부가 채널 전체 해제
+        for channelId in multiLiveChannels.keys {
+            if isEnabled {
+                let payload = CViewDisconnectPayload(clientId: clientId, channelId: channelId)
+                try? await apiClient.cviewDisconnect(payload)
+            }
+        }
+        multiLiveChannels.removeAll()
+
         await deactivateCurrentChannel()
         forwardingTask?.cancel()
         forwardingTask = nil

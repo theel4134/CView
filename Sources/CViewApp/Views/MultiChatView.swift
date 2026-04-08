@@ -137,32 +137,35 @@ struct MultiChatView: View {
 
     private var gridContent: some View {
         GeometryReader { geo in
-            let sessions = sessionManager.sessions
+            // [Fix] 세션 배열 스냅샷 캡처 — 렌더링 중 배열 변경에 의한 인덱스 초과 크래시 방지
+            let sessions = Array(sessionManager.sessions)
             let count = sessions.count
 
-            if count == 1 {
-                gridCell(session: sessions[0], width: geo.size.width, height: geo.size.height)
-            } else if count == 2 {
+            if count == 1, let s0 = sessions.first {
+                gridCell(session: s0, width: geo.size.width, height: geo.size.height)
+            } else if count == 2, let s0 = sessions[safe: 0], let s1 = sessions[safe: 1] {
                 // 2개: 좌우 분할 + 리사이즈 디바이더
                 let leftW = geo.size.width * sessionManager.gridHorizontalRatio
                 HStack(spacing: 0) {
-                    gridCell(session: sessions[0], width: leftW, height: geo.size.height)
+                    gridCell(session: s0, width: leftW, height: geo.size.height)
                     MLResizeDivider(
                         isHorizontal: true,
                         containerLength: geo.size.width,
                         currentRatio: sessionManager.gridHorizontalRatio,
                         onRatioChange: { sessionManager.gridHorizontalRatio = $0 }
                     )
-                    gridCell(session: sessions[1], width: geo.size.width - leftW, height: geo.size.height)
+                    gridCell(session: s1, width: geo.size.width - leftW, height: geo.size.height)
                 }
             } else if count >= 3 {
                 // 3~4개: 상하 분할 (각 행은 좌우 균등)
                 let topH = geo.size.height * sessionManager.gridVerticalRatio
                 let botH = geo.size.height - topH
+                let topRow = Array(sessions.prefix(min(2, count)))
+                let bottomRow = Array(sessions.dropFirst(2))
                 VStack(spacing: 0) {
                     HStack(spacing: 1) {
-                        ForEach(0..<min(2, count), id: \.self) { i in
-                            gridCell(session: sessions[i], width: geo.size.width / CGFloat(min(2, count)), height: topH)
+                        ForEach(topRow) { session in
+                            gridCell(session: session, width: geo.size.width / CGFloat(topRow.count), height: topH)
                         }
                     }
                     .frame(height: topH)
@@ -175,9 +178,8 @@ struct MultiChatView: View {
                     )
 
                     HStack(spacing: 1) {
-                        let bottomSessions = Array(sessions.dropFirst(2))
-                        ForEach(0..<bottomSessions.count, id: \.self) { i in
-                            gridCell(session: bottomSessions[i], width: geo.size.width / CGFloat(bottomSessions.count), height: botH)
+                        ForEach(bottomRow) { session in
+                            gridCell(session: session, width: geo.size.width / CGFloat(max(1, bottomRow.count)), height: botH)
                         }
                     }
                 }

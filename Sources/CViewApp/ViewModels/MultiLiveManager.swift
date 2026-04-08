@@ -390,11 +390,11 @@ public final class MultiLiveManager {
                 if let vlc = current.playerViewModel.playerEngine as? VLCPlayerEngine {
                     vlc.isSelectedSession = true
                 }
-                // 메트릭 포워더: 선택된 세션으로 채널 전환
+                // 메트릭 포워더: 선택된 세션으로 채널 전환 (기존 주 채널은 부가 채널로 이동)
                 if let forwarder = metricsForwarder {
                     let chId = current.channelId
                     let chName = current.channelName
-                    Task { await forwarder.activateChannel(channelId: chId, channelName: chName) }
+                    Task { await forwarder.switchPrimaryChannel(channelId: chId, channelName: chName) }
                 }
             }
         }

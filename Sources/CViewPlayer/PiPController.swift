@@ -194,6 +194,9 @@ public final class PiPController: @unchecked Sendable {
     public var onToggleMute: (() -> Void)?
     public var onReturnToMain: (() -> Void)?
 
+    /// PiP 종료 시 외부 알림 콜백 (stopPiP / 패널 닫기 모두 호출)
+    public var onPiPStopped: (() -> Void)?
+
     // MARK: - Singleton
 
     public static let shared = PiPController()
@@ -270,6 +273,10 @@ public final class PiPController: @unchecked Sendable {
 
         state = .inactive
         logger.info("PiP stopped")
+
+        let callback = onPiPStopped
+        onPiPStopped = nil
+        callback?()
     }
 
     /// PiP 토글
@@ -388,5 +395,9 @@ public final class PiPController: @unchecked Sendable {
         pipPanel = nil
         panelDelegate = nil
         logger.info("PiP panel closed by user")
+
+        let callback = onPiPStopped
+        onPiPStopped = nil
+        callback?()
     }
 }

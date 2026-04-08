@@ -148,6 +148,20 @@ extension LiveStreamView {
                 if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {
                     await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
                 }
+                // latencyInfo 기반 레이턴시(ms) 콜백 — 서버 전송용
+                await _forwarder?.setLatencyMsCallback { [weak _playerVM] in
+                    let info = await MainActor.run { _playerVM?.latencyInfo }
+                    return (info?.current ?? 0) * 1000
+                }
+                // 재생 위치(currentTime) 콜백 연결
+                await _forwarder?.setCurrentTimeCallback { [weak _playerVM] in
+                    await MainActor.run { _playerVM?.currentTime ?? 0 }
+                }
+                // PDT 기반 레이턴시 콜백
+                await _forwarder?.setPDTLatencyCallback { [weak _playerVM] in
+                    let info = await MainActor.run { _playerVM?.latencyInfo }
+                    return info.map { $0.current * 1000 }
+                }
             }
 
             Task { await recordWatch(channelName: _channelName, thumbnailURL: liveInfo.liveImageURL?.absoluteString, categoryName: liveInfo.liveCategoryValue) }

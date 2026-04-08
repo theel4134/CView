@@ -196,6 +196,9 @@ struct LatencyComparisonChart: View {
             
             if history.isEmpty {
                 latencyEmptyState
+            } else if history.count == 1 {
+                // 단일 포인트: 수치 카드로 표시
+                singlePointState
             } else {
                 Chart {
                     ForEach(history) { entry in
@@ -208,6 +211,13 @@ struct LatencyComparisonChart: View {
                             .foregroundStyle(.cyan)
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
                             .interpolationMethod(.catmullRom)
+                            
+                            PointMark(
+                                x: .value("시간", entry.timestamp),
+                                y: .value("레이턴시", web)
+                            )
+                            .foregroundStyle(.cyan)
+                            .symbolSize(16)
                         }
                         
                         if let app = entry.appLatency {
@@ -219,6 +229,13 @@ struct LatencyComparisonChart: View {
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
                             .interpolationMethod(.catmullRom)
+                            
+                            PointMark(
+                                x: .value("시간", entry.timestamp),
+                                y: .value("레이턴시", app)
+                            )
+                            .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                            .symbolSize(16)
                         }
                     }
                 }
@@ -276,6 +293,47 @@ struct LatencyComparisonChart: View {
             Spacer()
         }
         .frame(height: 140)
+    }
+    
+    /// 단일 포인트: 차트 대신 현재 수치 표시
+    private var singlePointState: some View {
+        let entry = history[0]
+        return HStack(spacing: 24) {
+            Spacer()
+            if let web = entry.webLatency {
+                VStack(spacing: 4) {
+                    Text("웹 레이턴시")
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(.cyan)
+                    Text(String(format: "%.0fms", web))
+                        .font(DesignTokens.Typography.custom(size: 24, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.cyan)
+                }
+            }
+            if let app = entry.appLatency {
+                VStack(spacing: 4) {
+                    Text("CView 레이턴시")
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    Text(String(format: "%.0fms", app))
+                        .font(DesignTokens.Typography.custom(size: 24, weight: .bold, design: .monospaced))
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                }
+            }
+            if entry.webLatency == nil && entry.appLatency == nil {
+                Text("데이터 없음")
+                    .font(DesignTokens.Typography.caption)
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+            Spacer()
+        }
+        .frame(height: 140)
+        .overlay(alignment: .bottom) {
+            Text("다음 폴링에서 차트가 표시됩니다")
+                .font(DesignTokens.Typography.micro)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .padding(.bottom, 4)
+        }
     }
 }
 

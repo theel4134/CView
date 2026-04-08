@@ -164,15 +164,12 @@ final class MultiLiveSession: Identifiable {
                 return
             }
 
-            // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             let _forwarder = metricsForwarder
             let sessionChannelId = channelId
             playerViewModel.setVLCMetricsCallback { [weak self] metrics in
                 Task {
-                    // 선택된 세션(활성 채널)의 메트릭만 서버로 전송
-                    if await _forwarder?.currentChannelId == sessionChannelId {
-                        await _forwarder?.updateVLCMetrics(metrics)
-                    }
+                    await _forwarder?.updateVLCMetrics(metrics, forChannel: sessionChannelId)
                 }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -181,12 +178,10 @@ final class MultiLiveSession: Identifiable {
                 }
             }
 
-            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
                 Task {
-                    if await _forwarder?.currentChannelId == sessionChannelId {
-                        await _forwarder?.updateAVPlayerMetrics(metrics)
-                    }
+                    await _forwarder?.updateAVPlayerMetrics(metrics, forChannel: sessionChannelId)
                 }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -195,12 +190,10 @@ final class MultiLiveSession: Identifiable {
                 }
             }
 
-            // HLS.js 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            // HLS.js 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             playerViewModel.setHLSJSMetricsCallback { [weak self] metrics in
                 Task {
-                    if await _forwarder?.currentChannelId == sessionChannelId {
-                        await _forwarder?.updateHLSJSMetrics(metrics)
-                    }
+                    await _forwarder?.updateHLSJSMetrics(metrics, forChannel: sessionChannelId)
                 }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -208,7 +201,7 @@ final class MultiLiveSession: Identifiable {
                 }
             }
 
-            // 메트릭 채널 활성화 (포그라운드 세션만)
+            // 메트릭 채널 활성화 — 포그라운드 세션은 주 채널, 백그라운드 세션은 부가 채널로 등록
             if !isBackground {
                 Task { await _forwarder?.activateChannel(channelId: channelId, channelName: channelName, streamUrl: streamURL.absoluteString) }
                 // 서버 동기화 추천 → 재생 속도 적용 콜백
@@ -232,6 +225,33 @@ final class MultiLiveSession: Identifiable {
                         let info = await MainActor.run { _playerVM?.latencyInfo }
                         return info.map { $0.current * 1000 }
                     }
+                    // latencyInfo 기반 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 시 폴백
+                    await _forwarder?.setLatencyMsCallback { [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return (info?.current ?? 0) * 1000
+                    }
+                }
+            } else {
+                // 백그라운드 세션 → 멀티라이브 부가 채널로 등록
+                let _playerVM = playerViewModel
+                Task {
+                    await _forwarder?.registerMultiLiveChannel(channelId: channelId, channelName: channelName)
+                    // 채널별 콜백 등록
+                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
+                        await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching), forChannel: sessionChannelId)
+                    }
+                    await _forwarder?.setCurrentTimeCallback({ [weak _playerVM] in
+                        await MainActor.run { _playerVM?.currentTime ?? 0 }
+                    }, forChannel: sessionChannelId)
+                    await _forwarder?.setPDTLatencyCallback({ [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return info.map { $0.current * 1000 }
+                    }, forChannel: sessionChannelId)
+                    // latencyInfo 기반 레이턴시(ms) 직접 조회 콜백
+                    await _forwarder?.setLatencyMsCallback({ [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return (info?.current ?? 0) * 1000
+                    }, forChannel: sessionChannelId)
                 }
             }
 
@@ -320,15 +340,12 @@ final class MultiLiveSession: Identifiable {
             )
             playerViewModel.applyMultiLiveConstraints(paneCount: paneCount)
 
-            // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             let _forwarder2 = metricsForwarder ?? appState.metricsForwarder
             let sessionChannelId2 = channelId
             playerViewModel.setVLCMetricsCallback { [weak self] metrics in
                 Task {
-                    // 선택된 세션(활성 채널)의 메트릭만 서버로 전송
-                    if await _forwarder2?.currentChannelId == sessionChannelId2 {
-                        await _forwarder2?.updateVLCMetrics(metrics)
-                    }
+                    await _forwarder2?.updateVLCMetrics(metrics, forChannel: sessionChannelId2)
                 }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -337,12 +354,10 @@ final class MultiLiveSession: Identifiable {
                 }
             }
 
-            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송
+            // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
                 Task {
-                    if await _forwarder2?.currentChannelId == sessionChannelId2 {
-                        await _forwarder2?.updateAVPlayerMetrics(metrics)
-                    }
+                    await _forwarder2?.updateAVPlayerMetrics(metrics, forChannel: sessionChannelId2)
                 }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -351,9 +366,59 @@ final class MultiLiveSession: Identifiable {
                 }
             }
 
-            // 메트릭 채널 활성화 (포그라운드 세션만)
+            // HLS.js 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
+            playerViewModel.setHLSJSMetricsCallback { [weak self] metrics in
+                Task {
+                    await _forwarder2?.updateHLSJSMetrics(metrics, forChannel: sessionChannelId2)
+                }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.latestHLSJSMetrics = metrics
+                }
+            }
+
+            // 메트릭 채널 활성화 — 포그라운드 세션은 주 채널, 백그라운드 세션은 부가 채널로 등록
             if !isBackground {
-                Task { await _forwarder2?.activateChannel(channelId: channelId, channelName: channelName, streamUrl: streamURL.absoluteString) }
+                let _playerVM = playerViewModel
+                Task {
+                    await _forwarder2?.activateChannel(channelId: channelId, channelName: channelName, streamUrl: streamURL.absoluteString)
+                    // 레이턴시 콜백 등록
+                    await _forwarder2?.setLatencyMsCallback { [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return (info?.current ?? 0) * 1000
+                    }
+                    await _forwarder2?.setCurrentTimeCallback { [weak _playerVM] in
+                        await MainActor.run { _playerVM?.currentTime ?? 0 }
+                    }
+                    await _forwarder2?.setPDTLatencyCallback { [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return info.map { $0.current * 1000 }
+                    }
+                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
+                        await _forwarder2?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
+                    }
+                }
+            } else {
+                // 백그라운드 세션 → 멀티라이브 부가 채널로 등록
+                let _playerVM = playerViewModel
+                Task {
+                    await _forwarder2?.registerMultiLiveChannel(channelId: channelId, channelName: channelName)
+                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
+                        await _forwarder2?.setTargetLatency(Double(vlc.streamingProfile.liveCaching), forChannel: sessionChannelId2)
+                    }
+                    await _forwarder2?.setCurrentTimeCallback({ [weak _playerVM] in
+                        await MainActor.run { _playerVM?.currentTime ?? 0 }
+                    }, forChannel: sessionChannelId2)
+                    await _forwarder2?.setPDTLatencyCallback({ [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return info.map { $0.current * 1000 }
+                    }, forChannel: sessionChannelId2)
+                    // latencyInfo 기반 레이턴시(ms) 직접 조회 콜백
+                    await _forwarder2?.setLatencyMsCallback({ [weak _playerVM] in
+                        let info = await MainActor.run { _playerVM?.latencyInfo }
+                        return (info?.current ?? 0) * 1000
+                    }, forChannel: sessionChannelId2)
+                }
             }
 
             startPolling(apiClient: apiClient, appState: appState)
@@ -406,9 +471,11 @@ final class MultiLiveSession: Identifiable {
         refreshTask?.cancel(); refreshTask = nil
         offlineRetryTask?.cancel(); offlineRetryTask = nil
         chatConnectionTask?.cancel(); chatConnectionTask = nil
-        // 메트릭 포워더 채널 비활성화 — 이 세션이 활성 채널인 경우에만
+        // 메트릭 포워더 채널 해제 — 주 채널이면 비활성화, 부가 채널이면 등록 해제
         if await metricsForwarder?.currentChannelId == channelId {
             await metricsForwarder?.deactivateCurrentChannel()
+        } else {
+            await metricsForwarder?.unregisterMultiLiveChannel(channelId: channelId)
         }
         await playerViewModel.stopStream()
         await chatViewModel.disconnect()

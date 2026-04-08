@@ -97,6 +97,11 @@ struct FollowingView: View {
         get { ps.showMLSettings }
         nonmutating set { ps.showMLSettings = newValue }
     }
+    // PiP 모드 — 영속 (AppState)
+    var isMultiLivePiPMode: Bool {
+        get { ps.isMultiLivePiPMode }
+        nonmutating set { ps.isMultiLivePiPMode = newValue }
+    }
     var hideFollowingList: Bool {
         get { ps.hideFollowingList }
         nonmutating set { ps.hideFollowingList = newValue }
@@ -307,8 +312,10 @@ struct FollowingView: View {
         .onChange(of: multiLiveManager.sessions.count) { oldCount, newCount in
             guard newCount > oldCount else { return }
             guard !isRestoringChatSessions else { return }
+            // [Fix] 배열 스냅샷 캡처 — onChange 콜백과 배열 접근 사이의 레이스 방지
+            let currentSessions = Array(multiLiveManager.sessions)
             let existingChatIds = Set(chatSessionManager.sessions.map { $0.id })
-            let newSessions = multiLiveManager.sessions.filter { !existingChatIds.contains($0.channelId) }
+            let newSessions = currentSessions.filter { !existingChatIds.contains($0.channelId) }
             for session in newSessions {
                 let channelId = session.channelId
                 Task { await addChatChannel(channelId: channelId) }
@@ -361,7 +368,8 @@ struct FollowingView: View {
     private let dualChatMinWidth: CGFloat = 300
 
     private var mainContent: some View {
-        let hasSidePanel = showMultiLive || showMultiChat
+        let effectiveShowMultiLive = showMultiLive && !isMultiLivePiPMode
+        let hasSidePanel = effectiveShowMultiLive || showMultiChat
 
         return GeometryReader { geo in
             let totalWidth = geo.size.width
@@ -414,12 +422,14 @@ struct FollowingView: View {
         .animation(dividerDragOffset != 0 ? nil : DesignTokens.Animation.contentTransition, value: hideFollowingList)
         .animation(DesignTokens.Animation.contentTransition, value: showMultiLive)
         .animation(DesignTokens.Animation.contentTransition, value: showMultiChat)
+        .animation(DesignTokens.Animation.contentTransition, value: isMultiLivePiPMode)
     }
 
     /// 멀티라이브 + 멀티채팅 동시 또는 단독 표시
     @ViewBuilder
     private func sidePanelContent(totalWidth: CGFloat) -> some View {
-        if showMultiLive && showMultiChat {
+        let effectiveShowMultiLive = showMultiLive && !isMultiLivePiPMode
+        if effectiveShowMultiLive && showMultiChat {
             // 커스텀 분할 뷰 (HSplitView 대신 순수 SwiftUI로 레이아웃 순환 방지)
             GeometryReader { geo in
                 let panelW = geo.size.width
@@ -459,11 +469,43 @@ struct FollowingView: View {
                 .onAppear { ps.currentSidePanelWidth = panelW }
                 .onChange(of: panelW) { _, w in ps.currentSidePanelWidth = w }
             }
-        } else if showMultiLive {
+        } else if effectiveShowMultiLive {
             multiLiveInlinePanel
         } else if showMultiChat {
             multiChatInlinePanel
         }
+    }
+
+    // MARK: - Multi-Live PiP Auto-Transition
+
+    /// 멀티라이브 활성 세션을 PiP로 자동 전환
+    private func startMultiLivePiP() {
+        let pip = PiPController.shared
+
+        // 이미 PiP 활성 → 모드 플래그만 동기화
+        guard !pip.isActive else {
+            isMultiLivePiPMode = true
+            return
+        }
+
+        guard let session = multiLiveManager.selectedSession ?? multiLiveManager.sessions.first,
+              let vlcEngine = session.playerViewModel.playerEngine as? VLCPlayerEngine
+        else { return }
+
+        pip.startPiP(vlcEngine: vlcEngine, title: session.channelName)
+
+        // PiP "메인 창 복귀" 버튼 → PiP 종료 + 인라인 복원
+        pip.onReturnToMain = { [ps] in
+            pip.stopPiP()
+            ps.isMultiLivePiPMode = false
+        }
+
+        // PiP 종료(닫기 버튼·외부 호출 등) → 인라인 복원
+        pip.onPiPStopped = { [ps] in
+            ps.isMultiLivePiPMode = false
+        }
+
+        isMultiLivePiPMode = true
     }
 
     /// 팔로잉 리스트 우측 리사이즈 핸들 — 드래그로 리스트 패널 너비 조절
