@@ -197,7 +197,10 @@ extension VLCPlayerEngine {
         media.addOption(":disc-caching=0")
         media.addOption(":cr-average=\(profile.crAverage)")
         media.addOption(":avcodec-threads=\(profile.decoderThreads)")
-        media.addOption(":avcodec-fast=1")
+        // [Quality] avcodec-fast: 싱글 스트림에서는 비활성 (디블로킹 완전 적용으로 원본 화질 유지)
+        if profile.avcodecFast {
+            media.addOption(":avcodec-fast=1")
+        }
         media.addOption(":http-reconnect")
         let maxW = profile.adaptiveMaxWidth(isSelected: isSelectedSession)
         var maxH = profile.adaptiveMaxHeight(isSelected: isSelectedSession)
@@ -205,8 +208,9 @@ extension VLCPlayerEngine {
         if maxAdaptiveHeight > 0 {
             maxH = min(maxH, maxAdaptiveHeight)
         }
-        media.addOption(":adaptive-maxwidth=\(maxW)")
-        media.addOption(":adaptive-maxheight=\(maxH)")
+        // [Quality] 0 = 무제한 (VLC가 소스 원본 해상도 사용) — 싱글 스트림용
+        if maxW > 0 { media.addOption(":adaptive-maxwidth=\(maxW)") }
+        if maxH > 0 { media.addOption(":adaptive-maxheight=\(maxH)") }
         // [Opt-A3] 멀티라이브 비선택 세션: predictive 알고리즘으로 대역폭 예측 기반 리버퍼링 감소
         // 선택 세션 및 단일 스트림: highest로 최고 화질 유지
         if profile == .multiLive && !isSelectedSession {
@@ -224,18 +228,17 @@ extension VLCPlayerEngine {
         media.addOption(":http-user-agent=\(CommonHeaders.safariUserAgent)")
         if profile.dropLateFrames { media.addOption(":drop-late-frames=1") }
         if profile.skipFrames { media.addOption(":skip-frames=1") }
-        media.addOption(":avcodec-hurry-up=1")
+        // [Quality] hurry-up: 싱글 스트림에서는 비활성 (디코더 품질 단계 완전 적용)
+        if profile.hurryUp { media.addOption(":avcodec-hurry-up=1") }
         if profile == .multiLive {
             media.addOption(":prefetch-buffer-size=786432")
         } else {
             media.addOption(":prefetch-buffer-size=393216")
         }
-        // [Opt-A4] 루프필터 스킵 — VideoToolbox 활성 시 GPU 처리되어 무시되지만
-        // SW 폴백 시 CPU 5~15% 절감 보험. multiLive: 전체 스킵, 그 외: Non-ref만.
-        if profile == .multiLive {
-            media.addOption(":avcodec-skiploopfilter=4")  // All
-        } else {
-            media.addOption(":avcodec-skiploopfilter=1")  // Non-ref only
+        // [Opt-A4/Quality] 루프필터 스킵 — 프로파일 기반 적용
+        // 싱글 스트림: 0 (원본 품질), multiLive: 4 (전체 스킵, GPU 절감)
+        if profile.skipLoopFilter > 0 {
+            media.addOption(":avcodec-skiploopfilter=\(profile.skipLoopFilter)")
         }
         if profile == .multiLive {
             media.addOption(":avcodec-skip-idct=4")

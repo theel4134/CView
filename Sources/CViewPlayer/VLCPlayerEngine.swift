@@ -141,15 +141,16 @@ public enum VLCStreamingProfile: Sendable {
     /// HLS adaptive 최대 해상도 — 멀티라이브 그리드 셀에서는 해상도 제한
     /// isSelected: 현재 선택된(포그라운드) 세션 여부
     /// [Opt] 멀티라이브 비선택 세션: 720p→480p — GPU 디코딩 부하 40% 절감
+    /// [Quality] 싱글 스트림: 0 = 무제한 (소스 원본 해상도 사용)
     func adaptiveMaxWidth(isSelected: Bool) -> Int {
         switch self {
-        case .ultraLow, .lowLatency: return 1920
+        case .ultraLow, .lowLatency: return 0  // 무제한 — 소스 원본 해상도
         case .multiLive: return isSelected ? 1920 : 854
         }
     }
     func adaptiveMaxHeight(isSelected: Bool) -> Int {
         switch self {
-        case .ultraLow, .lowLatency: return 1080
+        case .ultraLow, .lowLatency: return 0  // 무제한 — 소스 원본 해상도
         case .multiLive: return isSelected ? 1080 : 480
         }
     }
@@ -159,8 +160,38 @@ public enum VLCStreamingProfile: Sendable {
     /// 라이브 스트리밍에서는 늦은 프레임 드롭이 버퍼링 최소화의 핵심
     var dropLateFrames: Bool { true }
     /// skip-frames 활성화 여부 — 디코더 단에서 참조되지 않는 프레임 건너뛰기
-    /// [Fix 16h-opt3] 모든 프로파일에서 활성화: 디코딩 파이프라인 부하 감소 → 리버퍼링 감소
-    var skipFrames: Bool { true }
+    /// [Quality] 싱글 스트림에서는 비활성: 프레임 스킵 없이 원본 품질 유지
+    /// multiLive에서만 활성: 디코딩 파이프라인 부하 감소
+    var skipFrames: Bool {
+        switch self {
+        case .ultraLow, .lowLatency: return false
+        case .multiLive: return true
+        }
+    }
+    /// avcodec-fast 모드 — 빠른 디코딩 경로 (일부 디블로킹 생략 가능)
+    /// [Quality] 싱글 스트림에서는 비활성: 디블로킹 필터 완전 적용으로 블록 아티팩트 방지
+    var avcodecFast: Bool {
+        switch self {
+        case .ultraLow, .lowLatency: return false
+        case .multiLive: return true
+        }
+    }
+    /// 루프필터 스킵 레벨 (0=없음, 1=Non-ref, 4=전체)
+    /// [Quality] 싱글 스트림: 0 = 스킵 없음 (원본 품질), multiLive: 4 = 전체 스킵 (GPU 절감)
+    var skipLoopFilter: Int {
+        switch self {
+        case .ultraLow, .lowLatency: return 0
+        case .multiLive: return 4
+        }
+    }
+    /// avcodec-hurry-up 모드 — 디코더 품질 단계 건너뛰기
+    /// [Quality] 싱글 스트림에서는 비활성: 디코더 전체 품질 단계 적용
+    var hurryUp: Bool {
+        switch self {
+        case .ultraLow, .lowLatency: return false
+        case .multiLive: return true
+        }
+    }
 }
 
 // MARK: - VLC 플레이어 엔진

@@ -220,15 +220,19 @@ final class MultiLiveSession: Identifiable {
                     await _forwarder?.setCurrentTimeCallback { [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
                     }
-                    // PDT 기반 레이턴시 콜백 연결 (초 → 밀리초 변환)
+                    // PDT 기반 레이턴시 콜백 — StreamCoordinator에서 직접 조회 (초 단위)
                     await _forwarder?.setPDTLatencyCallback { [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return info.map { $0.current * 1000 }
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return nil }
+                        if let latency = await coord.currentLatencySeconds() {
+                            return latency  // 초 단위 (MetricsForwarder에서 ×1000)
+                        }
+                        return nil
                     }
-                    // latencyInfo 기반 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 시 폴백
+                    // 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 시 VLC buffer fallback
                     await _forwarder?.setLatencyMsCallback { [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return (info?.current ?? 0) * 1000
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 0 }
+                        let latency = await coord.currentLatencySeconds() ?? 0
+                        return latency * 1000  // 초 → ms
                     }
                 }
             } else {
@@ -243,14 +247,19 @@ final class MultiLiveSession: Identifiable {
                     await _forwarder?.setCurrentTimeCallback({ [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
                     }, forChannel: sessionChannelId)
+                    // PDT 기반 레이턴시 콜백 — StreamCoordinator에서 직접 조회 (초 단위)
                     await _forwarder?.setPDTLatencyCallback({ [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return info.map { $0.current * 1000 }
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return nil }
+                        if let latency = await coord.currentLatencySeconds() {
+                            return latency
+                        }
+                        return nil
                     }, forChannel: sessionChannelId)
-                    // latencyInfo 기반 레이턴시(ms) 직접 조회 콜백
+                    // 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 시 VLC buffer fallback
                     await _forwarder?.setLatencyMsCallback({ [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return (info?.current ?? 0) * 1000
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 0 }
+                        let latency = await coord.currentLatencySeconds() ?? 0
+                        return latency * 1000
                     }, forChannel: sessionChannelId)
                 }
             }
@@ -382,17 +391,22 @@ final class MultiLiveSession: Identifiable {
                 let _playerVM = playerViewModel
                 Task {
                     await _forwarder2?.activateChannel(channelId: channelId, channelName: channelName, streamUrl: streamURL.absoluteString)
-                    // 레이턴시 콜백 등록
+                    // PDT 기반 레이턴시 콜백 — StreamCoordinator에서 직접 조회 (초 단위)
+                    await _forwarder2?.setPDTLatencyCallback { [weak _playerVM] in
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return nil }
+                        if let latency = await coord.currentLatencySeconds() {
+                            return latency
+                        }
+                        return nil
+                    }
+                    // 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 시 VLC buffer fallback
                     await _forwarder2?.setLatencyMsCallback { [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return (info?.current ?? 0) * 1000
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 0 }
+                        let latency = await coord.currentLatencySeconds() ?? 0
+                        return latency * 1000
                     }
                     await _forwarder2?.setCurrentTimeCallback { [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
-                    }
-                    await _forwarder2?.setPDTLatencyCallback { [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return info.map { $0.current * 1000 }
                     }
                     if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
                         await _forwarder2?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
@@ -409,14 +423,19 @@ final class MultiLiveSession: Identifiable {
                     await _forwarder2?.setCurrentTimeCallback({ [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
                     }, forChannel: sessionChannelId2)
+                    // PDT 기반 레이턴시 콜백 — StreamCoordinator에서 직접 조회 (초 단위)
                     await _forwarder2?.setPDTLatencyCallback({ [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return info.map { $0.current * 1000 }
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return nil }
+                        if let latency = await coord.currentLatencySeconds() {
+                            return latency
+                        }
+                        return nil
                     }, forChannel: sessionChannelId2)
-                    // latencyInfo 기반 레이턴시(ms) 직접 조회 콜백
+                    // 레이턴시(ms) 직접 조회 콜백 — PDT 미지원 시 VLC buffer fallback
                     await _forwarder2?.setLatencyMsCallback({ [weak _playerVM] in
-                        let info = await MainActor.run { _playerVM?.latencyInfo }
-                        return (info?.current ?? 0) * 1000
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 0 }
+                        let latency = await coord.currentLatencySeconds() ?? 0
+                        return latency * 1000
                     }, forChannel: sessionChannelId2)
                 }
             }

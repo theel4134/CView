@@ -103,10 +103,14 @@ public actor ChzzkAPIClient: APIClientProtocol {
 
         // 인증: 쿠키가 있으면 항상 첨부 (soft auth)
         // requiresAuth=true인 경우 쿠키/토큰 없으면 에러, false이면 쿠키가 있을 때만 첨부
+        var usedSoftAuth = false
         if let cookies = await authProvider?.cookies, !cookies.isEmpty {
             let headers = HTTPCookie.requestHeaderFields(with: cookies)
             for (key, value) in headers {
                 request.setValue(value, forHTTPHeaderField: key)
+            }
+            if !endpoint.requiresAuth {
+                usedSoftAuth = true
             }
             Log.network.debug("Auth: cookies (\(cookies.count)) for \(endpoint.path, privacy: .public)")
         } else if endpoint.requiresAuth {
@@ -159,8 +163,16 @@ public actor ChzzkAPIClient: APIClientProtocol {
                 case 200...299:
                     break
                 case 401:
-                    // 쿠키를 첨부한 요청이 서버에서 401을 반환 = 세션 만료
-                    // (자격증명 자체가 없는 경우는 요청 전에 이미 throw됨)
+                    // soft auth(requiresAuth=false)에서 만료 쿠키로 인한 401 →
+                    // 쿠키 제거 후 1회 재시도 (인증 불필요 엔드포인트이므로 비인증으로도 동작)
+                    if usedSoftAuth {
+                        Log.network.info("Soft auth 401 on \(endpoint.path, privacy: .public) — 쿠키 제거 후 재시도")
+                        request.setValue(nil, forHTTPHeaderField: "Cookie")
+                        usedSoftAuth = false  // 다음 401에서는 세션 만료 처리
+                        NotificationCenter.default.post(name: .chzzkSessionExpired, object: nil)
+                        continue
+                    }
+                    // requiresAuth=true 또는 이미 재시도한 경우 → 세션 만료
                     NotificationCenter.default.post(name: .chzzkSessionExpired, object: nil)
                     throw APIError.unauthorized
                 case 429:

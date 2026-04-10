@@ -205,6 +205,28 @@ public actor StreamCoordinator {
     public nonisolated func proxyNetworkStats() -> ProxyNetworkStats {
         streamProxy.networkStats()
     }
+
+    // MARK: - Latency Access (Direct Query)
+
+    /// PDT 기반 세그먼트 레이턴시 (초, nil = PDT 미지원/비활성)
+    public func pdtLatencySeconds() async -> TimeInterval? {
+        await pdtProvider?.currentLatency()
+    }
+
+    /// VLC 버퍼 기반 재생 위치 지연 (초, nil = 비가용)
+    public func bufferLatencySeconds() async -> TimeInterval? {
+        await vlcBufferLatency()
+    }
+
+    /// 현재 종합 레이턴시 (초) — PDT + vlcBuffer 합산, 없으면 vlcBuffer 단독
+    /// MetricsForwarder 콜백에서 직접 호출하여 정확한 실시간 레이턴시를 취득
+    public func currentLatencySeconds() async -> TimeInterval? {
+        if let pdt = await pdtProvider?.currentLatency() {
+            let buffer = await vlcBufferLatency() ?? 0
+            return pdt + buffer
+        }
+        return await vlcBufferLatency()
+    }
     
     // MARK: - Low Latency Config Update
     

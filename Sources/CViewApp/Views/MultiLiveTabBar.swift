@@ -32,13 +32,17 @@ struct MLTabBar: View {
             addChannelArea
             sidebarToggle
         }
-        .frame(height: 36)
+        .frame(height: 40)
         .background { DesignTokens.Colors.surfaceBase }
         .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
-                .frame(height: 0.5)
+            LinearGradient(
+                colors: [.clear, DesignTokens.Glass.dividerColor.opacity(0.3), .clear],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(height: 0.5)
         }
+        // [Depth] 탭바 하단 그림자 — 콘텐츠 위에 떠 있는 헤더 느낌
+        .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 3)
     }
 
     // MARK: - Sidebar Toggle

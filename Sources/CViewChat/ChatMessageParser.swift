@@ -458,7 +458,8 @@ public struct ChatMessageParser: Sendable {
         
         let chatExtras = ChatExtras(
             emojis: parsedExtras.emojis.isEmpty ? nil : parsedExtras.emojis,
-            donation: parsedExtras.donation
+            donation: parsedExtras.donation,
+            subscription: parsedExtras.subscription
         )
         
         return ChatMessage(
@@ -639,6 +640,7 @@ public struct ChatMessageParser: Sendable {
     private struct ParsedExtras {
         var emojis: [String: String] = [:]
         var donation: DonationInfo? = nil
+        var subscription: SubscriptionInfo? = nil
         var isDonation: Bool = false
         var isAnonymous: Bool = false
         var isSubscription: Bool = false
@@ -699,6 +701,17 @@ public struct ChatMessageParser: Sendable {
         if let chatType = dict["chatType"] as? String {
             result.isSubscription = chatType == "SUBSCRIPTION"
             result.isSystemMessage = chatType == "SYSTEM"
+        }
+        
+        // Subscription data — extras 내 month/tierName 또는 프로필 streamingProperty에서 추출
+        if result.isSubscription {
+            let month = dict["month"] as? Int
+                ?? dict["accumulativeMonth"] as? Int
+                ?? dict["months"] as? Int
+                ?? 1
+            let tierName = dict["tierName"] as? String
+                ?? dict["tierInfo"] as? String
+            result.subscription = SubscriptionInfo(months: month, tierName: tierName)
         }
         
         return result

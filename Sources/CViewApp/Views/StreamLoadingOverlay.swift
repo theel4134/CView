@@ -41,15 +41,7 @@ struct StreamLoadingOverlay: View {
             thumbnailBackground
 
             // ── 다크 베일 ────────────────────────────────────
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.52),
-                    Color.black.opacity(0.70),
-                    Color.black.opacity(0.60)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            Color.black.opacity(0.62)
 
             // ── 콘텐츠 ───────────────────────────────────────
             VStack(spacing: 0) {
@@ -112,38 +104,32 @@ struct StreamLoadingOverlay: View {
         VStack(spacing: DesignTokens.Spacing.xl) {
             // 링 + 회전 스피너 + 중앙 아이콘
             ZStack {
-                // 외부 펄스 링 (두 겹)
+                // 서클 글로우
                 Circle()
-                    .stroke(DesignTokens.Colors.chzzkGreen.opacity(0.18), lineWidth: 1.5)
-                    .frame(width: 80, height: 80)
-                    .scaleEffect(ringScale * 1.38)
-                    .opacity(ringOpacity * 0.5)
-
-                Circle()
-                    .stroke(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1.5)
-                    .frame(width: 80, height: 80)
-                    .scaleEffect(ringScale * 1.18)
-                    .opacity(ringOpacity * 0.75)
+                    .stroke(DesignTokens.Colors.chzzkGreen.opacity(0.12), lineWidth: 1)
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(ringScale * 1.2)
+                    .opacity(ringOpacity * 0.6)
 
                 // 내부 배경 원
                 Circle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 64, height: 64)
-                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 60, height: 60)
+                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 0.5))
 
-                // 회전 호 스피너
+                // 회전 호 스피너 — thin stroke
                 Circle()
-                    .trim(from: 0, to: 0.72)
+                    .trim(from: 0, to: 0.65)
                     .stroke(
                         DesignTokens.Colors.chzzkGreen,
-                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round)
                     )
-                    .frame(width: 64, height: 64)
+                    .frame(width: 60, height: 60)
                     .rotationEffect(.degrees(spinnerRotation))
 
                 // 중앙 SF Symbol
                 Image(systemName: phaseIcon)
-                    .font(DesignTokens.Typography.custom(size: 22, weight: .light))
+                    .font(DesignTokens.Typography.custom(size: 20, weight: .light))
                     .foregroundStyle(Color.white.opacity(0.85))
                     .symbolEffect(.pulse)
             }

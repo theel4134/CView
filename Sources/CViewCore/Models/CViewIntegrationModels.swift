@@ -82,6 +82,8 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
     public let pdtTimestamp: Double?
     public let pdtLatency: Double?
     public let latencyUnit: String?
+    /// 레이턴시 측정 소스: "pdt+buffer", "pdt", "buffer", "callback", "monitor"
+    public let latencySource: String?
     
     public init(
         clientId: String,
@@ -105,7 +107,8 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
         currentTime: Double? = nil,
         pdtTimestamp: Double? = nil,
         pdtLatency: Double? = nil,
-        latencyUnit: String? = "ms"
+        latencyUnit: String? = "ms",
+        latencySource: String? = nil
     ) {
         self.clientId = clientId
         self.channelId = channelId
@@ -129,6 +132,7 @@ public struct CViewHeartbeatPayload: Codable, Sendable {
         self.pdtTimestamp = pdtTimestamp
         self.pdtLatency = pdtLatency
         self.latencyUnit = latencyUnit
+        self.latencySource = latencySource
     }
 }
 

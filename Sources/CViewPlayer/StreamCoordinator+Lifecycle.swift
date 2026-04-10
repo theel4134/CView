@@ -138,6 +138,9 @@ extension StreamCoordinator {
             // 저지연 싱크: 백그라운드에서 비동기 실행
             if config.enableLowLatency {
                 Task { [weak self] in await self?.startLowLatencySync() }
+            } else if isVLCEngine {
+                // 멀티라이브 등 PID 제어 없이 PDT 모니터링만 (레이턴시 측정용)
+                Task { [weak self] in await self?.startPDTMonitoring() }
             }
 
             logger.info("Stream started: \(LogMask.url(url), privacy: .private)")

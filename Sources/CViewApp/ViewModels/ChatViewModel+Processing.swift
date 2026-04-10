@@ -217,6 +217,9 @@ extension ChatViewModel {
     }
 
     /// Schedule a single batch-flush task.
+    /// 치지직 웹 채팅처럼 자연스러운 메시지 흐름을 위한 적응형 스케줄링:
+    /// - 포그라운드: 100ms 간격 flush → 메시지 1-2개씩 자연스럽게 표시
+    /// - 백그라운드: 1초 간격 flush → CPU 절약
     func scheduleBatchFlush() {
         guard batchFlushTask == nil else { return }
         guard !pendingMessages.isEmpty else { return }

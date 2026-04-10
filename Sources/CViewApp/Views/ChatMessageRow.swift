@@ -113,19 +113,26 @@ struct ChatMessageRow: View {
                 let allBadges = message.badges.isEmpty
                     ? (message.badgeImageURL.map { [ChatBadge(imageURL: $0)] } ?? [])
                     : message.badges
-                ForEach(Array(allBadges.prefix(3).enumerated()), id: \.offset) { _, badge in
+                ForEach(Array(allBadges.prefix(3).enumerated()), id: \.offset) { idx, badge in
                     if let url = badge.imageURL {
                         let isSubBadge = badge.badgeId?.hasPrefix("subscription") == true
-                        let tierStyle = isSubBadge ? subscriptionBadgeTier(months: message.subscriptionMonths ?? 0) : nil
+                        let tierStyle = isSubBadge ? subscriptionBadgeTier(months: message.subscriptionMonths ?? 1) : nil
                         CachedAsyncImage(url: url) {
-                            if let alt = badge.altText {
+                            // 로딩 실패 placeholder: altText 또는 뱃지 아이콘
+                            if let alt = badge.altText, !alt.isEmpty {
                                 Text(alt)
-                                    .font(.system(size: 8, weight: .bold))
+                                    .font(.system(size: 7, weight: .bold))
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
                                     .frame(width: 16, height: 16)
                                     .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: 3))
                             } else {
-                                EmptyView()
+                                Image(systemName: isSubBadge ? "star.fill" : "shield.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
+                                    .frame(width: 16, height: 16)
+                                    .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: 3))
                             }
                         }
                         .frame(width: 16, height: 16)
@@ -138,6 +145,7 @@ struct ChatMessageRow: View {
                         }
                         .shadow(color: tierStyle?.glow == true ? tierStyle!.color.opacity(0.6) : .clear, radius: tierStyle?.glow == true ? 3 : 0)
                         .padding(.trailing, 2)
+                        .help(badge.altText ?? badge.badgeId ?? "뱃지")
                     }
                 }
             }
@@ -202,7 +210,7 @@ struct ChatMessageRow: View {
         .overlay(
             !isMentioned && config.highlightRoles && message.userRole.isSpecial
                 ? RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                    .strokeBorder(roleIconColor.opacity(0.15), lineWidth: 0.5)
+                    .strokeBorder(roleIconColor.opacity(0.25), lineWidth: 0.5)
                 : nil
         )
         .contentShape(Rectangle())
@@ -580,20 +588,35 @@ struct ChatMessageRow: View {
     }
 
     /// 칭호 표시 색상 (hex → Color 변환, 기본 textSecondary)
+    /// 지원 형식: "#RRGGBB", "RRGGBB", "#RGB", "RGB", "#AARRGGBB"
     private var titleDisplayColor: Color {
-        if let hex = message.titleColor,
-           let value = UInt(hex.replacingOccurrences(of: "#", with: ""), radix: 16) {
-            return Color(hex: value)
+        guard let hex = message.titleColor, !hex.isEmpty else {
+            return DesignTokens.Colors.textSecondary
         }
-        return DesignTokens.Colors.textSecondary
+        let cleaned = hex.replacingOccurrences(of: "#", with: "").trimmingCharacters(in: .whitespaces)
+        guard !cleaned.isEmpty else { return DesignTokens.Colors.textSecondary }
+        // 3자리 → 6자리 확장 (F0A → FF00AA)
+        let expanded: String
+        if cleaned.count == 3 {
+            expanded = cleaned.map { "\($0)\($0)" }.joined()
+        } else if cleaned.count == 8 {
+            // AARRGGBB → RRGGBB (알파 무시)
+            expanded = String(cleaned.dropFirst(2))
+        } else {
+            expanded = cleaned
+        }
+        guard let value = UInt(expanded, radix: 16) else {
+            return DesignTokens.Colors.textSecondary
+        }
+        return Color(hex: value)
     }
 
     /// 스트리머/매니저 메시지 배경 색상 (설정에서 비활성화 가능)
     private var roleHighlightColor: Color? {
         guard config.highlightRoles else { return nil }
         switch message.userRole {
-        case .streamer: return DesignTokens.Colors.chzzkGreen.opacity(0.06)
-        case .manager, .channelManager: return Color(hex: 0x5C9DFF).opacity(0.06)
+        case .streamer: return DesignTokens.Colors.chzzkGreen.opacity(0.08)
+        case .manager, .channelManager: return Color(hex: 0x5C9DFF).opacity(0.07)
         case .viewer: return nil
         }
     }

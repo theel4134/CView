@@ -635,9 +635,20 @@ public actor MetricsForwarder {
             )
         } else {
             // VLC 엔진 — 기존 VLC 기반 하트비트
-            // 레이턴시 우선순위: PDT → latencyMsCallback → PerformanceMonitor
+            // 레이턴시 우선순위: PDT(초→ms) → latencyMsCallback(ms) → PerformanceMonitor
             let directLatencyMs = await latencyMsCallback?()
-            let effectiveLatencyMs = pdtLatMs ?? directLatencyMs ?? metrics?.latencyMs ?? 0
+            let effectiveLatencyMs: Double
+            let latencySourceTag: String
+            if let pdt = pdtLatMs, pdt > 0 {
+                effectiveLatencyMs = pdt
+                latencySourceTag = "pdt+buffer"  // PDT + VLC buffer 합산 (StreamCoordinator.currentLatencySeconds)
+            } else if let direct = directLatencyMs, direct > 0 {
+                effectiveLatencyMs = direct
+                latencySourceTag = "buffer"  // VLC buffer fallback (duration - currentTime)
+            } else {
+                effectiveLatencyMs = metrics?.latencyMs ?? 0
+                latencySourceTag = "monitor"  // PerformanceMonitor 추정값
+            }
             payload = CViewHeartbeatPayload(
                 clientId: clientId,
                 channelId: channelId,
@@ -660,7 +671,8 @@ public actor MetricsForwarder {
                 currentTime: playbackTime?.safeForJSON,
                 pdtTimestamp: pdtTimestampMs?.safeForJSON,
                 pdtLatency: pdtLatMs?.safeForJSON,
-                latencyUnit: "ms"
+                latencyUnit: "ms",
+                latencySource: latencySourceTag
             )
         }
 
@@ -840,9 +852,20 @@ public actor MetricsForwarder {
             )
         } else {
             let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
-            // 레이턴시 우선순위: PDT → latencyMsCallback
+            // 레이턴시 우선순위: PDT(초→ms) → latencyMsCallback(ms)
             let directLatencyMs = await ch.latencyMsCallback?()
-            let effectiveLatencyMs = pdtLatMs ?? directLatencyMs ?? 0
+            let effectiveLatencyMs: Double
+            let latencySourceTag: String
+            if let pdt = pdtLatMs, pdt > 0 {
+                effectiveLatencyMs = pdt
+                latencySourceTag = "pdt+buffer"
+            } else if let direct = directLatencyMs, direct > 0 {
+                effectiveLatencyMs = direct
+                latencySourceTag = "buffer"
+            } else {
+                effectiveLatencyMs = 0
+                latencySourceTag = "none"
+            }
             payload = CViewHeartbeatPayload(
                 clientId: clientId,
                 channelId: ch.channelId,
@@ -865,7 +888,8 @@ public actor MetricsForwarder {
                 currentTime: playbackTime?.safeForJSON,
                 pdtTimestamp: pdtTimestampMs?.safeForJSON,
                 pdtLatency: pdtLatMs?.safeForJSON,
-                latencyUnit: "ms"
+                latencyUnit: "ms",
+                latencySource: latencySourceTag
             )
         }
 

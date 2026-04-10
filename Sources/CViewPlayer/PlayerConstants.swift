@@ -13,10 +13,12 @@ public enum ABRDefaults {
     public static let maxBandwidthBps: Double = 50_000_000
     /// 초기 대역폭 추정치 (5Mbps)
     public static let initialBandwidthEstimate: Double = 5_000_000
-    /// 대역폭 안전 계수 (실제 대역폭의 70% 사용)
-    public static let bandwidthSafetyFactor: Double = 0.7
+    /// 대역폭 안전 계수 (실제 대역폭의 85% 사용)
+    /// [Quality] 0.7→0.85: 더 많은 대역폭 활용으로 높은 비트레이트 선택
+    public static let bandwidthSafetyFactor: Double = 0.85
     /// 품질 상향 전환 임계값
-    public static let switchUpThreshold: Double = 1.2
+    /// [Quality] 1.2→1.1: 10% 초과 시 업그레이드 → 더 적극적 최고 화질 전환
+    public static let switchUpThreshold: Double = 1.1
     /// 품질 하향 전환 임계값
     public static let switchDownThreshold: Double = 0.8
     /// 최소 품질 전환 간격 (초)

@@ -26,13 +26,7 @@ public actor MetricsAPIClient {
         baseURL: URL = URL(string: MetricsSettings.defaultServerURL)!,
         directBaseURL: URL = URL(string: MetricsSettings.defaultDirectServerURL)!,
         cache: ResponseCache = ResponseCache(),
-        appSecret: String = {
-            #if DEBUG
-            return "dev-app-secret-change-in-production"
-            #else
-            return Bundle.main.object(forInfoDictionaryKey: "METRICS_APP_SECRET") as? String ?? ""
-            #endif
-        }()
+        appSecret: String = Bundle.main.object(forInfoDictionaryKey: "METRICS_APP_SECRET") as? String ?? "dev-app-secret-change-in-production"
     ) {
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = [

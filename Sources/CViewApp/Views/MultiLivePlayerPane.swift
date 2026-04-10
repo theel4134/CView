@@ -310,27 +310,26 @@ struct MLGridCell: View {
             if session.playerViewModel.streamPhase == .buffering
                 || session.playerViewModel.streamPhase == .connecting {
                 ProgressView()
-                    .scaleEffect(0.9)
+                    .scaleEffect(0.85)
                     .tint(.white)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.6))
-                            .frame(width: 36, height: 36)
-                    )
+                    .frame(width: 34, height: 34)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay {
+                        Circle().strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                    }
             }
 
             // 세션 상태 오버레이 (loading / offline / error)
             switch session.loadState {
             case .loading:
                 ProgressView()
-                    .scaleEffect(0.85)
+                    .scaleEffect(0.8)
                     .tint(.white)
-                    // [GPU 최적화] Material → Color.black.opacity
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.6))
-                            .frame(width: 36, height: 36)
-                    )
+                    .frame(width: 34, height: 34)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay {
+                        Circle().strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                    }
             case .offline:
                 VStack(spacing: DesignTokens.Spacing.sm) {
                     Image(systemName: "tv.slash")
@@ -354,14 +353,14 @@ struct MLGridCell: View {
                 }
                 .padding(.horizontal, DesignTokens.Spacing.md)
                 .padding(.vertical, DesignTokens.Spacing.sm)
-                // [GPU 최적화] Material → Color.black.opacity
                 .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(Color.black.opacity(0.7))
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                        .fill(.ultraThinMaterial)
                         .overlay {
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
                         }
+                        .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
                 )
             case .error:
                 VStack(spacing: DesignTokens.Spacing.sm) {
@@ -386,14 +385,14 @@ struct MLGridCell: View {
                 }
                 .padding(.horizontal, DesignTokens.Spacing.md)
                 .padding(.vertical, DesignTokens.Spacing.sm)
-                // [GPU 최적화] Material → Color.black.opacity
                 .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(Color.black.opacity(0.7))
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                        .fill(.ultraThinMaterial)
                         .overlay {
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
                         }
+                        .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
                 )
             default:
                 EmptyView()
@@ -444,6 +443,7 @@ struct MLGridCell: View {
         // [리사이즈 최적화] 그리드 셀에 전파되는 implicit 애니메이션 차단
         .transaction { $0.animation = nil }
         } // VStack
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 
     private func scheduleHide() {

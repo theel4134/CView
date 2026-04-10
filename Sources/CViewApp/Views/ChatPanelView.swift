@@ -134,9 +134,11 @@ struct ChatPanelView: View {
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 5)
         .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(DesignTokens.Glass.dividerColor.opacity(0.6))
-                .frame(height: 0.5)
+            LinearGradient(
+                colors: [.clear, DesignTokens.Glass.dividerColor.opacity(0.5), .clear],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(height: 0.5)
         }
     }
 
@@ -312,9 +314,9 @@ struct ChatMessagesView: View {
         withAnimation(DesignTokens.Animation.chatScroll) {
             proxy.scrollTo(lastId, anchor: .bottom)
         }
-        // 스크롤 완료 후 억제 해제 — 배치 간격(250ms) + 렌더링 여유(50ms)
+        // 스크롤 완료 후 억제 해제 — 배치 간격(100ms) + 렌더링 여유(80ms)
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: .milliseconds(180))
             self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }
     }
@@ -409,12 +411,15 @@ struct ChatMessagesView: View {
         VStack(spacing: DesignTokens.Spacing.md) {
             ZStack {
                 Circle()
-                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.08))
+                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.06))
+                    .frame(width: 72, height: 72)
+                Circle()
+                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.10), lineWidth: 0.5)
                     .frame(width: 72, height: 72)
 
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(DesignTokens.Typography.custom(size: 28, weight: .light))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.5))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.45))
             }
 
             VStack(spacing: DesignTokens.Spacing.xs) {

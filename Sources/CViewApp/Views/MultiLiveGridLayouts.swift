@@ -6,7 +6,7 @@ import SwiftUI
 import CViewCore
 import CViewPlayer
 
-private let gridGap: CGFloat = 1
+private let gridGap: CGFloat = 2
 
 // MARK: - MLPresetGridLayout
 /// 프리셋 그리드: 세션 수에 따라 자동 배치 (2x1, 2x2 등)

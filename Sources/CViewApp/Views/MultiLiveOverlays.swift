@@ -113,16 +113,19 @@ struct MLControlOverlay: View {
                 session.showStats.toggle()
             }
         }
-        .padding(.horizontal, DesignTokens.Spacing.lg)
-        .padding(.vertical, DesignTokens.Spacing.md)
-        .background(
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.55)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .drawingGroup()
+        .padding(.horizontal, DesignTokens.Spacing.xl)
+        .padding(.vertical, DesignTokens.Spacing.sm + 2)
+        .background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.xl)
+        .padding(.bottom, DesignTokens.Spacing.md)
     }
 
     private func controlButton(
@@ -406,9 +409,13 @@ struct MLAddChannelPanel: View {
         .frame(width: 380)
         .background(DesignTokens.Colors.surfaceBase.opacity(0.94))
         .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(DesignTokens.Glass.borderColor)
-                .frame(width: 0.5)
+            // [Depth] 좌측 inner shadow — 메인 영역 뒤에서 나오는 깊이감
+            LinearGradient(
+                colors: [.black.opacity(0.25), .black.opacity(0.08), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 8)
         }
         .onKeyPress(.escape) {
             withAnimation(DesignTokens.Animation.snappy) { isPresented = false }

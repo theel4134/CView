@@ -74,6 +74,9 @@ struct MultiLiveView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
+            // [Depth] 메인 콘텐츠가 슬라이딩 패널보다 앞에 떠 있는 느낌
+            .shadow(color: .black.opacity(0.35), radius: 12, x: 4, y: 0)
+            .zIndex(1)
 
             // ── 채널 추가 패널 (push slide) ──
             if showAddChannel {
@@ -86,6 +89,7 @@ struct MultiLiveView: View {
                 .environment(appState)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
                 .animation(DesignTokens.Animation.contentTransition, value: showAddChannel)
+                .zIndex(0)
             }
 
             // ── 설정 패널 (push slide) ──
@@ -97,6 +101,7 @@ struct MultiLiveView: View {
                 )
                 .transition(.move(edge: .trailing).combined(with: .opacity))
                 .animation(DesignTokens.Animation.contentTransition, value: showSettings)
+                .zIndex(0)
             }
         }
         .background(manager.sessions.isEmpty ? DesignTokens.Colors.background : Color.black)

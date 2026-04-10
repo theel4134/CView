@@ -100,9 +100,13 @@ struct MLSettingsPanel: View {
         .frame(width: 380)
         .background(DesignTokens.Colors.surfaceBase.opacity(0.92))
         .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(DesignTokens.Glass.borderColor)
-                .frame(width: 0.5)
+            // [Depth] 좌측 inner shadow — 메인 영역 뒤에서 나오는 깊이감
+            LinearGradient(
+                colors: [.black.opacity(0.25), .black.opacity(0.08), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 8)
         }
     }
 

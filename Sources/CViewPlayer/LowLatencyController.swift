@@ -137,6 +137,8 @@ public actor LowLatencyController {
     // Callbacks
     private var onRateChange: (@Sendable (Double) -> Void)?
     private var onSeekRequired: (@Sendable (TimeInterval) -> Void)?
+    /// 매 측정 후 (raw, ewma, target) 알림 — StreamCoordinator → PlayerViewModel.latencyInfo 갱신용
+    private var onLatencyMeasured: (@Sendable (TimeInterval, TimeInterval, TimeInterval) -> Void)?
     
     // MARK: - Public Accessors
     
@@ -161,6 +163,11 @@ public actor LowLatencyController {
     /// Set callback for seek requirements
     public func setOnSeekRequired(_ handler: @escaping @Sendable (TimeInterval) -> Void) {
         self.onSeekRequired = handler
+    }
+
+    /// Set callback for latency measurements (current, ewma, target — all in seconds)
+    public func setOnLatencyMeasured(_ handler: @escaping @Sendable (TimeInterval, TimeInterval, TimeInterval) -> Void) {
+        self.onLatencyMeasured = handler
     }
     
     // MARK: - Buffering Pause (M1 fix)
@@ -225,6 +232,9 @@ public actor LowLatencyController {
         guard !_isPausedForBuffering else { return }
         
         let smoothedLatency = latencyEWMA.update(currentLatency)
+
+        // 측정 콜백 — StreamCoordinator → PlayerViewModel.latencyInfo 갱신
+        onLatencyMeasured?(currentLatency, smoothedLatency, config.targetLatency)
         
         _latencyHistory.append(smoothedLatency)
         if _latencyHistory.count > 100 {

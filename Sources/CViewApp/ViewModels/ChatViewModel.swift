@@ -195,19 +195,19 @@ public final class ChatViewModel {
     
     /// 멀티라이브 비활성 세션 CPU 절약: 백그라운드 모드에서 flush 간격 증가 + 통계 중단
     @ObservationIgnored public var isBackgroundMode: Bool = false
-    /// 백그라운드 모드에서의 배치 flush 간격 (1초 — 기본 100ms의 10배)
+    /// 백그라운드 모드에서의 배치 flush 간격 (1초)
     @ObservationIgnored let backgroundFlushIntervalNs: UInt64 = 1_000_000_000
     
-    // MARK: - Batching (reduces SwiftUI update frequency from 1000/s → ~10/s)
+    // MARK: - Batching (reduces SwiftUI update frequency)
     
     /// Pending messages accumulated before the next batch flush.
     @ObservationIgnored var pendingMessages: [ChatMessageItem] = []
     /// Active batch‐flush timer task.
     @ObservationIgnored var batchFlushTask: Task<Void, Never>?
     /// Batch flush interval in nanoseconds.
-    /// [Freeze Fix] 250ms → 500ms: 멀티라이브 4세션 시 16 mutations/s → 8 mutations/s
-    /// MainActor @Observable 업데이트 빈도를 줄여 UI 이벤트 루프 포화 방지
-    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 500_000_000
+    /// 치지직 웹 채팅과 동일한 자연스러운 메시지 흐름: 100ms 간격으로 flush.
+    /// 멀티라이브 비활성 세션은 backgroundFlushIntervalNs(1초)로 CPU 절약.
+    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 100_000_000
     
     // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
     
@@ -527,13 +527,13 @@ public final class ChatViewModel {
                 exitReplayMode()
             }
         } else {
-            // 하단에서 벗어나면 debounce(300ms) 후 리플레이 모드 진입
-            // — 메시지 배치 flush(100ms)로 인한 일시적 geometry 변경을 충분히 걸러냄
+            // 하단에서 벗어나면 debounce 후 리플레이 모드 진입
+            // — 배치 flush(100ms)로 인한 일시적 geometry 변경을 걸러냄
             guard !isReplayMode else { return }
             guard messages.count > 3 else { return }
             guard replayDebounceTask == nil else { return }
             replayDebounceTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 250_000_000)
+                try? await Task.sleep(nanoseconds: 150_000_000)
                 guard !Task.isCancelled, let self, !self.isReplayMode else { return }
                 self.enterReplayMode()
                 self.replayDebounceTask = nil

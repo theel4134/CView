@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:CView_v2}",
+            "name": "Debug CViewApp",
+            "target": "CViewApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CViewApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:CView_v2}",
+            "name": "Release CViewApp",
+            "target": "CViewApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CViewApp"
+        }
+    ]
+}

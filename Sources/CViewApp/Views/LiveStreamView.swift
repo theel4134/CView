@@ -326,14 +326,14 @@ struct LiveStreamView: View {
                     VStack(spacing: 22) {
                         ZStack {
                             Circle()
-                                .fill(DesignTokens.Colors.textPrimary.opacity(0.04))
-                                .frame(width: 100, height: 100)
+                                .fill(DesignTokens.Colors.textPrimary.opacity(0.03))
+                                .frame(width: 96, height: 96)
                             Circle()
-                                .stroke(DesignTokens.Colors.textPrimary.opacity(0.10), lineWidth: 1)
-                                .frame(width: 100, height: 100)
+                                .strokeBorder(DesignTokens.Colors.textPrimary.opacity(0.08), lineWidth: 0.5)
+                                .frame(width: 96, height: 96)
                             Image(systemName: "tv.slash")
-                                .font(DesignTokens.Typography.custom(size: 38, weight: .light))
-                                .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.5))
+                                .font(DesignTokens.Typography.custom(size: 36, weight: .light))
+                                .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.45))
                         }
                         VStack(spacing: 8) {
                             Text("방송이 종료되었습니다")
@@ -341,7 +341,7 @@ struct LiveStreamView: View {
                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                             Text("스트리머가 방송을 종료했습니다.")
                                 .font(DesignTokens.Typography.bodyMedium)
-                                .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.6))
+                                .foregroundStyle(DesignTokens.Colors.textPrimary.opacity(0.5))
                         }
                         Button {
                             Task { await startStreamAndChat() }
@@ -355,10 +355,15 @@ struct LiveStreamView: View {
                             .foregroundStyle(DesignTokens.Colors.textPrimary)
                             .padding(.horizontal, DesignTokens.Spacing.xl)
                             .padding(.vertical, DesignTokens.Spacing.md)
-                            .background(
-                                Capsule().fill(DesignTokens.Colors.surfaceElevated)
-                                    .overlay(Capsule().stroke(DesignTokens.Colors.textPrimary.opacity(0.18), lineWidth: 1))
-                            )
+                            .background {
+                                Capsule()
+                                    .fill(.ultraThinMaterial)
+                                    .overlay {
+                                        Capsule()
+                                            .strokeBorder(DesignTokens.Colors.textPrimary.opacity(0.12), lineWidth: 0.5)
+                                    }
+                                    .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                            }
                         }
                         .buttonStyle(.plain)
                     }

@@ -6,12 +6,39 @@ import CViewCore
 
 extension StreamCoordinator {
 
+    /// PDT 모니터링만 시작 (PID 제어 없음) — 멀티라이브 레이턴시 측정용
+    func startPDTMonitoring() async {
+        let mediaPlaylistURL = await resolveMediaPlaylistURL()
+        guard let mediaPlaylistURL else {
+            logger.info("PDT monitoring: Media playlist URL unavailable")
+            return
+        }
+        let provider = PDTLatencyProvider(playlistURL: mediaPlaylistURL)
+        await provider.start()
+        pdtProvider = provider
+
+        // PDT 초기 안정화 대기 (최대 6초)
+        for _ in 0..<6 {
+            if await provider.isReady { break }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        logger.info("PDT monitoring active (no PID): \(mediaPlaylistURL.lastPathComponent, privacy: .public)")
+    }
+
     func startLowLatencySync() async {
         guard let controller = lowLatencyController else { return }
         
         await controller.setOnRateChange { [weak self] rate in
             Task { [weak self] in
                 await self?.playerEngine?.setRate(Float(rate))
+            }
+        }
+
+        // 매 측정마다 latencyUpdate 이벤트 발행 → PlayerViewModel.latencyInfo 갱신
+        await controller.setOnLatencyMeasured { [weak self] current, ewma, target in
+            Task { [weak self] in
+                let info = LatencyInfo(current: current, target: target, ewma: ewma)
+                await self?.emitEvent(.latencyUpdate(info))
             }
         }
         

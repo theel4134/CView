@@ -81,8 +81,8 @@ struct PlayerProgressSection: View {
                 LiveBadge()
                 Spacer()
             }
-            .padding(.horizontal, DesignTokens.Spacing.xl)
-            .padding(.bottom, DesignTokens.Spacing.xs)
+            .padding(.horizontal, 32)
+            .padding(.bottom, DesignTokens.Spacing.sm)
         } else if duration > 0 {
             // VOD seekable progress bar
             VStack(spacing: 4) {
@@ -176,7 +176,7 @@ struct PlayerProgressSection: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
-            .padding(.horizontal, DesignTokens.Spacing.xl)
+            .padding(.horizontal, 32)
             .padding(.bottom, DesignTokens.Spacing.xs)
         }
     }
@@ -188,19 +188,19 @@ struct LiveBadge: View {
     @State private var isPulsing = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             // shadow radius 고정 — opacity 변화만으로 펄스 표현 (GPU blur 재계산 방지)
             Circle()
                 .fill(DesignTokens.Colors.textOnOverlay)
-                .frame(width: 7, height: 7)
+                .frame(width: 6, height: 6)
                 .opacity(isPulsing ? 1.0 : 0.5)
 
             Text("LIVE")
-                .font(DesignTokens.Typography.custom(size: 11, weight: .bold))
+                .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
                 .tracking(0.5)
                 .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         }
-        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.horizontal, 10)
         .padding(.vertical, DesignTokens.Spacing.xs)
         .background(Capsule().fill(DesignTokens.Gradients.live))
         .clipShape(Capsule())
@@ -225,12 +225,12 @@ struct StreamInfoBar: View {
         HStack(spacing: DesignTokens.Spacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(playerVM?.channelName ?? "")
-                    .font(DesignTokens.Typography.custom(size: 16, weight: .bold))
+                    .font(DesignTokens.Typography.custom(size: 15, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)
 
                 Text(playerVM?.liveTitle ?? "")
-                    .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)
             }
 
@@ -251,9 +251,17 @@ struct StreamInfoBar: View {
                 }
             }
         }
-        .padding(.horizontal, DesignTokens.Spacing.xl)
-        .padding(.vertical, DesignTokens.Spacing.md)
-        .background(DesignTokens.Gradients.playerOverlayTop)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
+                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.top, DesignTokens.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -411,9 +419,16 @@ struct PlayerControlsBar: View {
             }
             .accessibilityLabel("전체화면")
         }
-        .padding(.horizontal, DesignTokens.Spacing.xl)
-        .padding(.vertical, DesignTokens.Spacing.md)
-        .background(DesignTokens.Gradients.playerOverlayBottom)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.3), radius: 16, y: 6)
+        .padding(.horizontal, 32)
+        .padding(.bottom, 16)
     }
 
     private var volumeIcon: String {
@@ -622,16 +637,18 @@ struct PlayerButton: View {
             Image(systemName: icon)
                 .font(DesignTokens.Typography.custom(size: size, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                .frame(width: isPrimary ? 44 : 36, height: isPrimary ? 44 : 36)
+                .frame(width: isPrimary ? 42 : 32, height: isPrimary ? 42 : 32)
                 .background {
                     if isPrimary {
                         Circle()
-                            .fill(isHovered ? .white.opacity(0.25) : .white.opacity(0.12))
+                            .fill(isHovered ? .white.opacity(0.28) : .white.opacity(0.14))
+                            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
                     } else {
                         Circle()
-                            .fill(isHovered ? .white.opacity(0.15) : .clear)
+                            .fill(isHovered ? .white.opacity(0.14) : .clear)
                     }
                 }
+                .scaleEffect(isHovered ? 1.06 : 1.0)
         }
         .buttonStyle(.plain)
         .focusable()
@@ -658,11 +675,11 @@ struct InfoBadge: View {
                 .font(DesignTokens.Typography.micro)
         }
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-        .padding(.horizontal, DesignTokens.Spacing.xs)
-        .padding(.vertical, DesignTokens.Spacing.xxs)
-        .background(Color.black.opacity(0.55), in: Capsule())
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xxs + 1)
+        .background(.ultraThinMaterial, in: Capsule())
         .overlay {
-            Capsule().strokeBorder(color.opacity(0.5), lineWidth: 0.5)
+            Capsule().strokeBorder(color.opacity(0.35), lineWidth: 0.5)
         }
     }
 }

@@ -376,8 +376,8 @@ extension VLCPlayerEngine {
     // MARK: - 통계 기반 화질 적응
 
     /// 프레임 드롭/지연 통계를 분석하여 StreamCoordinator에 화질 변경을 요청한다.
-    /// - 연속 2회 이상 프레임 품질 저하 → downgrade 요청
-    /// - 연속 6회 안정 → upgrade 요청 (과도한 토글 방지)
+    /// - 연속 3회 이상 프레임 품질 저하 → downgrade 요청
+    /// - 연속 4회 안정 → upgrade 요청 (더 빠른 원본 복귀)
     @MainActor
     func evaluateQualityAdaptation(
         droppedDelta: Int,
@@ -388,14 +388,16 @@ extension VLCPlayerEngine {
         // hidden 세션에서는 화질 적응 불필요
         guard sessionTier != .hidden else { return }
 
-        let isDropping = droppedDelta > 3 || lateDelta > 5
+        // [Quality] 임계값 완화: 일시적 네트워크 지터에 의한 불필요한 강등 방지
+        let isDropping = droppedDelta > 8 || lateDelta > 12
         let isCorrupted = demuxCorruptDelta > 0
         let isStarved = decodedDelta <= 0
 
         if isDropping || isCorrupted || isStarved {
             _qualityStableCount = 0
             _qualityDegradeCount += 1
-            if _qualityDegradeCount >= 2 {
+            // [Quality] 연속 3회 불량 샘플 후 강등 (기존 2회 → 3회)
+            if _qualityDegradeCount >= 3 {
                 _qualityDegradeCount = 0
                 let reason: String
                 if isStarved { reason = "decode_stall" }
@@ -407,10 +409,10 @@ extension VLCPlayerEngine {
         } else {
             _qualityDegradeCount = 0
             _qualityStableCount += 1
-            // 6회 연속 안정 (단일=30초, 멀티=60초) → 화질 복원 시도
-            if _qualityStableCount >= 6 {
+            // [Quality] 4회 연속 안정 → 빠른 원본 복귀 (기존 6회 → 4회, 단일=20초, 멀티=40초)
+            if _qualityStableCount >= 4 {
                 _qualityStableCount = 0
-                Log.player.info("[QualityAdapt] ⬆ upgrade: stable_\(self.streamingProfile == .multiLive ? "60s" : "30s")")
+                Log.player.info("[QualityAdapt] ⬆ upgrade: stable_\(self.streamingProfile == .multiLive ? "40s" : "20s")")
                 onQualityAdaptationRequest?(.upgrade(reason: "stable"))
             }
         }

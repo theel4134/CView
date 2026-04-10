@@ -37,6 +37,7 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
         self.donationAmount = message.extras?.donation?.amount
         self.donationType = message.extras?.donation?.type
         self.subscriptionMonths = message.extras?.subscription?.months
+            ?? Self.extractSubscriptionMonthsFromBadges(message.profile?.badges ?? [])
         self.profileImageUrl = message.profile?.profileImageURL?.absoluteString
         self.isNotice = isNotice
         self.isSystem = false
@@ -111,5 +112,17 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
     /// Formatted timestamp (HH:mm:ss)
     public var formattedTime: String {
         Self.timeFormatter.string(from: timestamp)
+    }
+
+    /// 뱃지 배열에서 구독 개월 수 추출 (extras에 없을 때 fallback)
+    /// badgeId = "subscription_0" 형태에서 altText "N개월 구독" 파싱
+    private static func extractSubscriptionMonthsFromBadges(_ badges: [ChatBadge]) -> Int? {
+        for badge in badges {
+            guard let badgeId = badge.badgeId, badgeId.hasPrefix("subscription") else { continue }
+            if let alt = badge.altText, let range = alt.range(of: #"(\d+)"#, options: .regularExpression) {
+                return Int(alt[range])
+            }
+        }
+        return nil
     }
 }
