@@ -30,6 +30,9 @@ extension ChatViewModel {
         case .connected:
             connectionState = .connected(serverIndex: 0)
             errorMessage = nil
+            // 치지직 웹처럼 채팅방 환영 메시지 표시
+            let welcome = ChatMessageItem.system("채팅방에 오신 것을 환영합니다!\n쾌적한 시청 환경을 위해 불필요한 메시지는 필터링 됩니다. 올바른 라이브 채팅 문화 만들기에 동참해 주세요.")
+            messages.append(welcome)
 
         case .disconnected(let reason):
             connectionState = .disconnected
@@ -92,16 +95,18 @@ extension ChatViewModel {
         let channelEmotes = channelEmoticons
         let donationsOnly = showDonationsOnly
         let showDon = showDonation
+        let modService = moderationService
 
-        let filteredMsgs: [ChatMessage]
-        if let modService = moderationService {
-            filteredMsgs = await modService.filterMessages(msgs)
-        } else {
-            filteredMsgs = msgs
-        }
-
+        // moderation 필터링 + 이모티콘 변환 + 후원 필터를 단일 백그라운드 파이프라인에서 처리
+        // (MainActor 경유 없이 actor hop → 변환 → 필터를 연속 실행)
         let items = await Task.detached(priority: .userInitiated) {
-            let rawItems = filteredMsgs.map { msg in
+            let filtered: [ChatMessage]
+            if let modService {
+                filtered = await modService.filterMessages(msgs)
+            } else {
+                filtered = msgs
+            }
+            let rawItems = filtered.map { msg in
                 Self.enrichWithChannelEmoticonsPure(ChatMessageItem(from: msg), channelEmoticons: channelEmotes)
             }
             return Self.filterByDonationPrefsPure(rawItems, donationsOnly: donationsOnly, showDonation: showDon)
@@ -136,13 +141,17 @@ extension ChatViewModel {
         }
     }
 
-    /// 이모티콘 팩의 모든 이미지를 백그라운드에서 미리 다운로드
+    /// 이모티콘 팩의 이미지를 백그라운드에서 미리 다운로드
+    /// - 팩이 매우 크면 수백~수천 URL 대량 다운로드로 네트워크/메모리 부담이 크므로
+    ///   앞쪽 최대 `prefetchLimit`개만 미리 받고 나머지는 실제 사용 시(collectEmoticons) lazy 로드.
     func prefetchEmoticonImages() {
-        let urls = emoticonPacks
+        let prefetchLimit = 120
+        let allURLs = emoticonPacks
             .flatMap { $0.emoticons ?? [] }
             .compactMap { $0.imageURL }
-        guard !urls.isEmpty else { return }
-        logger.info("이모티콘 프리페치 시작: \(urls.count)개 이미지")
+        guard !allURLs.isEmpty else { return }
+        let urls = Array(allURLs.prefix(prefetchLimit))
+        logger.info("이모티콘 프리페치 시작: \(urls.count)/\(allURLs.count)개 (상위 \(prefetchLimit))")
         Task.detached(priority: .background) {
             await ImageCacheService.shared.prefetch(urls)
         }
@@ -178,14 +187,7 @@ extension ChatViewModel {
             merged[key] = value
         }
         guard merged.count != item.emojis.count else { return item }
-        return ChatMessageItem(
-            id: item.id, userId: item.userId, nickname: item.nickname,
-            content: item.content, timestamp: item.timestamp, type: item.type,
-            badgeImageURL: item.badgeImageURL, emojis: merged,
-            donationAmount: item.donationAmount, donationType: item.donationType,
-            subscriptionMonths: item.subscriptionMonths, profileImageUrl: item.profileImageUrl,
-            isNotice: item.isNotice, isSystem: item.isSystem
-        )
+        return item.withEmojis(merged)
     }
 
     func refilterMessages() async {
@@ -208,18 +210,45 @@ extension ChatViewModel {
     // MARK: - Batching
 
     /// Enqueue items for the next batch flush.
+    /// 인입 시점에 중복 제거를 선행하여 드립 flush 부담 최소화.
     func enqueueBatchedMessages(_ items: [ChatMessageItem]) {
         guard !items.isEmpty else { return }
-        pendingMessages.append(contentsOf: items)
-        recentMessageTimestamps.append(contentsOf: items.map { _ in Date() })
-        messageCount += items.count
+
+        // 만료된 에코 키 정리
+        let now = Date()
+        recentSentEchoKeys = recentSentEchoKeys.filter { $0.value > now }
+
+        let unique = items.filter { item in
+            // ID 기반 중복 제거 — FIFO 큐로 오래된 ID만 제거 (이전 전체 clear → 재연결/recent 동시 수신 시 중복 통과 버그 수정)
+            guard seenMessageIDs.insert(item.id).inserted else { return false }
+            seenMessageIDQueue.append(item.id)
+            // 본인 메시지 에코백 필터: sendMessage()에서 로컬 추가한 메시지와 동일한 서버 에코 제거
+            let echoKey = "\(item.userId)_\(item.content.hashValue)"
+            if let expiry = recentSentEchoKeys[echoKey], now < expiry {
+                recentSentEchoKeys.removeValue(forKey: echoKey)
+                return false
+            }
+            return true
+        }
+        // 용량 초과 시 오래된 절반만 제거 (최근 창 보존하여 재수신 메시지 중복 방지)
+        if seenMessageIDQueue.count > 800 {
+            let removeCount = seenMessageIDQueue.count - 400
+            for id in seenMessageIDQueue.prefix(removeCount) {
+                seenMessageIDs.remove(id)
+            }
+            seenMessageIDQueue.removeFirst(removeCount)
+        }
+        guard !unique.isEmpty else { return }
+        pendingMessages.append(contentsOf: unique)
+        recentMessageTimestamps.append(contentsOf: unique.map { _ in Date() })
+        messageCount += unique.count
         scheduleBatchFlush()
     }
 
     /// Schedule a single batch-flush task.
-    /// 치지직 웹 채팅처럼 자연스러운 메시지 흐름을 위한 적응형 스케줄링:
-    /// - 포그라운드: 100ms 간격 flush → 메시지 1-2개씩 자연스럽게 표시
-    /// - 백그라운드: 1초 간격 flush → CPU 절약
+    /// 치지직 웹 채팅처럼 1개씩 드립 표시:
+    /// - 포그라운드: 50ms 간격으로 메시지 1개씩 flush
+    /// - 백그라운드: 3초 간격으로 일괄 flush (CPU 절약)
     func scheduleBatchFlush() {
         guard batchFlushTask == nil else { return }
         guard !pendingMessages.isEmpty else { return }
@@ -231,37 +260,54 @@ extension ChatViewModel {
         }
     }
 
-    /// Move all pending messages into the visible ring buffer in one shot.
+    /// 포그라운드: 메시지 1개씩 드립 flush (큐 밀리면 catch-up)
+    /// 백그라운드: 일괄 flush
     func flushPendingMessages() {
         batchFlushTask = nil
         guard !pendingMessages.isEmpty else { return }
 
-        // recentChat + chatMessage 이벤트 겹침으로 인한 중복 메시지 필터링
-        let uniqueMessages = pendingMessages.filter { seenMessageIDs.insert($0.id).inserted }
-
-        // seenMessageIDs 무한 증가 방지 (링 버퍼 용량의 2배까지만 유지)
-        if seenMessageIDs.count > 400 {
-            seenMessageIDs.removeAll(keepingCapacity: true)
-        }
-
-        guard !uniqueMessages.isEmpty else {
+        // 백그라운드: 전량 flush (애니메이션 없이)
+        if isBackgroundMode {
+            commitMessages(pendingMessages)
             pendingMessages.removeAll(keepingCapacity: true)
             return
         }
 
-        for msg in uniqueMessages {
+        // 포그라운드 드립: 기본 1개, 큐가 15개 이상 밀리면 절반을 한 번에 flush
+        let count = pendingMessages.count
+        let flushCount: Int
+        if count > 15 {
+            flushCount = count / 2
+        } else {
+            flushCount = 1
+        }
+
+        let toFlush = Array(pendingMessages.prefix(flushCount))
+        pendingMessages.removeFirst(flushCount)
+
+        commitMessages(toFlush)
+
+        // 남은 메시지가 있으면 다음 드립 예약
+        if !pendingMessages.isEmpty {
+            scheduleBatchFlush()
+        }
+    }
+
+    /// 메시지를 visible buffer에 커밋
+    private func commitMessages(_ msgs: [ChatMessageItem]) {
+        guard !msgs.isEmpty else { return }
+        for msg in msgs {
             if msg.type == .donation || msg.type == .subscription {
                 ttsService.enqueue(msg)
             }
         }
-        trackRecentChatters(from: uniqueMessages)
-        appendToHistory(uniqueMessages)
+        trackRecentChatters(from: msgs)
+        appendToHistory(msgs)
         if isReplayMode {
-            unreadCount += uniqueMessages.count
+            unreadCount += msgs.count
         }
-        updateIncrementalStats(with: uniqueMessages)
-        messages.append(contentsOf: uniqueMessages)
-        pendingMessages.removeAll(keepingCapacity: true)
+        updateIncrementalStats(with: msgs)
+        messages.append(contentsOf: msgs)
     }
 
     /// 배치 단위로 통계를 증분 업데이트

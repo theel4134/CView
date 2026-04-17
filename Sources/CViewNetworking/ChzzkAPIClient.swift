@@ -87,7 +87,9 @@ public actor ChzzkAPIClient: APIClientProtocol {
         }
 
         // URL 구성
-        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        guard var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false) else {
+            throw APIError.networkError("Invalid URL components: \(endpoint.path)")
+        }
         urlComponents.queryItems = endpoint.queryItems
 
         guard let url = urlComponents.url else {
@@ -251,7 +253,9 @@ public actor ChzzkAPIClient: APIClientProtocol {
 
     /// 응답 본문 디코딩 없이 API 호출 (POST/DELETE 등)
     public func requestRaw(_ endpoint: any EndpointProtocol) async throws {
-        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        guard var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false) else {
+            throw APIError.networkError("Invalid URL components: \(endpoint.path)")
+        }
         urlComponents.queryItems = endpoint.queryItems
 
         guard let url = urlComponents.url else {

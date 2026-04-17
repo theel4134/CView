@@ -75,15 +75,10 @@ struct ChannelInfoTabContent: View {
 
     private func liveCard(_ live: LiveInfo) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-            // 섹션 헤더
-            HStack(spacing: 6) {
-                Circle().fill(DesignTokens.Colors.live).frame(width: 8, height: 8)
-                Text("현재 방송 중")
-                    .font(DesignTokens.Typography.bodyBold)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Spacer()
-                // 방송 시간
-                if liveUptime > 0 {
+            // 방송 시간 (우측 정렬, 헤더 텍스트는 상단 배지로 대체)
+            if liveUptime > 0 {
+                HStack {
+                    Spacer()
                     Text(formatChannelUptime(liveUptime))
                         .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
@@ -237,7 +232,7 @@ struct ChannelInfoTabContent: View {
                 channelStatCard(
                     icon: liveInfo != nil ? "dot.radiowaves.left.and.right" : "moon.fill",
                     label: "방송 상태",
-                    value: liveInfo != nil ? "라이브" : "오프라인",
+                    value: liveInfo != nil ? "라이브 중" : "오프라인",
                     color: liveInfo != nil ? DesignTokens.Colors.live : DesignTokens.Colors.textTertiary
                 )
 

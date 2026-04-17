@@ -61,7 +61,7 @@ extension FollowingView {
                         }
                         .foregroundStyle(isOverflowSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
                         .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 7)
                         .background {
                             if isOverflowSelected {
                                 Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
@@ -79,8 +79,8 @@ extension FollowingView {
                     .fixedSize()
                 }
             }
-            .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)
-            .padding(.vertical, DesignTokens.Spacing.xxs)
+            .padding(.horizontal, DesignTokens.Spacing.lg)
+            .padding(.vertical, DesignTokens.Spacing.xs)
         }
         .scrollClipDisabled(false)
     }
@@ -98,7 +98,7 @@ extension FollowingView {
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .background {
                 if isSelected {
                     Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
@@ -107,9 +107,12 @@ extension FollowingView {
                 }
             }
             .overlay {
-                if isSelected {
-                    Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1)
-                }
+                Capsule().strokeBorder(
+                    isSelected
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.35)
+                        : DesignTokens.Colors.surfaceElevated.opacity(0.4),
+                    lineWidth: isSelected ? 1 : 0.5
+                )
             }
         }
         .buttonStyle(.plain)
@@ -122,24 +125,24 @@ extension FollowingView {
             // 좌측 accent bar
             RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
                 .fill(color)
-                .frame(width: 3, height: 20)
+                .frame(width: 3.5, height: 22)
 
             Image(systemName: icon)
-                .font(.system(size: layout.sectionIconSize + 1, weight: .semibold))
+                .font(.system(size: layout.sectionIconSize + 2, weight: .bold))
                 .foregroundStyle(color)
 
             Text(title)
-                .font(DesignTokens.Typography.custom(size: 15, weight: .bold, design: .rounded))
+                .font(DesignTokens.Typography.custom(size: 16, weight: .bold, design: .rounded))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
 
             // 카운트 배지
             Text("\(count)")
                 .font(DesignTokens.Typography.custom(size: layout.sectionCountSize + 1, weight: .bold, design: .rounded))
-                .foregroundStyle(color)
+                .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(color.opacity(0.10), in: Capsule())
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(color.opacity(0.75), in: Capsule())
 
             Spacer()
         }
@@ -184,7 +187,7 @@ extension FollowingView {
                     }
                 }
             }
-            .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.md)
+            .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
         }
         .scrollClipDisabled(false)
@@ -248,13 +251,8 @@ extension FollowingView {
                     }
                 : nil
             )
-            .animation(
-                livePageDragOffset != 0
-                    ? DesignTokens.Animation.interactive
-                    : DesignTokens.Animation.gridPageTransition,
-                value: livePageDragOffset
-            )
-            .animation(DesignTokens.Animation.gridPageTransition, value: livePageIndex)
+            .animation(DesignTokens.Animation.interactive, value: livePageDragOffset)
+            .animation(livePageDragOffset == 0 ? DesignTokens.Animation.gridPageTransition : nil, value: livePageIndex)
             .preference(key: LiveGridHeightKey.self, value: gridHeight)
         }
         .frame(height: computedLiveGridHeight)
@@ -284,7 +282,7 @@ extension FollowingView {
         let totalSpacing = layout.gridSpacing * CGFloat(liveColumns - 1)
         let cardWidth = (containerWidth - totalSpacing) / CGFloat(liveColumns)
         let imageHeight = cardWidth * (9.0 / 16.0)
-        let infoHeight: CGFloat = 42
+        let infoHeight = layout.cardInfoHeight
         return imageHeight + infoHeight
     }
 
@@ -381,13 +379,8 @@ extension FollowingView {
                     }
                 : nil
             )
-            .animation(
-                offlinePageDragOffset != 0
-                    ? DesignTokens.Animation.interactive
-                    : DesignTokens.Animation.gridPageTransition,
-                value: offlinePageDragOffset
-            )
-            .animation(DesignTokens.Animation.gridPageTransition, value: offlinePageIndex)
+            .animation(DesignTokens.Animation.interactive, value: offlinePageDragOffset)
+            .animation(offlinePageDragOffset == 0 ? DesignTokens.Animation.gridPageTransition : nil, value: offlinePageIndex)
         }
         .frame(height: offlinePageHeight)
         .clipped()
@@ -707,6 +700,13 @@ extension FollowingView {
             .background {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                     .fill(DesignTokens.Colors.surfaceBase.opacity(0.65))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
+                            .strokeBorder(
+                                DesignTokens.Colors.surfaceElevated.opacity(0.6),
+                                lineWidth: 0.5
+                            )
+                    }
             }
     }
 }

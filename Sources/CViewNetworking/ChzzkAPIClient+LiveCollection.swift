@@ -205,20 +205,19 @@ extension ChzzkAPIClient {
     public func fetchFollowingChannels() async throws -> [LiveChannelItem] {
         var allItems: [(LiveChannelItem, Bool)] = []
         var seenIds: Set<String> = []
-        var currentPage = 0
         let batchSize = 50
         let maxPages = 50
 
-        // 페이지네이션: 모든 팔로잉 채널 수집
-        while currentPage < maxPages {
-            let response = try await following(size: batchSize, page: currentPage)
+        // 페이지네이션: page 번호 순차 증가 (0, 1, 2, ...)
+        for page in 0..<maxPages {
+            let response = try await following(size: batchSize, page: page)
             let items = response.followingList ?? []
             let pageItems: [(LiveChannelItem, Bool)] = items.compactMap { item in
                 guard let channel = item.channel,
                       let channelId = channel.channelId,
                       !seenIds.contains(channelId) else { return nil }
                 seenIds.insert(channelId)
-                let isLive = item.streamer?.openLive ?? false
+                let isLive = item.streamer?.isActuallyLive ?? false
                 let baseItem = LiveChannelItem(
                     id: channelId,
                     channelName: channel.channelName ?? "Unknown",
@@ -234,50 +233,53 @@ extension ChzzkAPIClient {
             }
             allItems.append(contentsOf: pageItems)
 
-            if let total = response.totalCount, seenIds.count >= total { break }
-            if items.count < batchSize { break }
-            currentPage += 1
+            // 종료 조건: 응답이 비어있거나 배치보다 적으면 마지막 페이지
+            if items.isEmpty || items.count < batchSize { break }
         }
 
-        // 라이브 중인 채널의 상세 정보를 최대 8개씩 병렬 요청 (API rate limit 보호)
+        // 라이브 중인 채널의 상세 정보를 슬라이딩 윈도우 방식으로 병렬 요청
+        // (최대 8개 동시 — API rate limit 보호, 청크 직렬 대기 없이 파이프라인 처리)
         let liveItems = allItems.filter { $0.1 }
         let offlineItems = allItems.filter { !$0.1 }.map(\.0)
         let concurrencyLimit = 8
 
-        var liveResults: [LiveChannelItem] = []
-        var offset = 0
-        while offset < liveItems.count {
-            let chunk = Array(liveItems[offset..<min(offset + concurrencyLimit, liveItems.count)])
-            offset += concurrencyLimit
-
-            let chunkResults = await withTaskGroup(of: LiveChannelItem.self) { group in
-                for (baseItem, _) in chunk {
-                    group.addTask {
-                        do {
-                            let liveInfo = try await self.liveDetail(channelId: baseItem.channelId)
-                            return LiveChannelItem(
-                                id: baseItem.id,
-                                channelName: baseItem.channelName,
-                                channelImageUrl: baseItem.channelImageUrl,
-                                liveTitle: liveInfo.liveTitle,
-                                viewerCount: liveInfo.concurrentUserCount,
-                                categoryName: liveInfo.liveCategoryValue,
-                                thumbnailUrl: liveInfo.resolvedLiveImageURL?.absoluteString,
-                                channelId: baseItem.channelId,
-                                isLive: true,
-                                openDate: liveInfo.openDate
-                            )
-                        } catch {
-                            Log.api.warning("라이브 상세 조회 실패: \(baseItem.channelId) — \(error)")
-                            return baseItem
-                        }
+        let liveResults = await withTaskGroup(of: LiveChannelItem.self) { group in
+            var collected: [LiveChannelItem] = []
+            collected.reserveCapacity(liveItems.count)
+            var launched = 0
+            for (baseItem, _) in liveItems {
+                if launched >= concurrencyLimit {
+                    if let item = await group.next() {
+                        collected.append(item)
                     }
                 }
-                var collected: [LiveChannelItem] = []
-                for await item in group { collected.append(item) }
-                return collected
+                launched += 1
+                group.addTask {
+                    do {
+                        let liveInfo = try await self.liveDetail(channelId: baseItem.channelId)
+                        // 팔로잉 1차 응답 이후 실제 방송이 종료(status=.close)됐을 수 있으므로
+                        // liveDetail 상태도 반영한다.
+                        let actuallyLive = liveInfo.status == .open
+                        return LiveChannelItem(
+                            id: baseItem.id,
+                            channelName: baseItem.channelName,
+                            channelImageUrl: baseItem.channelImageUrl,
+                            liveTitle: liveInfo.liveTitle,
+                            viewerCount: liveInfo.concurrentUserCount,
+                            categoryName: liveInfo.liveCategoryValue,
+                            thumbnailUrl: liveInfo.resolvedLiveImageURL?.absoluteString,
+                            channelId: baseItem.channelId,
+                            isLive: actuallyLive,
+                            openDate: actuallyLive ? liveInfo.openDate : nil
+                        )
+                    } catch {
+                        Log.api.warning("라이브 상세 조회 실패: \(baseItem.channelId) — \(error)")
+                        return baseItem
+                    }
+                }
             }
-            liveResults.append(contentsOf: chunkResults)
+            for await item in group { collected.append(item) }
+            return collected
         }
 
         return liveResults + offlineItems

@@ -2,6 +2,7 @@
 // CViewPlayer — drawable 재바인딩, 재사용, 녹화, 메트릭 수집
 
 import Foundation
+import QuartzCore
 import CViewCore
 @preconcurrency import VLCKitSPM
 
@@ -9,17 +10,36 @@ extension VLCPlayerEngine {
     
     // MARK: - drawable 재바인딩
 
+    /// 마지막 drawable refresh 시각 — 500ms 쿨다운으로 중복 vout 재생성 방지
+    private static let _drawableRefreshCooldown: TimeInterval = 0.5
+
     /// VLC drawable을 nil → playerView 순서로 강제 리셋하여 vout 재생성을 트리거한다.
-    public func refreshDrawable() {
-        if Thread.isMainThread {
-            player.drawable = nil
-            player.drawable = playerView
-        } else {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.player.drawable = nil
-                self.player.drawable = playerView
+    /// 500ms 쿨다운: 멀티라이브에서 buffering→playing 사이클 + recoverFromBackground 등
+    /// 여러 경로에서 중복 호출되어 검은 프레임이 반복 발생하는 것을 방지한다.
+    /// force=true: 쿨다운을 무시하고 강제 리셋 (세션 추가/그리드 재구성 시)
+    public func refreshDrawable(force: Bool = false) {
+        let doRefresh = { [weak self] in
+            guard let self else { return }
+            let now = Date()
+            if !force,
+               let last = self._lastDrawableRefreshTime,
+               now.timeIntervalSince(last) < Self._drawableRefreshCooldown {
+                return  // 쿨다운 중 — 중복 refresh 스킵
             }
+            self._lastDrawableRefreshTime = now
+            // [플리커 방지] CATransaction으로 drawable 스왕을 원자적으로 처리 —
+            // nil→playerView 사이의 CA 레이어 변경이 단일 프레임에 커밋되어
+            // 중간 검은 프레임 노출을 최소화한다.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.player.drawable = nil
+            self.player.drawable = self.playerView
+            CATransaction.commit()
+        }
+        if Thread.isMainThread {
+            doRefresh()
+        } else {
+            DispatchQueue.main.async { doRefresh() }
         }
     }
 
@@ -77,11 +97,12 @@ extension VLCPlayerEngine {
         let pv = playerView
         let doStop = { [weak self] in
             self?._prevStats = nil
-            self?._lastBufferingDecodedCount = 0
-            self?._bufferingFilterStartTime = nil
+            self?._bufferingFilter.withLock { $0 = _BufferingFilterState() }
             self?._zeroFrameCount = 0
             self?._qualityDegradeCount = 0
             self?._qualityStableCount = 0
+            self?._ioHealthEWMA = 1.0
+            self?._frameDeliveryEWMA = 1.0
             p.delegate = nil
             p.stop()
             p.drawable = nil
@@ -115,7 +136,7 @@ extension VLCPlayerEngine {
             } else {
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    do { try await Task.sleep(nanoseconds: 500_000_000) } catch { return }
                     if !self.player.videoTracks.isEmpty {
                         self.player.selectTrack(at: 0, type: .video)
                     }
@@ -240,6 +261,9 @@ extension VLCPlayerEngine {
 
     // MARK: - 버퍼 상태
 
+    /// [Fix 21] 복합 버퍼 건강도 — 프레임 비율 기반 + I/O/전달 경고 보호
+    /// 정상 상태: frameRatio만 사용 (기존 동작, false-conservative 방지)
+    /// I/O 또는 프레임 전달률 < 0.5: min() 보수적 보호 활성화
     @MainActor
     public func bufferHealth() -> BufferHealth {
         guard let stats = player.media?.statistics else {
@@ -251,7 +275,19 @@ extension VLCPlayerEngine {
         let ratio     = Float(displayed) / Float(decoded)
         let isBuffering = player.state == .buffering
         let isHealthy   = displayed > 0 && lost == 0 && !isBuffering
-        return BufferHealth(currentLevel: Double(ratio), targetLevel: 1.0, isHealthy: isHealthy)
+        
+        let frameRatio = Double(ratio)
+        let minAuxiliary = min(_ioHealthEWMA, _frameDeliveryEWMA)
+        let compositeLevel: Double
+        if minAuxiliary < 0.5 {
+            // I/O 또는 프레임 전달 위험 → 보수적 min() 보호
+            compositeLevel = min(frameRatio, minAuxiliary)
+        } else {
+            // 정상 → frameRatio만 사용 (불필요한 가속 억제 방지)
+            compositeLevel = frameRatio
+        }
+        
+        return BufferHealth(currentLevel: compositeLevel, targetLevel: 1.0, isHealthy: isHealthy)
     }
 
     // MARK: - 오디오 트랙
@@ -279,7 +315,7 @@ extension VLCPlayerEngine {
         let interval: UInt64 = streamingProfile == .multiLive ? 10_000_000_000 : 5_000_000_000
         statsTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: interval)
+                do { try await Task.sleep(nanoseconds: interval) } catch { break }
                 guard !Task.isCancelled, let self else { break }
                 await self.collectMetrics()
             }
@@ -288,6 +324,20 @@ extension VLCPlayerEngine {
 
     @MainActor
     func collectMetrics() {
+        // [장시간 안정성] playing 상태가 아닌 경우 VLC 통계 접근 스킵
+        // buffering/opening 상태에서 player.media?.statistics 접근 시
+        // VLC 내부 뮤텍스 경합으로 MainThread 블로킹 가능 (4세션 × 10초 반복 → 누적)
+        let currentPhase = _state.withLock { $0.currentPhase }
+        // [Fix] .playing뿐 아니라 .buffering에서도 메트릭 수집 허용
+        // VLC 라이브 HLS는 프레임 디코딩 중에도 .buffering 상태를 유지하는 경우가 많음
+        // player.media?.statistics 접근은 media가 존재하면 안전 (guard let stats로 확인)
+        switch currentPhase {
+        case .playing, .buffering:
+            break  // OK — 통계 수집 진행
+        default:
+            _zeroFrameCount = 0
+            return
+        }
         guard let stats = player.media?.statistics else { return }
         let now = Date()
         let elapsed = now.timeIntervalSince(_lastMetricsTime)
@@ -310,10 +360,29 @@ extension VLCPlayerEngine {
         let readBytesDelta = Int(stats.readBytes) - Int(prev.readBytes)
         let demuxReadBytesDelta = Int(stats.demuxReadBytes) - Int(prev.demuxReadBytes)
 
-        let netBytesPerSec = elapsed > 0 ? max(0, readBytesDelta) / Int(max(elapsed, 0.001)) : 0
-        let inputKbps = elapsed > 0 ? Double(max(0, readBytesDelta)) * 8.0 / elapsed / 1000.0 : 0.0
+        // [VLC 4.0] readBytes가 불변인 경우 demuxReadBytes를 대역폭 기준으로 사용
+        // VLC 4.0은 HLS 라이브 스트림에서 readBytes를 더 이상 갱신하지 않음
+        let effectiveBytesDelta = readBytesDelta > 0 ? readBytesDelta : demuxReadBytesDelta
+        let netBytesPerSec = elapsed > 0 ? max(0, effectiveBytesDelta) / Int(max(elapsed, 0.001)) : 0
+        let inputKbps = elapsed > 0 ? Double(max(0, effectiveBytesDelta)) * 8.0 / elapsed / 1000.0 : 0.0
         let demuxKbps = elapsed > 0 ? Double(max(0, demuxReadBytesDelta)) * 8.0 / elapsed / 1000.0 : 0.0
         let fps = elapsed > 0 ? Double(max(0, decodedDelta)) / elapsed : 0.0
+
+        // [Fix 20 Phase3] I/O 건강도 EWMA 갱신
+        // VLC 4.0: readBytes 불변 시 frameDelivery만으로 판단 (ioRatio 갱신 스킵)
+        if readBytesDelta > 0, demuxReadBytesDelta > 100 {
+            let ioRatio = min(Double(readBytesDelta) / Double(demuxReadBytesDelta), 1.5)
+            _ioHealthEWMA = 0.3 * min(ioRatio, 1.0) + 0.7 * _ioHealthEWMA
+        }
+        
+        // [Fix 20 Phase3] 프레임 전달률 EWMA 갱신: (표시 프레임) / (디코딩 프레임)
+        // 손실/지연 프레임 반영 → 버퍼 부족 시 즉각 감지
+        if decodedDelta > 0 {
+            let delivery = Double(max(0, displayedDelta)) / Double(decodedDelta)
+            let lossPenalty = (droppedDelta + lateDelta) > 0 ? 0.8 : 1.0
+            let effectiveDelivery = min(delivery * lossPenalty, 1.0)
+            _frameDeliveryEWMA = 0.3 * effectiveDelivery + 0.7 * _frameDeliveryEWMA
+        }
 
         let size = player.videoSize
         if size != _cachedVideoSize {
@@ -338,7 +407,7 @@ extension VLCPlayerEngine {
             lostAudioBuffersDelta: max(0, audioLostDelta),
             decodedAudioDelta: max(0, decodedAudioDelta),
             playedAudioBuffersDelta: max(0, playedAudioDelta),
-            readBytesDelta: max(0, readBytesDelta),
+            readBytesDelta: max(0, effectiveBytesDelta),
             demuxReadBytesDelta: max(0, demuxReadBytesDelta),
             displayedPicturesDelta: max(0, displayedDelta),
             latePicturesDelta: max(0, lateDelta),
@@ -349,24 +418,20 @@ extension VLCPlayerEngine {
 
         // [Opt-B3] 통계 기반 자동 화질 적응
         // 프레임 드롭/지연이 급증하면 downgrade 요청, 안정적이면 upgrade 요청
-        let currentPhase = _state.withLock { $0.currentPhase }
-        if case .playing = currentPhase {
-            evaluateQualityAdaptation(
-                droppedDelta: droppedDelta,
-                lateDelta: lateDelta,
-                decodedDelta: decodedDelta,
-                demuxCorruptDelta: demuxCorruptDelta
-            )
+        // (함수 진입 시 .playing 가드 통과했으므로 바로 호출)
+        evaluateQualityAdaptation(
+            droppedDelta: droppedDelta,
+            lateDelta: lateDelta,
+            decodedDelta: decodedDelta,
+            demuxCorruptDelta: demuxCorruptDelta
+        )
 
-            // 재생 정체 감지
-            if decodedDelta <= 0 {
-                _zeroFrameCount += 1
-                if _zeroFrameCount >= _zeroFrameStallThreshold {
-                    _zeroFrameCount = 0
-                    onPlaybackStalled?()
-                }
-            } else {
+        // 재생 정체 감지
+        if decodedDelta <= 0 {
+            _zeroFrameCount += 1
+            if _zeroFrameCount >= _zeroFrameStallThreshold {
                 _zeroFrameCount = 0
+                onPlaybackStalled?()
             }
         } else {
             _zeroFrameCount = 0
@@ -387,6 +452,14 @@ extension VLCPlayerEngine {
     ) {
         // hidden 세션에서는 화질 적응 불필요
         guard sessionTier != .hidden else { return }
+
+        // [Quality Lock] 항상 최고 화질 모드: downgrade/upgrade 모두 무시
+        // (1080p60 고정 유지 — 프레임 드롭은 VLC가 자체 처리)
+        guard !forceHighestQuality else {
+            _qualityDegradeCount = 0
+            _qualityStableCount = 0
+            return
+        }
 
         // [Quality] 임계값 완화: 일시적 네트워크 지터에 의한 불필요한 강등 방지
         let isDropping = droppedDelta > 8 || lateDelta > 12

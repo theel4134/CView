@@ -82,6 +82,14 @@ extension VLCPlayerEngine {
         player.play()
         Log.player.debug("[DIAG] player.play() called — state=\(self.player.state.rawValue) media=\(url.lastPathComponent, privacy: .public) retry=\(retryAttempt)")
         startStatsTimer()
+
+        // 선명한 화면(픽셀 샤프) 설정은 VLC 서브레이어가 생성된 뒤 재적용해야 반영된다.
+        if sharpPixelScaling {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                self?.playerView.setSharpScaling(true)
+            }
+        }
         Log.player.debug("[DIAG] _startPlay: profile=\(String(describing: profile)) isSelected=\(self.isSelectedSession) window=\(self.playerView.window != nil ? "attached" : "NIL") playerState=\(self.player.state.rawValue) url=\(url.lastPathComponent, privacy: .public)")
         
         // [Fix 14] VLC 4.0 초기 재생 모니터링
@@ -191,29 +199,43 @@ extension VLCPlayerEngine {
     
     /// VLCStreamingProfile에 따른 미디어 옵션 일괄 적용
     func applyMediaOptions(_ media: VLCMedia, profile: VLCStreamingProfile) {
+        // [Quality Lock] 항상 최고 화질 유지 모드 — 멀티라이브에서도 1080p 고정
+        let forceMax = forceHighestQuality
+
         media.addOption(":network-caching=\(profile.networkCaching)")
         media.addOption(":live-caching=\(profile.liveCaching)")
         media.addOption(":file-caching=0")
         media.addOption(":disc-caching=0")
         media.addOption(":cr-average=\(profile.crAverage)")
-        media.addOption(":avcodec-threads=\(profile.decoderThreads)")
+        // 디코더 스레드: forceMax면 CPU 코어를 최대한 활용 (최대 4)
+        let decoderThreads = forceMax ? min(ProcessInfo.processInfo.processorCount, 4) : profile.decoderThreads
+        media.addOption(":avcodec-threads=\(decoderThreads)")
         // [Quality] avcodec-fast: 싱글 스트림에서는 비활성 (디블로킹 완전 적용으로 원본 화질 유지)
-        if profile.avcodecFast {
+        if profile.avcodecFast && !forceMax {
             media.addOption(":avcodec-fast=1")
         }
         media.addOption(":http-reconnect")
-        let maxW = profile.adaptiveMaxWidth(isSelected: isSelectedSession)
-        var maxH = profile.adaptiveMaxHeight(isSelected: isSelectedSession)
-        // 대역폭 코디네이터의 화면 캡핑이 설정된 경우 더 제한적인 값 사용
-        if maxAdaptiveHeight > 0 {
-            maxH = min(maxH, maxAdaptiveHeight)
+        // [Quality Lock] forceMax면 해상도 캡핑/대역폭 코디네이터 캡 무시 (무제한)
+        let maxW: Int
+        let maxH: Int
+        if forceMax {
+            maxW = 0
+            maxH = 0
+        } else {
+            maxW = profile.adaptiveMaxWidth(isSelected: isSelectedSession)
+            var h = profile.adaptiveMaxHeight(isSelected: isSelectedSession)
+            if maxAdaptiveHeight > 0 {
+                h = min(h, maxAdaptiveHeight)
+            }
+            maxH = h
         }
         // [Quality] 0 = 무제한 (VLC가 소스 원본 해상도 사용) — 싱글 스트림용
         if maxW > 0 { media.addOption(":adaptive-maxwidth=\(maxW)") }
         if maxH > 0 { media.addOption(":adaptive-maxheight=\(maxH)") }
-        // [Opt-A3] 멀티라이브 비선택 세션: predictive 알고리즘으로 대역폭 예측 기반 리버퍼링 감소
-        // 선택 세션 및 단일 스트림: highest로 최고 화질 유지
-        if profile == .multiLive && !isSelectedSession {
+        // [Quality Lock] forceMax면 항상 highest. 기존: 멀티라이브 비선택만 predictive
+        if forceMax {
+            media.addOption(":adaptive-logic=highest")
+        } else if profile == .multiLive && !isSelectedSession {
             media.addOption(":adaptive-logic=predictive")
         } else {
             media.addOption(":adaptive-logic=highest")
@@ -227,25 +249,22 @@ extension VLCPlayerEngine {
         media.addOption(":http-referrer=\(CommonHeaders.chzzkReferer)")
         media.addOption(":http-user-agent=\(CommonHeaders.safariUserAgent)")
         if profile.dropLateFrames { media.addOption(":drop-late-frames=1") }
-        if profile.skipFrames { media.addOption(":skip-frames=1") }
-        // [Quality] hurry-up: 싱글 스트림에서는 비활성 (디코더 품질 단계 완전 적용)
-        if profile.hurryUp { media.addOption(":avcodec-hurry-up=1") }
+        // [Quality Lock] skip-frames/hurry-up/skiploopfilter/skip-idct/B-frame skip은
+        // forceMax일 때 모두 비활성 — 원본 품질 유지 (GPU/CPU 사용량 증가 감수)
+        if profile.skipFrames && !forceMax { media.addOption(":skip-frames=1") }
+        if profile.hurryUp && !forceMax { media.addOption(":avcodec-hurry-up=1") }
         if profile == .multiLive {
             media.addOption(":prefetch-buffer-size=786432")
         } else {
             media.addOption(":prefetch-buffer-size=393216")
         }
-        // [Opt-A4/Quality] 루프필터 스킵 — 프로파일 기반 적용
-        // 싱글 스트림: 0 (원본 품질), multiLive: 4 (전체 스킵, GPU 절감)
-        if profile.skipLoopFilter > 0 {
+        if profile.skipLoopFilter > 0 && !forceMax {
             media.addOption(":avcodec-skiploopfilter=\(profile.skipLoopFilter)")
         }
-        if profile == .multiLive {
+        if profile == .multiLive && !forceMax {
             media.addOption(":avcodec-skip-idct=4")
         }
-        // [Opt-A5] 멀티라이브 비선택: B프레임 디코딩 스킵 — 시각적 끊김 미미(480p)
-        // VLC 레벨 프레임 스킵은 VideoToolbox에도 일부 효과 (프레임 미전달)
-        if profile == .multiLive && !isSelectedSession {
+        if profile == .multiLive && !isSelectedSession && !forceMax {
             media.addOption(":avcodec-skip-frame=1")  // B-frames skip
         }
     }

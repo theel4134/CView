@@ -342,6 +342,27 @@ struct PlayerControlsBar: View {
                 }
             }
 
+            // 선명한 화면 (픽셀 샤프 스케일링) 토글
+            if let store = settingsStore {
+                let sharp = store.player.sharpPixelScaling
+                PlayerButton(
+                    icon: sharp ? "square.grid.3x3.square" : "square.grid.3x3",
+                    size: 14
+                ) {
+                    let newValue = !store.player.sharpPixelScaling
+                    store.player.sharpPixelScaling = newValue
+                    playerVM?.applySharpPixelScaling(newValue)
+                }
+                .help(sharp ? "선명한 화면 끄기 (기본 보간)" : "선명한 화면 켜기 (픽셀 샤프)")
+                .overlay {
+                    if sharp {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                            .fill(DesignTokens.Colors.accentBlue.opacity(0.25))
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+
             // Audio-only mode
             PlayerButton(
                 icon: playerVM?.isAudioOnly == true ? "speaker.wave.2.fill" : "eye.slash",

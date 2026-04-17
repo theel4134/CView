@@ -33,11 +33,22 @@ struct MainContentView: View {
                 .transition(.opacity.combined(with: .scale(scale: 1.02)))
             }
         }
-        .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
         .commandPaletteOverlay(isPresented: Binding(
             get: { appState.showCommandPalette },
             set: { appState.showCommandPalette = $0 }
         ))
+        .sheet(isPresented: Binding(
+            get: { appState.showKeyboardShortcutsHelp },
+            set: { appState.showKeyboardShortcutsHelp = $0 }
+        )) {
+            KeyboardShortcutsHelpView()
+        }
+        .sheet(isPresented: Binding(
+            get: { appState.showAboutPanel },
+            set: { appState.showAboutPanel = $0 }
+        )) {
+            AboutPanelView()
+        }
     }
 
     @ViewBuilder
@@ -50,7 +61,6 @@ struct MainContentView: View {
         } detail: {
             NavigationStack(path: $router.path) {
                 detailView
-                    .id(router.selectedSidebarItem)
                     .navigationDestination(for: AppRoute.self) { route in
                         routeDestination(for: route)
                     }
@@ -183,6 +193,11 @@ struct SidebarView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isLogoutHovered = false
     @State private var isLoginHovered = false
+    @State private var isSettingsBackHovered = false
+    @State private var hoveredItem: AppRouter.SidebarItem?
+    @State private var hoveredSettingsTab: AppRouter.SettingsTab?
+    @Namespace private var sidebarNS
+    @Namespace private var settingsNS
 
     private let primaryItems: [AppRouter.SidebarItem] = [.home, .following, .category]
     private let discoverItems: [AppRouter.SidebarItem] = [.search, .clips, .recentFavorites]
@@ -249,10 +264,8 @@ struct SidebarView: View {
 
                 // 설정 섹션 헤더
                 Text("설정")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
                     .padding(.horizontal, DesignTokens.Spacing.lg + 2)
                     .padding(.top, DesignTokens.Spacing.sm)
                     .padding(.bottom, DesignTokens.Spacing.xs)
@@ -274,8 +287,6 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var settingsBackButton: some View {
-        @State var isBackHovered = false
-
         Button {
             withAnimation(DesignTokens.Animation.smooth) {
                 router.exitSettings()
@@ -284,17 +295,30 @@ struct SidebarView: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .foregroundStyle(isSettingsBackHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    .offset(x: isSettingsBackHovered ? -2 : 0)
                 Text("메뉴")
                     .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .foregroundStyle(isSettingsBackHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
                 Spacer()
             }
             .padding(.horizontal, DesignTokens.Spacing.lg)
             .padding(.vertical, 6)
+            .background {
+                if isSettingsBackHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(DesignTokens.Colors.textPrimary.opacity(0.04))
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(DesignTokens.Animation.micro) {
+                isSettingsBackHovered = hovering
+            }
+        }
+        .padding(.horizontal, 8)
         .customCursor(.pointingHand)
     }
 
@@ -303,49 +327,49 @@ struct SidebarView: View {
     @ViewBuilder
     private func settingsTabRow(_ tab: AppRouter.SettingsTab) -> some View {
         let isSelected = router.selectedSettingsTab == tab
+        let isHovered = hoveredSettingsTab == tab
 
         Button {
             withAnimation(DesignTokens.Animation.snappy) {
                 router.selectSettingsTab(tab)
             }
         } label: {
-            HStack(spacing: 11) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                        .fill(isSelected
-                              ? (colorScheme == .light ? tab.color.opacity(0.15) : tab.color)
-                              : tab.color.opacity(colorScheme == .light ? 0.18 : 0.15))
-                        .frame(width: DesignTokens.Spacing.xxl, height: DesignTokens.Spacing.xxl)
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(isSelected
-                                        ? (colorScheme == .light ? tab.color : .white)
-                                        : tab.color)
-                }
-                .shadow(color: isSelected ? tab.color.opacity(colorScheme == .light ? 0.15 : 0.28) : .clear, radius: 5, y: 2)
+            HStack(spacing: 10) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isSelected ? .white : tab.color)
+                    .frame(width: 20)
 
                 Text(tab.rawValue)
                     .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
-                    .tracking(0.1)
+                    .foregroundStyle(isSelected ? .white : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary))
 
                 Spacer()
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                        .fill(tab.color.opacity(0.10))
+                        .fill(Color.accentColor)
+                        .matchedGeometryEffect(id: "settings_sel", in: settingsNS)
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(DesignTokens.Colors.textPrimary.opacity(0.06))
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(DesignTokens.Animation.micro) {
+                hoveredSettingsTab = hovering ? tab : nil
+            }
+        }
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
-        .animation(DesignTokens.Animation.fast, value: isSelected)
+        .animation(DesignTokens.Animation.indicator, value: router.selectedSettingsTab)
     }
 
     // MARK: - Settings Footer (Version)
@@ -356,15 +380,10 @@ struct SidebarView: View {
                 .padding(.horizontal, DesignTokens.Spacing.lg)
                 .padding(.bottom, DesignTokens.Spacing.sm)
 
-            HStack(spacing: 6) {
-                Image(systemName: "c.square.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                Text("CView v2.0")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-            .frame(maxWidth: .infinity)
+            Text("CView v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"))")
+                .font(DesignTokens.Typography.custom(size: 11, weight: .regular))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -419,6 +438,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func sidebarRow(_ item: AppRouter.SidebarItem) -> some View {
         let isSelected = router.selectedSidebarItem == item
+        let isHovered = hoveredItem == item
         let liveCount = item == .following ? appState.backgroundUpdateService.onlineChannels.count : 0
 
         Button {
@@ -433,13 +453,16 @@ struct SidebarView: View {
                     Image(systemName: item.icon)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(isSelected ? (colorScheme == .light ? iconColor(for: item) : .white) : iconColor(for: item))
+                        .scaleEffect(isHovered && !isSelected ? 1.15 : 1.0)
+                        .rotationEffect(.degrees(isHovered && !isSelected ? -3 : 0))
                 }
                 .shadow(color: isSelected ? DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.15 : 0.28) : .clear, radius: 5, y: 2)
+                .scaleEffect(isSelected ? 1.05 : 1.0)
 
                 // 레이블
                 Text(item.rawValue)
                     .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary))
                     .tracking(0.1)
 
                 Spacer()
@@ -449,10 +472,11 @@ struct SidebarView: View {
                     Text("\(liveCount)")
                         .font(DesignTokens.Typography.microSemibold.monospacedDigit())
                         .foregroundStyle(.white)
+                        .contentTransition(.numericText())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(DesignTokens.Colors.live, in: Capsule())
-                        .shadow(color: DesignTokens.Colors.live.opacity(0.4), radius: 4, y: 1)
+                        .shadow(color: DesignTokens.Colors.live.opacity(0.5), radius: 5, y: 1)
                 }
             }
             .padding(.horizontal, 10)
@@ -462,14 +486,25 @@ struct SidebarView: View {
                 if isSelected {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .fill(DesignTokens.Colors.chzzkGreen.opacity(0.10))
+                        .matchedGeometryEffect(id: "sidebar_sel", in: sidebarNS)
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                        .fill(DesignTokens.Colors.textPrimary.opacity(0.04))
                 }
             }
+            .offset(x: isHovered && !isSelected ? 2 : 0)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .onHover { hovering in
+            withAnimation(DesignTokens.Animation.micro) {
+                hoveredItem = hovering ? item : nil
+            }
+        }
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
-        .animation(DesignTokens.Animation.fast, value: isSelected)
+        .animation(DesignTokens.Animation.indicator, value: router.selectedSidebarItem)
     }
 
     // MARK: - Icon Styling
@@ -530,13 +565,16 @@ struct SidebarView: View {
                         Circle()
                             .fill(DesignTokens.Colors.live)
                             .frame(width: 6, height: 6)
+                            .shadow(color: DesignTokens.Colors.live.opacity(0.6), radius: 4)
                         Text("\(liveCount)채널 라이브")
                             .font(DesignTokens.Typography.micro)
                             .foregroundStyle(DesignTokens.Colors.live)
+                            .contentTransition(.numericText())
                     } else {
                         Circle()
                             .fill(Color.green)
                             .frame(width: 6, height: 6)
+                            .shadow(color: Color.green.opacity(0.5), radius: 3)
                         Text("온라인")
                             .font(DesignTokens.Typography.micro)
                             .foregroundStyle(.tertiary)

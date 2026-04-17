@@ -41,6 +41,13 @@ extension StreamCoordinator {
                 await self?.emitEvent(.latencyUpdate(info))
             }
         }
+
+        // 버퍼 건강도 제공 — PID 가속 댐핑에 사용
+        // [Fix 25B] Mutex 기반 thread-safe 접근
+        await controller.setBufferHealthProvider { [weak self] in
+            guard let self else { return 1.0 }
+            return self._bufferState.withLock { $0.bufferHealth }
+        }
         
         await controller.setOnSeekRequired { [weak self] targetLatency in
             Task { [weak self] in
@@ -74,23 +81,19 @@ extension StreamCoordinator {
             logger.info("PDT sync active: \(mediaPlaylistURL.lastPathComponent, privacy: .public)")
             
             await controller.startSync { [weak provider, weak self] in
-                // 실제 체감 레이턴시 = PDT 세그먼트 지연 + VLC 버퍼 내 재생 위치 차이
-                // PDT: 마지막 세그먼트가 CDN에 올라온 시점 대비 현재 시각 (세그먼트 수준 지연)
-                // vlcBuffer: VLC 버퍼 끝(duration) - 현재 재생 위치(currentTime)
-                // 합계 = 실제 라이브 대비 재생 화면이 얼마나 뒤처졌는지
+                // [Fix 21] 실제 체감 레이턴시 = PDT(보정됨) + VLC 버퍼 지연(스무딩)
                 if let pdtLatency = await provider?.currentLatency() {
-                    // PDT 측정 성공 시, VLC 버퍼 지연을 합산
-                    let bufferDelay = await self?.vlcBufferLatency() ?? 0
+                    let bufferDelay = await self?.smoothedVlcBufferLatency() ?? 0
                     return pdtLatency + bufferDelay
                 }
-                // Fallback: VLC 버퍼 내부 duration-currentTime (PDT 없을 때)
-                return await self?.vlcBufferLatency()
+                // Fallback: VLC 버퍼 스무딩 레이턴시 (PDT 없을 때)
+                return await self?.smoothedVlcBufferLatency()
             }
         } else {
             // 마스터 플레이리스트 fetch 실패 - VLC 버퍼 fallback
             logger.info("Media playlist URL unavailable, using VLC buffer latency")
             await controller.startSync { [weak self] in
-                await self?.vlcBufferLatency()
+                await self?.smoothedVlcBufferLatency()
             }
         }
     }
@@ -143,5 +146,17 @@ extension StreamCoordinator {
         let latency = duration - current
         guard latency > 0, latency < 60 else { return nil }
         return latency
+    }
+    
+    /// [Fix 21] EWMA 스무딩된 VLC 버퍼 레이턴시 — 톱니파 노이즈 제거
+    /// 세그먼트 도착/소비에 따른 duration 급변을 완화하여 PID 입력 안정화
+    func smoothedVlcBufferLatency() async -> TimeInterval? {
+        guard let raw = await vlcBufferLatency() else { return _vlcBufferEWMA }
+        if let prev = _vlcBufferEWMA {
+            _vlcBufferEWMA = 0.3 * raw + 0.7 * prev
+        } else {
+            _vlcBufferEWMA = raw
+        }
+        return _vlcBufferEWMA
     }
 }

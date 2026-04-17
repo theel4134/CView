@@ -202,11 +202,11 @@ struct ChatOverlayMessagesView: View {
 
     @State private var isScrollViewVisible = true
     @State private var scrollSuppressionCount = 0
-    @State private var containerHeight: CGFloat = 300
 
     private var isScrollSuppressed: Bool { scrollSuppressionCount > 0 }
 
     var body: some View {
+        GeometryReader { geo in
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -217,17 +217,12 @@ struct ChatOverlayMessagesView: View {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: containerHeight, alignment: .bottom)
+                .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .bottom)
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xxs)
             }
             .defaultScrollAnchor(.bottom)
             .scrollIndicators(.hidden)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                if newHeight > 0 { containerHeight = newHeight }
-            }
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 let maxScrollY = geometry.contentSize.height - geometry.containerSize.height
                 guard maxScrollY > 0 else { return true }
@@ -242,7 +237,6 @@ struct ChatOverlayMessagesView: View {
             }
             .onAppear {
                 isScrollViewVisible = true
-                overlayScrollToLatest(proxy: proxy)
             }
             .onDisappear {
                 isScrollViewVisible = false
@@ -250,7 +244,7 @@ struct ChatOverlayMessagesView: View {
             .onChange(of: viewModel?.messages.last?.id) { _, _ in
                 guard viewModel?.isAutoScrollEnabled == true,
                       viewModel?.isReplayMode != true else { return }
-                overlayScrollToLatest(proxy: proxy)
+                overlayStickyScroll(proxy: proxy)
             }
             // 리플레이 모드 표시 (간소화)
             .overlay(alignment: .bottom) {
@@ -276,20 +270,31 @@ struct ChatOverlayMessagesView: View {
                     .padding(.bottom, 4)
                 }
             }
-        }
+        } // ScrollViewReader
+        } // GeometryReader
     }
 
     // MARK: - Scroll Helpers
 
+    /// 새 메시지 도착 시 — defaultScrollAnchor(.bottom)에 위임
+    /// proxy.scrollTo 없이 suppression만 걸어 geometry 변경에 의한 false replay 방지
+    private func overlayStickyScroll(proxy: ScrollViewProxy) {
+        guard viewModel?.messages.last?.id != nil else { return }
+        scrollSuppressionCount += 1
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(60))
+            self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
+        }
+    }
+
+    /// 사용자 액션(리플레이 해제 등) — 치지직 웹처럼 애니메이션 없이 즉시 이동
     private func overlayScrollToLatest(proxy: ScrollViewProxy) {
         guard let lastId = viewModel?.messages.last?.id else { return }
         viewModel?.cancelReplayDebounce()
         scrollSuppressionCount += 1
-        withAnimation(DesignTokens.Animation.chatScroll) {
-            proxy.scrollTo(lastId, anchor: .bottom)
-        }
+        proxy.scrollTo(lastId, anchor: .bottom)
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: .milliseconds(60))
             self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }
     }

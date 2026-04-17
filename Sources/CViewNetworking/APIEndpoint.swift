@@ -69,7 +69,7 @@ public enum ChzzkEndpoint: EndpointProtocol, Sendable {
         case .chatAccessToken(let id):
             "/polling/v3/channels/\(id)/access-token"
         case .vodList(let id, _, _):
-            "/service/v3/channels/\(id)/videos"
+            "/service/v1/channels/\(id)/videos"
         case .vodDetail(let videoNo):
             "/service/v3/videos/\(videoNo)"
         case .clipList(let id, _, _):
@@ -115,14 +115,11 @@ public enum ChzzkEndpoint: EndpointProtocol, Sendable {
     public var queryItems: [URLQueryItem]? {
         switch self {
         case .following(let size, let page):
-            var items = [
+            return [
                 URLQueryItem(name: "size", value: "\(size)"),
-                URLQueryItem(name: "sortType", value: "FOLLOW")
+                URLQueryItem(name: "sortType", value: "FOLLOW"),
+                URLQueryItem(name: "page", value: "\(page)")
             ]
-            if page > 0 {
-                items.append(URLQueryItem(name: "page", value: "\(page)"))
-            }
-            return items
         case .searchChannel(let keyword, let offset, let size),
              .searchLive(let keyword, let offset, let size),
              .searchVideo(let keyword, let offset, let size):

@@ -58,15 +58,15 @@ struct MultiLiveView: View {
                         })
                     } else {
                         // [VLC 안정성] ForEach + opacity 전환 — drawable 연결 유지
+                        // 개별 pane의 .transaction으로 VLC NSView 애니메이션 차단
                         ForEach(manager.sessions) { session in
                             let isActive = session.id == manager.selectedSessionId
-                            MLPlayerPane(session: session, appState: appState, isActive: isActive)
+                            MLPlayerPane(session: session, manager: manager, appState: appState, isActive: isActive)
                                 .opacity(isActive ? 1 : 0)
                                 .zIndex(isActive ? 1 : 0)
                                 .allowsHitTesting(isActive)
                                 .transaction { $0.animation = nil }
                         }
-                        .animation(nil, value: manager.sessions.count)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -9,13 +9,13 @@ extension FollowingView {
     // MARK: - Header Section (모던 리디자인)
 
     var headerSection: some View {
-        VStack(alignment: .leading, spacing: layout.sizeClass == .ultraCompact ? 6 : DesignTokens.Spacing.md) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             // 상단: 타이틀 + 액션
             HStack(alignment: .center, spacing: DesignTokens.Spacing.sm) {
                 // 타이틀 + 라이브 배지 — 축소 가능하도록 fixedSize 제한
                 HStack(spacing: 6) {
                     Text("팔로잉")
-                        .font(.system(size: layout.sizeClass == .ultraCompact ? 18 : 26, weight: .bold, design: .rounded))
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
@@ -43,13 +43,11 @@ extension FollowingView {
                 headerActionButtons
             }
 
-            // 하단: 스탯 배지 (narrow이 아닐 때만 별도 행)
-            if !layout.sizeClass.isNarrow {
-                headerStatBadges
-            }
+            // 하단: 스탯 배지
+            headerStatBadges
         }
-        .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)
-        .padding(.vertical, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, DesignTokens.Spacing.lg)
     }
 
     /// 헤더 통계 배지 (채널수, 라이브수, 시청자수) — 경량 인라인 배지
@@ -102,7 +100,7 @@ extension FollowingView {
 
     /// 헤더 액션 버튼 그룹
     var headerActionButtons: some View {
-        HStack(spacing: layout.sizeClass == .ultraCompact ? 4 : DesignTokens.Spacing.xs) {
+        HStack(spacing: DesignTokens.Spacing.xs) {
             // 새로고침
             Button {
                 Task { await viewModel.loadFollowingChannels() }
@@ -126,10 +124,8 @@ extension FollowingView {
                 HStack(spacing: 4) {
                     Image(systemName: "rectangle.split.2x2")
                         .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    if layout.sizeClass == .regular || layout.sizeClass == .expanded {
-                        Text("멀티라이브")
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    }
+                    Text("멀티라이브")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     if !multiLiveManager.sessions.isEmpty {
                         Text("\(multiLiveManager.sessions.count)/\(multiLiveManager.effectiveMaxSessions)")
                             .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .rounded))
@@ -139,7 +135,7 @@ extension FollowingView {
                     }
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, layout.sizeClass.isNarrow ? 8 : 12)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
@@ -160,10 +156,8 @@ extension FollowingView {
                 HStack(spacing: 4) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    if layout.sizeClass == .regular || layout.sizeClass == .expanded {
-                        Text("멀티채팅")
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    }
+                    Text("멀티채팅")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     if !chatSessionManager.sessions.isEmpty {
                         Text("\(chatSessionManager.sessions.count)")
                             .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .rounded))
@@ -173,7 +167,7 @@ extension FollowingView {
                     }
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, layout.sizeClass.isNarrow ? 8 : 12)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
@@ -184,46 +178,6 @@ extension FollowingView {
             }
             .buttonStyle(.plain)
             .help(showMultiChat ? "멀티채팅 닫기" : "멀티채팅 열기")
-
-            if showMultiLive || showMultiChat {
-                // 레이아웃 프리셋 메뉴
-                Menu {
-                    ForEach(LayoutPreset.allCases) { preset in
-                        Button {
-                            withAnimation(DesignTokens.Animation.snappy) {
-                                ps.applyPreset(preset)
-                            }
-                        } label: {
-                            Label(preset.rawValue, systemImage: preset.icon)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "rectangle.3.group")
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
-                        )
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("레이아웃 프리셋")
-
-                Button {
-                    withAnimation(DesignTokens.Animation.snappy) {
-                        hideFollowingList.toggle()
-                    }
-                } label: {
-                Image(systemName: hideFollowingList ? "sidebar.trailing" : "sidebar.squares.trailing")
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                .buttonStyle(IconButtonStyle())
-                .help(hideFollowingList ? "라이브 목록 보이기 (⌘\\)" : "라이브 목록 숨기기 (⌘\\)")
-                .transition(.opacity)
-            }
         }
     }
 
@@ -239,26 +193,13 @@ extension FollowingView {
     }
 
     var searchAndFilterCard: some View {
-        Group {
-            if layout.sizeClass == .ultraCompact {
-                VStack(spacing: DesignTokens.Spacing.xs) {
-                    searchBarContent
-                    HStack(spacing: DesignTokens.Spacing.xs) {
-                        filterSegmentContent
-                        sortMenuButton
-                        if activeFilterCount > 0 { activeFilterBadge }
-                    }
-                }
-            } else {
-                HStack(spacing: DesignTokens.Spacing.sm) {
-                    searchBarContent
-                    filterSegmentContent
-                    sortMenuButton
-                    if activeFilterCount > 0 { activeFilterBadge }
-                }
-            }
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            searchBarContent
+            filterSegmentContent
+            sortMenuButton
+            if activeFilterCount > 0 { activeFilterBadge }
         }
-        .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.lg)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
     }
 
     /// 활성 필터 배지 — 클릭 시 모든 필터 초기화
@@ -302,7 +243,7 @@ extension FollowingView {
 
             TextField("채널, 방송 제목, 카테고리 검색...", text: $searchText)
                 .textFieldStyle(.plain)
-                .font(DesignTokens.Typography.custom(size: layout.sizeClass == .ultraCompact ? 12 : 13))
+                .font(DesignTokens.Typography.custom(size: 13))
                 .focused($isSearchFocused)
 
             if !searchText.isEmpty {
@@ -318,7 +259,7 @@ extension FollowingView {
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, layout.sizeClass == .ultraCompact ? 7 : 9)
+        .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                 .fill(DesignTokens.Colors.surfaceBase.opacity(0.85))
@@ -328,8 +269,8 @@ extension FollowingView {
                 .strokeBorder(
                     isSearchFocused
                         ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
-                        : Color.clear,
-                    lineWidth: isSearchFocused ? 1.5 : 0
+                        : DesignTokens.Colors.surfaceElevated.opacity(0.4),
+                    lineWidth: isSearchFocused ? 1.5 : 0.5
                 )
         )
         .animation(DesignTokens.Animation.micro, value: isSearchFocused)
@@ -364,6 +305,10 @@ extension FollowingView {
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                 .fill(DesignTokens.Colors.surfaceBase.opacity(0.7))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
+                .strokeBorder(DesignTokens.Colors.surfaceElevated.opacity(0.5), lineWidth: 0.5)
         )
     }
 

@@ -30,6 +30,12 @@ final class AppState {
     /// 커맨드 팔레트 표시 여부 (⌘K)
     var showCommandPalette = false
 
+    /// 키보드 단축키 도움말 시트 표시 여부
+    var showKeyboardShortcutsHelp = false
+
+    /// CView 정보 패널 표시 여부
+    var showAboutPanel = false
+
     /// 앱이 현재 활성 상태(포커스)인지 여부
     var isAppActive: Bool = true
 

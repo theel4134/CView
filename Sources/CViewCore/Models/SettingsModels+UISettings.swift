@@ -304,13 +304,41 @@ public struct SavedChatSession: Codable, Sendable, Equatable, Hashable {
 public struct MultiChatSettings: Codable, Sendable, Equatable {
     public var savedSessions: [SavedChatSession]
     public var selectedChannelId: String?
+    public var gridHorizontalRatio: CGFloat
+    public var gridVerticalRatio: CGFloat
+    /// 멀티채팅 패널의 앱 창 너비 대비 비율 (0.15 ~ 0.50, 기본 0.25)
+    public var panelWidthRatio: CGFloat
 
     public init(
         savedSessions: [SavedChatSession] = [],
-        selectedChannelId: String? = nil
+        selectedChannelId: String? = nil,
+        gridHorizontalRatio: CGFloat = 0.5,
+        gridVerticalRatio: CGFloat = 0.5,
+        panelWidthRatio: CGFloat = 0.25
     ) {
         self.savedSessions = savedSessions
         self.selectedChannelId = selectedChannelId
+        self.gridHorizontalRatio = gridHorizontalRatio
+        self.gridVerticalRatio = gridVerticalRatio
+        self.panelWidthRatio = panelWidthRatio
+    }
+
+    // 기존 저장 데이터(panelWidthRatio 미포함)와의 호환을 위해 커스텀 디코더 제공
+    private enum CodingKeys: String, CodingKey {
+        case savedSessions
+        case selectedChannelId
+        case gridHorizontalRatio
+        case gridVerticalRatio
+        case panelWidthRatio
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.savedSessions = try c.decodeIfPresent([SavedChatSession].self, forKey: .savedSessions) ?? []
+        self.selectedChannelId = try c.decodeIfPresent(String.self, forKey: .selectedChannelId)
+        self.gridHorizontalRatio = try c.decodeIfPresent(CGFloat.self, forKey: .gridHorizontalRatio) ?? 0.5
+        self.gridVerticalRatio = try c.decodeIfPresent(CGFloat.self, forKey: .gridVerticalRatio) ?? 0.5
+        self.panelWidthRatio = try c.decodeIfPresent(CGFloat.self, forKey: .panelWidthRatio) ?? 0.25
     }
 
     public static let `default` = MultiChatSettings()

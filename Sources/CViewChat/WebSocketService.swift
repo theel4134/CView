@@ -114,7 +114,13 @@ public actor WebSocketService {
         }
         
         updateState(.connecting)
-        
+
+        // [Fix] connect() 재호출 시 좌비 세션/webSocket 정리 — 중첩 재연결 시 누수 방지
+        webSocket?.cancel(with: .goingAway, reason: nil)
+        webSocket = nil
+        session?.invalidateAndCancel()
+        session = nil
+
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.waitsForConnectivity = true
         sessionConfig.timeoutIntervalForRequest = WSDefaults.requestTimeout

@@ -117,6 +117,7 @@ final class MultiLiveSession: Identifiable {
 
     /// 파라미터 없는 start — storedApiClient/storedAppState 사용 (MultiLiveManager 호환)
     func start() async {
+        guard loadState != .loading else { return }
         guard let apiClient = storedApiClient else {
             loadState = .error("API 클라이언트 없음")
             return
@@ -167,37 +168,35 @@ final class MultiLiveSession: Identifiable {
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             let _forwarder = metricsForwarder
             let sessionChannelId = channelId
+            // [Fix 24F] 콜백당 2개 Task → 1개로 통합 (4세션 × 2초 = 초당 4 Task 절약)
             playerViewModel.setVLCMetricsCallback { [weak self] metrics in
-                Task {
-                    await _forwarder?.updateVLCMetrics(metrics, forChannel: sessionChannelId)
-                }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                    await _forwarder?.updateVLCMetrics(metrics, forChannel: sessionChannelId)
                 }
             }
 
             // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
+            // [Fix 24F] 콜백당 2개 Task → 1개로 통합
             playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
-                Task {
-                    await _forwarder?.updateAVPlayerMetrics(metrics, forChannel: sessionChannelId)
-                }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestAVMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                    await _forwarder?.updateAVPlayerMetrics(metrics, forChannel: sessionChannelId)
                 }
             }
 
             // HLS.js 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
+            // [Fix 24F] 콜백당 2개 Task → 1개로 통합
             playerViewModel.setHLSJSMetricsCallback { [weak self] metrics in
-                Task {
-                    await _forwarder?.updateHLSJSMetrics(metrics, forChannel: sessionChannelId)
-                }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestHLSJSMetrics = metrics
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                    await _forwarder?.updateHLSJSMetrics(metrics, forChannel: sessionChannelId)
                 }
             }
 
@@ -211,6 +210,16 @@ final class MultiLiveSession: Identifiable {
                         Task { @MainActor in
                             _playerVM?.applySyncSpeed(speed)
                         }
+                    }
+                    // [Fix 20] PID 활성 상태 콜백 — PID 능동 제어 중이면 서버 추천 무시
+                    await _forwarder?.setPIDActiveCallback { [weak _playerVM] in
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return false }
+                        return await coord.lowLatencyController?.isPIDActive ?? false
+                    }
+                    // [Fix 20 Phase3] PID 현재 배율 콜백 — Rate Arbiter 통합 속도 결정
+                    await _forwarder?.setPIDCurrentRateCallback { [weak _playerVM] in
+                        guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 1.0 }
+                        return await coord.lowLatencyController?.currentRate ?? 1.0
                     }
                     // VLC 엔진의 liveCaching 값을 targetLatency로 전달
                     if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
@@ -347,6 +356,8 @@ final class MultiLiveSession: Identifiable {
                 lowLatency: ps.lowLatencyMode,
                 catchupRate: ps.catchupRate
             )
+            playerViewModel.applyForceHighestQuality(ps.forceHighestQuality)
+            playerViewModel.applySharpPixelScaling(ps.sharpPixelScaling)
             playerViewModel.applyMultiLiveConstraints(paneCount: paneCount)
 
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
@@ -383,6 +394,7 @@ final class MultiLiveSession: Identifiable {
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestHLSJSMetrics = metrics
+                    self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
                 }
             }
 
@@ -490,6 +502,10 @@ final class MultiLiveSession: Identifiable {
         refreshTask?.cancel(); refreshTask = nil
         offlineRetryTask?.cancel(); offlineRetryTask = nil
         chatConnectionTask?.cancel(); chatConnectionTask = nil
+        // [장시간 안정성] 메트릭 콜백 해제 — 해제된 세션에서 fire-and-forget Task 생성 방지
+        playerViewModel.setVLCMetricsCallback(nil)
+        playerViewModel.setAVPlayerMetricsCallback(nil)
+        playerViewModel.setHLSJSMetricsCallback(nil)
         // 메트릭 포워더 채널 해제 — 주 채널이면 비활성화, 부가 채널이면 등록 해제
         if await metricsForwarder?.currentChannelId == channelId {
             await metricsForwarder?.deactivateCurrentChannel()
@@ -501,10 +517,16 @@ final class MultiLiveSession: Identifiable {
         loadState = .idle
         latestMetrics = nil
         latestAVMetrics = nil
+        latestHLSJSMetrics = nil
         latestProxyStats = nil
     }
 
     func retry(using apiClient: ChzzkAPIClient, appState: AppState) async {
+        // [장시간 안정성] 재시도 전 기존 리소스 정리 — 중복 연결 방지
+        offlineRetryTask?.cancel(); offlineRetryTask = nil
+        chatConnectionTask?.cancel(); chatConnectionTask = nil
+        await playerViewModel.stopStream()
+        await chatViewModel.disconnect()
         loadState = .idle
         isOffline = false
         await start(using: apiClient, appState: appState)
@@ -533,38 +555,36 @@ final class MultiLiveSession: Identifiable {
     private func startPolling(apiClient: ChzzkAPIClient, appState: AppState) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
-            guard let self else { return }
             var consecutiveErrors = 0
             var totalRetries = 0
             let maxTotalRetries = 10
             do {
                 while !Task.isCancelled {
-                    let interval: Duration = self.isBackground ? .seconds(60) : .seconds(30)
+                    // [장시간 안정성] sleep 전에는 weak 접근만 — sleep 중 세션 해제 허용
+                    let interval: Duration = (self?.isBackground ?? false) ? .seconds(60) : .seconds(30)
                     try await Task.sleep(for: interval)
-                    guard !Task.isCancelled else { break }
+                    guard !Task.isCancelled, let self else { break }
 
                     // 방송 상태 폴링
                     do {
                         let status = try await apiClient.liveStatus(channelId: self.channelId)
-                        await MainActor.run {
-                            self.viewerCount = status.concurrentUserCount
-                            if status.status == .close {
-                                if !self.isOffline {
-                                    self.isOffline = true
-                                    self.loadState = .offline
-                                    Task { await self.playerViewModel.stopStream() }
-                                    // 오프라인 감지 → 2분 후 자동 재시도
-                                    self.offlineRetryTask?.cancel()
-                                    self.offlineRetryTask = Task { [weak self] in
-                                        guard let self else { return }
-                                        try? await Task.sleep(for: .seconds(120))
-                                        guard !Task.isCancelled, self.isOffline else { return }
-                                        await self.retry(using: apiClient, appState: appState)
-                                    }
+                        self.viewerCount = status.concurrentUserCount
+                        if status.status == .close {
+                            if !self.isOffline {
+                                self.isOffline = true
+                                self.loadState = .offline
+                                Task { await self.playerViewModel.stopStream() }
+                                // 오프라인 감지 → 2분 후 자동 재시도
+                                self.offlineRetryTask?.cancel()
+                                self.offlineRetryTask = Task { [weak self] in
+                                    guard let self else { return }
+                                    try? await Task.sleep(for: .seconds(120))
+                                    guard !Task.isCancelled, self.isOffline else { return }
+                                    await self.retry(using: apiClient, appState: appState)
                                 }
-                            } else {
-                                self.isOffline = false
                             }
+                        } else {
+                            self.isOffline = false
                         }
                     } catch {
                         Log.network.debug("멀티라이브 상태 폴링 실패 channelId=\(self.channelId, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -572,9 +592,7 @@ final class MultiLiveSession: Identifiable {
 
                     // VLC 엔진 헬스 체크 (오프라인 아닐 때)
                     guard !self.isOffline else { consecutiveErrors = 0; continue }
-                    let inError = await MainActor.run {
-                        self.playerViewModel.playerEngine?.isInErrorState ?? false
-                    }
+                    let inError = self.playerViewModel.playerEngine?.isInErrorState ?? false
                     if inError {
                         consecutiveErrors += 1
                         Log.player.warning("멀티라이브 엔진 ERROR (\(consecutiveErrors)연속) channelId=\(self.channelId, privacy: .public)")
@@ -583,7 +601,7 @@ final class MultiLiveSession: Identifiable {
                             totalRetries += 1
                             if totalRetries > maxTotalRetries {
                                 Log.player.error("멀티라이브 최대 재시도 초과(\(maxTotalRetries)회) — 재시도 중단 channelId=\(self.channelId, privacy: .public)")
-                                await MainActor.run { self.loadState = .error("재시도 한도 초과") }
+                                self.loadState = .error("재시도 한도 초과")
                                 break
                             }
                             await self.retry(using: apiClient, appState: appState)
@@ -604,16 +622,17 @@ final class MultiLiveSession: Identifiable {
     private func scheduleProactiveRefresh(apiClient: ChzzkAPIClient, appState: AppState) {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
-            guard let self else { return }
             do {
                 try await Task.sleep(for: .seconds(55 * 60))
                 while !Task.isCancelled {
-                    if self.isOffline {
+                    // [장시간 안정성] sleep 전에는 weak 접근만
+                    if self?.isOffline ?? true {
                         try await Task.sleep(for: .seconds(60))
                         continue
                     }
+                    guard let self else { break }
                     Log.player.info("멀티라이브 주기적 URL 재취득 — CDN 토큰 만료 예방 channelId=\(self.channelId, privacy: .public)")
-                    await MainActor.run { self.playerViewModel.playerEngine?.resetRetries() }
+                    self.playerViewModel.playerEngine?.resetRetries()
                     await self.retry(using: apiClient, appState: appState)
                     try await Task.sleep(for: .seconds(55 * 60))
                 }

@@ -59,11 +59,12 @@ extension StreamCoordinator {
                     let target = sortedVariants.first(where: { $0.resolution.contains("1080") })
                         ?? sortedVariants.first
 
-                    // ABR 레벨 설정 (프리페치 경로에서도 필요)
-                    await abrController?.setLevels(prefetchedMaster.variants)
-
-                    // CDN 워밍만 비동기 실행 (variant 해석은 이미 완료)
-                    await warmUpCDNConnection(url: url)
+                    // ABR 레벨 설정 + CDN 워밍 병렬 실행 (독립 작업)
+                    async let levelsTask: Void = {
+                        await abrController?.setLevels(prefetchedMaster.variants)
+                    }()
+                    async let warmUpTask: Void = warmUpCDNConnection(url: url)
+                    _ = await (levelsTask, warmUpTask)
 
                     if let variant = target {
                         _currentVariantURL = variant.uri
@@ -112,7 +113,21 @@ extension StreamCoordinator {
                     await resolveAVPlayerManifest(from: url)
                 }
 
-                if _isProxyActive {
+                // [Quality Lock] AVPlayer 의 내장 ABR 은 preferredPeakBitRate/Resolution 을
+                // **상한** 으로만 취급하므로, 초기 대역폭 추정이 보수적이면 480p 변종으로 고정된다.
+                // 화질 잠금(forceHighestQuality=true) 모드에서는 1080p60 variant URL 을 직접 전달하여
+                // AVPlayer ABR 을 우회하고 1080p 를 항상 유지한다.
+                let isAVPlayer = playerEngine is AVPlayerEngine
+                if isAVPlayer,
+                   config.forceHighestQuality,
+                   let variant = _preferredQualityVariant {
+                    _currentVariantURL = variant.uri
+                    playbackURL = _isProxyActive
+                        ? streamProxy.proxyURL(from: variant.uri)
+                        : variant.uri
+                    let fpsStr = variant.frameRate.map { "\(Int($0))fps" } ?? ""
+                    logger.info("AVPlayer: [Quality Lock] variant URL 직접 전달 → \(variant.qualityLabel) \(fpsStr) (\(variant.bandwidth / 1000)kbps)")
+                } else if _isProxyActive {
                     playbackURL = streamProxy.proxyURL(from: url)
                 }
             }
@@ -286,6 +301,9 @@ extension StreamCoordinator {
         _isQualityDegraded = false
         _qualityRecoveryTask?.cancel()
         _qualityRecoveryTask = nil
+        _qualityProbeTask?.cancel()
+        _qualityProbeTask = nil
+        _userSelectedVariant = nil  // [Fix 27] 사용자 화질 잠금 해제
         _manifestRefreshTask?.cancel()
         _manifestRefreshTask = nil
         _currentVariantURL = nil
@@ -349,6 +367,13 @@ extension StreamCoordinator {
         guard let engine = playerEngine else { return }
 
         let playURL = _isProxyActive ? streamProxy.proxyURL(from: variant.uri) : variant.uri
+
+        // [Fix 28] 재연결/매니페스트 갱신 시 사용자가 선택한 화질을 유지하도록
+        // 현재 variant URL과 preferred variant를 모두 갱신한다.
+        // 기존: switchQuality 이후에도 _currentVariantURL은 최초 1080p URL을 유지 →
+        // 네트워크 블립·워치독 등으로 재연결되면 사용자가 선택한 720p 등이 날아감.
+        _currentVariantURL = variant.uri
+        _preferredQualityVariant = variant
 
         try await engine.play(url: playURL)
 

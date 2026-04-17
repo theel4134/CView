@@ -28,7 +28,6 @@
 		A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */; };
 		A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */; };
 		A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */; };
-			A1B2C3D4E5F60006BB660001 /* Sources/CViewApp/Views/ResizeDivider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60006AA660001 /* Sources/CViewApp/Views/ResizeDivider.swift */; };
 		A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */; };
              A1B2C3D4E5F60002BB220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift */; };
 		A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */; };
@@ -130,6 +129,10 @@
 		FF11223344556677AABB0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0047 /* Sources/CViewApp/Views/FollowingView+MultiChat.swift */; };
 		FF11223344556677AABB0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0048 /* Sources/CViewApp/ViewModels/ChatTTSService.swift */; };
 		FF11223344556677AABB0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0049 /* Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift */; };			FF33445566778899AB010001 /* Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF33445566778899CD010001 /* Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift */; };		FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */; };
+		AA00112233445566AABB0001 /* Sources/CViewApp/Views/MLNetworkWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0001 /* Sources/CViewApp/Views/MLNetworkWindowView.swift */; };
+		AA00112233445566AABB0002 /* Sources/CViewApp/Views/MLMetricsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0002 /* Sources/CViewApp/Views/MLMetricsWindowView.swift */; };
+		AA00112233445566AABB0003 /* Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0003 /* Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift */; };
+		AA00112233445566AABB0004 /* Sources/CViewApp/Views/AboutPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0004 /* Sources/CViewApp/Views/AboutPanelView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -159,7 +162,6 @@
 		A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MetricsForwardingStatusView.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LatencySettingsContent.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingView.swift; sourceTree = SOURCE_ROOT; };
-			A1B2C3D4E5F60006AA660001 /* Sources/CViewApp/Views/ResizeDivider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ResizeDivider.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220002 /* Sources/CViewApp/Views/FollowingCardViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingCardViews.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220003 /* Sources/CViewApp/Views/SharedEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SharedEffects.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220004 /* Sources/CViewApp/Views/ErrorStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ErrorStateView.swift; sourceTree = SOURCE_ROOT; };
@@ -251,6 +253,10 @@
 		FF11223344556677CCDD0047 /* FollowingView+MultiChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/FollowingView+MultiChat.swift"; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0048 /* ChatTTSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ChatTTSService.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0049 /* ChatViewModel+Autocomplete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/ChatViewModel+Autocomplete.swift"; sourceTree = SOURCE_ROOT; };			FF33445566778899CD010001 /* ChatViewModel+Processing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/ViewModels/ChatViewModel+Processing.swift"; sourceTree = SOURCE_ROOT; };		FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamAlertOverlayView.swift; sourceTree = SOURCE_ROOT; };
+		AA00112233445566CCDD0001 /* Sources/CViewApp/Views/MLNetworkWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLNetworkWindowView.swift; sourceTree = SOURCE_ROOT; };
+		AA00112233445566CCDD0002 /* Sources/CViewApp/Views/MLMetricsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLMetricsWindowView.swift; sourceTree = SOURCE_ROOT; };
+		AA00112233445566CCDD0003 /* Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift; sourceTree = SOURCE_ROOT; };
+		AA00112233445566CCDD0004 /* Sources/CViewApp/Views/AboutPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/AboutPanelView.swift; sourceTree = SOURCE_ROOT; };
             A1B2C3D4E5F60002AA220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ResponsiveFollowingLayout.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -402,7 +408,6 @@
 				A1B2C3D4E5F60001AA110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift */,
 				A1B2C3D4E5F60001AA110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift */,
 				A1B2C3D4E5F60002AA220001 /* Sources/CViewApp/Views/FollowingView.swift */,
-						A1B2C3D4E5F60006AA660001 /* Sources/CViewApp/Views/ResizeDivider.swift */,
 				FF11223344556677CCDD0044 /* Sources/CViewApp/Views/FollowingView+Header.swift */,
 				FF11223344556677CCDD0045 /* Sources/CViewApp/Views/FollowingView+List.swift */,
 				FF11223344556677CCDD0046 /* Sources/CViewApp/Views/FollowingView+MultiLive.swift */,
@@ -418,6 +423,10 @@
 				A1B2C3D4E5F60005AA550001 /* Sources/CViewApp/Views/CommandPaletteView.swift */,
 				A1B2C3D4E5F60005AA550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift */,
 				FF22334455667788CCDD0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift */,
+				AA00112233445566CCDD0001 /* Sources/CViewApp/Views/MLNetworkWindowView.swift */,
+				AA00112233445566CCDD0002 /* Sources/CViewApp/Views/MLMetricsWindowView.swift */,
+				AA00112233445566CCDD0003 /* Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift */,
+				AA00112233445566CCDD0004 /* Sources/CViewApp/Views/AboutPanelView.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -693,7 +702,6 @@
 				A1B2C3D4E5F60001BB110007 /* Sources/CViewApp/Views/MetricsSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110008 /* Sources/CViewApp/Views/MultiLiveSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110009 /* Sources/CViewApp/Views/MetricsForwardingStatusView.swift in Sources */,					A1B2C3D4E5F60001BB110010 /* Sources/CViewApp/Views/LatencySettingsContent.swift in Sources */,				A1B2C3D4E5F60002BB220001 /* Sources/CViewApp/Views/FollowingView.swift in Sources */,
-						A1B2C3D4E5F60006BB660001 /* Sources/CViewApp/Views/ResizeDivider.swift in Sources */,
 				A1B2C3D4E5F60002BB220002 /* Sources/CViewApp/Views/FollowingCardViews.swift in Sources */,
 				A1B2C3D4E5F60002BB220099 /* Sources/CViewApp/Views/ResponsiveFollowingLayout.swift in Sources */,
 				A1B2C3D4E5F60002BB220003 /* Sources/CViewApp/Views/SharedEffects.swift in Sources */,
@@ -710,6 +718,10 @@
 				A1B2C3D4E5F60005BB550001 /* Sources/CViewApp/Views/CommandPaletteView.swift in Sources */,
 				A1B2C3D4E5F60005BB550004 /* Sources/CViewApp/Views/StatisticsDetailViews.swift in Sources */,
 				FF22334455667788AABB0100 /* Sources/CViewApp/Views/StreamAlertOverlayView.swift in Sources */,
+				AA00112233445566AABB0001 /* Sources/CViewApp/Views/MLNetworkWindowView.swift in Sources */,
+				AA00112233445566AABB0002 /* Sources/CViewApp/Views/MLMetricsWindowView.swift in Sources */,
+				AA00112233445566AABB0003 /* Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift in Sources */,
+				AA00112233445566AABB0004 /* Sources/CViewApp/Views/AboutPanelView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

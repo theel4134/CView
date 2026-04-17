@@ -137,23 +137,13 @@ public final class PlayerContainerView: NSView {
         videoView.frame = bounds
         videoView.autoresizingMask = [.width, .height]
 
-        // VLCLayerHostView — VLC가 생성한 렌더링 서브뷰 포함 클리핑
+        // VLCLayerHostView — masksToBounds로 오버플로 클리핑 보장
         if let sublayer = videoView.layer {
             sublayer.masksToBounds = true
             sublayer.frame = bounds
-            // VLC 내부 렌더링 서브레이어까지 클리핑 강제
-            if let children = sublayer.sublayers {
-                for child in children {
-                    child.masksToBounds = true
-                    child.frame = bounds
-                }
-            }
-        }
-        // VLC 내부 서브뷰(렌더링 서피스) 클리핑
-        for child in videoView.subviews {
-            child.frame = bounds
-            child.layer?.masksToBounds = true
-            child.layer?.frame = bounds
+            // [플리커 방지] VLC 내부 렌더링 서브레이어/서브뷰의 frame은 VLC가 자체 관리.
+            // 외부에서 CAMetalLayer frame을 강제 설정하면 VLC Metal 렌더 스레드와
+            // 충돌하여 깜빡임을 유발. autoresizingMask가 자동 전파.
         }
 
         currentSubview = videoView
@@ -172,21 +162,14 @@ public final class PlayerContainerView: NSView {
         // playerView가 새 PlayerContainerView에 마운트된다. VLC의 Metal 렌더링 서피스는
         // 이전 레이어 계층에 바인딩되어 있으므로, drawable을 재설정하여 새 레이어 계층에서
         // vout을 재생성시킨다.
-        // [멀티라이브 그리드 안정화] 세션이 순차 추가되면 그리드 레이아웃이 여러 번 변경되어
-        // PlayerContainerView가 반복 재생성된다. progressive retry로 최종 레이아웃 안정 후
-        // drawable이 올바르게 바인딩되도록 보장.
+        // [플리커 방지] CATransaction 커밋 직후 동기 실행 — asyncAfter(.now()) 대비
+        // 1프레임 지연 동안 구 레이어에 렌더링되는 깜빡임 제거.
         if let vlcView = videoView as? VLCLayerHostView,
-           let player = vlcView.boundPlayer {
-            // 뷰가 새 컨테이너로 이동 시 drawable 즉시 재바인딩
-            // VLC가 새 레이어 계층에서 vout을 재생성하도록 함
-            // 200ms/800ms 지연 복구는 초기 vout 생성을 방해하므로 제거
-            DispatchQueue.main.asyncAfter(deadline: .now()) { [weak vlcView, weak player] in
-                guard let vlcView, let player, vlcView.window != nil else { return }
-                let state = player.state
-                guard state != .stopped && state != .stopping else { return }
-                player.drawable = nil
-                player.drawable = vlcView
-            }
+           let engine = vlcView.boundEngine {
+            guard engine.playerView.window != nil else { return }
+            let state = engine.mediaPlayer.state
+            guard state != .stopped && state != .stopping else { return }
+            engine.refreshDrawable(force: true)
         }
     }
 
@@ -234,24 +217,15 @@ public final class PlayerContainerView: NSView {
         let b = bounds
         currentSubview?.frame = b
 
-        // [클리핑 강제] VLC 렌더링 레이어가 컨테이너 밖으로 넘치지 않도록
-        // 모든 서브뷰 + 서브레이어에 masksToBounds 재적용
+        // [클리핑 강제] 컨테이너 + 서브뷰 레이어에 masksToBounds 재적용
         layer?.masksToBounds = true
         if let subview = currentSubview {
             subview.layer?.frame = b
             subview.layer?.masksToBounds = true
-            // VLC 내부 렌더링 서브뷰/서브레이어까지 클리핑
-            for child in subview.subviews {
-                child.frame = b
-                child.layer?.frame = b
-                child.layer?.masksToBounds = true
-            }
-            if let sublayers = subview.layer?.sublayers {
-                for sublayer in sublayers {
-                    sublayer.frame = b
-                    sublayer.masksToBounds = true
-                }
-            }
+            // [플리커 방지] VLC 내부 서브뷰/서브레이어의 frame을 직접 조작하지 않음.
+            // VLC가 자체 Metal CAMetalLayer의 frame을 렌더 스레드에서 관리하므로,
+            // 메인 스레드에서 강제 설정하면 렌더 사이클과 충돌하여 깜빡임 발생.
+            // autoresizingMask [.width, .height]가 VLCLayerHostView → 내부 뷰 자동 전파.
         }
         CATransaction.commit()
         isLayingOut = false

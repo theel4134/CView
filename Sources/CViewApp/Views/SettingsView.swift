@@ -94,19 +94,19 @@ struct SettingsView: View {
 
     private var settingsSidebar: some View {
         VStack(spacing: 2) {
-            VStack(spacing: 4) {
+            // 미니멀 헤더
+            HStack(spacing: DesignTokens.Spacing.sm) {
                 Image(systemName: "c.square.fill")
-                    .font(DesignTokens.Typography.custom(size: 24))
+                    .font(DesignTokens.Typography.custom(size: 16))
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                Text("CView")
-                    .font(DesignTokens.Typography.custom(size: 13, weight: .bold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Text("v2.0")
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                    .foregroundStyle(.secondary)
+                Text("CView 설정")
+                    .font(DesignTokens.Typography.custom(size: 13, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.top, DesignTokens.Spacing.lg)
-            .padding(.bottom, DesignTokens.Spacing.md)
+            .padding(.bottom, DesignTokens.Spacing.sm)
 
             Divider()
                 .padding(.horizontal, DesignTokens.Spacing.sm)
@@ -126,7 +126,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Settings Window Tab Button (Cmd+, 윈도우 전용)
+// MARK: - Settings Window Tab Button (macOS System Settings 스타일)
 
 private struct SettingsWindowTabButton: View {
     let tab: AppRouter.SettingsTab
@@ -136,27 +136,23 @@ private struct SettingsWindowTabButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .fill(isSelected ? tab.color : tab.color.opacity(0.15))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: tab.icon)
-                        .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                        .foregroundStyle(isSelected ? .white : tab.color)
-                }
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Image(systemName: tab.icon)
+                    .font(DesignTokens.Typography.custom(size: 14, weight: .medium))
+                    .foregroundStyle(isSelected ? .white : tab.color)
+                    .frame(width: 20)
                 Text(tab.rawValue)
                     .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                    .foregroundStyle(isSelected ? .white : DesignTokens.Colors.textPrimary)
                 Spacer()
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.sm)
+            .padding(.vertical, 6)
             .background(
                 Group {
                     if isSelected {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .fill(Color.primary.opacity(0.1))
+                            .fill(Color.accentColor)
                     } else if isHovered {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .fill(Color.primary.opacity(0.06))

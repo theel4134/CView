@@ -1,15 +1,24 @@
 // MARK: - AVPlayerEngine.swift
-// CViewPlayer - AVPlayer 기반 라이브 스트림 재생 엔진 (고도화)
-// Reference: chzzkView-v1/HLSNativePlayer, StreamReconnectionManager, EnhancedErrorRecoverySystem
+// CViewPlayer - AVPlayer 기반 재생 엔진 (v2 재설계)
 //
-// 분리된 Extension 파일:
-//   - AVPlayerLayerView.swift          — 비디오 렌더링 NSView (Metal Zero-Copy)
-//   - AVPlayerEngine+LiveStream.swift  — 캐치업 설정, 스톨 감지, 네트워크 모니터
-//   - AVPlayerEngine+Observers.swift   — KVO/Notification 옵저버, 메트릭 수집
+// 설계 개요
+//   - 모든 가변 상태를 `Mutex<State>`에 단일 집계
+//   - 옵저버/Task는 각각 ObserverBag / TaskBag에서 일괄 관리 → 누수 차단
+//   - 스톨 감지는 StallWatchdog(+LiveStream) 단일 경로로 통합
+//   - 네트워크 모니터는 전역 싱글톤 공유 (멀티라이브 N개 세션에서 N개 → 1개)
+//   - 에러 분류는 AVPlayerErrorClassifier 순수 함수로 분리
+//
+// 파일 분할
+//   - AVPlayerEngine.swift              ← 본 파일: 프로토콜 구현, 재생 파이프라인
+//   - AVPlayerEngine+Lifecycle.swift    ← ObserverBag / TaskBag
+//   - AVPlayerEngine+Errors.swift       ← 에러 분류기 + URL 판정
+//   - AVPlayerEngine+LiveStream.swift   ← 라이브 캐치업 + 스톨 워치독
+//   - AVPlayerEngine+Observers.swift    ← KVO / Notification / 메트릭 수집
+//   - AVPlayerLayerView.swift           ← Metal Zero-Copy 렌더링 NSView
+//   - AVPlayerNetworkMonitor.swift      ← 공유 NWPathMonitor 싱글톤
 
 import Foundation
 import AVFoundation
-import Network
 import AppKit
 import QuartzCore
 import Synchronization
@@ -17,43 +26,131 @@ import CViewCore
 
 // MARK: - AVPlayerEngine
 
-/// AVPlayer 기반 라이브 스트림 재생 엔진
-/// - 저지연 HLS: automaticallyWaitsToMinimizeStalling = false, configuredTimeOffsetFromLive
-/// - 스톨 워치독: 45초 무응답 → .connectionLost 에러 발생
-/// - 라이브 캐치업: 지연이 maxLatency 초과 시 재생 속도를 최대 1.5배로 조정
-/// - NWPathMonitor: 네트워크 인터페이스에 따라 목표 지연 시간 자동 조정
-/// - 세분화된 에러 분류: AVFoundation 에러 코드 → PlayerError 12종
+/// AVPlayer 기반 라이브/VOD 재생 엔진. `PlayerEngineProtocol` 구현체.
+///
+/// 외부 공개 API(호환성 보장):
+///   - `play(url:)` `pause()` `resume()` `stop()` `seek(to:)` `setRate(_:)` `setVolume(_:)`
+///   - `startRecording(to:)` `stopRecording()` `resetForReuse()`
+///   - 속성: `player`, `videoView`, `isPlaying`, `rate`, `currentTime`, `duration`,
+///           `isRecording`, `isInErrorState`, `isBackgroundMode`, `catchupConfig`, `currentPhase`
+///   - 콜백: `onStateChange`, `onTimeChange`, `onLatencyChange`, `onReconnectRequested`, `onAVMetrics`
+///   - `setVideoLayerVisible(_:)`
 public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Sendable {
 
-    // MARK: - Public Properties
+    // MARK: - Internal State (단일 Mutex로 모든 가변 상태 집계)
 
-    public let player: AVPlayer
-    /// catchupConfig 접근자 — Mutex 경유
-    public var catchupConfig: AVLiveCatchupConfig {
-        get { _avState.withLock { $0.catchupConfig } }
-        set { _avState.withLock { $0.catchupConfig = newValue } }
+    internal struct State: Sendable {
+        // 재생 상태
+        var phase: PlayerState.Phase = .idle
+        var rate: Float = 1.0
+        var volume: Float = 1.0
+        var currentURL: URL? = nil
+        var isLiveStream: Bool = false
+        var lastProgressTime: Date = .init()
+
+        // 라이브 캐치업 — 기본값은 .balanced (7s 버퍼). VLC 수준의 안정성 확보.
+        // .lowLatency(3s 버퍼)는 chzzk 2s 세그먼트 환경에서 지터 한 번에 스톨 유발.
+        var catchupConfig: AVLiveCatchupConfig = .balanced
+        var networkType: AVPlayerNetworkMonitor.InterfaceType = .other
+
+        // 녹화
+        var isRecording: Bool = false
+        var recordingURL: URL? = nil
+
+        // 백그라운드(비활성 멀티라이브 세션)
+        var isBackgroundMode: Bool = false
+
+        // [Quality Lock] 자동 화질 저하 방지 — 항상 lockedResolution / lockedPeakBitRate 유지.
+        // 기본 true: 백그라운드 다운시프트도 무시하고 1080p60 / 8Mbps 고정.
+        var isQualityLocked: Bool = true
+        var lockedPeakBitRate: Double = 8_000_000            // 8000kbps
+        var lockedMaximumResolution: CGSize = CGSize(width: 1920, height: 1080)
+
+        // 선명한 화면(픽셀 샤프 스케일링) 상태 — 새 NSView/PiP 생성 시 재적용용
+        var sharpPixelScalingEnabled: Bool = false
+
+        // 메트릭 스냅샷 (AccessLog + Catchup 공유)
+        var indicatedBitrate: Double = 0
+        var droppedFrames: Int = 0
+        var previousDroppedFrames: Int = 0
+        var measuredLatency: Double = 0
+
+        // 캐치업 속도 스무딩 히스토리 (최대 4개)
+        var rateHistory: [Float] = []
+
+        // 재연결 폭주 방지: 최근 5분 내 재연결 타임스탬프
+        var recentReconnectTimestamps: [Date] = []
     }
 
-    /// State change callback
-    public var onStateChange: (@Sendable (PlayerState.Phase) -> Void)?
-    /// Time change callback (currentTime, duration)
-    public var onTimeChange: (@Sendable (TimeInterval, TimeInterval) -> Void)?
-    /// Latency change callback (latency in seconds)
-    public var onLatencyChange: (@Sendable (Double) -> Void)?
-    /// Reconnection requested callback
-    public var onReconnectRequested: (@Sendable () -> Void)?
+    internal let stateLock = Mutex(State())
 
-    /// AVPlayer 실시간 메트릭 콜백 (10초 주기) — VLC의 onVLCMetrics에 대응
+    // MARK: - Public Properties (PlayerEngineProtocol + AVPlayer 특화)
+
+    public let player: AVPlayer
+
+    /// 라이브 캐치업 설정. 외부에서 프리셋 변경 가능 (.ultraLow / .lowLatency / .balanced / .webSync / .stable).
+    public var catchupConfig: AVLiveCatchupConfig {
+        get { stateLock.withLock { $0.catchupConfig } }
+        set { stateLock.withLock { $0.catchupConfig = newValue } }
+    }
+
+    /// 멀티라이브 비활성(음소거) 세션 CPU 절감 모드.
+    /// - 캐치업 루프/스톨 워치독/주기 time 콜백 전파 중단
+    /// - play() 시점에 480p·2Mbps·10s 버퍼로 다운시프트 (단, `isQualityLocked=true`일 때는 다운시프트 생략)
+    public var isBackgroundMode: Bool {
+        get { stateLock.withLock { $0.isBackgroundMode } }
+        set { stateLock.withLock { $0.isBackgroundMode = newValue } }
+    }
+
+    /// 화질 자동 저하(ABR 다운시프트) 방지 플래그.
+    /// `true`(기본값)이면 `lockedPeakBitRate` / `lockedMaximumResolution` 를 항상 고정 적용하며,
+    /// 배경 모드/네트워크 저하 상황에서도 화질을 낮추지 않는다.
+    /// 라이브 스트리밍 시 항상 1080p60 / 8Mbps 유지가 목표.
+    public var isQualityLocked: Bool {
+        get { stateLock.withLock { $0.isQualityLocked } }
+        set {
+            stateLock.withLock { $0.isQualityLocked = newValue }
+            applyQualityPreferencesToCurrentItem()
+        }
+    }
+
+    /// 잠금 상태에서 적용할 최대 비트레이트(bps). 기본 8_000_000 = 8Mbps.
+    public var lockedPeakBitRate: Double {
+        get { stateLock.withLock { $0.lockedPeakBitRate } }
+        set {
+            stateLock.withLock { $0.lockedPeakBitRate = max(0, newValue) }
+            applyQualityPreferencesToCurrentItem()
+        }
+    }
+
+    /// 잠금 상태에서 적용할 최대 해상도. 기본 1920×1080.
+    public var lockedMaximumResolution: CGSize {
+        get { stateLock.withLock { $0.lockedMaximumResolution } }
+        set {
+            stateLock.withLock { $0.lockedMaximumResolution = newValue }
+            applyQualityPreferencesToCurrentItem()
+        }
+    }
+
+    // MARK: - Callbacks
+
+    public var onStateChange: (@Sendable (PlayerState.Phase) -> Void)?
+    public var onTimeChange: (@Sendable (TimeInterval, TimeInterval) -> Void)?
+    public var onLatencyChange: (@Sendable (Double) -> Void)?
+    public var onReconnectRequested: (@Sendable () -> Void)?
     public var onAVMetrics: (@Sendable (AVPlayerLiveMetrics) -> Void)?
 
-    // MARK: - PlayerEngineProtocol Properties
+    // MARK: - PlayerEngineProtocol 요구사항
 
     public var isPlaying: Bool {
-        _avState.withLock { $0.state == .playing }
+        stateLock.withLock { $0.phase == .playing }
     }
 
     public var isInErrorState: Bool {
-        _avState.withLock { if case .error = $0.state { return true }; return false }
+        stateLock.withLock {
+            if case .error = $0.phase { return true }
+            return false
+        }
     }
 
     public var currentTime: TimeInterval {
@@ -68,440 +165,399 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     }
 
     public var rate: Float {
-        _avState.withLock { $0.rate }
+        stateLock.withLock { $0.rate }
     }
 
-    public var videoView: NSView { _videoView }
+    public var videoView: NSView { renderView }
 
-    // MARK: - Internal State (Extension 파일에서 접근)
-
-    /// Mutex\<AVEngineState\>로 보호되는 변수들 — 여러 스레드/큐에서 동시 접근
-    internal struct AVEngineState: Sendable {
-        var state: PlayerState.Phase = .idle
-        var rate: Float = 1.0
-        var volume: Float = 1.0
-        var currentURL: URL? = nil
-        var catchupConfig: AVLiveCatchupConfig = .webSync
-        var isLiveStream: Bool = false
-        var lastProgressTime: Date = Date()
-        var isRecording: Bool = false
-        var recordingURL: URL? = nil
+    /// 현재 재생 단계 스냅샷 (UI 바인딩용)
+    public var currentPhase: PlayerState.Phase {
+        stateLock.withLock { $0.phase }
     }
-    internal let _avState = Mutex(AVEngineState())
 
-    private let _videoView: AVPlayerLayerView
+    public var isRecording: Bool {
+        stateLock.withLock { $0.isRecording }
+    }
+
+    // MARK: - Private Members
+
+    private let renderView: AVPlayerLayerView
     internal let logger = AppLogger.player
 
-    // MARK: - KVO / Observers
+    // 옵저버 / Task 라이프사이클 관리자
+    internal let observers = AVPlayerObserverBag()
+    internal let tasks = AVPlayerTaskBag()
 
-    internal var statusObservation: NSKeyValueObservation?
-    internal var timeControlObservation: NSKeyValueObservation?
-    internal var bufferKeepUpObservation: NSKeyValueObservation?  // isPlaybackLikelyToKeepUp
-    internal var bufferFullObservation: NSKeyValueObservation?    // isPlaybackBufferFull
-    internal var timeObserver: Any?
-    internal var stallObservation: NSObjectProtocol?
-    internal var bufferObservation: NSObjectProtocol?
-    internal var accessLogObservation: NSObjectProtocol?          // AVPlayerItemNewAccessLogEntry
-    internal var liveOffsetObservation: NSObjectProtocol?         // RecommendedTimeOffsetFromLive
-
-    // MARK: - Live Stream State
-
-    internal var isLiveStream: Bool {
-        get { _avState.withLock { $0.isLiveStream } }
-        set { _avState.withLock { $0.isLiveStream = newValue } }
-    }
-    internal var stallWatchdogTask: Task<Void, Never>?
-    internal var liveCatchupTask: Task<Void, Never>?
-    internal var lastProgressTime: Date {
-        get { _avState.withLock { $0.lastProgressTime } }
-        set { _avState.withLock { $0.lastProgressTime = newValue } }
-    }
-    /// 최근 캐치업 속도 히스토리 — 급격한 속도 변화 스무딩용 (최대 4개)
-    internal var rateHistory: [Float] = []
-    /// 현재 측정 지연 시간 (초) — AccessLog/Catchup 공유
-    internal var measuredLatency: Double = 0
-    /// AccessLog 기반 추정 비트레이트 (bps)
-    internal var indicatedBitrate: Double = 0
-    /// AccessLog 기반 드롭 프레임 수 누적
-    internal var droppedFrames: Int = 0
-
-    // MARK: - Network Monitor
-
-    internal let networkMonitor = NWPathMonitor()
-    internal var currentNetworkType: NWInterface.InterfaceType = .wifi
-    internal let networkQueue = DispatchQueue(label: "av.engine.network")
-
-    // MARK: - Recording
-
+    // 녹화 서비스
     private let recordingService = StreamRecordingService()
 
-    // MARK: - Background Mode (멀티라이브 비활성 세션 CPU 절약)
-    
-    /// 멀티라이브에서 비활성(음소거) 세션의 CPU 사용 절감
-    /// - liveCatchupLoop 건너뜀 (재생 속도 조정 불필요)
-    /// - stallWatchdog 건너뜀 (비활성 세션 복구 지연 허용)
-    /// - timeObserver 콜백 공백 전파 안 함
-    public var isBackgroundMode: Bool = false
+    // 공유 네트워크 모니터 구독 토큰
+    private var networkSubscriptionId: UUID?
 
-    // MARK: - Metrics Collection
-
-    /// 메트릭 수집 주기 Task (10초)
-    internal var metricsCollectionTask: Task<Void, Never>?
-    /// 이전 수집 시점의 드롭 프레임 수 (delta 계산용)
-    internal var previousDroppedFrames: Int = 0
-
-    // MARK: - Stall Watchdog State
-
-    internal var recentReconnectTimestamps: [Date] = []
+    // 재연결 폭주 보호 기준
     internal let maxReconnectsInWindow = 3
     internal let reconnectWindowSeconds: TimeInterval = 300 // 5분
 
-    // MARK: - Initialization
+    // MARK: - Init / Deinit
 
     public override init() {
-        self._videoView = AVPlayerLayerView()
+        self.renderView = AVPlayerLayerView()
         self.player = AVPlayer()
         super.init()
-        _videoView.attach(player: player)
-        setupNetworkMonitor()
-        setupObservers()
+        renderView.attach(player: player)
+        subscribeNetworkMonitor()
+        setupPlayerObservers()
     }
 
     deinit {
-        networkMonitor.cancel()
-        stallWatchdogTask?.cancel()
-        liveCatchupTask?.cancel()
-        metricsCollectionTask?.cancel()
-        removeObservers()
+        if let id = networkSubscriptionId {
+            AVPlayerNetworkMonitor.shared.unsubscribe(id)
+        }
+        tasks.cancelAll()
+        observers.removeAll()
         player.pause()
     }
 
     // MARK: - Video Layer Visibility
 
-    /// 비디오 레이어 출력 표시/숨김.
-    /// `isHidden = true` 시 GPU 합성 패스를 완전히 건너뜀 (디코딩·오디오는 유지).
-    /// 백그라운드 전환 또는 오디오 전용 모드에서 호출한다.
+    /// 비디오 출력 레이어 표시/숨김. 디코딩·오디오는 유지하되 GPU 합성 패스만 차단.
     public func setVideoLayerVisible(_ visible: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        _videoView.playerLayer.isHidden = !visible
+        renderView.playerLayer.isHidden = !visible
         CATransaction.commit()
     }
 
-    // MARK: - PlayerEngineProtocol Methods
+    /// 현재 선명한 화면(픽셀 샤프 스케일링) 활성 상태.
+    public var sharpPixelScalingEnabled: Bool {
+        stateLock.withLock { $0.sharpPixelScalingEnabled }
+    }
+
+    /// 선명한 화면(픽셀 샤프 스케일링) 설정.
+    /// AVPlayerLayer 의 magnificationFilter/minificationFilter 를 .nearest 로 전환하여
+    /// 업/다운스케일 시 픽셀 경계를 유지한다. (기본: .linear / .trilinear)
+    public func setSharpPixelScaling(_ enabled: Bool) {
+        stateLock.withLock { $0.sharpPixelScalingEnabled = enabled }
+        renderView.setSharpScaling(enabled)
+        logger.info("AVPlayerEngine: sharpPixelScaling = \(enabled)")
+    }
+
+    // MARK: - Playback Pipeline
 
     public func play(url: URL) async throws {
-        // 이전 재생 정리
-        stallWatchdogTask?.cancel()
-        liveCatchupTask?.cancel()
-        removeItemObservers()
+        // 1) 이전 재생 자원 정리
+        tasks.cancel(AVPlayerTaskBag.kStallWatchdog)
+        tasks.cancel(AVPlayerTaskBag.kLiveCatchup)
+        tasks.cancel(AVPlayerTaskBag.kMetricsCollector)
+        observers.removeItemScoped()
 
-        _avState.withLock { $0.currentURL = url; $0.state = .loading }
-        notifyStateChange(.loading)
-
-        // 속도 스무딩 히스토리 초기화
-        rateHistory.removeAll()
-        droppedFrames = 0
-        indicatedBitrate = 0
-        measuredLatency = 0
-
-        isLiveStream = detectLiveStream(url: url)
-
-        // ── Metal 최적 Asset 설정 + VideoToolbox 하드웨어 디코더 힌트 ──────
-        let playerOptions: [String: Any] = [
-            "AVURLAssetHTTPHeaderFieldsKey": [
-                "User-Agent": "Mozilla/5.0",
-                // LLHLS 지원 서버에 저지연 세그먼트 힌트 전달
-                "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, */*"
-            ] as [String: String],
-            // 라이브에서 불필요한 정밀 duration 계산 비활성화 → 시작 지연 단축
-            AVURLAssetPreferPreciseDurationAndTimingKey: false,
-            // [Phase 4] VideoToolbox 하드웨어 디코더 우선 사용 힌트
-            // Apple Silicon의 전용 미디어 엔진(ProRes/H.264/HEVC 하드웨어 블록)이
-            // 소프트웨어 디코더보다 선명한 출력 + 낮은 CPU 부하를 보장
-            "AVURLAssetAllowsCellularAccessKey": true,
-        ]
-        let asset = AVURLAsset(url: url, options: playerOptions)
-
-        // [Phase 4] AVAsset 리소스 로더를 통한 디코더 최적화
-        // preferredMediaSelection → 기본 미디어 선택 시 최고 품질 오디오/비디오 트랙 선호
-        asset.resourceLoader.setDelegate(nil, queue: .global(qos: .userInteractive))
-        // ─────────────────────────────────────────────────────────────────
-
-        let item = AVPlayerItem(asset: asset)
-
-        // [Phase 4] 1080p 60fps 기본 재생 — VLC 동등 화질 즉시 시작
-        // startsOnFirstEligibleVariant=false: ABR이 최적(최고) variant를 즉시 선택
-        // preferredMaximumResolution=1920×1080: 1080p 해상도를 명시적으로 선호
-        // preferredPeakBitRate=8Mbps: 1080p 60fps(~6-8Mbps) 이상 variant 선택 보장
-        item.startsOnFirstEligibleVariant = false
-        item.preferredMaximumResolution = CGSize(width: 1920, height: 1080)
-
-        // 1080p 60fps 스트림의 일반적 비트레이트(6-8Mbps)를 충분히 커버하는 값 설정
-        // 8Mbps 이상의 bitrate variant가 있으면 선택 가능하도록 넉넉하게 설정
-        item.preferredPeakBitRate = 8_000_000  // 1080p 60fps 타겟
-
-        // [Phase 4] 선명도 최적화: 비디오 컴포지션 비활성화 → 디코더 원본 프레임 직통 출력
-        // videoComposition이 nil이면 AVPlayer가 디코더 출력을 무가공으로 CALayer에 전달
-        // → 리사이즈/리샘플링 없이 원본 해상도 그대로 렌더링 (최대 선명도)
-        item.videoComposition = nil
-
-        // ── 라이브 스트림 저지연 설정 ──────────────────────────────────────
-        if isLiveStream {
-            // false: 스톨 시 자동 대기 없이 즉시 에러/재연결 경로로 진입
-            // true면 AVPlayer가 내부적으로 최대 수십 초 대기해 UI가 응답하지 않는 것처럼 보임
-            player.automaticallyWaitsToMinimizeStalling = false
-            // HLS LivePlaylist의 Program-Date-Time 기반 라이브 오프셋 자동 보정
-            item.automaticallyPreservesTimeOffsetFromLive = true
-
-            // 네트워크 인터페이스에 따른 목표 지연·버퍼 설정
-            adjustCatchupConfigForNetwork()
-            item.preferredForwardBufferDuration = catchupConfig.preferredForwardBuffer
-
-            // configuredTimeOffsetFromLive: AVPlayer가 라이브 엣지에서 얼마나 뒤에서 재생할지 명시
-            // timescale 1000 = 밀리초 정밀도 (기본 1보다 정밀한 오프셋 적용)
-            item.configuredTimeOffsetFromLive = CMTime(
-                seconds: catchupConfig.targetLatency,
-                preferredTimescale: 1000
-            )
-
-            // 일시정지 중에도 세그먼트 다운로드 유지 → 재개 시 버퍼링 없이 즉시 재생
-            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
-
-            // 멀티라이브 배경 세션: 최고 화질 불필요 → 480p 수준 대역폭 제한으로
-            // 네트워크 경합 및 GPU 디코딩 부하 감소 (활성 전환 시 0으로 복원)
-            // [Opt] 720p→480p: 디코딩 픽셀 수 55% 감소, 4세션 동시 시 CPU 부하 크게 완화
-            if isBackgroundMode {
-                item.preferredPeakBitRate = 2_000_000  // ~480p 상한
-                item.preferredMaximumResolution = CGSize(width: 854, height: 480)
-                item.preferredForwardBufferDuration = 10  // 백그라운드: 버퍼 축소로 메모리 절감
-            }
-        } else {
-            player.automaticallyWaitsToMinimizeStalling = true
+        // 2) 상태 초기화
+        // [Smooth Switch] 이전에 라이브 재생 중이었다면 수동 화질 전환 / 재연결로 판단.
+        // 이 경우 .loading 방송을 생략하고 .buffering 으로 부드럽게 전환 → UI 깜빡임/스피너 플리커 제거.
+        let isLive = AVPlayerStreamDetector.isLive(url: url)
+        let wasLivePlaying: Bool = stateLock.withLock { state in
+            let wasActive: Bool = {
+                switch state.phase {
+                case .playing, .buffering:
+                    return state.isLiveStream
+                default:
+                    return false
+                }
+            }()
+            state.phase = wasActive && isLive ? .buffering(progress: 0) : .loading
+            state.currentURL = url
+            state.isLiveStream = isLive
+            state.rateHistory.removeAll(keepingCapacity: true)
+            state.indicatedBitrate = 0
+            state.droppedFrames = 0
+            state.previousDroppedFrames = 0
+            state.measuredLatency = 0
+            // 수동 화질 전환도 play() 재호출이므로 재연결 이력에 섞이면 "5분 내 3회" 캡을 앞당김.
+            // → 항상 리셋하여 사용자 액션이 자동 복구 예산을 소진하지 않도록 분리.
+            state.recentReconnectTimestamps.removeAll(keepingCapacity: true)
+            state.lastProgressTime = Date()
+            return wasActive
         }
-        // ────────────────────────────────────────────────────────────────────
+        notifyStateChange(wasLivePlaying && isLive ? .buffering(progress: 0) : .loading)
 
-        observeItemStatus(item)
+        // 3) Asset / Item 구성
+        let item = makePlayerItem(url: url, isLive: isLive)
+
+        // 4) KVO / Notification 부착
+        attachItemObservers(item)
+
+        // 5) 플레이어에 장착 및 재생 시작
         player.replaceCurrentItem(with: item)
-        player.rate = _avState.withLock { $0.rate }
+        player.rate = stateLock.withLock { $0.rate }
         player.play()
 
-        if isLiveStream {
-            // stall watchdog는 readyToPlay KVO에서 시작됨 (어이템 준비 완료 후 감시 시작)
-            // liveCatchupLoop는 젠시 시작하여 러닝 상태 모니터링
+        // 6) 라이브 전용 루프 기동 (스톨 워치독은 readyToPlay 시점에 시작)
+        if isLive {
             startLiveCatchupLoop()
             startMetricsCollection()
         }
 
-        let streamKind = self.isLiveStream ? "LIVE" : "VOD"
-        logger.info("AVPlayerEngine playing [\(streamKind)]: \(url.lastPathComponent)")
+        logger.info("AVPlayerEngine: play [\(isLive ? "LIVE" : "VOD")] \(url.lastPathComponent)")
     }
 
     public func pause() {
         player.pause()
-        _avState.withLock { $0.state = .paused }
+        stateLock.withLock { $0.phase = .paused }
         notifyStateChange(.paused)
     }
 
     public func resume() {
-        player.rate = _avState.withLock { $0.rate }
+        let r = stateLock.withLock { $0.rate }
+        player.rate = r
         player.play()
-        _avState.withLock { $0.state = .playing }
+        stateLock.withLock { $0.phase = .playing }
         notifyStateChange(.playing)
     }
 
     public func stop() {
-        stallWatchdogTask?.cancel()
-        liveCatchupTask?.cancel()
-        metricsCollectionTask?.cancel()
-        stallWatchdogTask = nil
-        liveCatchupTask = nil
-        metricsCollectionTask = nil
-
-        // KVO observer 잔존 방지 — replaceCurrentItem(nil) 전에 제거
-        removeItemObservers()
+        // Task → Observer → Player 순서로 정리 (역순 의존 방지)
+        tasks.cancelAll()
+        observers.removeItemScoped()
 
         player.pause()
         player.replaceCurrentItem(with: nil)
-        _avState.withLock { $0.state = .idle; $0.currentURL = nil }
+
+        stateLock.withLock {
+            $0.phase = .idle
+            $0.currentURL = nil
+            $0.isLiveStream = false
+        }
         notifyStateChange(.idle)
     }
 
-    /// 엔진 풀 반납 시 상태 초기화 — stop() + 콜백 정리 + 메트릭 리셋
+    /// 엔진 풀 반납 시 사용: stop() + 콜백 해제 + 상태 리셋.
     public func resetForReuse() {
         stop()
 
-        // 콜백 참조 해제
+        // 콜백 참조 전부 해제 — 이전 뷰모델이 GC되도록
         onStateChange = nil
         onTimeChange = nil
         onLatencyChange = nil
         onReconnectRequested = nil
         onAVMetrics = nil
 
-        // 메트릭 리셋
-        rateHistory.removeAll()
-        droppedFrames = 0
-        indicatedBitrate = 0
-        measuredLatency = 0
-        previousDroppedFrames = 0
-        isBackgroundMode = false
-
-        _avState.withLock {
-            $0.rate = 1.0
-            $0.volume = 1.0
-            $0.isLiveStream = false
-            $0.lastProgressTime = Date()
+        stateLock.withLock { state in
+            state.rate = 1.0
+            state.volume = 1.0
+            state.isLiveStream = false
+            state.isBackgroundMode = false
+            state.catchupConfig = .balanced
+            state.sharpPixelScalingEnabled = false
+            state.lastProgressTime = Date()
+            state.rateHistory.removeAll(keepingCapacity: true)
+            state.indicatedBitrate = 0
+            state.droppedFrames = 0
+            state.previousDroppedFrames = 0
+            state.measuredLatency = 0
+            state.recentReconnectTimestamps.removeAll(keepingCapacity: true)
+            state.isRecording = false
+            state.recordingURL = nil
         }
         player.volume = 1.0
-
-        // 비디오 레이어 복원
         setVideoLayerVisible(true)
     }
 
     public func seek(to position: TimeInterval) {
-        let cmTime = CMTime(seconds: position, preferredTimescale: 600)
-        let prev = _avState.withLock { $0.state }
+        let cm = CMTime(seconds: position, preferredTimescale: 600)
+        let previous = stateLock.withLock { $0.phase }
 
-        _avState.withLock { $0.state = .buffering(progress: 0) }
+        stateLock.withLock { $0.phase = .buffering(progress: 0) }
         notifyStateChange(.buffering(progress: 0))
 
-        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+        player.seek(to: cm, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
             guard let self, finished else { return }
-            let restored: PlayerState.Phase = (prev == .paused) ? .paused : .playing
-            self._avState.withLock { $0.state = restored }
+            let restored: PlayerState.Phase = (previous == .paused) ? .paused : .playing
+            self.stateLock.withLock { $0.phase = restored }
             self.notifyStateChange(restored)
-            if prev != .paused { self.player.play() }
+            if restored == .playing { self.player.play() }
         }
     }
 
     public func setRate(_ newRate: Float) {
-        _avState.withLock { $0.rate = newRate }
+        stateLock.withLock { $0.rate = newRate }
         if player.timeControlStatus == .playing {
             player.rate = newRate
         }
     }
 
     public func setVolume(_ newVolume: Float) {
-        let v = max(0, min(1, newVolume))
-        player.volume = v
-        _avState.withLock { $0.volume = v }
+        let clamped = max(0, min(1, newVolume))
+        player.volume = clamped
+        stateLock.withLock { $0.volume = clamped }
     }
 
-    // MARK: - Recording (PlayerEngineProtocol)
+    // MARK: - Recording
 
-    /// 현재 녹화 중인지 여부
-    public var isRecording: Bool {
-        _avState.withLock { $0.isRecording }
-    }
-
-    /// 스트림 녹화 시작 — HLS 세그먼트 다운로드 방식
-    /// 현재 재생 중인 HLS 스트림의 세그먼트를 직접 다운로드·저장한다.
     public func startRecording(to url: URL) async throws {
-        guard !_avState.withLock({ $0.isRecording }) else {
+        let (already, currentURL) = stateLock.withLock { state -> (Bool, URL?) in
+            (state.isRecording, state.currentURL)
+        }
+        guard !already else {
             throw PlayerError.recordingFailed("이미 녹화 중입니다")
         }
-        guard let streamURL = _avState.withLock({ $0.currentURL }) else {
+        guard let streamURL = currentURL else {
             throw PlayerError.recordingFailed("재생 중인 스트림이 없습니다")
         }
 
         try await recordingService.startRecording(playlistURL: streamURL, to: url)
 
-        _avState.withLock { $0.isRecording = true; $0.recordingURL = url }
-        logger.info("AVPlayer 녹화 시작: \(url.lastPathComponent, privacy: .public)")
+        stateLock.withLock {
+            $0.isRecording = true
+            $0.recordingURL = url
+        }
+        logger.info("AVPlayerEngine: recording start → \(url.lastPathComponent, privacy: .public)")
     }
 
-    /// 녹화 중지
     public func stopRecording() async {
-        guard _avState.withLock({ $0.isRecording }) else { return }
-
+        guard stateLock.withLock({ $0.isRecording }) else { return }
         await recordingService.stopRecording()
-
-        _avState.withLock { $0.isRecording = false; $0.recordingURL = nil }
-        logger.info("AVPlayer 녹화 중지")
-    }
-
-    // MARK: - AVPlayer-Specific Accessors
-
-    public var currentPhase: PlayerState.Phase {
-        _avState.withLock { $0.state }
-    }
-
-    // MARK: - Error Handling
-
-    internal func handleError(_ error: PlayerError) {
-        _avState.withLock { $0.state = .error(error) }
-        notifyStateChange(.error(error))
-
-        if error == .connectionLost || error == .networkTimeout {
-            onReconnectRequested?()
+        stateLock.withLock {
+            $0.isRecording = false
+            $0.recordingURL = nil
         }
+        logger.info("AVPlayerEngine: recording stop")
     }
 
-    internal func classifyError(_ error: Error) -> PlayerError {
-        let nsError = error as NSError
+    // MARK: - State Transition Helper
 
-        // AVFoundation 에러 도메인
-        if nsError.domain == AVFoundationErrorDomain {
-            switch nsError.code {
-            case AVError.contentIsNotAuthorized.rawValue:
-                return .streamNotFound
-
-            case AVError.noLongerPlayable.rawValue:
-                return .connectionLost
-
-            case AVError.serverIncorrectlyConfigured.rawValue:
-                return .networkTimeout
-
-            case AVError.decodeFailed.rawValue,
-                 AVError.failedToLoadMediaData.rawValue:
-                return .decodingFailed(nsError.localizedDescription)
-
-            case AVError.fileFormatNotRecognized.rawValue,
-                 AVError.contentIsUnavailable.rawValue:
-                return .unsupportedFormat(nsError.localizedDescription)
-
-            default:
-                break
-            }
+    /// 상태를 전이시키고 콜백을 MainActor에서 발행.
+    /// 동일 상태로 연속 전이 시 콜백 중복 억제.
+    internal func transition(to phase: PlayerState.Phase) {
+        let changed: Bool = stateLock.withLock { state in
+            guard state.phase != phase else { return false }
+            state.phase = phase
+            return true
         }
-
-        // URL 관련 에러
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorNotConnectedToInternet,
-                 NSURLErrorNetworkConnectionLost,
-                 NSURLErrorCannotConnectToHost:
-                return .connectionLost
-            case NSURLErrorTimedOut:
-                return .networkTimeout
-            case NSURLErrorBadURL,
-                 NSURLErrorUnsupportedURL:
-                return .invalidManifest
-            default:
-                return .networkTimeout
-            }
-        }
-
-        return .engineInitFailed
+        if changed { notifyStateChange(phase) }
     }
 
-    // MARK: - Live Stream Detection
-
-    private func detectLiveStream(url: URL) -> Bool {
-        let ext = url.pathExtension.lowercased()
-        let path = url.absoluteString.lowercased()
-        return ext == "m3u8" || ext == "m3u"
-            || path.contains(".m3u8")
-            || path.contains("live")
-            || path.contains("hls")
-    }
-
-    // MARK: - Helpers
-
+    /// 외부에서 상태 비교 없이 강제로 콜백 발행.
     internal func notifyStateChange(_ phase: PlayerState.Phase) {
+        guard let cb = onStateChange else { return }
+        Task { @MainActor in cb(phase) }
+    }
+
+    // MARK: - Error Pipeline
+
+    /// 에러 상태 전이 + 재연결 가능 유형이면 상위에 재연결 요청 발행.
+    internal func handleError(_ error: PlayerError) {
+        stateLock.withLock { $0.phase = .error(error) }
+        notifyStateChange(.error(error))
+        if AVPlayerErrorClassifier.isRecoverable(error) {
+            if let cb = onReconnectRequested {
+                Task { @MainActor in cb() }
+            }
+        }
+    }
+
+    // MARK: - Player Item Factory
+
+    /// AVURLAsset + AVPlayerItem 구성. 라이브/VOD 분기 최소화.
+    private func makePlayerItem(url: URL, isLive: Bool) -> AVPlayerItem {
+        let headers: [String: String] = [
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, */*"
+        ]
+        let assetOptions: [String: Any] = [
+            "AVURLAssetHTTPHeaderFieldsKey": headers,
+            AVURLAssetPreferPreciseDurationAndTimingKey: false,
+            "AVURLAssetAllowsCellularAccessKey": true,
+        ]
+        let asset = AVURLAsset(url: url, options: assetOptions)
+        let item = AVPlayerItem(asset: asset)
+
+        // 화질 잠금/기본 선호도 스냅샷을 단일 락 진입으로 획득
+        let (qualityLocked, lockedBitrate, lockedResolution, bgMode) = stateLock.withLock { s in
+            (s.isQualityLocked, s.lockedPeakBitRate, s.lockedMaximumResolution, s.isBackgroundMode)
+        }
+
+        // 기본 ABR 선호도 — 1080p 60fps / 8Mbps 고정 (자동 화질 저하 차단)
+        // startsOnFirstEligibleVariant = false → AVPlayer 가 preferredPeakBitRate /
+        // preferredMaximumResolution 힌트에 맞는 1080p 변종을 선택한 뒤 재생 시작.
+        // (true 로 두면 네트워크 추정이 낮을 때 첫 다운로드된 저화질 변종으로 고정되어
+        //  852×480 / 1.6Mbps 수준에서 재생이 잠기는 회귀가 발생한다.)
+        item.startsOnFirstEligibleVariant = false
+        item.preferredMaximumResolution = lockedResolution
+        item.preferredPeakBitRate = lockedBitrate
+        item.videoComposition = nil  // 디코더 프레임 직통 (선명도 최대)
+
+        // 라이브 저지연 설정
+        if isLive {
+            player.automaticallyWaitsToMinimizeStalling = false
+            item.automaticallyPreservesTimeOffsetFromLive = true
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+
+            adjustCatchupConfigForNetwork()
+            let cfg = catchupConfig
+            item.preferredForwardBufferDuration = cfg.preferredForwardBuffer
+            item.configuredTimeOffsetFromLive = CMTime(
+                seconds: cfg.targetLatency,
+                preferredTimescale: 1000
+            )
+
+            // 배경(비활성) 세션: 화질 잠금이 해제된 경우에만 대역폭/메모리 축소 적용.
+            // 화질 잠금(기본값) 상태에서는 백그라운드에서도 1080p60/8Mbps 유지.
+            if bgMode && !qualityLocked {
+                item.preferredPeakBitRate = 2_000_000
+                item.preferredMaximumResolution = CGSize(width: 854, height: 480)
+                item.preferredForwardBufferDuration = 10
+            }
+        } else {
+            player.automaticallyWaitsToMinimizeStalling = true
+        }
+
+        return item
+    }
+
+    /// 런타임 화질 선호도 변경을 현재 AVPlayerItem 에 즉시 반영.
+    /// (lockedPeakBitRate / lockedMaximumResolution / isQualityLocked 토글 시 호출)
+    private func applyQualityPreferencesToCurrentItem() {
+        let (locked, bitrate, resolution) = stateLock.withLock { s in
+            (s.isQualityLocked, s.lockedPeakBitRate, s.lockedMaximumResolution)
+        }
         Task { @MainActor [weak self] in
-            self?.onStateChange?(phase)
+            guard let self, let item = self.player.currentItem else { return }
+            if locked {
+                item.preferredPeakBitRate = bitrate
+                item.preferredMaximumResolution = resolution
+            } else {
+                // 잠금 해제 시에는 시스템 자동 ABR 허용 (0 = 제한 없음)
+                item.preferredPeakBitRate = 0
+                item.preferredMaximumResolution = .zero
+            }
+        }
+    }
+
+    // MARK: - Network Monitor Subscription
+
+    private func subscribeNetworkMonitor() {
+        networkSubscriptionId = AVPlayerNetworkMonitor.shared.subscribe { [weak self] type in
+            guard let self else { return }
+            let previous = self.stateLock.withLock { state -> AVPlayerNetworkMonitor.InterfaceType in
+                let prev = state.networkType
+                state.networkType = type
+                return prev
+            }
+            guard previous != type else { return }
+            self.logger.info("AVPlayerEngine: network changed \(String(describing: previous)) → \(String(describing: type))")
+
+            let isLive = self.stateLock.withLock { $0.isLiveStream }
+            guard isLive else { return }
+
+            // 라이브: 캐치업 설정 재조정 + 현재 아이템 버퍼 업데이트
+            self.adjustCatchupConfigForNetwork()
+            let buffer = self.catchupConfig.preferredForwardBuffer
+            Task { @MainActor [weak self] in
+                guard let self, let item = self.player.currentItem else { return }
+                item.preferredForwardBufferDuration = buffer
+            }
+            // 네트워크 전환 순간의 일시 정지를 스톨로 오인하지 않도록 타임스탬프 갱신
+            self.stateLock.withLock { $0.lastProgressTime = Date() }
         }
     }
 }
-

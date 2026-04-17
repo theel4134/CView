@@ -3,6 +3,7 @@
 // 원본의 ChzzkChatService 내부 파싱 로직 분리
 
 import Foundation
+import Synchronization
 import CViewCore
 
 // MARK: - Chzzk Chat Protocol Constants
@@ -413,15 +414,16 @@ public struct ChatMessageParser: Sendable {
     }
     
     /// 프로세스 단위 단조 증가 시퀀스 — 동일 uid+msgTime 메시지의 ID 충돌 방지
-    private nonisolated(unsafe) static var _msgSequence: UInt64 = 0
+    /// [Fix 25A] nonisolated(unsafe) → Mutex: 멀티라이브 4세션 동시 파싱 시 데이터 레이스 방지
+    private static let _msgSequence = Mutex<UInt64>(0)
 
     private func parseSingleMessage(_ dict: [String: AnyCodable]) -> ChatMessage? {
         let msg = dict["msg"]?.stringValue ?? ""
         let uid = dict["uid"]?.stringValue ?? ""
         let msgTime = dict["msgTime"]?.intValue ?? 0
         // 고유 ID 생성: uid + msgTime + 단조 시퀀스 (동일 ms 메시지 ID 충돌 완전 방지)
-        Self._msgSequence &+= 1
-        let msgId = uid.isEmpty ? UUID().uuidString : "\(uid)_\(msgTime)_\(Self._msgSequence)"
+        let seq = Self._msgSequence.withLock { val -> UInt64 in val &+= 1; return val }
+        let msgId = uid.isEmpty ? UUID().uuidString : "\(uid)_\(msgTime)_\(seq)"
         
         // Parse profile from extras
         let parsedProfile = parseProfile(dict["profile"])

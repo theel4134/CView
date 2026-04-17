@@ -50,6 +50,24 @@ public final class VLCLayerHostView: NSView {
         // 잦은 layout() 호출(리사이즈, SwiftUI 재계산 등)마다 재초기화되면 GPU 스파이크 발생.
         // play() 직전 _startPlay() 에서 한 번만 설정하고, refreshDrawable() 로 명시적 복구.
     }
+
+    /// 선명한 화면(픽셀 샤프 스케일링) 토글.
+    /// VLC 가 생성하는 서브레이어(Metal/CAMetalLayer) 들에 대해 magnificationFilter 를
+    /// nearest 로 전환한다. (CA 합성 경로에서만 유효; 일부 Metal 직통 출력에서는 효과 제한)
+    public func setSharpScaling(_ enabled: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let mag: CALayerContentsFilter = enabled ? .nearest : .linear
+        let min: CALayerContentsFilter = enabled ? .nearest : .trilinear
+        layer?.magnificationFilter = mag
+        layer?.minificationFilter = min
+        // VLC 가 렌더 타겟으로 추가한 서브레이어 전체에 적용
+        layer?.sublayers?.forEach { sub in
+            sub.magnificationFilter = mag
+            sub.minificationFilter = min
+        }
+    }
 }
 
 // MARK: - 화질 적응 액션
@@ -87,22 +105,22 @@ public enum VLCStreamingProfile: Sendable {
     case lowLatency           // 라이브 (저지연 기본)
     case multiLive            // 멀티라이브 (GPU/메모리 절약 우선)
 
-    // [Fix 17b] 버퍼링 최소화 — 초기 재생 지연 단축 + 네트워크 지터 흡수 균형
-    // lowLatency 600→500ms: 2초 세그먼트 25% 커버리지, prefetch 병용으로 보완
-    // multiLive 2000→1000ms: 4스트림 동시 재생 시 VLC가 2초 버퍼를 유지하지 못해
-    //   buffering 상태에서 빠져나오지 못하는 문제 해결. 1초 버퍼로 더 빠른 playing 전이.
+    // [Fix 19] 네트워크 지터 흡수 + 초기 재생 지연 균형
+    // lowLatency 500ms: 2초 세그먼트 25% 커버리지, prefetch 병용
+    // multiLive 1000→1500ms: 1초 세그먼트 커버 + 0.5초 지터 마진
+    //   (2000ms는 4스트림에서 VLC 버퍼 경합 유발, 1000ms는 지터 흡수 부족)
     var networkCaching: Int {
         switch self {
         case .ultraLow: return 300
-        case .lowLatency: return 500   // 600→500ms: prefetch-buffer-size 병용
-        case .multiLive: return 1000   // 2000→1000ms: 4스트림 동시 버퍼 경합 방지
+        case .lowLatency: return 500
+        case .multiLive: return 1500   // 1000→1500ms: 지터 흡수 마진 확보
         }
     }
     public var liveCaching: Int {
         switch self {
         case .ultraLow: return 300
-        case .lowLatency: return 500   // network-caching과 동일
-        case .multiLive: return 1000   // network-caching과 동일
+        case .lowLatency: return 500
+        case .multiLive: return 1500   // network-caching과 동일
         }
     }
     var manifestRefreshInterval: Int {
@@ -218,6 +236,17 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     /// 화면 캡핑(flashls capLevelToStage) 적용 시 사용
     public var maxAdaptiveHeight: Int = 0
 
+    /// 항상 최고 화질(1080p60) 유지 — true면 ABR 하향/해상도 캡핑/프레임 스킵 비활성화
+    public var forceHighestQuality: Bool = true
+
+    /// 선명한 화면(픽셀 샤프 스케일링) 여부 — play() 이후 drawable 재생성 시에도 자동 재적용
+    public var sharpPixelScaling: Bool = false {
+        didSet {
+            guard oldValue != sharpPixelScaling else { return }
+            playerView.setSharpScaling(sharpPixelScaling)
+        }
+    }
+
     /// 내부 VLCMediaPlayer 인스턴스 (PiP 등 직접 접근이 필요한 경우 사용)
     public var mediaPlayer: VLCMediaPlayer { player }
 
@@ -287,14 +316,16 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     // 2회 연속 0프레임: lowLatency=4초, multiLive=8초 내 정체 감지 (3→2회)
     let _zeroFrameStallThreshold: Int = 2
 
-    // 버퍼링 필터용: 마지막 buffering 이벤트 시점의 decodedVideo 누적값
-    // 누적값이 아닌 delta로 비교하여 장시간 재생 후에도 정확한 감지
-    var _lastBufferingDecodedCount: Int32 = 0
+    // [Fix 20 Phase3] 버퍼 건강도: I/O 비율 + 프레임 전달률 EWMA 추적
+    var _ioHealthEWMA: Double = 1.0      // input/demux 바이트 비율 (1.0 = 정상)
+    var _frameDeliveryEWMA: Double = 1.0 // 프레임 전달 성공률 (1.0 = 모든 프레임 표시)
 
-    // C1 fix: 버퍼링 필터 시간 기반 override
-    // .buffering이 delta>0으로 연속 필터링될 때 최초 필터 시각을 기록.
-    // 이 시점 이후 5초 이상 지나면 필터링을 중단하고 .buffering을 강제 전파.
-    var _bufferingFilterStartTime: Date?
+    // [Fix 27] 버퍼링 필터 상태 — VLC delegate 스레드 + Main 스레드 동시 접근 보호
+    struct _BufferingFilterState: Sendable {
+        var lastDecodedCount: Int32 = 0
+        var filterStartTime: Date?
+    }
+    let _bufferingFilter = Mutex(_BufferingFilterState())
 
     // _setPhase 중복 호출 방지: 동일 phase 연속 콜백 억제
     // VLC가 같은 상태를 수십 ms 간격으로 반복 보고해도 onStateChange 1회만 호출
@@ -314,6 +345,9 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
     // Fix 12: VLC 4.0 fMP4 디먹서 폴백 버그 대응
     var _startPlayRetryTask: Task<Void, Never>?
+
+    // [플리커 방지] drawable refresh 쿨다운 시각
+    var _lastDrawableRefreshTime: Date?
 
     // MARK: - Init / Deinit
 
@@ -389,11 +423,17 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
         statsTask = nil
         let p = player
         // 상태 초기화 (Mutex로 보호 — 어느 스레드에서도 안전)
-        _prevStats = nil
-        _lastBufferingDecodedCount = 0
-        _bufferingFilterStartTime = nil
         _state.withLock { $0.currentPhase = .idle }
         if Thread.isMainThread {
+            // [장시간 안정성] 메트릭 관련 변수는 collectMetrics()와 동일한
+            // MainActor 컨텍스트에서 정리하여 데이터 레이스 방지
+            _prevStats = nil
+            _bufferingFilter.withLock { $0 = _BufferingFilterState() }
+            _zeroFrameCount = 0
+            _ioHealthEWMA = 1.0
+            _frameDeliveryEWMA = 1.0
+            _qualityDegradeCount = 0
+            _qualityStableCount = 0
             p.stop()
             p.drawable = nil
             _setPhase(.idle)
@@ -401,6 +441,14 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
             // p는 강한 참조로 캡처되어 VLC stop()은 항상 실행됨
             // _setPhase는 콜백 전파용이므로 self가 해제되어도 VLC 리소스 정리는 보장
             DispatchQueue.main.async { [weak self] in
+                // [장시간 안정성] 메트릭 관련 변수 정리도 MainActor에서 수행
+                self?._prevStats = nil
+                self?._bufferingFilter.withLock { $0 = _BufferingFilterState() }
+                self?._zeroFrameCount = 0
+                self?._ioHealthEWMA = 1.0
+                self?._frameDeliveryEWMA = 1.0
+                self?._qualityDegradeCount = 0
+                self?._qualityStableCount = 0
                 p.stop()
                 p.drawable = nil
                 self?._setPhase(.idle)

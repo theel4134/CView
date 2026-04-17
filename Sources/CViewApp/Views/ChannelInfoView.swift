@@ -386,7 +386,8 @@ struct ChannelInfoView: View {
 
             let (channel, live, vods, clips) = try await (channelFetch, liveFetch, vodFetch, clipFetch)
             channelInfo = channel
-            liveInfo = live
+            // status가 .open이 아니면 실제로 방송 중이 아니므로 nil 처리
+            liveInfo = (live?.status == .open) ? live : nil
             vodList = vods
             clipList = clips
             vodPage = 0
@@ -394,7 +395,7 @@ struct ChannelInfoView: View {
             hasMoreVODs = vods.count >= 12
             hasMoreClips = clips.count >= 12
 
-            if let openDate = live?.openDate {
+            if let openDate = liveInfo?.openDate {
                 liveUptime = Date().timeIntervalSince(openDate)
                 startUptimeTimer()
             }

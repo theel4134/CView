@@ -245,6 +245,7 @@ public final class PiPController: @unchecked Sendable {
 
         let avView = AVVideoView.AVVideoNSView()
         avView.setPlayer(avEngine.player)
+        avView.setSharpScaling(avEngine.sharpPixelScalingEnabled)
         setupPanelContent(panel: panel, videoView: avView)
 
         pipPanel = panel

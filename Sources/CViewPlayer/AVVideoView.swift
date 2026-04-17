@@ -26,8 +26,10 @@ public struct AVVideoView: NSViewRepresentable {
     public func updateNSView(_ nsView: AVVideoNSView, context: Context) {
         if let engine = playerEngine {
             nsView.setPlayer(engine.player)
+            nsView.setSharpScaling(engine.sharpPixelScalingEnabled)
         } else {
             nsView.setPlayer(nil)
+            nsView.setSharpScaling(false)
         }
     }
     
@@ -101,6 +103,17 @@ public struct AVVideoView: NSViewRepresentable {
         /// 비디오 화면 채움 모드 변경 (true: aspect-fill, false: aspect-fit 레터박스)
         func setFillMode(_ fill: Bool) {
             playerLayer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+        }
+
+        /// 선명한 화면(픽셀 샤프 스케일링) 토글.
+        /// - true: magnificationFilter/minificationFilter = .nearest → 픽셀 경계 유지
+        /// - false: 기본 .linear / .trilinear (부드러운 보간)
+        func setSharpScaling(_ enabled: Bool) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            playerLayer.magnificationFilter = enabled ? .nearest : .linear
+            playerLayer.minificationFilter  = enabled ? .nearest : .trilinear
+            CATransaction.commit()
         }
         
         override public func layout() {

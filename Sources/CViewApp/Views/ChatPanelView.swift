@@ -198,14 +198,13 @@ struct ChatPanelView: View {
 struct ChatMessagesView: View {
     let viewModel: ChatViewModel?
 
+    /// 하단 고정 sentinel ID (scrollTo 안정화용)
+    fileprivate static let bottomAnchorID = "__chat_bottom_anchor__"
+
     /// ScrollView가 화면에 표시 중인지 추적 — 백그라운드 전환에 의한 잘못된 replay mode 진입 방지
     @State private var isScrollViewVisible = true
     /// 프로그래밍적 스크롤 중 onScrollGeometryChange 오탐 방지 (카운터 기반)
     @State private var scrollSuppressionCount = 0
-    /// ScrollView 컨테이너의 실제 너비 — LazyVStack 콘텐츠에 명시적 너비 제약 전달용
-    @State private var containerWidth: CGFloat = 300
-    /// ScrollView 컨테이너 높이 — 치지직 웹처럼 메시지를 하단 정렬하기 위한 minHeight
-    @State private var containerHeight: CGFloat = 400
 
     /// 스크롤 억제 중인지 여부
     private var isScrollSuppressed: Bool { scrollSuppressionCount > 0 }
@@ -217,6 +216,7 @@ struct ChatMessagesView: View {
                 pinnedMessageBanner(pinned)
             }
 
+            GeometryReader { geo in
             ScrollViewReader { proxy in
                 // 렌더링 설정값을 값 타입으로 스냅샷 — config 미변경 시 기존 행 재렌더링 방지
                 let renderConfig = viewModel.map(ChatRenderConfig.init(from:)) ?? .default
@@ -231,23 +231,17 @@ struct ChatMessagesView: View {
                                         .equatable()
                                         .id(message.id)
                                 }
+                                // 하단 고정 sentinel — scrollTo 타겟이 항상 안정적 (행 높이 변동의 영향 없음)
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id(Self.bottomAnchorID)
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, minHeight: containerHeight, alignment: .bottom)
+                    .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .bottom)
                     .padding(.vertical, DesignTokens.Spacing.xs)
                 }
                 .scrollIndicators(.hidden)
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.width
-                } action: { newWidth in
-                    if newWidth > 0 { containerWidth = newWidth }
-                }
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.height
-                } action: { newHeight in
-                    if newHeight > 0 { containerHeight = newHeight }
-                }
                 .defaultScrollAnchor(.bottom)
                 // Rebuilt scroll detection — 적응형 거리 기반 하단 감지
                 .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -265,16 +259,15 @@ struct ChatMessagesView: View {
                 }
                 .onAppear {
                     isScrollViewVisible = true
-                    scrollToLatest(proxy: proxy)
                 }
                 .onDisappear {
                     isScrollViewVisible = false
                 }
-                // 새 메시지 도착 시 자동 스크롤 — isAutoScrollEnabled 기반 (shouldScrollToLatest 레이스컨디션 제거)
+                // 새 메시지 도착 시 자동 스크롤 — 치지직 웹처럼 애니메이션 없이 즉시 하단 고정
                 .onChange(of: viewModel?.messages.last?.id) { _, _ in
                     guard viewModel?.isAutoScrollEnabled == true,
                           viewModel?.isReplayMode != true else { return }
-                    scrollToLatest(proxy: proxy)
+                    stickyScroll(proxy: proxy)
                 }
                 // 앱이 다시 포그라운드로 돌아올 때 자동 스크롤 복원
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -299,24 +292,43 @@ struct ChatMessagesView: View {
                     scrollToLatest(proxy: proxy)
                     return .handled
                 }
-            }
+            } // ScrollViewReader
+            } // GeometryReader
         } // VStack
     }
 
     // MARK: - Scroll Helpers
 
-    /// 최하단으로 프로그래밍적 스크롤 — 억제 카운터로 onScrollGeometryChange 오탐 방지
-    private func scrollToLatest(proxy: ScrollViewProxy) {
-        guard let lastId = viewModel?.messages.last?.id else { return }
-        // replay mode debounce 타스크가 대기 중이면 취소 — 프로그래밍적 스크롤 중 잘못된 진입 방지
+    /// 새 메시지 자동 스크롤 — 하단 sentinel을 타겟으로 하여 마지막 행 높이 변동에 영향받지 않음
+    /// · 다음 runloop로 defer: 현재 레이아웃 패스 완료 후 실행되어 스크롤 위치 재계산 경합 제거
+    /// · withAnimation 제거: 드립 간격(50ms)에서 animation transaction이 LazyVStack 뷰 재사용과 충돌
+    private func stickyScroll(proxy: ScrollViewProxy) {
+        guard viewModel?.messages.isEmpty == false else { return }
         viewModel?.cancelReplayDebounce()
         scrollSuppressionCount += 1
-        withAnimation(DesignTokens.Animation.chatScroll) {
-            proxy.scrollTo(lastId, anchor: .bottom)
-        }
-        // 스크롤 완료 후 억제 해제 — 배치 간격(100ms) + 렌더링 여유(80ms)
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(180))
+            await Task.yield()
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+            }
+            try? await Task.sleep(for: .milliseconds(80))
+            self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
+        }
+    }
+
+    /// 사용자 요청 시 최하단 스크롤 — 부드러운 애니메이션으로 이동
+    private func scrollToLatest(proxy: ScrollViewProxy) {
+        guard viewModel?.messages.isEmpty == false else { return }
+        viewModel?.cancelReplayDebounce()
+        scrollSuppressionCount += 1
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation(.easeOut(duration: 0.15)) {
+                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+            }
+            try? await Task.sleep(for: .milliseconds(200))
             self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }
     }

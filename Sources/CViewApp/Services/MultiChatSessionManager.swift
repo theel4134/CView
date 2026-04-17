@@ -6,6 +6,7 @@ import Foundation
 import CViewCore
 import CViewChat
 import CViewPersistence
+import CViewNetworking
 
 /// 멀티채팅 세션을 관리하는 Actor
 /// 채널당 1개의 ChatViewModel 인스턴스를 관리
@@ -66,6 +67,9 @@ public final class MultiChatSessionManager {
     /// SettingsStore 연결 (세션 영속화 활성화)
     public func configure(settingsStore: SettingsStore) {
         self.settingsStore = settingsStore
+        // 저장된 그리드 비율 복원
+        gridHorizontalRatio = settingsStore.multiChat.gridHorizontalRatio
+        gridVerticalRatio = settingsStore.multiChat.gridVerticalRatio
     }
 
     /// 저장된 세션 목록 반환 (앱 시작 시 복원용)
@@ -204,6 +208,8 @@ public final class MultiChatSessionManager {
             SavedChatSession(channelId: $0.id, channelName: $0.channelName)
         }
         store.multiChat.selectedChannelId = selectedChannelId
+        store.multiChat.gridHorizontalRatio = gridHorizontalRatio
+        store.multiChat.gridVerticalRatio = gridVerticalRatio
         store.scheduleDebouncedSave()
     }
 
@@ -212,5 +218,66 @@ public final class MultiChatSessionManager {
         guard let store = settingsStore else { return }
         store.multiChat.selectedChannelId = selectedChannelId
         store.scheduleDebouncedSave()
+    }
+
+    /// 그리드 비율 변경 시 영속 저장
+    public func persistGridRatio() {
+        guard let store = settingsStore else { return }
+        store.multiChat.gridHorizontalRatio = gridHorizontalRatio
+        store.multiChat.gridVerticalRatio = gridVerticalRatio
+        store.scheduleDebouncedSave()
+    }
+
+    /// 모든 세션을 포그라운드/백그라운드 모드로 일괄 전환
+    /// MergedChatView 진입 시 foreground=true로 호출하여 3초 flush 지연을 해소
+    public func setAllSessionsForeground(_ foreground: Bool) {
+        for session in sessions {
+            session.chatViewModel.isBackgroundMode = !foreground
+            session.chatViewModel.messages.resize(to: foreground ? 200 : 50)
+        }
+    }
+
+    /// 저장된 세션 복원 (앱 시작 시 호출)
+    /// - Returns: 하나 이상의 세션이 복원되었는지 여부
+    @discardableResult
+    public func restoreSessions(
+        apiClient: ChzzkAPIClient,
+        uid: String?,
+        nickname: String?
+    ) async -> Bool {
+        let saved = savedSessions
+        guard !saved.isEmpty else { return false }
+
+        var restoredAny = false
+        let lastSelected = savedSelectedChannelId
+
+        for session in saved {
+            do {
+                let liveDetail = try await apiClient.liveDetail(channelId: session.channelId)
+                guard let chatChannelId = liveDetail.chatChannelId else { continue }
+                let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
+                let channelName = liveDetail.channel?.channelName ?? session.channelName
+                let result = await addSession(
+                    channelId: session.channelId,
+                    channelName: channelName,
+                    chatChannelId: chatChannelId,
+                    accessToken: tokenInfo.accessToken,
+                    extraToken: tokenInfo.extraToken,
+                    uid: uid,
+                    nickname: nickname
+                )
+                if case .success = result {
+                    restoredAny = true
+                }
+            } catch {
+                continue
+            }
+        }
+
+        if let lastSelected, sessions.contains(where: { $0.id == lastSelected }) {
+            selectChannel(lastSelected)
+        }
+
+        return restoredAny
     }
 }

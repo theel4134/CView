@@ -185,23 +185,6 @@ public struct ChatExtras: Sendable, Codable, Hashable {
     }
 }
 
-/// 치지직 채팅 프로토콜 명령 코드
-public enum ChatCommandCode: Int, Sendable {
-    case ping = 0
-    case pong = 10000
-    case connect = 100
-    case connected = 10100
-    case requestRecentChat = 5101
-    case recentChat = 15101
-    case sendChat = 3101
-    case chatMessage = 93101
-    case donation = 93102
-    case kick = 94005
-    case blind = 94008
-    case notice = 94010
-    case penalty = 94015
-}
-
 /// 채팅 접속 토큰
 public struct ChatAccessToken: Sendable, Codable {
     public let accessToken: String

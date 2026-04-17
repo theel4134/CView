@@ -19,6 +19,8 @@ public struct StreamBandwidthState: Sendable {
     public var isSelected: Bool = false
     public var lastFetchDuration: TimeInterval = 0
     public var lastSegmentDuration: TimeInterval = 4.0
+    /// [Fix 20 Phase3] 현재 재생 배율 — 대역폭 소비 추정에 반영
+    public var playbackRate: Double = 1.0
 
     public init(sessionId: UUID) {
         self.sessionId = sessionId
@@ -173,8 +175,9 @@ public actor MultiLiveBandwidthCoordinator {
         streamStates[sessionId]?.lastFetchDuration = fetchDuration
         streamStates[sessionId]?.lastSegmentDuration = segmentDuration
 
-        // 집계 대역폭 히스토리 갱신
-        let totalBW = streamStates.values.reduce(0.0) { $0 + $1.currentBitrate }
+        // [Fix 20 Phase3] 집계 대역폭에 playbackRate 반영:
+        // 가속 중인 스트림은 단위 시간당 더 많은 세그먼트를 소비
+        let totalBW = streamStates.values.reduce(0.0) { $0 + $1.currentBitrate * $1.playbackRate }
         recordAggregateBandwidth(totalBW)
     }
 
@@ -186,6 +189,11 @@ public actor MultiLiveBandwidthCoordinator {
     /// 최대 가용 레벨 비트레이트 업데이트
     public func updateMaxLevelBitrate(sessionId: UUID, maxBitrate: Double) {
         streamStates[sessionId]?.maxLevelBitrate = maxBitrate
+    }
+
+    /// [Fix 20 Phase3] 재생 배율 업데이트 — 대역폭 계산에 반영
+    public func updatePlaybackRate(sessionId: UUID, rate: Double) {
+        streamStates[sessionId]?.playbackRate = rate
     }
 
     // MARK: - Bandwidth Advice Computation
@@ -278,7 +286,10 @@ public actor MultiLiveBandwidthCoordinator {
         }
 
         let currentBW = aggregateBWHistory.last ?? 0
-        let minBW = aggregateBWHistory.min() ?? currentBW
+        // [Fix 26] min() 대신 P20 백분위수 사용 — 단일 이상치가 영구 저하 유발 방지
+        let sorted = aggregateBWHistory.sorted()
+        let p20Index = max(0, Int(Double(sorted.count) * 0.2))
+        let minBW = sorted[p20Index]
 
         guard minBW + currentBW > 0 else { return currentBW }
 

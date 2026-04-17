@@ -21,7 +21,7 @@ public actor MetricsWebSocketClient {
     
     private let serverURL: URL
     private var webSocketTask: URLSessionWebSocketTask?
-    private let session: URLSession
+    private var session: URLSession
     private var state: ConnectionState = .disconnected
     private var continuation: AsyncStream<MetricsWebSocketMessage>.Continuation?
     private var reconnectTask: Task<Void, Never>?
@@ -31,10 +31,14 @@ public actor MetricsWebSocketClient {
     
     public init(serverURL: URL = URL(string: MetricsSettings.defaultWebSocketURL)!) {
         self.serverURL = serverURL
+        self.session = Self.makeSession()
+    }
+    
+    private static func makeSession() -> URLSession {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.waitsForConnectivity = true
-        self.session = URLSession(configuration: config)
+        return URLSession(configuration: config)
     }
     
     // MARK: - Public API
@@ -49,6 +53,9 @@ public actor MetricsWebSocketClient {
         // 이전 stream이 있으면 종료하여 소비자 hang 방지
         continuation?.finish()
         continuation = nil
+        
+        // 이전 disconnect로 invalidate된 session 재생성
+        session = Self.makeSession()
         
         let stream = AsyncStream<MetricsWebSocketMessage> { continuation in
             self.continuation = continuation
@@ -72,6 +79,8 @@ public actor MetricsWebSocketClient {
         state = .disconnected
         continuation?.finish()
         continuation = nil
+        // URLSession invalidate — delegate retain cycle 방지
+        session.invalidateAndCancel()
     }
     
     // MARK: - Channel Subscription
@@ -141,6 +150,8 @@ public actor MetricsWebSocketClient {
                 @unknown default:
                     break
                 }
+            } catch is CancellationError {
+                return
             } catch {
                 // 연결 끊김 → 재연결 시도
                 if !isManuallyDisconnected {
@@ -165,9 +176,13 @@ public actor MetricsWebSocketClient {
             // 지수 백오프: 2, 4, 8, 16, 30, 30... 초
             let delay = min(pow(2.0, Double(attempt)), MetricsNetDefaults.maxBackoffDelay)
             Log.network.info("WebSocket 재연결 시도 \(attempt)/\(maxAttempts) — \(String(format: "%.0f", delay))초 후")
-            try? await Task.sleep(for: .seconds(delay))
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return  // Task cancelled
+            }
             
-            guard !isManuallyDisconnected else { return }
+            guard !isManuallyDisconnected, !Task.isCancelled else { return }
             
             // 재연결 시도
             let task = session.webSocketTask(with: serverURL)

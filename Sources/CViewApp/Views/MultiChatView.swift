@@ -53,6 +53,13 @@ struct MultiChatView: View {
         .frame(minWidth: 500, minHeight: 400)
         .task {
             sessionManager.configure(settingsStore: appState.settingsStore)
+            if sessionManager.sessions.isEmpty, let apiClient = appState.apiClient {
+                await sessionManager.restoreSessions(
+                    apiClient: apiClient,
+                    uid: appState.userChannelId,
+                    nickname: appState.userNickname
+                )
+            }
         }
         .sheet(isPresented: $showChatSettings) {
             ChatSettingsView()
@@ -152,7 +159,7 @@ struct MultiChatView: View {
                         isHorizontal: true,
                         containerLength: geo.size.width,
                         currentRatio: sessionManager.gridHorizontalRatio,
-                        onRatioChange: { sessionManager.gridHorizontalRatio = $0 }
+                        onRatioChange: { sessionManager.gridHorizontalRatio = $0; sessionManager.persistGridRatio() }
                     )
                     gridCell(session: s1, width: geo.size.width - leftW, height: geo.size.height)
                 }
@@ -174,7 +181,7 @@ struct MultiChatView: View {
                         isHorizontal: false,
                         containerLength: geo.size.height,
                         currentRatio: sessionManager.gridVerticalRatio,
-                        onRatioChange: { sessionManager.gridVerticalRatio = $0 }
+                        onRatioChange: { sessionManager.gridVerticalRatio = $0; sessionManager.persistGridRatio() }
                     )
 
                     HStack(spacing: 1) {
@@ -233,15 +240,6 @@ struct MultiChatView: View {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: DesignTokens.Border.thin)
         )
-    }
-
-    private func gridColumns(for count: Int) -> Int {
-        switch count {
-        case 1:    return 1
-        case 2:    return 2
-        case 3, 4: return 2
-        default:   return min(4, count)
-        }
     }
 
     // MARK: - Merged Layout (통합 타임라인)
@@ -357,25 +355,78 @@ struct MultiChatView: View {
                     set: { id in if let id { sessionManager.selectChannel(id) } }
                 )) {
                     ForEach(sessionManager.sessions) { session in
+                        let isConnected = session.chatViewModel.connectionState.isConnected
+                        let isCurrentlySelected = sessionManager.selectedChannelId == session.id
                         HStack(spacing: 8) {
-                            Circle()
-                                .fill(session.chatViewModel.connectionState.isConnected
-                                    ? DesignTokens.Colors.chzzkGreen
-                                    : DesignTokens.Colors.error)
-                                .frame(width: 6, height: 6)
+                            // Avatar circle with initial + status dot
+                            ZStack(alignment: .bottomTrailing) {
+                                ZStack {
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    chatAvatarColor(for: session.id),
+                                                    chatAvatarColor(for: session.id).opacity(0.65),
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                        .frame(width: 26, height: 26)
+                                    Text(String(session.channelName.prefix(1)).uppercased())
+                                        .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
+                                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                                        .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                                }
+                                // Connection status dot
+                                ZStack {
+                                    Circle()
+                                        .fill(DesignTokens.Colors.surfaceBase)
+                                        .frame(width: 10, height: 10)
+                                    Circle()
+                                        .fill(isConnected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.error)
+                                        .frame(width: 7, height: 7)
+                                        .shadow(
+                                            color: isConnected
+                                                ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
+                                                : DesignTokens.Colors.error.opacity(0.4),
+                                            radius: 2
+                                        )
+                                }
+                                .offset(x: 3, y: 3)
+                            }
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.channelName)
-                                    .font(DesignTokens.Typography.captionMedium)
+                                    .font(DesignTokens.Typography.custom(size: 11.5, weight: isCurrentlySelected ? .semibold : .medium))
+                                    .foregroundStyle(
+                                        isCurrentlySelected
+                                            ? DesignTokens.Colors.textPrimary
+                                            : DesignTokens.Colors.textSecondary
+                                    )
                                     .lineLimit(1)
 
-                                Text("\(session.chatViewModel.messageCount)개 메시지")
-                                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 4) {
+                                    Text(isConnected ? "연결됨" : "연결 끊김")
+                                        .font(DesignTokens.Typography.custom(size: 9.5, weight: .medium))
+                                        .foregroundStyle(
+                                            isConnected
+                                                ? DesignTokens.Colors.chzzkGreen.opacity(0.8)
+                                                : DesignTokens.Colors.textTertiary
+                                        )
+                                    if session.chatViewModel.messageCount > 0 {
+                                        Text("·")
+                                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                        Text("\(session.chatViewModel.messageCount)")
+                                            .font(DesignTokens.Typography.custom(size: 9.5, weight: .medium, design: .rounded))
+                                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    }
+                                }
                             }
 
                             Spacer()
                         }
+                        .padding(.vertical, 2)
                         .tag(session.id)
                         .contextMenu {
                             Button(role: .destructive) {
@@ -478,7 +529,10 @@ struct MultiChatView: View {
                 channelId: channelId,
                 channelName: channelName,
                 chatChannelId: chatChannelId,
-                accessToken: tokenInfo.accessToken
+                accessToken: tokenInfo.accessToken,
+                extraToken: tokenInfo.extraToken,
+                uid: appState.userChannelId,
+                nickname: appState.userNickname
             )
             switch result {
             case .alreadyExists:
@@ -489,9 +543,20 @@ struct MultiChatView: View {
                 break
             }
         } catch {
-            await MainActor.run {
-                addChannelError = "채널 '\(channelId)'에 연결할 수 없습니다: \(error.localizedDescription)"
-            }
+            addChannelError = "채널 '\(channelId)'에 연결할 수 없습니다: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Avatar Color Helper
+
+    private func chatAvatarColor(for channelId: String) -> Color {
+        let palette: [Color] = [
+            DesignTokens.Colors.accentBlue.opacity(0.8),
+            DesignTokens.Colors.accentPurple.opacity(0.75),
+            DesignTokens.Colors.accentPink.opacity(0.75),
+            DesignTokens.Colors.accentOrange.opacity(0.75),
+            DesignTokens.Colors.chzzkGreen.opacity(0.65),
+        ]
+        return palette[abs(channelId.hashValue) % palette.count]
     }
 }

@@ -258,6 +258,21 @@ struct MetricsForwardingStatusView: View {
                                 if let ld = sd.latencyDelta {
                                     statCard("레이턴시 차이", String(format: "%+.0fms", ld), icon: "arrow.left.and.right", color: abs(ld) < 300 ? .green : .orange)
                                 }
+                                // 적응형 동기화 상태
+                                statCard(
+                                    "동기화 간격",
+                                    String(format: "%.0f초", snap.adaptiveSyncInterval),
+                                    icon: "timer",
+                                    color: snap.adaptiveSyncInterval <= 5 ? .red : (snap.adaptiveSyncInterval <= 12 ? .orange : .green)
+                                )
+                                if abs(snap.lastClientDelta) > 1 {
+                                    statCard(
+                                        "클라이언트 델타",
+                                        String(format: "%+.0fms", snap.lastClientDelta),
+                                        icon: "arrow.triangle.2.circlepath",
+                                        color: abs(snap.lastClientDelta) < 300 ? .green : (abs(snap.lastClientDelta) < 1000 ? .orange : .red)
+                                    )
+                                }
                             }
                         }
                     }

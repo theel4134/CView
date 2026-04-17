@@ -260,8 +260,8 @@ struct ChatStatsView: View {
                         )
                         StatCard(
                             title: "도네 총액",
-                            value: "₩\(chatVM?.totalDonationAmount ?? 0)",
-                            icon: "wonsign.circle.fill",
+                            value: "🪙\(chatVM?.totalDonationAmount ?? 0)",
+                            icon: "gift.circle.fill",
                             color: .red
                         )
                     }

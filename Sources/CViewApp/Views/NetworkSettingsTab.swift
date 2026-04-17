@@ -12,12 +12,13 @@ struct NetworkSettingsTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                SettingsPageHeader("네트워크")
 
                 // MARK: - 네트워크 프리셋
                 SettingsSection(title: "네트워크 프리셋", icon: "wand.and.stars", color: DesignTokens.Colors.chzzkGreen) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                        HStack(spacing: DesignTokens.Spacing.sm) {
                             ForEach(NetworkPreset.allCases, id: \.self) { preset in
                                 PresetButton(
                                     preset: preset,
@@ -28,15 +29,15 @@ struct NetworkSettingsTab: View {
                         }
                         HStack(spacing: 6) {
                             Image(systemName: selectedPreset.icon)
-                                .font(.system(size: 11))
+                                .font(DesignTokens.Typography.custom(size: 11))
                                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                             Text(selectedPreset.description)
                                 .font(DesignTokens.Typography.caption)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                         }
-                        .padding(.top, 2)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.md)
                 }
 
                 // MARK: - 연결 타임아웃
@@ -119,8 +120,6 @@ struct NetworkSettingsTab: View {
                 }
             }
             .padding(DesignTokens.Spacing.xl)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
         }
         .onChange(of: settings.network) { _, newValue in
             Task {
@@ -155,7 +154,7 @@ private struct PresetButton: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: preset.icon)
-                    .font(.system(size: 14))
+                    .font(DesignTokens.Typography.custom(size: 14))
                 Text(preset.displayName)
                     .font(DesignTokens.Typography.caption)
             }

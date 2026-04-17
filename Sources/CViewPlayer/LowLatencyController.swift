@@ -51,23 +51,23 @@ public actor LowLatencyController {
             pidKd: 0.08
         )
         
-        /// 웹(hls.js) 동기화 프리셋 — 앱↔웹 동일 재생 위치 목표
+        /// 웹(hls.js) 동기화 프리셋 — 앱↔웹 동일 재생 위치 목표 (완화형)
         /// hls.js 기본값: liveSyncDurationCount=3 × TARGETDURATION(2s) = 6.0s 지연
         /// 앱은 VLC 내부 버퍼(~1s) + CDN→프록시 파이프라인을 고려하여 6.0s 타겟
-        /// PID 게인을 적극적으로 설정: 빠른 수렴 후 정밀 유지
-        /// catchUpThreshold=0.5: ±0.5초 초과 시 즉시 속도 조정 시작
-        /// slowDownThreshold=0.3: ±0.3초 이내면 동기화 완료로 판단
+        /// PID 게인을 보수적으로 설정: 부드러운 수렴 (버퍼링 최소화 우선)
+        /// catchUpThreshold=1.0: ±1.0초 초과 시 속도 조정 시작 (여유 확보)
+        /// slowDownThreshold=0.8: ±0.8초 이내면 동기화 완료로 판단 (넓은 데드존)
         public static let webSync = Configuration(
             targetLatency: 6.0,
-            maxLatency: 10.0,
+            maxLatency: 12.0,
             minLatency: 3.0,
-            maxPlaybackRate: 1.15,
-            minPlaybackRate: 0.90,
-            catchUpThreshold: 0.5,
-            slowDownThreshold: 0.3,
-            pidKp: 1.2,
-            pidKi: 0.15,
-            pidKd: 0.08
+            maxPlaybackRate: 1.08,
+            minPlaybackRate: 0.93,
+            catchUpThreshold: 1.0,
+            slowDownThreshold: 0.8,
+            pidKp: 0.5,
+            pidKi: 0.05,
+            pidKd: 0.03
         )
         
         public init(
@@ -131,8 +131,48 @@ public actor LowLatencyController {
     // M1 fix: 버퍼링 중 rate 조정 일시 중지
     private var _isPausedForBuffering: Bool = false
     
+    // [Fix 20] 버퍼링 해제 후 쿨다운 — 즉시 재가속 방지
+    private var _cooldownUntil: Date = .distantPast
+    private let _cooldownDuration: TimeInterval = 12.0  // 12초 쿨다운
+    private let _cooldownMaxRate: Double = 1.03  // 쿨다운 중 최대 가속
+    
+    // [Fix 20] 가속↔버퍼링 진동 감지기
+    private var _recentBufferingTimestamps: [Date] = []
+    private var _oscillationMaxRate: Double?  // nil = 정상, 값 있으면 제한
+    private var _oscillationResetTime: Date = .distantPast
+    
+    // 버퍼 건강도 콜백 — 가속 댐핑에 사용 (0.0~1.0, 기본 1.0)
+    private var bufferHealthProvider: (@Sendable () -> Double)?
+    
     // 초기 재생 시 seek 여부 — 첫 측정에서 타겟 대비 크게 벗어나면 seek으로 즉시 이동
     private var _initialSeekDone: Bool = false
+    
+    // [Fix 20] PID 비활성 상태 공개 — MetricsForwarder 속도 제어 여부 판단용
+    public var isPIDActive: Bool {
+        _state == .catchingUp || _state == .slowingDown
+    }
+    
+    // [Fix 20-F] 멀티라이브 가속 예산 — 외부에서 설정하는 가속 상한 오버라이드
+    // nil = config.maxPlaybackRate 사용 (기본), 값 있으면 해당 값으로 제한
+    private var _maxRateOverride: Double?
+    public func setMaxRateOverride(_ maxRate: Double?) {
+        _maxRateOverride = maxRate
+    }
+    
+    /// 현재 실효 최대 가속률 (config, 쿨다운, 진동, 외부 오버라이드 중 최소값)
+    private var effectiveMaxRate: Double {
+        var rate = config.maxPlaybackRate
+        if let override = _maxRateOverride {
+            rate = min(rate, override)
+        }
+        if Date() < _cooldownUntil {
+            rate = min(rate, _cooldownMaxRate)
+        }
+        if let oscMax = _oscillationMaxRate {
+            rate = min(rate, oscMax)
+        }
+        return rate
+    }
     
     // Callbacks
     private var onRateChange: (@Sendable (Double) -> Void)?
@@ -150,7 +190,7 @@ public actor LowLatencyController {
     public init(configuration: Configuration = .default) {
         self.config = configuration
         self.pidController = PIDController(kp: configuration.pidKp, ki: configuration.pidKi, kd: configuration.pidKd)
-        self.latencyEWMA = EWMACalculator(alpha: 0.3)
+        self.latencyEWMA = EWMACalculator(alpha: 0.15)
     }
     
     // MARK: - Setup
@@ -169,25 +209,71 @@ public actor LowLatencyController {
     public func setOnLatencyMeasured(_ handler: @escaping @Sendable (TimeInterval, TimeInterval, TimeInterval) -> Void) {
         self.onLatencyMeasured = handler
     }
+
+    /// 버퍼 건강도 제공자 설정 (0.0~1.0) — 가속 시 댐핑에 사용
+    public func setBufferHealthProvider(_ provider: @escaping @Sendable () -> Double) {
+        self.bufferHealthProvider = provider
+    }
     
-    // MARK: - Buffering Pause (M1 fix)
+    // MARK: - Buffering Pause (M1 fix + Fix 20 쿨다운/진동 감지)
     
-    /// 버퍼링 시작 시 호출 — rate를 1.0으로 리셋하고 조정 일시 중지
+    /// 버퍼링 시작 시 호출 — rate를 1.0으로 리셋, PID I항 리셋, 조정 일시 중지
     public func pauseForBuffering() {
         guard !_isPausedForBuffering else { return }
         _isPausedForBuffering = true
+        
+        // [Fix 20-A] PID 적분(I)항 리셋 — 축적된 오차가 재가속을 유발하지 않도록
+        pidController.reset()
+        
         if _currentRate != 1.0 {
             _currentRate = 1.0
             onRateChange?(1.0)
-            logger.info("LowLatency: 버퍼링 감지 — rate 1.0으로 리셋, 조정 일시 중지")
+            logger.info("LowLatency: 버퍼링 감지 — rate 1.0으로 리셋 + PID 리셋, 조정 일시 중지")
+        }
+        
+        // [Fix 20-C] 진동 감지: 최근 버퍼링 시각 기록
+        let now = Date()
+        _recentBufferingTimestamps.append(now)
+        // 60초보다 오래된 기록 제거
+        _recentBufferingTimestamps.removeAll { now.timeIntervalSince($0) > 60 }
+        
+        if _recentBufferingTimestamps.count >= 3 {
+            // 60초 내 3회 이상 버퍼링 → 가속 상한을 1.03으로 제한
+            _oscillationMaxRate = _cooldownMaxRate
+            _oscillationResetTime = now.addingTimeInterval(120)  // 120초 후 자동 복원
+            let count = _recentBufferingTimestamps.count
+            logger.warning("LowLatency: 진동 감지 — 60초 내 \(count)회 버퍼링, 가속 상한 1.03 적용 (120초간)")
         }
     }
     
-    /// 버퍼링 종료(재생 재개) 시 호출 — rate 조정 재개
+    /// 버퍼링 종료(재생 재개) 시 호출 — rate 조정 재개 (쿨다운 적용)
     public func resumeFromBuffering() {
         guard _isPausedForBuffering else { return }
         _isPausedForBuffering = false
-        logger.info("LowLatency: 재생 재개 — rate 조정 재개")
+        
+        // [Fix 20-B] 쿨다운 기간 시작 — 버퍼 안정화용
+        let duration = _cooldownDuration
+        let maxRate = _cooldownMaxRate
+        _cooldownUntil = Date().addingTimeInterval(duration)
+        logger.info("LowLatency: 재생 재개 — \(Int(duration))초 쿨다운 (최대 가속 \(maxRate))")
+    }
+    
+    // MARK: - Post-Seek Grace
+    
+    /// [Fix 20-E] Seek 실행 후 버퍼 재구축 보호
+    /// PID 리셋 + 자동 버퍼링 일시정지 + 쿨다운 적용
+    /// VLC가 .playing 상태로 돌아오면 StreamCoordinator가 resumeFromBuffering() 호출
+    private func enterPostSeekGrace() {
+        pidController.reset()
+        latencyEWMA = EWMACalculator(alpha: 0.15)
+        _latencyHistory.removeAll()
+        _isPausedForBuffering = true
+        _currentRate = 1.0
+        onRateChange?(1.0)
+        // seek 후에도 쿨다운 적용 — 재개 시 즉시 가속 방지
+        let duration = _cooldownDuration
+        _cooldownUntil = Date().addingTimeInterval(duration)
+        logger.info("LowLatency: Seek 후 preload grace — PID/EWMA 리셋, 버퍼 재구축 대기")
     }
     
     // MARK: - Sync Control
@@ -201,8 +287,9 @@ public actor LowLatencyController {
         syncTask = Task { [weak self] in
             guard let self else { return }
             
-            // 3.0s: PID 제어 주기를 낮춰 CPU 절약. 3초 간격에서도 실시간 지연 보정 충분.
-            let timer = AsyncTimerSequence(interval: 3.0 as TimeInterval)
+            // 5.0s: PID 제어 주기를 낮춰 CPU 절약 + 버퍼 안정화. 
+            // VLC 내부 버퍼가 안정될 충분한 시간 확보.
+            let timer = AsyncTimerSequence(interval: 5.0 as TimeInterval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 
@@ -222,7 +309,7 @@ public actor LowLatencyController {
         _initialSeekDone = false
         pidController.reset()
         // 재연결 시 이전 세션의 stale EWMA/히스토리가 PID를 오염하지 않도록 리셋
-        latencyEWMA = EWMACalculator(alpha: 0.3)
+        latencyEWMA = EWMACalculator(alpha: 0.15)
         _latencyHistory.removeAll()
     }
     
@@ -241,6 +328,13 @@ public actor LowLatencyController {
             _latencyHistory.removeFirst()
         }
         
+        // [Fix 20-C] 진동 제한 자동 해제 (120초 경과)
+        if let _ = _oscillationMaxRate, Date() > _oscillationResetTime {
+            _oscillationMaxRate = nil
+            _recentBufferingTimestamps.removeAll()
+            logger.info("LowLatency: 진동 제한 해제 — 가속 범위 정상 복원")
+        }
+        
         // 초기 재생 시 타겟 대비 크게 벗어나면 seek으로 즉시 점프 (PID 수렴 대기 대신)
         // 첫 측정에서만 1회 적용 — 이후는 PID로 미세 조정
         if !_initialSeekDone {
@@ -250,17 +344,20 @@ public actor LowLatencyController {
                 // 타겟보다 2초 이상 뒤쳐진 상태 → seek으로 즉시 이동
                 _state = .seekRequired
                 onSeekRequired?(config.targetLatency)
-                pidController.reset()
+                // [Fix 20-E] Seek 후 preload grace — 버퍼 재구축 보호
+                enterPostSeekGrace()
                 logger.info("Initial seek: latency \(String(format: "%.1f", smoothedLatency))s → target \(String(format: "%.1f", self.config.targetLatency))s")
                 return
             }
         }
         
-        // Check if seek is required (latency too high)
+        // [Fix 20-D] 점진적 수렴: maxLatency 초과가 아닌 중간 범위(8~12s)는 가속으로 접근
+        // seek은 maxLatency 초과 시에만 실행 (기존과 동일)
         if smoothedLatency > config.maxLatency {
             _state = .seekRequired
             onSeekRequired?(config.targetLatency)
-            pidController.reset()
+            // [Fix 20-E] Seek 후 preload grace — 버퍼 재구축 보호
+            enterPostSeekGrace()
             logger.warning("Latency \(String(format: "%.1f", smoothedLatency))s exceeds max, seek required")
             return
         }
@@ -270,7 +367,7 @@ public actor LowLatencyController {
         let pidOutput = pidController.update(error: error, deltaTime: 1.0)
         
         // Determine rate adjustment — 직접 PID 출력을 rate로 변환
-        let newRate: Double
+        var newRate: Double
         
         if abs(error) < config.slowDownThreshold {
             // 데드존 안 — 동기화 완료 상태
@@ -278,10 +375,18 @@ public actor LowLatencyController {
             _state = .synced
         } else if error > 0 {
             // 뒤쳐짐 — 속도 올림
-            // PID 출력을 직접 rate 오프셋으로 사용 (0.1 승수 제거)
-            // 클램핑으로 max rate 초과 방지
-            let rateOffset = min(pidOutput * 0.3, config.maxPlaybackRate - 1.0)
-            newRate = min(1.0 + max(0.01, rateOffset), config.maxPlaybackRate)
+            // 버퍼 건강도에 따라 가속 댐핑 — 낮은 버퍼에서 과도한 가속 방지
+            let bh = bufferHealthProvider?() ?? 1.0
+            let damping: Double
+            if bh < 0.3 {
+                damping = 0.0  // 버퍼 위험 — 가속 중단
+            } else if bh < 0.6 {
+                damping = 0.5  // 버퍼 주의 — 가속 절반
+            } else {
+                damping = 1.0  // 버퍼 정상 — 전체 가속
+            }
+            let rateOffset = min(pidOutput * 0.3 * damping, config.maxPlaybackRate - 1.0)
+            newRate = min(1.0 + max(0.01 * damping, rateOffset), config.maxPlaybackRate)
             _state = .catchingUp
         } else {
             // 앞서감 — 속도 내림
@@ -290,8 +395,13 @@ public actor LowLatencyController {
             _state = .slowingDown
         }
         
-        // Apply rate if changed significantly
-        if abs(newRate - _currentRate) > 0.003 {
+        // [Fix 20-F] 통합 가속 상한 (쿨다운 + 진동 + 멀티라이브 예산)
+        if newRate > 1.0 {
+            newRate = min(newRate, effectiveMaxRate)
+        }
+        
+        // Apply rate if changed significantly (0.005 임계값: 미세한 떨림 무시)
+        if abs(newRate - _currentRate) > 0.005 {
             _currentRate = newRate
             onRateChange?(newRate)
             
@@ -318,7 +428,7 @@ public actor LowLatencyController {
     /// Reset all state
     public func reset() {
         pidController.reset()
-        latencyEWMA = EWMACalculator(alpha: 0.3)
+        latencyEWMA = EWMACalculator(alpha: 0.15)
         _latencyHistory.removeAll()
         _currentRate = 1.0
         _state = .idle

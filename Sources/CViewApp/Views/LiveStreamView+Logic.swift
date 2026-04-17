@@ -124,6 +124,8 @@ extension LiveStreamView {
                     playerSettings: ps
                 )
                 playerVM?.applySettings(volume: ps.volumeLevel, lowLatency: ps.lowLatencyMode, catchupRate: ps.catchupRate)
+                playerVM?.applyForceHighestQuality(ps.forceHighestQuality)
+                playerVM?.applySharpPixelScaling(ps.sharpPixelScaling)
             }
             isLoadingStream = false  // 영상 버퍼링은 VLC streamPhase 스피너가 처리
 
@@ -143,6 +145,16 @@ extension LiveStreamView {
             Task {
                 await _forwarder?.setSyncSpeedCallback { [weak _playerVM] speed in
                     Task { @MainActor [weak _playerVM] in _playerVM?.applySyncSpeed(speed) }
+                }
+                // [Fix 20] PID 활성 상태 콜백 — PID 능동 제어 중이면 서버 추천 무시
+                await _forwarder?.setPIDActiveCallback { [weak _playerVM] in
+                    guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return false }
+                    return await coord.lowLatencyController?.isPIDActive ?? false
+                }
+                // [Fix 20 Phase3] PID 현재 배율 콜백 — Rate Arbiter 통합 속도 결정
+                await _forwarder?.setPIDCurrentRateCallback { [weak _playerVM] in
+                    guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 1.0 }
+                    return await coord.lowLatencyController?.currentRate ?? 1.0
                 }
                 // VLC 엔진의 liveCaching 값을 targetLatency로 전달
                 if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {

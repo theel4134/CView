@@ -65,11 +65,28 @@ extension AppState {
         ) { [weak self] _ in
             self?.multiLiveManager.isTerminating = true
             MultiLivePersistedState.clear()
-            // 멀티채팅 저장 세션도 초기화 — 재시작 시 빈 대기 화면으로 시작
-            self?.settingsStore.multiChat.savedSessions = []
-            self?.settingsStore.multiChat.selectedChannelId = nil
-            self?.settingsStore.scheduleDebouncedSave()
+
+            // 멀티채팅 초기화 플래그 — DataStore는 actor라 동기 저장 불가하므로
+            // UserDefaults 플래그만 설정하고 다음 실행 시 load()에서 처리
+            UserDefaults.standard.set(true, forKey: "multiChatShouldClear")
+
+            // NotificationCenter observer 명시적 해제
+            self?.removeAllObservers()
         }
+    }
+
+    /// 모든 NotificationCenter observer 해제
+    private func removeAllObservers() {
+        let nc = NotificationCenter.default
+        [appActiveObserver, appResignObserver, sessionExpiryObserver,
+         deminiaturizeObserver, terminateObserver].compactMap { $0 }.forEach {
+            nc.removeObserver($0)
+        }
+        appActiveObserver = nil
+        appResignObserver = nil
+        sessionExpiryObserver = nil
+        deminiaturizeObserver = nil
+        terminateObserver = nil
     }
 
     /// 앱 포커스 복귀 — 폴링 주기를 정상(30s)으로 복구 & 즉시 1회 갱신

@@ -31,30 +31,33 @@ extension VLCPlayerEngine: VLCMediaPlayerDelegate {
             // 1-2프레임 디코딩하면서 무한 필터링 되는 것을 방지)
             if case .playing = _state.withLock({ $0.currentPhase }) {
                 let decoded = player.media?.statistics.decodedVideo ?? 0
-                let delta = decoded - _lastBufferingDecodedCount
-                _lastBufferingDecodedCount = decoded
-                if delta > 0 {
-                    // 이전 체크 이후 새 프레임이 디코딩됨
-                    let now = Date()
-                    if let filterStart = _bufferingFilterStartTime {
-                        if now.timeIntervalSince(filterStart) >= 3.0 {
-                            // [Fix 16h-opt3] 5→3초: 실제 버퍼링 감지 2초 빨라짐
-                            _bufferingFilterStartTime = nil
+                // [Fix 27] Mutex로 보호 — VLC delegate 스레드와 Main 스레드 동시 접근 방지
+                let shouldFilter = _bufferingFilter.withLock { state -> Bool in
+                    let delta = decoded - state.lastDecodedCount
+                    state.lastDecodedCount = decoded
+                    if delta > 0 {
+                        let now = Date()
+                        if let filterStart = state.filterStartTime {
+                            if now.timeIntervalSince(filterStart) >= 3.0 {
+                                state.filterStartTime = nil
+                                return false  // 3초 초과 → 버퍼링 전파
+                            } else {
+                                return true   // 아직 3초 미만, 필터 유지
+                            }
                         } else {
-                            return  // 아직 5초 미만, 필터 유지
+                            state.filterStartTime = now
+                            return true       // 최초 필터링, 타이머 시작
                         }
                     } else {
-                        _bufferingFilterStartTime = now
-                        return  // 최초 필터링, 타이머 시작
+                        state.filterStartTime = nil
+                        return false          // delta == 0 → 진짜 버퍼링
                     }
-                } else {
-                    // delta == 0: 프레임 디코딩 없음 → 필터 타이머 리셋 (진짜 버퍼링)
-                    _bufferingFilterStartTime = nil
                 }
+                if shouldFilter { return }
             }
             phase = .buffering(progress: 0)
         case .playing:
-            _bufferingFilterStartTime = nil  // C1: .playing 전이 시 필터 타이머 리셋
+            _bufferingFilter.withLock { $0.filterStartTime = nil }  // C1: .playing 전이 시 필터 리셋
             phase = .playing
         case .paused:
             phase = .paused

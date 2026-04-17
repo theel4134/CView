@@ -106,9 +106,13 @@ private struct StreamAlertCard: View {
 
                 // 금액 (후원) 또는 개월 (구독)
                 if let amount = alert.donationAmount {
-                    Text("₩\(amount.formatted())")
-                        .font(DesignTokens.Typography.custom(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(tierColor)
+                    HStack(spacing: 3) {
+                        Text("🪙")
+                            .font(.system(size: 14))
+                        Text("\(amount.formatted())")
+                            .font(DesignTokens.Typography.custom(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(tierColor)
+                    }
                 }
 
                 // 메시지 내용

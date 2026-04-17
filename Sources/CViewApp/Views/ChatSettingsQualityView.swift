@@ -132,6 +132,7 @@ struct ChatSettingsView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         displaySection(vm: vm)
+                        sizeSection()
                         contentSection(vm: vm)
                         filterSection(vm: vm)
                         statsSection(vm: vm)
@@ -148,6 +149,47 @@ struct ChatSettingsView: View {
             }
         }
         .frame(width: 420, height: 600)
+    }
+
+    // MARK: - Section Builders
+
+    /// 패널 크기(멀티채팅 / 단일 채팅) 수동 조절
+    @ViewBuilder
+    private func sizeSection() -> some View {
+        ChatSettingsCard(title: "크기", icon: "rectangle.split.2x1", color: DesignTokens.Colors.accentBlue) {
+            // 멀티채팅 패널 너비 (앱 창 대비 비율)
+            ChatSettingsRow(label: "멀티채팅 너비",
+                            icon: "square.split.2x1.fill",
+                            iconColor: DesignTokens.Colors.accentBlue,
+                            description: "앱 창 너비 대비 비율 (15~50%)") {
+                HStack(spacing: 6) {
+                    Slider(value: Binding(
+                        get: { Double(store.multiChat.panelWidthRatio) },
+                        set: { newVal in
+                            let clamped = min(max(newVal, 0.15), 0.50)
+                            store.multiChat.panelWidthRatio = CGFloat(clamped)
+                            Task { await store.save() }
+                        }
+                    ), in: 0.15...0.50, step: 0.01)
+                    .tint(DesignTokens.Colors.accentBlue)
+                    .frame(width: 110)
+                    Text("\(Int(store.multiChat.panelWidthRatio * 100))%")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(DesignTokens.Colors.accentBlue)
+                        .frame(width: 38)
+                }
+            }
+
+            ChatSettingsDivider()
+
+            // 단일 채팅 패널 너비 (pt) — LiveStreamView와 동일한 @AppStorage 키 사용
+            ChatSettingsRow(label: "채팅 패널 너비",
+                            icon: "sidebar.right",
+                            iconColor: DesignTokens.Colors.accentBlue,
+                            description: "라이브 화면 사이드 채팅 너비 (pt)") {
+                SingleChatWidthControl()
+            }
+        }
     }
 
     // MARK: - Section Builders
@@ -672,5 +714,55 @@ struct ClipLookupView: View {
                 clipTitle: "클립 \(clipUID)"
             )
         }
+    }
+}
+
+// MARK: - Single Chat Width Control
+
+/// 단일 채팅 패널 너비 (pt) 수동 입력 컨트롤.
+/// `LiveStreamView`에서 사용하는 `@AppStorage("chatPanelWidth")`와 동일한 키를 공유하여
+/// 실시간 반영된다.
+private struct SingleChatWidthControl: View {
+    @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 300
+    @State private var textValue: String = ""
+
+    private let minWidth: Double = 120
+    private let maxWidth: Double = 800
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Slider(value: Binding(
+                get: { chatPanelWidth },
+                set: { newVal in
+                    let clamped = min(max(newVal, minWidth), maxWidth)
+                    chatPanelWidth = clamped
+                    textValue = "\(Int(clamped))"
+                }
+            ), in: minWidth...maxWidth, step: 10)
+            .tint(DesignTokens.Colors.accentBlue)
+            .frame(width: 90)
+
+            TextField("", text: $textValue)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 46)
+                .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
+                .multilineTextAlignment(.trailing)
+                .onSubmit { commit() }
+
+            Text("pt")
+                .font(DesignTokens.Typography.custom(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(DesignTokens.Colors.accentBlue)
+        }
+        .onAppear { textValue = "\(Int(chatPanelWidth))" }
+    }
+
+    private func commit() {
+        guard let val = Double(textValue.trimmingCharacters(in: .whitespaces)) else {
+            textValue = "\(Int(chatPanelWidth))"
+            return
+        }
+        let clamped = min(max(val, minWidth), maxWidth)
+        chatPanelWidth = clamped
+        textValue = "\(Int(clamped))"
     }
 }

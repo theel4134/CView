@@ -3,6 +3,7 @@
 
 import Foundation
 import SwiftUI
+import AppKit
 import CViewCore
 import CViewPlayer
 
@@ -13,17 +14,28 @@ extension PlayerViewModel {
     public func takeScreenshot() {
         guard let engine = playerEngine as? VLCPlayerEngine else { return }
         guard let tempURL = engine.captureSnapshot() else { return }
-        let picturesDir = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
-        let dir = picturesDir?.appendingPathComponent("CView Screenshots")
-        if let dir {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let name = "CView_\(channelName)_\(Int(Date().timeIntervalSince1970)).png"
-            let dest = dir.appendingPathComponent(name)
-            Task.detached {
-                try? await Task.sleep(for: .milliseconds(500))
+
+        let path = (screenshotSavePath as NSString).expandingTildeInPath
+        let dir = URL(fileURLWithPath: path, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let ext = screenshotSaveFormat.fileExtension
+        let name = "CView_\(channelName)_\(Int(Date().timeIntervalSince1970)).\(ext)"
+        let dest = dir.appendingPathComponent(name)
+
+        let format = screenshotSaveFormat
+        Task.detached {
+            try? await Task.sleep(for: .milliseconds(500))
+            if format == .jpeg, let image = NSImage(contentsOf: tempURL),
+               let tiff = image.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff),
+               let jpegData = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) {
+                try? jpegData.write(to: dest)
+                try? FileManager.default.removeItem(at: tempURL)
+            } else {
                 try? FileManager.default.copyItem(at: tempURL, to: dest)
-                await MainActor.run { Log.player.info("스크린샷 저장: \(dest.path)") }
             }
+            await MainActor.run { Log.player.info("스크린샷 저장: \(dest.path)") }
         }
     }
 
@@ -162,6 +174,8 @@ extension PlayerViewModel {
         audioStereoMode = UInt(settings.audioStereoMode)
         audioMixMode = settings.audioMixMode
         audioDelay = Int(settings.audioDelay)
+        screenshotSavePath = settings.screenshotPath
+        screenshotSaveFormat = settings.screenshotFormat
     }
 
     // MARK: - 녹화

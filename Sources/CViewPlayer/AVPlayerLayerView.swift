@@ -84,6 +84,17 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         playerLayer.player = player
     }
 
+    /// 선명한 화면(픽셀 샤프 스케일링) 토글.
+    /// - true: magnificationFilter/minificationFilter = .nearest → 픽셀 경계 유지 (에지 선명, 계단감 가능)
+    /// - false: 기본 .linear / .trilinear (부드러운 보간)
+    func setSharpScaling(_ enabled: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.magnificationFilter = enabled ? .nearest : .linear
+        playerLayer.minificationFilter  = enabled ? .nearest : .trilinear
+        CATransaction.commit()
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         // 윈도우 이동/스크린 변경 시 contentsScale 자동 업데이트

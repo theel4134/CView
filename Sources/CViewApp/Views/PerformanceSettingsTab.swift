@@ -13,7 +13,9 @@ struct PerformanceSettingsTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                SettingsPageHeader("성능")
+
                 SettingsSection(title: "하드웨어 & 메모리", icon: "cpu.fill", color: DesignTokens.Colors.accentOrange) {
                     SettingsRow("하드웨어 디코딩",
                                 description: "GPU 가속을 사용해 CPU 부하를 줄입니다",
@@ -57,6 +59,18 @@ struct PerformanceSettingsTab: View {
                     }
                 }
 
+                SettingsSection(title: "개발자", icon: "hammer.fill", color: DesignTokens.Colors.textSecondary) {
+                    SettingsRow("디버그 모드",
+                                description: "상세 로그 및 디버그 정보를 활성화합니다",
+                                icon: "ant.fill", iconColor: DesignTokens.Colors.textSecondary) {
+                        Toggle("", isOn: $settings.appearance.debugMode)
+                            .toggleStyle(.switch).tint(DesignTokens.Colors.accentOrange).labelsHidden()
+                    }
+                    if settings.appearance.debugMode {
+                        SettingsSectionFooter(text: "활성화 시 성능 오버레이, 네트워크 로그 등 개발 정보가 표시됩니다.")
+                    }
+                }
+
                 SettingsSection(title: "캐시 & 초기화", icon: "trash.fill", color: DesignTokens.Colors.live) {
                     // 캐시 크기 표시
                     SettingsRow("현재 캐시 크기",
@@ -74,18 +88,19 @@ struct PerformanceSettingsTab: View {
                         showCacheAlert = true
                         cacheSize = "0 MB"
                     } label: {
-                        HStack(spacing: 10) {
+                        HStack(spacing: DesignTokens.Spacing.md) {
                             Image(systemName: "trash")
-                                .font(DesignTokens.Typography.caption)
+                                .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(DesignTokens.Colors.accentOrange)
-                                .frame(width: 18)
+                                .frame(width: 26, height: 26)
+                                .background(DesignTokens.Colors.accentOrange.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             Text("캐시 전체 삭제")
-                                .font(DesignTokens.Typography.captionMedium)
+                                .font(DesignTokens.Typography.body)
                                 .foregroundStyle(DesignTokens.Colors.accentOrange)
                             Spacer()
                         }
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.vertical, DesignTokens.Spacing.md)
+                        .padding(.horizontal, DesignTokens.Spacing.lg)
+                        .padding(.vertical, 11)
                     }
                     .buttonStyle(.plain)
                     RowDivider()
@@ -95,30 +110,29 @@ struct PerformanceSettingsTab: View {
                             showResetAlert = true
                         }
                     } label: {
-                        HStack(spacing: 10) {
+                        HStack(spacing: DesignTokens.Spacing.md) {
                             Image(systemName: "arrow.counterclockwise")
-                                .font(DesignTokens.Typography.caption)
+                                .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(DesignTokens.Colors.live)
-                                .frame(width: 18)
-                            VStack(alignment: .leading, spacing: 1) {
+                                .frame(width: 26, height: 26)
+                                .background(DesignTokens.Colors.live.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text("모든 설정 초기화")
-                                    .font(DesignTokens.Typography.captionMedium)
+                                    .font(DesignTokens.Typography.body)
                                     .foregroundStyle(DesignTokens.Colors.live)
                                 Text("되돌릴 수 없습니다")
-                                    .font(DesignTokens.Typography.caption)
+                                    .font(DesignTokens.Typography.footnote)
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                             Spacer()
                         }
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.vertical, DesignTokens.Spacing.md)
+                        .padding(.horizontal, DesignTokens.Spacing.lg)
+                        .padding(.vertical, 11)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(DesignTokens.Spacing.xl)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
         }
         .onAppear { cacheSize = measureCacheSize() }
         .onChange(of: settings.appearance) { _, _ in Task { await settings.save() } }

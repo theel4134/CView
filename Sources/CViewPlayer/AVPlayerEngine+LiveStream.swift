@@ -1,26 +1,46 @@
 // MARK: - AVPlayerEngine+LiveStream.swift
-// CViewPlayer - 라이브 스트림 지연 제어: 캐치업 설정, 스톨 감지, 네트워크 모니터링
+// CViewPlayer - 라이브 캐치업 + 통합 스톨 워치독
+//
+// 설계 원칙
+//   - 캐치업: 2초 측정 → EMA 스무딩 → 0.03 이하 변화는 무시 (API 호출 최소화)
+//   - 스톨 감지: currentTime 정체 + 버퍼 고갈 두 신호를 OR 판정하는 단일 워치독
+//   - 재연결 폭주 보호: 5분 내 3회 초과 시 영구 에러 전환
+//   - 배경 세션(isBackgroundMode)은 두 루프 모두 건너뜀 → 유휴 CPU 절감
 
 import Foundation
 import AVFoundation
-import Network
 import CViewCore
 
 // MARK: - Live Catchup Configuration
 
-/// 라이브 스트림 저지연 캐치업 설정
-public struct AVLiveCatchupConfig: Sendable {
-    /// 목표 지연 시간 (초)
+/// 라이브 스트림 저지연 캐치업 설정.
+/// `AVPlayerEngine.catchupConfig`에 프리셋 중 하나를 대입하거나 커스텀 값 구성.
+public struct AVLiveCatchupConfig: Sendable, Equatable {
+
+    /// 목표 지연 시간(초). 이 값 근처로 수렴 시 재생 속도 1.0x로 복귀.
     public var targetLatency: Double
-    /// 최대 허용 지연 시간 (초) — 초과 시 캐치업 시작
+    /// 최대 허용 지연(초). 초과 시 라이브 엣지로 seek.
     public var maxLatency: Double
-    /// 최대 캐치업 재생 속도
+    /// 캐치업 중 허용되는 최대 배속.
     public var maxCatchupRate: Float
-    /// 버퍼 전진 지속 시간 (초)
+    /// AVPlayerItem.preferredForwardBufferDuration (초).
     public var preferredForwardBuffer: Double
 
-    /// [외부 리서치: Apple LL-HLS] 최저 지연 — 안정적 네트워크(유선/고속WiFi) 전용
-    /// 부분 세그먼트(~200ms) 지원 LL-HLS 서버에서 최적 성능
+    public init(
+        targetLatency: Double,
+        maxLatency: Double,
+        maxCatchupRate: Float,
+        preferredForwardBuffer: Double
+    ) {
+        self.targetLatency = targetLatency
+        self.maxLatency = maxLatency
+        self.maxCatchupRate = maxCatchupRate
+        self.preferredForwardBuffer = preferredForwardBuffer
+    }
+
+    // MARK: Presets
+
+    /// [외부 리서치: Apple LL-HLS] 최저 지연 — 유선/고속WiFi 전용
     public static let ultraLow = AVLiveCatchupConfig(
         targetLatency: 2.0, maxLatency: 5.0,
         maxCatchupRate: 1.5, preferredForwardBuffer: 2.0
@@ -33,8 +53,7 @@ public struct AVLiveCatchupConfig: Sendable {
         targetLatency: 5.0, maxLatency: 12.0,
         maxCatchupRate: 1.2, preferredForwardBuffer: 7.0
     )
-    /// 웹(hls.js) 동기화 — 앱↔웹 동일 재생 위치 목표
-    /// hls.js 기본 3×TARGETDURATION(2s)=6.0s에 맞춰 5.0s 타겟, 최소 속도 변화로 수렴
+    /// hls.js 동기화 — 3×TARGETDURATION(2s)=6s 버퍼에 맞춤
     public static let webSync = AVLiveCatchupConfig(
         targetLatency: 5.0, maxLatency: 12.0,
         maxCatchupRate: 1.10, preferredForwardBuffer: 5.0
@@ -43,81 +62,94 @@ public struct AVLiveCatchupConfig: Sendable {
         targetLatency: 8.0, maxLatency: 20.0,
         maxCatchupRate: 1.1, preferredForwardBuffer: 12.0
     )
-
-    public init(targetLatency: Double, maxLatency: Double,
-                maxCatchupRate: Float, preferredForwardBuffer: Double) {
-        self.targetLatency = targetLatency
-        self.maxLatency = maxLatency
-        self.maxCatchupRate = maxCatchupRate
-        self.preferredForwardBuffer = preferredForwardBuffer
-    }
 }
 
-// MARK: - Stall Watchdog & Live Catchup
+// MARK: - Network-Aware Catchup Adjustment
 
 extension AVPlayerEngine {
 
-    /// 스마트 스톨 워치독 — currentTime 기반 실질 정체 감지:
-    /// 1) currentTime 정체: 21초(7회 연속) 동안 재생 위치 변화 없음 → 재연결
-    /// 2) 버퍼 고갈: 24초(8회 연속) isPlaybackLikelyToKeepUp=false → 재연결
-    /// 3) 연속 재연결 실패 보호: 5분 내 3회 이상 재연결 시 에러 상태 전환
+    /// 네트워크 인터페이스에 따라 catchupConfig 조정.
+    /// 호출자: play() 진입 시 + NetworkMonitor 구독 콜백.
+    internal func adjustCatchupConfigForNetwork() {
+        let type = stateLock.withLock { $0.networkType }
+        let cfg: AVLiveCatchupConfig = {
+            switch type {
+            case .wiredEthernet:
+                // 유선: 저지연 유지하되 1080p60 VBR 피크(8-12Mbps) 지터 흡수용 6s 버퍼로 상향
+                // (기존 4s는 장시간 재생 시 간헐적 스톨 유발)
+                return AVLiveCatchupConfig(
+                    targetLatency: 3.0, maxLatency: 8.0,
+                    maxCatchupRate: 1.4, preferredForwardBuffer: 6.0
+                )
+            case .wifi:
+                // WiFi: RSSI 변동/혼선 흡수용 10s 버퍼 — VLC 수준의 안정성 확보
+                return AVLiveCatchupConfig(
+                    targetLatency: 5.0, maxLatency: 12.0,
+                    maxCatchupRate: 1.2, preferredForwardBuffer: 10.0
+                )
+            case .cellular:
+                return AVLiveCatchupConfig(
+                    targetLatency: 6.0, maxLatency: 15.0,
+                    maxCatchupRate: 1.15, preferredForwardBuffer: 14.0
+                )
+            case .offline, .other:
+                // 네트워크 타입 불명 — WiFi 수준의 안전 프리셋 적용
+                return AVLiveCatchupConfig(
+                    targetLatency: 5.0, maxLatency: 12.0,
+                    maxCatchupRate: 1.2, preferredForwardBuffer: 10.0
+                )
+            }
+        }()
+        stateLock.withLock { $0.catchupConfig = cfg }
+    }
+}
+
+// MARK: - Stall Watchdog (통합 단일 경로)
+
+extension AVPlayerEngine {
+
+    /// 통합 스톨 워치독 — 4초 주기로 다음 두 신호를 OR 판정:
+    /// 1) currentTime 정체 12회 연속(≈48s): 재생 위치 미변화 (VLC 수준의 관대함)
+    /// 2) isPlaybackLikelyToKeepUp=false 14회 연속(≈56s): 버퍼 회복 불능
+    /// → 재연결 요청. 5분 내 3회 초과 시 .connectionLost 영구 에러 전환.
+    ///
+    /// `observeItem` → readyToPlay 시점에 호출. 중복 호출은 기존 Task를 자동 취소.
     /// 
-    /// 이전 문제: lastProgressTime + timeControlStatus 기반 감지가 멀티라이브에서
-    /// false positive를 일으킴 (timeControlStatus가 잠시 .waiting 상태일 때
-    /// 실제로는 재생 중이지만 재연결 트리거). currentTime 직접 비교로 해결.
+    /// [안정성 튜닝] 기존 7/8 역치(21s/24s)는 WiFi/셀룰러 지터에서 false positive 다수 발생.
+    /// VLC는 내부 http-reconnect로 60s+ 복구 대기 — 이에 맞춰 역치 상향.
     internal func startStallWatchdog() {
-        let kCheckInterval: UInt64 = 4_000_000_000 // 4초 (AVPlayer 기본엔진 전환: CPU 절감)
+        let checkInterval: UInt64 = 4_000_000_000 // 4s
 
-        stallWatchdogTask?.cancel()
-        lastProgressTime = Date()
-        recentReconnectTimestamps.removeAll()
+        let task = Task { [weak self] in
+            // 초기 안정화 대기 — readyToPlay 직후 네트워크 RTT + HLS 초기 세그먼트 로드 흡수용 5s
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
 
-        stallWatchdogTask = Task { [weak self] in
-            // readyToPlay 이후 시작되므로 짧은 안정화 대기만 필요.
-            // 이전 8초 대기는 play() 직후 호출 시 false positive 방지용이었으나,
-            // 이제 readyToPlay KVO에서 호출되므로 2초면 충분.
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            
-            var bufferStallCount = 0
             var timeStallCount = 0
+            var bufferStallCount = 0
             var previousCurrentTime: Double = -1
-            
+
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: kCheckInterval)
+                try? await Task.sleep(nanoseconds: checkInterval)
                 guard let self, !Task.isCancelled else { return }
 
-                // 백그라운드 세션은 스톨 감시 건너뜀 (비활성 세션 복구 지연 허용)
-                guard !self.isBackgroundMode else {
-                    bufferStallCount = 0
+                // 배경 세션은 스톨 감시 건너뜀 (비활성 세션 복구 지연 허용)
+                if self.isBackgroundMode {
                     timeStallCount = 0
+                    bufferStallCount = 0
                     previousCurrentTime = -1
                     continue
                 }
 
-                let phase = self._avState.withLock { $0.state }
-
-                // idle/ended/error 상태에서는 감시 일시 중지 (루프는 유지)
-                if phase == .idle || phase == .ended {
-                    bufferStallCount = 0
+                let phase = self.currentPhase
+                // 재생/버퍼링 이외 단계에서는 카운터 리셋 후 유지
+                if !phaseIsWatchable(phase) {
                     timeStallCount = 0
-                    previousCurrentTime = -1
-                    continue
-                }
-                if case .error = phase {
                     bufferStallCount = 0
-                    timeStallCount = 0
                     previousCurrentTime = -1
                     continue
                 }
 
-                guard phase == .playing || phase == .buffering(progress: 0) else {
-                    bufferStallCount = 0
-                    timeStallCount = 0
-                    previousCurrentTime = -1
-                    continue
-                }
-
-                // ── currentTime 기반 실질 정체 감지 ──
+                // ── 1) currentTime 정체 감지 ──
                 let currentTime = CMTimeGetSeconds(self.player.currentTime())
                 if previousCurrentTime >= 0 && currentTime.isFinite {
                     if abs(currentTime - previousCurrentTime) < 0.1 {
@@ -126,206 +158,148 @@ extension AVPlayerEngine {
                         timeStallCount = 0
                     }
                 }
-                if currentTime.isFinite {
-                    previousCurrentTime = currentTime
-                }
+                if currentTime.isFinite { previousCurrentTime = currentTime }
 
-                // 버퍼 부족 카운트
+                // ── 2) 버퍼 고갈 감지 ──
                 let keepUp = self.player.currentItem?.isPlaybackLikelyToKeepUp ?? true
                 if !keepUp { bufferStallCount += 1 } else { bufferStallCount = 0 }
 
-                // 재연결 조건 (false positive 방지를 위해 더 보수적):
-                // 1) currentTime 정체 7회 연속 (21초간 재생 위치 변화 없음)
-                // 2) 버퍼 고갈 연속 8회 (24초간 isPlaybackLikelyToKeepUp=false)
-                let shouldReconnect = timeStallCount >= 7 || bufferStallCount >= 8
-
-                if shouldReconnect {
+                // ── 재연결 조건 OR 판정 (완화된 역치: 48s/56s) ──
+                if timeStallCount >= 12 || bufferStallCount >= 14 {
                     self.logger.warning(
-                        "AVPlayerEngine: stall watchdog — timeStalls=\(timeStallCount) bufferStalls=\(bufferStallCount) currentTime=\(String(format: "%.1f", currentTime))"
+                        "AVPlayerEngine: stall detected — timeStalls=\(timeStallCount) bufferStalls=\(bufferStallCount) currentTime=\(String(format: "%.1f", currentTime))"
                     )
+                    timeStallCount = 0
+                    bufferStallCount = 0
+                    previousCurrentTime = -1
 
-                    // 연속 재연결 실패 보호: 5분 내 maxReconnectsInWindow회 초과 시 에러 전환
-                    let now = Date()
-                    self.recentReconnectTimestamps.append(now)
-                    self.recentReconnectTimestamps.removeAll {
-                        now.timeIntervalSince($0) > self.reconnectWindowSeconds
-                    }
-
-                    if self.recentReconnectTimestamps.count > self.maxReconnectsInWindow {
+                    if self.registerReconnectAndShouldGiveUp() {
                         self.logger.error(
-                            "AVPlayerEngine: \(self.maxReconnectsInWindow)+ reconnects in \(Int(self.reconnectWindowSeconds))s — giving up"
+                            "AVPlayerEngine: \(self.maxReconnectsInWindow)+ reconnects within \(Int(self.reconnectWindowSeconds))s — giving up"
                         )
                         self.handleError(.connectionLost)
-                        return // 워치독 종료 (복구 불가 상태)
+                        return
                     }
 
-                    // 재연결 요청 후 카운터 리셋, 루프 계속
-                    bufferStallCount = 0
-                    timeStallCount = 0
-                    previousCurrentTime = -1
-                    self.lastProgressTime = Date()
+                    self.stateLock.withLock { $0.lastProgressTime = Date() }
                     self.handleError(.connectionLost)
-                    // 재연결 완료 대기 (15초) — play()가 다시 호출될 때까지 대기
+                    // 재연결 완료 대기 — play()가 재호출되면 stop→새 play 흐름으로 이 Task는 취소됨
                     try? await Task.sleep(nanoseconds: 15_000_000_000)
-                    continue
                 }
             }
         }
+        tasks.set(AVPlayerTaskBag.kStallWatchdog, task)
     }
 
-    // MARK: - Live Catchup Loop
+    /// 최근 재연결 이력에 현재 시각 기록 후 포기해야 하는지 판단.
+    private func registerReconnectAndShouldGiveUp() -> Bool {
+        let now = Date()
+        return stateLock.withLock { state in
+            state.recentReconnectTimestamps.append(now)
+            state.recentReconnectTimestamps.removeAll { now.timeIntervalSince($0) > reconnectWindowSeconds }
+            return state.recentReconnectTimestamps.count > maxReconnectsInWindow
+        }
+    }
+}
 
-    /// 2초마다 지연 측정 → 스무딩된 속도 조정
-    /// - 급격한 속도 변화를 방지하기 위해 최근 4개 측정값의 EMA 사용
-    /// - latency > maxLatency: 라이브 엣지로 즉시 점프 후 offset 재설정
-    /// - 백그라운드 세션은 건너뜀 (비활성 세션에서 속도 조정 불필요)
+/// 스톨 워치독이 감시해야 하는 단계인지 판정.
+/// `.playing`과 `.buffering`만 대상(그 외는 스톨 감지 불가/불필요).
+private func phaseIsWatchable(_ phase: PlayerState.Phase) -> Bool {
+    switch phase {
+    case .playing, .buffering:
+        return true
+    default:
+        return false
+    }
+}
+
+// MARK: - Live Catchup Loop
+
+extension AVPlayerEngine {
+
+    /// 3초 주기로 지연 측정 → EMA 스무딩된 속도 조정.
     internal func startLiveCatchupLoop() {
-        let kCheckInterval: UInt64 = 3_000_000_000 // 3초 (AVPlayer 기본엔진 전환: CPU 절감)
+        let checkInterval: UInt64 = 3_000_000_000 // 3s
 
-        liveCatchupTask?.cancel()
-        liveCatchupTask = Task { [weak self] in
+        let task = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: kCheckInterval)
+                try? await Task.sleep(nanoseconds: checkInterval)
                 guard let self, !Task.isCancelled else { return }
-                guard !self.isBackgroundMode else { continue }
-                await MainActor.run { self.adjustPlaybackRateForLatency() }
+                if self.isBackgroundMode { continue }
+                await self.adjustPlaybackRateForLatency()
             }
         }
+        tasks.set(AVPlayerTaskBag.kLiveCatchup, task)
     }
 
     @MainActor
-    internal func adjustPlaybackRateForLatency() {
+    private func adjustPlaybackRateForLatency() {
         guard let item = player.currentItem,
               let seekRange = item.seekableTimeRanges.last?.timeRangeValue,
               player.timeControlStatus == .playing else { return }
 
-        let liveEdge  = CMTimeGetSeconds(CMTimeRangeGetEnd(seekRange))
+        let liveEdge = CMTimeGetSeconds(CMTimeRangeGetEnd(seekRange))
         let currentPos = CMTimeGetSeconds(player.currentTime())
         guard liveEdge.isFinite, currentPos.isFinite, liveEdge > 0 else { return }
 
         let latency = max(0, liveEdge - currentPos)
-        measuredLatency = latency
-        onLatencyChange?(latency)
+
+        // 측정값/레이턴시 콜백 전파
+        stateLock.withLock { $0.measuredLatency = latency }
+        if let cb = onLatencyChange {
+            Task { @MainActor in cb(latency) }
+        }
 
         let cfg = catchupConfig
 
-        // ── 지연 과다: 라이브 엣지 바로 앞으로 점프 ──────────────────────
+        // ── 지연 과다: 라이브 엣지 근처로 즉시 점프 ──
         if latency > cfg.maxLatency {
             let target = max(0, liveEdge - cfg.targetLatency)
             logger.info("AVPlayerEngine: latency \(String(format: "%.1f", latency))s > max → snap to live edge")
-            seek(to: target)
-            rateHistory.removeAll()
+            player.seek(
+                to: CMTime(seconds: target, preferredTimescale: 600),
+                toleranceBefore: CMTime(seconds: 1.0, preferredTimescale: 600),
+                toleranceAfter: .zero
+            )
+            stateLock.withLock { $0.rateHistory.removeAll(keepingCapacity: true) }
             return
         }
 
-        // ── 지연 정상 범위: 스무딩된 속도 계산 ───────────────────────────
+        // ── 목표치 범위 결정 ──
         let targetRate: Float
         if latency > cfg.targetLatency {
-            // 0~1로 정규화한 ratio → 로그 곡선으로 완만하게 가속
+            // 0~1 정규화 → 코사인 이징
             let ratio = min((latency - cfg.targetLatency) / (cfg.maxLatency - cfg.targetLatency), 1.0)
-            let curved = Float(1.0 - cos(ratio * .pi / 2))    // 코사인 이징
+            let curved = Float(1.0 - cos(ratio * .pi / 2))
             targetRate = 1.0 + curved * (cfg.maxCatchupRate - 1.0)
         } else if latency < cfg.targetLatency * 0.6 {
-            // 지연이 목표보다 충분히 낮으면 정상 속도로 복귀 + 히스토리 리셋
-            // rateHistory를 유지하면 다음 캐치업 사이클에서 높은 과거 값이 EMA에 반영되어
-            // 불필요하게 빠른 재생 속도로 시작하는 오버슈트 발생 → 명시적으로 리셋
-            if player.rate != 1.0 || !rateHistory.isEmpty {
+            // 지연이 충분히 낮으면 1.0으로 복귀 + 히스토리 리셋 (오버슈트 방지)
+            let needsReset = stateLock.withLock { state -> Bool in
+                let had = !state.rateHistory.isEmpty
+                state.rateHistory.removeAll(keepingCapacity: true)
+                return had
+            }
+            if player.rate != 1.0 || needsReset {
                 player.rate = 1.0
-                rateHistory.removeAll()
             }
             return
         } else {
-            return // 목표 범위 내 → 아무것도 하지 않음
+            return
         }
 
-        // EMA 스무딩 (α=0.4): 빠른 반응이면서 급격한 변화는 완충
+        // ── EMA 스무딩 (α=0.4) ──
         let alpha: Float = 0.4
-        let last = rateHistory.last ?? player.rate
-        let smoothed = alpha * targetRate + (1 - alpha) * last
+        let smoothed: Float = stateLock.withLock { state in
+            let last = state.rateHistory.last ?? player.rate
+            let s = alpha * targetRate + (1 - alpha) * last
+            state.rateHistory.append(s)
+            if state.rateHistory.count > 4 { state.rateHistory.removeFirst() }
+            return s
+        }
 
-        rateHistory.append(smoothed)
-        if rateHistory.count > 4 { rateHistory.removeFirst() }
-
-        // 0.03 미만 변화는 무시해서 불필요한 API 호출 제거
+        // 0.03 미만 변화는 무시 (불필요한 API 호출 제거)
         if abs(player.rate - smoothed) > 0.03 {
             player.rate = smoothed
-        }
-    }
-
-    // MARK: - Network Monitor
-
-    internal func setupNetworkMonitor() {
-        networkMonitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
-            let previousType = self.currentNetworkType
-            
-            if path.usesInterfaceType(.wiredEthernet) {
-                self.currentNetworkType = .wiredEthernet
-            } else if path.usesInterfaceType(.wifi) {
-                self.currentNetworkType = .wifi
-            } else if path.usesInterfaceType(.cellular) {
-                self.currentNetworkType = .cellular
-            } else {
-                self.currentNetworkType = .other
-            }
-            
-            // 네트워크 인터페이스 변경 시 자동 대응
-            if previousType != self.currentNetworkType {
-                self.logger.info("AVPlayerEngine: 네트워크 전환 \(String(describing: previousType)) → \(String(describing: self.currentNetworkType))")
-                
-                // 연결 상실 시 즉시 재연결 요청
-                if path.status != .satisfied {
-                    self.logger.warning("AVPlayerEngine: 네트워크 연결 해제 감지 — 재연결 대기")
-                    return
-                }
-                
-                // 라이브 스트림에서만 캐치업 설정 재조정
-                let isLive = self.isLiveStream
-                if isLive {
-                    self.adjustCatchupConfigForNetwork()
-                    
-                    // 현재 재생 중인 아이템의 버퍼 설정 즉시 업데이트
-                    Task { @MainActor [weak self] in
-                        guard let self, let item = self.player.currentItem else { return }
-                        item.preferredForwardBufferDuration = self.catchupConfig.preferredForwardBuffer
-                        self.logger.info("AVPlayerEngine: 버퍼 설정 업데이트 — target=\(self.catchupConfig.targetLatency)s max=\(self.catchupConfig.maxLatency)s buffer=\(self.catchupConfig.preferredForwardBuffer)s")
-                    }
-                }
-                
-                // 스톨 워치독 타임스탬프 갱신 — 전환 순간의 일시 정지를 스톨로 오인 방지
-                self.lastProgressTime = Date()
-            }
-        }
-        networkMonitor.start(queue: networkQueue)
-    }
-
-    /// 네트워크 인터페이스에 따라 목표 지연 시간 조정
-    internal func adjustCatchupConfigForNetwork() {
-        switch currentNetworkType {
-        case .wiredEthernet:
-            // [외부 리서치: LL-HLS] 유선: 최저 지연 (안정적 네트워크)
-            // 부분 세그먼트 활용으로 2초 미만 타겟 가능
-            catchupConfig.targetLatency = 1.5
-            catchupConfig.maxLatency = 4.0
-            catchupConfig.maxCatchupRate = 1.5
-            catchupConfig.preferredForwardBuffer = 2.0
-        case .wifi:
-            // WiFi: 저지연 기본값
-            catchupConfig.targetLatency = 2.5
-            catchupConfig.maxLatency = 6.0
-            catchupConfig.maxCatchupRate = 1.3
-            catchupConfig.preferredForwardBuffer = 3.0
-        case .cellular:
-            // 모바일: 안정 우선
-            catchupConfig.targetLatency = 5.0
-            catchupConfig.maxLatency = 12.0
-            catchupConfig.maxCatchupRate = 1.2
-            catchupConfig.preferredForwardBuffer = 8.0
-        default:
-            catchupConfig.targetLatency = 3.0
-            catchupConfig.maxLatency = 8.0
-            catchupConfig.maxCatchupRate = 1.3
-            catchupConfig.preferredForwardBuffer = 4.0
         }
     }
 }

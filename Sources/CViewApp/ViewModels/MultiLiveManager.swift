@@ -41,6 +41,7 @@ public final class MultiLiveManager {
 
     /// 현재 추가 중인 채널 ID 세트 (중복 추가 방지)
     private var addingChannelIds: Set<String> = []
+    private var removingSessionIds: Set<UUID> = []  // [Fix 24A] 중복 제거 방지 가드
 
     /// 앱 종료 중 플래그 — saveState() 재호출 방지
     var isTerminating = false
@@ -221,22 +222,9 @@ public final class MultiLiveManager {
             let paneCount = sessions.count
             for s in sessions { s.playerViewModel.applyMultiLiveConstraints(paneCount: paneCount) }
 
-            // [그리드 drawable 복구] 세션 추가로 그리드 레이아웃이 변경되면
-            // 기존 세션의 PlayerVideoView가 새 PlayerContainerView에 재마운트된다.
-            // SwiftUI 레이아웃 안정화 후 기존 세션의 VLC drawable을 재바인딩하여
-            // Metal 렌더링 서피스가 올바른 레이어에 연결되도록 보장.
-            if sessions.count >= 2 {
-                let existingSessions = Array(sessions.dropLast())
-                Task { @MainActor in
-                    // SwiftUI 레이아웃 안정화 후 drawable 재바인딩
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    for s in existingSessions {
-                        if let vlc = s.playerViewModel.playerEngine as? VLCPlayerEngine {
-                            vlc.refreshDrawable()
-                        }
-                    }
-                }
-            }
+            // [drawable 복구] 기존 세션의 drawable 재바인딩은
+            // PlayerContainerView.attachVideoView()에서 SwiftUI 레이아웃 변경 시 자동 처리.
+            // 여기서 중복 호출하면 500ms 후 2차 검은 프레임 플래시 발생.
 
             // 스트림 시작 (비동기) — restoreState에서는 startImmediately=false로
             // 모든 세션 추가 후 레이아웃 안정화 뒤 일괄 시작
@@ -283,8 +271,13 @@ public final class MultiLiveManager {
 
     /// 세션 제거 — 엔진 풀 반환 포함
     func removeSession(id: UUID) async {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        let session = sessions[index]
+        // [Fix 24A] 중복 호출 가드 — 빠른 연타·동시 Task 방지
+        guard !removingSessionIds.contains(id) else { return }
+        guard sessions.contains(where: { $0.id == id }) else { return }
+        removingSessionIds.insert(id)
+        defer { removingSessionIds.remove(id) }
+
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
 
         // ⚠️ 세션 정지 후 엔진 분리 → 풀 반납 (순서 중요)
         await session.stop()
@@ -293,7 +286,9 @@ public final class MultiLiveManager {
         }
         // 대역폭 코디네이터에서 세션 해제
         await bandwidthCoordinator.unregisterStream(sessionId: id)
-        sessions.remove(at: index)
+        // [Fix 24A] await 후 index 재계산 — stale index 크래시 방지
+        guard let freshIndex = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions.remove(at: freshIndex)
 
         // 선택 세션이 제거되면 다른 세션 선택
         if selectedSessionId == id {
@@ -321,6 +316,10 @@ public final class MultiLiveManager {
         // 세션 1개 이하이면 코디네이션 불필요
         if sessions.count < 2 {
             stopBandwidthCoordination()
+            // [Fix 20-F] 가속 예산 해제 — 남은 세션은 config 기본값 사용
+            for s in sessions {
+                Task { await s.playerViewModel.streamCoordinator?.lowLatencyController?.setMaxRateOverride(nil) }
+            }
         } else {
             updateEstimatedPaneSizes()
         }
@@ -328,21 +327,9 @@ public final class MultiLiveManager {
         let remaining = sessions.count
         for s in sessions { s.playerViewModel.applyMultiLiveConstraints(paneCount: remaining) }
 
-        // [그리드 drawable 복구] 세션 제거로 그리드 레이아웃이 변경되면
-        // SwiftUI가 남은 세션의 PlayerVideoView를 새 PlayerContainerView에 재마운트.
-        // VLC Metal 렌더링 서피스가 끊어지므로 drawable 재바인딩 필요.
-        if !sessions.isEmpty {
-            let remainingSessions = Array(sessions)
-            Task { @MainActor in
-                // SwiftUI 레이아웃 안정화 후 drawable 재바인딩
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                for s in remainingSessions {
-                    if let vlc = s.playerViewModel.playerEngine as? VLCPlayerEngine {
-                        vlc.refreshDrawable()
-                    }
-                }
-            }
-        }
+        // [drawable 복구] 남은 세션의 drawable 재바인딩은
+        // PlayerContainerView.attachVideoView()에서 SwiftUI 레이아웃 변경 시 자동 처리.
+        // 여기서 중복 호출하면 500ms 후 2차 검은 프레임 플래시 발생.
 
         saveState()
         logger.info("MultiLive: 세션 제거 — \(session.channelName)")
@@ -361,6 +348,9 @@ public final class MultiLiveManager {
             }
             await bandwidthCoordinator.updateSelectedState(sessionId: id, isSelected: true)
         }
+        
+        // [Fix 20-F] 선택 변경 시 가속 예산 즉시 재분배
+        applyRateBudget()
 
         // 오디오 라우팅 + CPU 최적화: 이전 세션 → 백그라운드, 새 세션 → 포그라운드
         if previousId != id {
@@ -453,15 +443,32 @@ public final class MultiLiveManager {
                     try await Task.sleep(for: .seconds(MultiLiveBWDefaults.updateIntervalSecs))
                     guard !Task.isCancelled else { break }
 
-                    // 1. 각 세션의 실시간 메트릭을 코디네이터에 피딩
-                    await MainActor.run {
-                        self.feedMetricsToCoordinator()
+                    // [Fix 24B] MainActor 진입 1회로 통합 — 기존 3회 → 1회
+                    // 메트릭 수집 + 어드바이스 적용 + 가속 예산을 한 번에 처리
+                    let metricsSnapshot = await MainActor.run {
+                        self.collectMetricsSnapshot()
+                    }
+                    
+                    // 코디네이터에 배치 리포트 (actor 격리 내에서 순차 처리)
+                    let coordinator = self.bandwidthCoordinator
+                    for m in metricsSnapshot {
+                        await coordinator.reportBandwidthSample(
+                            sessionId: m.sessionId,
+                            bitrate: m.bitrateBps,
+                            bufferLength: m.bufferLength,
+                            fetchDuration: 0.5,
+                            segmentDuration: 4.0
+                        )
+                        if m.playbackRate > 0 {
+                            await coordinator.updatePlaybackRate(sessionId: m.sessionId, rate: m.playbackRate)
+                        }
                     }
 
-                    // 2. 코디네이터 어드바이스 계산 + 적용
-                    let advices = await self.bandwidthCoordinator.computeAdvice()
+                    // 어드바이스 계산 + MainActor에서 적용
+                    let advices = await coordinator.computeAdvice()
                     await MainActor.run {
                         self.applyBandwidthAdvices(advices)
+                        self.applyRateBudget()
                     }
                 }
             } catch {
@@ -480,33 +487,129 @@ public final class MultiLiveManager {
 
     /// 어드바이스를 각 세션에 적용 (MainActor)
     private func applyBandwidthAdvices(_ advices: [BandwidthAdvice]) {
+        // [Fix 24B] ABR 설정을 단일 Task에서 배치 적용 (세션당 개별 Task 제거)
+        var abrUpdates: [(PlayerViewModel, Double)] = []
         for advice in advices {
             guard let session = sessions.first(where: { $0.id == advice.sessionId }) else { continue }
 
-            // VLC 엔진에 해상도 캡핑 적용
-            if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+            // [Quality Lock] 해당 세션이 최고 화질 유지 모드면 모든 캡/강등 무시
+            let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine
+            let isQualityLocked = vlc?.forceHighestQuality ?? false
+            if isQualityLocked {
+                if let vlc { vlc.maxAdaptiveHeight = 0 }
+                continue
+            }
+
+            // VLC 엔진에 해상도 캡핑 적용 (동기 — MainActor에서 직접)
+            if let vlc {
                 if advice.cappedMaxHeight > 0 {
                     vlc.maxAdaptiveHeight = advice.cappedMaxHeight
                 }
             }
 
-            // ABR 컨트롤러에 최대 허용 비트레이트 설정
-            let maxBitrate = advice.maxAllowedBitrate
-            let streamCoordinator = session.playerViewModel.streamCoordinator
-            Task {
-                await streamCoordinator?.setMaxAllowedBitrate(maxBitrate)
-            }
+            abrUpdates.append((session.playerViewModel, Double(advice.maxAllowedBitrate)))
 
             // 긴급 강등: 버퍼 부족 시 최저 품질 트리거
             if advice.emergencyDowngrade {
-                if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+                if let vlc {
                     vlc.onQualityAdaptationRequest?(.downgrade(reason: "BW 코디네이터 긴급 강등"))
                 }
             }
         }
+        // ABR 비트레이트 설정을 단일 Task에서 순차 처리
+        if !abrUpdates.isEmpty {
+            Task {
+                for (vm, maxBitrate) in abrUpdates {
+                    await vm.streamCoordinator?.setMaxAllowedBitrate(maxBitrate)
+                }
+            }
+        }
+    }
+    
+    // MARK: - [Fix 20-F] 멀티라이브 가속 예산 (Rate Budget)
+    
+    /// 전체 세션의 가속 합산이 총 예산(+12%) 이내로 제한
+    /// 선택(포커스) 세션 > 비선택 세션 우선순위
+    private func applyRateBudget() {
+        let sessionCount = sessions.count
+        guard sessionCount >= 2 else {
+            // 단일 세션: 오버라이드 해제
+            if let session = sessions.first {
+                Task {
+                    await session.playerViewModel.streamCoordinator?.lowLatencyController?.setMaxRateOverride(nil)
+                }
+            }
+            return
+        }
+        
+        // 총 가속 예산: 전체 세션 합산 최대 +12% (4세션 기준 세션당 평균 +3%)
+        let totalBudget = 0.12
+        // 선택 세션은 예산의 60% 사용, 나머지를 비선택 세션이 균등 분배
+        let selectedBudget = totalBudget * 0.6  // +7.2%
+        let remainingBudget = totalBudget - selectedBudget  // +4.8%
+        let nonSelectedCount = max(1, sessionCount - 1)
+        let perNonSelectedBudget = remainingBudget / Double(nonSelectedCount)
+        
+        // [Fix 24B] 세션별 개별 Task → 단일 Task로 통합 (4개 → 1개)
+        let ratePlan: [(PlayerViewModel, Double)] = sessions.map { session in
+            let isSelected = session.id == selectedSessionId
+            let maxRate = isSelected ? (1.0 + selectedBudget) : (1.0 + perNonSelectedBudget)
+            return (session.playerViewModel, maxRate)
+        }
+        Task {
+            for (vm, rate) in ratePlan {
+                await vm.streamCoordinator?.lowLatencyController?.setMaxRateOverride(rate)
+            }
+        }
+    }
+    
+    /// 각 세션의 VLC/AVPlayer 메트릭을 대역폭 코디네이터에 피딩 (MainActor)
+    /// [Fix 24B] 경량 스냅숏 구조체 — fire-and-forget Task 제거
+    private struct MetricSnapshot {
+        let sessionId: UUID
+        let bitrateBps: Double
+        let bufferLength: TimeInterval
+        let playbackRate: Double
+    }
+    
+    /// [Fix 24B] MainActor에서 메트릭 값만 캡처 → 코디네이터 보고는 밖에서 배치 처리
+    private func collectMetricsSnapshot() -> [MetricSnapshot] {
+        var snapshots: [MetricSnapshot] = []
+        for session in sessions {
+            let sessionId = session.id
+            if let metrics = session.latestMetrics {
+                let bitrateBps = metrics.inputBitrateKbps * 1000.0
+                let estimatedBufferSecs: TimeInterval
+                if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine,
+                   vlc.isPlaying {
+                    let d = vlc.duration
+                    let c = vlc.currentTime
+                    if d > 0, c > 0, (d - c) > 0, (d - c) < 60 {
+                        estimatedBufferSecs = d - c
+                    } else {
+                        estimatedBufferSecs = metrics.bufferHealth * 10.0
+                    }
+                } else {
+                    estimatedBufferSecs = metrics.bufferHealth * 10.0
+                }
+                snapshots.append(MetricSnapshot(
+                    sessionId: sessionId,
+                    bitrateBps: bitrateBps,
+                    bufferLength: estimatedBufferSecs,
+                    playbackRate: Double(metrics.playbackRate)
+                ))
+            } else if let avMetrics = session.latestAVMetrics {
+                snapshots.append(MetricSnapshot(
+                    sessionId: sessionId,
+                    bitrateBps: avMetrics.indicatedBitrate,
+                    bufferLength: avMetrics.bufferHealth * 10.0,
+                    playbackRate: 0
+                ))
+            }
+        }
+        return snapshots
     }
 
-    /// 각 세션의 VLC/AVPlayer 메트릭을 대역폭 코디네이터에 피딩 (MainActor)
     private func feedMetricsToCoordinator() {
         let coordinator = bandwidthCoordinator
         for session in sessions {
@@ -515,10 +618,24 @@ public final class MultiLiveManager {
             // VLC 메트릭이 있으면 대역폭 + 버퍼 데이터 보고
             if let metrics = session.latestMetrics {
                 let bitrateBps = metrics.inputBitrateKbps * 1000.0 // kbps → bps
-                let bufferHealth = metrics.bufferHealth
-                // bufferHealth (0~1 ratio) → 대략적 버퍼 시간 추정
-                // VLC는 정확한 버퍼 시간을 제공하지 않으므로 ratio × 캐싱 설정으로 추정
-                let estimatedBufferSecs = bufferHealth * 10.0 // 0~10초 스케일
+                // [Fix 22C] VLC 실제 버퍼 길이 사용 (duration - currentTime)
+                // 기존: bufferHealth × 10.0 추정 → 부정확한 10초 스케일
+                // 개선: 실제 VLC 파이프라인 버퍼 측정, 불가 시 기존 추정 폴백
+                let estimatedBufferSecs: TimeInterval
+                if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine,
+                   vlc.isPlaying {
+                    let d = vlc.duration
+                    let c = vlc.currentTime
+                    if d > 0, c > 0, (d - c) > 0, (d - c) < 60 {
+                        estimatedBufferSecs = d - c
+                    } else {
+                        estimatedBufferSecs = metrics.bufferHealth * 10.0
+                    }
+                } else {
+                    estimatedBufferSecs = metrics.bufferHealth * 10.0
+                }
+                // [Fix 20 Phase3] 재생 배율 전달 — 대역폭 계산에 가속 소비량 반영
+                let rate = Double(metrics.playbackRate)
 
                 Task {
                     await coordinator.reportBandwidthSample(
@@ -528,6 +645,7 @@ public final class MultiLiveManager {
                         fetchDuration: 0.5, // VLC 내부 페칭 — 근사값
                         segmentDuration: 4.0 // 일반 HLS 세그먼트 길이
                     )
+                    await coordinator.updatePlaybackRate(sessionId: sessionId, rate: rate)
                 }
             } else if let avMetrics = session.latestAVMetrics {
                 // AVPlayer 메트릭
@@ -641,6 +759,7 @@ public final class MultiLiveManager {
 
     func moveSession(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
+        saveState()
     }
 
     func swapSessions(_ i: Int, _ j: Int) {

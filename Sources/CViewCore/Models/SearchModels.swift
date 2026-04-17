@@ -178,7 +178,7 @@ public struct VODInfo: Sendable, Codable, Identifiable, Hashable {
         case videoNo
         case videoId
         case videoTitle
-        case videoImageURL = "videoImageUrl"
+        case videoImageURL = "thumbnailImageUrl"
         case duration
         case publishDate
         case readCount

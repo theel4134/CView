@@ -11,6 +11,8 @@ public struct ChannelInfo: Sendable, Codable, Identifiable, Hashable {
     public let verifiedMark: Bool
     public let followerCount: Int
     public let channelDescription: String?
+    /// 현재 라이브 방송 중 여부 (검색/팔로잉 응답에 포함)
+    public let openLive: Bool
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -20,6 +22,7 @@ public struct ChannelInfo: Sendable, Codable, Identifiable, Hashable {
         verifiedMark = (try? container.decode(Bool.self, forKey: .verifiedMark)) ?? false
         followerCount = (try? container.decode(Int.self, forKey: .followerCount)) ?? 0
         channelDescription = try? container.decode(String.self, forKey: .channelDescription)
+        openLive = (try? container.decode(Bool.self, forKey: .openLive)) ?? false
     }
 
     public var id: String { channelId }
@@ -30,7 +33,8 @@ public struct ChannelInfo: Sendable, Codable, Identifiable, Hashable {
         channelImageURL: URL? = nil,
         verifiedMark: Bool = false,
         followerCount: Int = 0,
-        channelDescription: String? = nil
+        channelDescription: String? = nil,
+        openLive: Bool = false
     ) {
         self.channelId = channelId
         self.channelName = channelName
@@ -38,6 +42,7 @@ public struct ChannelInfo: Sendable, Codable, Identifiable, Hashable {
         self.verifiedMark = verifiedMark
         self.followerCount = followerCount
         self.channelDescription = channelDescription
+        self.openLive = openLive
     }
 
     enum CodingKeys: String, CodingKey {
@@ -47,6 +52,7 @@ public struct ChannelInfo: Sendable, Codable, Identifiable, Hashable {
         case verifiedMark
         case followerCount
         case channelDescription
+        case openLive
     }
 }
 
@@ -57,7 +63,9 @@ public struct FollowingChannel: Sendable, Codable, Identifiable, Hashable {
     public let liveInfo: LiveInfo?
 
     public var id: String { channel.channelId }
-    public var isLive: Bool { liveInfo != nil }
+    /// 실제 라이브 여부: LiveInfo 객체가 존재하고 status가 .open 이어야 함.
+    /// (치지직 API는 방송 종료 직후에도 status=.close 인 LiveInfo 를 잠시 반환하므로 단순 nil 체크로는 불충분)
+    public var isLive: Bool { liveInfo?.status == .open }
 
     public init(channel: ChannelInfo, streamer: StreamerInfo? = nil, liveInfo: LiveInfo? = nil) {
         self.channel = channel

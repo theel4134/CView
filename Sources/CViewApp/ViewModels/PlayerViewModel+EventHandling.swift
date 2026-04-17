@@ -49,7 +49,9 @@ extension PlayerViewModel {
                 if let lastPlaying = _lastPlayingTime,
                    Date().timeIntervalSince(lastPlaying) < 3.0 {
                     // 쿨다운 중 — 무시
-                } else if _bufferingDebounceTask == nil {
+                } else {
+                    // [Fix] 항상 기존 Task cancel 후 재할당 — 비원자적 nil 체크 race 제거
+                    _bufferingDebounceTask?.cancel()
                     _bufferingDebounceTask = Task { @MainActor [weak self] in
                         try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
                         guard !Task.isCancelled, let self else { return }
@@ -135,17 +137,19 @@ extension PlayerViewModel {
             // 버퍼링 디바운스 취소 — VLC가 playing으로 돌아오면 즉시 반영
             _bufferingDebounceTask?.cancel()
             _bufferingDebounceTask = nil
+            let wasAlreadyPlaying = (_lastPlayingTime != nil)
             _lastPlayingTime = Date()
             streamPhase = .playing
             errorMessage = nil
             onPlaybackStateChanged?()
             // 재생 시작 시 고급 설정 적용 (설정이 기본값이 아닐 경우만)
             _applyVLCAdvancedSettingsIfNeeded()
-            // VLC → playing 전환 시 drawable 재바인딩: vout이 올바른 레이어에서 렌더링되도록 보장
-            // 멀티라이브에서 여러 세션이 동시 시작될 때 SwiftUI 뷰 마운트 타이밍으로
-            // drawable이 올바르게 설정되지 않는 경우를 대비
-            // [Freeze Fix] 이전 refreshDrawable Task 취소 — 중복 대기 해소
-            if let vlcEngine = playerEngine as? VLCPlayerEngine {
+            // [플리커 방지] 초기 재생 시작(idle/loading → playing)에서만 drawable 재바인딩.
+            // buffering → playing 복귀 시에는 이미 vout이 올바르게 바인딩되어 있으므로
+            // drawable 리셋을 생략하여 불필요한 검은 프레임 발생을 방지한다.
+            // (멀티라이브 4세션에서 각 세션이 수십초 간격으로 리버퍼링하면
+            //  매번 drawable 리셋 → 검은 프레임 → 눈에 보이는 플리커링)
+            if !wasAlreadyPlaying, let vlcEngine = playerEngine as? VLCPlayerEngine {
                 _refreshDrawableTask?.cancel()
                 _refreshDrawableTask = Task { @MainActor [weak self, weak vlcEngine] in
                     // 200ms 후 drawable 재바인딩 — VLC vout 초기화 완료 대기
@@ -171,13 +175,13 @@ extension PlayerViewModel {
                    Date().timeIntervalSince(lastPlaying) < 3.0 {
                     break
                 }
-                if _bufferingDebounceTask == nil {
-                    _bufferingDebounceTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
-                        guard !Task.isCancelled, let self else { return }
-                        self.streamPhase = .buffering
-                        self._bufferingDebounceTask = nil
-                    }
+                // [Fix] 항상 기존 Task cancel 후 재할당 — 비원자적 nil 체크 race 제거
+                _bufferingDebounceTask?.cancel()
+                _bufferingDebounceTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
+                    guard !Task.isCancelled, let self else { return }
+                    self.streamPhase = .buffering
+                    self._bufferingDebounceTask = nil
                 }
             } else {
                 // 아직 재생 전이면 (connecting, idle 등) 즉시 반영

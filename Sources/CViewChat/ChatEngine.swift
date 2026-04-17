@@ -47,7 +47,11 @@ public actor ChatEngine {
         private static func computeServerURL(chatChannelId: String) -> URL {
             let sum = chatChannelId.utf8.reduce(0) { $0 + Int($1) }
             let serverId = (sum % 9) + 1
-            return URL(string: "wss://kr-ss\(serverId).chat.naver.com/chat")!
+            // serverId는 1~9 범위이므로 URL 생성 실패 불가, guard로 방어
+            guard let url = URL(string: "wss://kr-ss\(serverId).chat.naver.com/chat") else {
+                return URL(string: "wss://kr-ss1.chat.naver.com/chat")!
+            }
+            return url
         }
     }
     
@@ -126,6 +130,9 @@ public actor ChatEngine {
         messageListenTask = nil
         stateListenTask?.cancel()
         stateListenTask = nil
+        // [Fix 25D] reconnectionTask 명시적 취소 — disconnect 후에도 재연결 시도 방지
+        reconnectionTask?.cancel()
+        reconnectionTask = nil
         
         await webSocket?.disconnect()
         await reconnection.cancel()

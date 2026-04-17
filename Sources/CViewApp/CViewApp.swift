@@ -120,7 +120,6 @@ struct CViewApplication: App {
         WindowGroup("통계", id: "statistics-window") {
             StatisticsView()
                 .environment(appState)
-                .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
         }
         .defaultSize(width: 700, height: 500)
 
@@ -128,7 +127,6 @@ struct CViewApplication: App {
         WindowGroup("채팅", id: "chat-window") {
             ChatWindowWrapper()
                 .environment(appState)
-                .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
         }
         .defaultSize(width: 360, height: 600)
 
@@ -137,14 +135,26 @@ struct CViewApplication: App {
             if let vm = appState.homeViewModel {
                 FollowingView(viewModel: vm)
                     .environment(appState)
-                    .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
             } else {
                 ProgressView()
                     .environment(appState)
-                    .preferredColorScheme(appState.settingsStore.appearance.theme.colorScheme)
             }
         }
         .defaultSize(width: 700, height: 550)
+
+        // Multi-live network monitor window
+        WindowGroup("네트워크 모니터", id: "ml-network-window") {
+            MLNetworkWindowView()
+                .environment(appState)
+        }
+        .defaultSize(width: 440, height: 600)
+
+        // Multi-live metrics forwarding window
+        WindowGroup("메트릭 전송", id: "ml-metrics-window") {
+            MLMetricsWindowView()
+                .environment(appState)
+        }
+        .defaultSize(width: 420, height: 500)
 
         // Settings window
         Settings {
@@ -166,18 +176,80 @@ struct CViewApplication: App {
 
     @CommandsBuilder
     private var appCommands: some Commands {
+        // ── 파일 메뉴 ──
         CommandGroup(replacing: .newItem) {
-            Button("새 창") {
+            Button("새 플레이어 창") {
                 openWindow(id: "player-window", value: "")
             }
             .keyboardShortcut("n", modifiers: .command)
+
+            Divider()
 
             Button("통계 창") {
                 openWindow(id: "statistics-window")
             }
             .keyboardShortcut("t", modifiers: [.command, .shift])
+
+            Button("네트워크 모니터") {
+                openWindow(id: "ml-network-window")
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
+
+            Button("메트릭 전송 현황") {
+                openWindow(id: "ml-metrics-window")
+            }
         }
 
+        // ── 보기 메뉴 ──
+        CommandGroup(after: .toolbar) {
+            Button("커맨드 팔레트") {
+                appState.showCommandPalette.toggle()
+            }
+            .keyboardShortcut("k", modifiers: .command)
+
+            Divider()
+
+            // 사이드바 네비게이션
+            Button("홈") {
+                router.selectSidebar(.home)
+            }
+            .keyboardShortcut("1", modifiers: .command)
+
+            Button("라이브") {
+                router.selectSidebar(.following)
+            }
+            .keyboardShortcut("2", modifiers: .command)
+
+            Button("카테고리") {
+                router.selectSidebar(.category)
+            }
+            .keyboardShortcut("3", modifiers: .command)
+
+            Button("검색") {
+                router.selectSidebar(.search)
+            }
+            .keyboardShortcut("4", modifiers: .command)
+
+            Button("클립") {
+                router.selectSidebar(.clips)
+            }
+            .keyboardShortcut("5", modifiers: .command)
+
+            Button("최근/즐겨찾기") {
+                router.selectSidebar(.recentFavorites)
+            }
+            .keyboardShortcut("6", modifiers: .command)
+
+            Divider()
+
+            Button("뒤로 가기") {
+                router.navigateBack()
+            }
+            .keyboardShortcut("[", modifiers: .command)
+            .disabled(router.path.isEmpty)
+        }
+
+        // ── 스트림 메뉴 ──
         CommandMenu("스트림") {
             Button("새로고침") {
                 Task { await appState.homeViewModel?.refresh() }
@@ -202,13 +274,7 @@ struct CViewApplication: App {
             .keyboardShortcut("f", modifiers: [.command, .shift])
         }
 
-        CommandGroup(after: .toolbar) {
-            Button("커맨드 팔레트") {
-                appState.showCommandPalette.toggle()
-            }
-            .keyboardShortcut("k", modifiers: .command)
-        }
-
+        // ── 채팅 메뉴 ──
         CommandMenu("채팅") {
             Button("채팅 지우기") {
                 appState.chatViewModel?.clearMessages()
@@ -233,6 +299,7 @@ struct CViewApplication: App {
             .keyboardShortcut("m", modifiers: [.command, .shift])
         }
 
+        // ── 재생 메뉴 ──
         CommandMenu("재생") {
             Button("재생/일시정지") {
                 Task { await appState.playerViewModel?.togglePlayPause() }
@@ -264,6 +331,20 @@ struct CViewApplication: App {
                 }
             }
             .keyboardShortcut("p", modifiers: [.command, .option])
+        }
+
+        // ── 도움말 메뉴 ──
+        CommandGroup(replacing: .help) {
+            Button("키보드 단축키") {
+                appState.showKeyboardShortcutsHelp = true
+            }
+            .keyboardShortcut("/", modifiers: .command)
+
+            Divider()
+
+            Button("CView 정보") {
+                appState.showAboutPanel = true
+            }
         }
     }
     

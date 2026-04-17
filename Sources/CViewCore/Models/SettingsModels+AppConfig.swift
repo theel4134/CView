@@ -9,17 +9,23 @@ public struct GeneralSettings: Codable, Sendable, Equatable {
     public var showInMenuBar: Bool
     public var notificationsEnabled: Bool
     public var autoRefreshInterval: TimeInterval
+    public var alwaysOnTop: Bool
+    public var restoreWindowOnLaunch: Bool
 
     public init(
         launchAtLogin: Bool = false,
         showInMenuBar: Bool = true,
         notificationsEnabled: Bool = true,
-        autoRefreshInterval: TimeInterval = 60
+        autoRefreshInterval: TimeInterval = 60,
+        alwaysOnTop: Bool = false,
+        restoreWindowOnLaunch: Bool = true
     ) {
         self.launchAtLogin = launchAtLogin
         self.showInMenuBar = showInMenuBar
         self.notificationsEnabled = notificationsEnabled
         self.autoRefreshInterval = autoRefreshInterval
+        self.alwaysOnTop = alwaysOnTop
+        self.restoreWindowOnLaunch = restoreWindowOnLaunch
     }
 
     public static let `default` = GeneralSettings()
@@ -32,19 +38,22 @@ public struct AppearanceSettings: Codable, Sendable, Equatable {
     public var compactMode: Bool
     public var hardwareDecoding: Bool
     public var maxMemoryMB: Int
+    public var debugMode: Bool
 
     public init(
         theme: AppTheme = .dark,
         sidebarWidth: CGFloat = 250,
         compactMode: Bool = false,
         hardwareDecoding: Bool = true,
-        maxMemoryMB: Int = 512
+        maxMemoryMB: Int = 512,
+        debugMode: Bool = false
     ) {
         self.theme = theme
         self.sidebarWidth = sidebarWidth
         self.compactMode = compactMode
         self.hardwareDecoding = hardwareDecoding
         self.maxMemoryMB = maxMemoryMB
+        self.debugMode = debugMode
     }
 
     public static let `default` = AppearanceSettings()

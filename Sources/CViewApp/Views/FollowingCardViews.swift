@@ -153,8 +153,10 @@ struct FollowingLiveCard: View, Equatable {
                     lineWidth: isHovered ? 1.5 : 0.5
                 )
         }
-        .shadow(color: .black.opacity(0.08), radius: 3, y: 2)
-        .animation(DesignTokens.Animation.fast, value: isHovered)
+        .compositingGroup()
+        .shadow(color: .black.opacity(isHovered ? 0.14 : 0.08), radius: 8, y: 4)
+        .scaleEffect(isHovered ? 1.015 : 1.0)
+        .animation(DesignTokens.Animation.cardHover, value: isHovered)
         .onHover { hovering in
             isHovered = hovering
             if hovering { onPrefetch?(channel.channelId) }
@@ -238,6 +240,7 @@ struct FollowingLiveCard: View, Equatable {
             // 호버 오버레이
             if isHovered { hoverOverlay }
         }
+        .compositingGroup()
     }
 
     private var thumbnailFallback: some View {
@@ -268,23 +271,21 @@ struct FollowingLiveCard: View, Equatable {
     // MARK: - Uptime Badge
 
     private func uptimeBadge(since date: Date) -> some View {
-        TimelineView(.periodic(from: .now, by: 60)) { timeline in
-            let elapsed = timeline.date.timeIntervalSince(date)
-            let hours = Int(elapsed) / 3600
-            let minutes = (Int(elapsed) % 3600) / 60
-            let text = hours > 0 ? "\(hours)시간 \(minutes)분" : "\(minutes)분"
+        let elapsed = Date().timeIntervalSince(date)
+        let hours = Int(elapsed) / 3600
+        let minutes = (Int(elapsed) % 3600) / 60
+        let text = hours > 0 ? "\(hours)시간 \(minutes)분" : "\(minutes)분"
 
-            HStack(spacing: 3) {
-                Image(systemName: "clock.fill")
-                    .font(.system(size: 8))
-                Text(text)
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-            }
-            .foregroundStyle(.white.opacity(0.9))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2.5)
-            .background(Capsule().fill(.black.opacity(0.45)))
+        return HStack(spacing: 3) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 8))
+            Text(text)
+                .font(.system(size: 9.5, weight: .medium, design: .rounded))
         }
+        .foregroundStyle(.white.opacity(0.9))
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2.5)
+        .background(Capsule().fill(.black.opacity(0.45)))
     }
 
     // MARK: - Category Tag
@@ -360,6 +361,11 @@ struct FollowingLiveCard: View, Equatable {
         .padding(.vertical, DesignTokens.Spacing.sm)
         .frame(maxWidth: .infinity, minHeight: layout.cardInfoHeight + 4, alignment: .leading)
         .background(DesignTokens.Colors.surfaceBase)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.3))
+                .frame(height: 0.5)
+        }
     }
 }
 
@@ -391,6 +397,8 @@ struct FollowingOfflineRow: View, Equatable {
                 .frame(width: layout.offlineProfileSize, height: layout.offlineProfileSize)
                 .clipShape(Circle())
                 .opacity(isHovered ? 1.0 : 0.7)
+                .scaleEffect(isHovered ? 1.05 : 1.0)
+                .compositingGroup()
 
                 Circle()
                     .fill(DesignTokens.Colors.textTertiary.opacity(0.4))
@@ -434,13 +442,13 @@ struct FollowingOfflineRow: View, Equatable {
                     .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
             }
         }
-        .padding(.horizontal, layout.sizeClass == .ultraCompact ? DesignTokens.Spacing.sm : DesignTokens.Spacing.md)
-        .padding(.vertical, layout.sizeClass == .ultraCompact ? 4 : (layout.sizeClass == .compact ? 6 : 8))
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, 8)
         .background {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
                 .fill(isHovered ? DesignTokens.Colors.surfaceElevated.opacity(0.4) : Color.clear)
         }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
+        .animation(DesignTokens.Animation.micro, value: isHovered)
         .onHover { isHovered = $0 }
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
         .customCursor(.pointingHand)
@@ -470,7 +478,6 @@ struct SkeletonLiveCard: View {
                     }
                     .padding(8)
                 }
-                .shimmer()
 
             // 정보 영역
             HStack(spacing: DesignTokens.Spacing.sm) {
@@ -491,9 +498,9 @@ struct SkeletonLiveCard: View {
             .padding(.vertical, DesignTokens.Spacing.sm)
             .frame(maxWidth: .infinity, minHeight: layout.cardInfoHeight, alignment: .leading)
             .background(DesignTokens.Colors.surfaceBase.opacity(0.85))
-            .shimmer()
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
+        .shimmer()
         .drawingGroup()
     }
 }

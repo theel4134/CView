@@ -42,7 +42,13 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
         self.isNotice = isNotice
         self.isSystem = false
         self.userRole = message.profile?.userRole ?? .viewer
-        self.badges = (message.profile?.badges ?? []) + (message.profile?.activityBadges ?? [])
+        // 배지 합산 시 중복 제거 (서버에서 viewerBadges와 activityBadges에 동일 배지가 포함될 수 있음)
+        let allBadges = (message.profile?.badges ?? []) + (message.profile?.activityBadges ?? [])
+        var seenURLs = Set<String>()
+        self.badges = allBadges.filter { badge in
+            guard let url = badge.imageURL?.absoluteString else { return true }
+            return seenURLs.insert(url).inserted
+        }
         self.titleName = message.profile?.title?.name
         self.titleColor = message.profile?.title?.color
     }
@@ -112,6 +118,20 @@ public struct ChatMessageItem: Identifiable, Sendable, Equatable, Hashable {
     /// Formatted timestamp (HH:mm:ss)
     public var formattedTime: String {
         Self.timeFormatter.string(from: timestamp)
+    }
+
+    /// emojis 필드만 교체한 복사본 반환 (이모티콘 병합 최적화)
+    public func withEmojis(_ newEmojis: [String: String]) -> ChatMessageItem {
+        ChatMessageItem(
+            id: id, userId: userId, nickname: nickname,
+            content: content, timestamp: timestamp, type: type,
+            badgeImageURL: badgeImageURL, emojis: newEmojis,
+            donationAmount: donationAmount, donationType: donationType,
+            subscriptionMonths: subscriptionMonths, profileImageUrl: profileImageUrl,
+            isNotice: isNotice, isSystem: isSystem,
+            userRole: userRole, badges: badges,
+            titleName: titleName, titleColor: titleColor
+        )
     }
 
     /// 뱃지 배열에서 구독 개월 수 추출 (extras에 없을 때 fallback)

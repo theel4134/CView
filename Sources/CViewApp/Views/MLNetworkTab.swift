@@ -12,6 +12,7 @@ struct MLNetworkTab: View {
 
     private var metrics: VLCLiveMetrics? { session.latestMetrics }
     private var avMetrics: AVPlayerLiveMetrics? { session.latestAVMetrics }
+    private var hlsjsMetrics: HLSJSLiveMetrics? { session.latestHLSJSMetrics }
     private var proxyStats: ProxyNetworkStats? { session.latestProxyStats }
 
     var body: some View {
@@ -42,6 +43,8 @@ struct MLNetworkTab: View {
                 vlcMetricsContent(m)
             } else if let av = avMetrics {
                 avPlayerMetricsContent(av)
+            } else if let hls = hlsjsMetrics {
+                hlsjsMetricsContent(hls)
             } else {
                 HStack {
                     Spacer()
@@ -178,6 +181,66 @@ struct MLNetworkTab: View {
                 Text("AVPlayer")
                     .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.accentBlue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func hlsjsMetricsContent(_ m: HLSJSLiveMetrics) -> some View {
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            Circle()
+                .fill(healthColor(m.healthScore))
+                .frame(width: 10, height: 10)
+            Text("스트림 건강도")
+                .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+            Spacer()
+            Text(String(format: "%.0f%%", m.healthScore * 100))
+                .font(DesignTokens.Typography.custom(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(healthColor(m.healthScore))
+        }
+
+        ProgressView(value: m.healthScore)
+            .tint(healthColor(m.healthScore))
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignTokens.Spacing.xs) {
+            metricCard("비트레이트", String(format: "%.0f kbps", m.bitrateKbps), icon: "speedometer")
+            metricCard("버퍼 건강도", String(format: "%.0f%%", m.bufferHealth * 100), icon: "heart.fill")
+            metricCard("FPS", String(format: "%.1f", m.fps), icon: "film")
+            metricCard("지연 시간", String(format: "%.1f초", m.latency), icon: "timer")
+            metricCard("드롭 프레임", "\(m.droppedFramesDelta)", icon: "exclamationmark.triangle", alert: m.droppedFramesDelta > 0)
+            metricCard("버퍼 길이", String(format: "%.1f초", m.bufferLength), icon: "clock")
+        }
+
+        HStack {
+            if let res = m.resolution {
+                HStack(spacing: 4) {
+                    Image(systemName: "rectangle.on.rectangle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    Text(res)
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+            }
+            Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: "gauge.with.needle")
+                    .font(.system(size: 10))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Text(String(format: "%.2fx", m.playbackRate))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
+
+            Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: "globe")
+                    .font(.system(size: 10))
+                    .foregroundStyle(DesignTokens.Colors.accentPurple)
+                Text("HLS.js")
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.accentPurple)
             }
         }
     }

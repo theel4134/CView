@@ -83,7 +83,10 @@ struct SearchChannelRow: View {
             .frame(width: 48, height: 48)
             .clipShape(Circle())
             .overlay {
-                Circle().strokeBorder(DesignTokens.Colors.border, lineWidth: 0.5)
+                Circle().strokeBorder(
+                    channel.openLive ? DesignTokens.Colors.live : DesignTokens.Colors.border,
+                    lineWidth: channel.openLive ? 2 : 0.5
+                )
             }
             
             VStack(alignment: .leading, spacing: 3) {
@@ -96,6 +99,32 @@ struct SearchChannelRow: View {
                         Image(systemName: "checkmark.seal.fill")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.accentBlue)
+                    }
+                    // 라이브 / 오프라인 상태 배지
+                    if channel.openLive {
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 5, height: 5)
+                            Text("LIVE")
+                                .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                                .foregroundStyle(Color.white)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(DesignTokens.Colors.live.gradient)
+                        .clipShape(Capsule())
+                    } else {
+                        Text("오프라인")
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(DesignTokens.Colors.surfaceElevated)
+                            .overlay {
+                                Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                            }
+                            .clipShape(Capsule())
                     }
                 }
                 Text("팔로워 \(formatKoreanCount(channel.followerCount))")

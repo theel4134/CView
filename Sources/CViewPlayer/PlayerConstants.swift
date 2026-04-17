@@ -20,9 +20,11 @@ public enum ABRDefaults {
     /// [Quality] 1.2→1.1: 10% 초과 시 업그레이드 → 더 적극적 최고 화질 전환
     public static let switchUpThreshold: Double = 1.1
     /// 품질 하향 전환 임계값
-    public static let switchDownThreshold: Double = 0.8
+    /// [Fix 19] 0.8→0.7: 30% 안전 마진 확보 → 대역폭 변동 시 품질 진동 방지
+    public static let switchDownThreshold: Double = 0.7
     /// 최소 품질 전환 간격 (초)
-    public static let minSwitchInterval: TimeInterval = 5.0
+    /// [Fix 19] 5→8초: 대역폭 추정 안정화 시간 확보 → 잦은 화질 전환 방지
+    public static let minSwitchInterval: TimeInterval = 8.0
 
     // MARK: Buffer-Aware ABR (flashls AutoLevelManager 참조)
 

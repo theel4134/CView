@@ -213,13 +213,17 @@ public actor PerformanceMonitor {
 
     // MARK: - Private
     
-    private func collectMetrics() {
+    private func collectMetrics() async {
         // CPU/GPU는 커널 호출(task_threads, IOKit)이므로 3초마다만 실제 샘플링
         _kernelSampleCounter += 1
         if _kernelSampleCounter >= kernelSampleInterval {
             _kernelSampleCounter = 0
-            _cachedGPU = readGPUStats()
-            _cachedCPU = currentCPUUsage()
+            // IOKit(GPU) + task_threads(CPU) 커널 호출을 병렬 실행
+            async let gpuTask = Task.detached(priority: .utility) { self.readGPUStats() }.value
+            async let cpuTask = Task.detached(priority: .utility) { self.currentCPUUsage() }.value
+            let (gpu, cpu) = await (gpuTask, cpuTask)
+            _cachedGPU = gpu
+            _cachedCPU = cpu
         }
         
         let gpu = _cachedGPU

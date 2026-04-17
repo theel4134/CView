@@ -86,9 +86,14 @@ public actor ImageCacheService {
     /// 주기적으로 만료된 디스크 캐시 엔트리를 정리
     private func startAutoPruneTimer() {
         pruneTask?.cancel()
+        let interval = pruneInterval  // actor-isolated 값을 미리 캡처
         pruneTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64((self?.pruneInterval ?? 1800) * 1_000_000_000))
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                } catch {
+                    break  // Task cancelled
+                }
                 guard let self, !Task.isCancelled else { break }
                 await self.pruneExpiredEntries()
             }
@@ -283,6 +288,9 @@ public actor ImageCacheService {
 
     /// 캐시 전체 삭제
     public func clearAll() {
+        // [Fix 25E] 진행 중 다운로드 취소 — 삭제 후 재저장 방지
+        for task in inFlightDownloads.values { task.cancel() }
+        inFlightDownloads.removeAll()
         memoryCache.removeAllObjects()
         decodedImageCache.removeAllObjects()
         try? FileManager.default.removeItem(at: diskCacheURL)

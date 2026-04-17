@@ -17,6 +17,7 @@ final class ChatTTSService: NSObject, AVSpeechSynthesizerDelegate {
     var isEnabled: Bool = false
     var volume: Float = 0.8
     var rate: Float = AVSpeechUtteranceDefaultSpeechRate
+    var voiceIdentifier: String?
 
     override init() {
         super.init()
@@ -61,6 +62,9 @@ final class ChatTTSService: NSObject, AVSpeechSynthesizerDelegate {
         let utterance = AVSpeechUtterance(string: text)
         utterance.volume = volume
         utterance.rate = rate
+        if let id = voiceIdentifier, let voice = AVSpeechSynthesisVoice(identifier: id) {
+            utterance.voice = voice
+        }
         synthesizer.speak(utterance)
     }
 

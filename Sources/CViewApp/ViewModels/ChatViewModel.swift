@@ -195,8 +195,9 @@ public final class ChatViewModel {
     
     /// 멀티라이브 비활성 세션 CPU 절약: 백그라운드 모드에서 flush 간격 증가 + 통계 중단
     @ObservationIgnored public var isBackgroundMode: Bool = false
-    /// 백그라운드 모드에서의 배치 flush 간격 (1초)
-    @ObservationIgnored let backgroundFlushIntervalNs: UInt64 = 1_000_000_000
+    /// [Fix 24E] 백그라운드 모드에서의 배치 flush 간격 (3초 — 기존 1초에서 완화)
+    /// 4세션 인기채널 기준 초당 수십 메시지 × 4 = CPU 부하 → 3초 배치로 파싱 횟수 감소
+    @ObservationIgnored let backgroundFlushIntervalNs: UInt64 = 3_000_000_000
     
     // MARK: - Batching (reduces SwiftUI update frequency)
     
@@ -205,9 +206,9 @@ public final class ChatViewModel {
     /// Active batch‐flush timer task.
     @ObservationIgnored var batchFlushTask: Task<Void, Never>?
     /// Batch flush interval in nanoseconds.
-    /// 치지직 웹 채팅과 동일한 자연스러운 메시지 흐름: 100ms 간격으로 flush.
-    /// 멀티라이브 비활성 세션은 backgroundFlushIntervalNs(1초)로 CPU 절약.
-    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 100_000_000
+    /// 치지직 웹 채팅처럼 1개씩 드립 표시: 50ms 간격으로 메시지 1개씩 flush.
+    /// 멀티라이브 비활성 세션은 backgroundFlushIntervalNs(3초)로 CPU 절약.
+    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 50_000_000
     
     // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
     
@@ -226,6 +227,11 @@ public final class ChatViewModel {
 
     /// 메시지 중복 방지용 최근 ID 세트 (recentChat + chatMessage 겹침 방지)
     @ObservationIgnored var seenMessageIDs = Set<String>()
+    /// FIFO 순서 추적용 큐 — seenMessageIDs 용량 초과 시 오래된 항목만 제거
+    @ObservationIgnored var seenMessageIDQueue: [String] = []
+
+    /// 본인 전송 메시지 에코백 필터링용 (userId_contentHash → 만료 시각)
+    @ObservationIgnored var recentSentEchoKeys = [String: Date]()
     
     // MARK: - Initialization
     
@@ -253,6 +259,7 @@ public final class ChatViewModel {
         ttsService.isEnabled = settings.ttsEnabled
         ttsService.volume = settings.ttsVolume
         ttsService.rate = settings.ttsRate
+        ttsService.voiceIdentifier = settings.ttsVoiceIdentifier
         displayMode = settings.displayMode
         overlayWidth = settings.overlayWidth
         overlayHeight = settings.overlayHeight
@@ -406,6 +413,10 @@ public final class ChatViewModel {
             appendToHistory([localMessage])
             messages.append(localMessage)
 
+            // 서버 에코백 중복 방지: userId+content 해시를 5초간 기억
+            let echoKey = "\(localMessage.userId)_\(localMessage.content.hashValue)"
+            recentSentEchoKeys[echoKey] = Date().addingTimeInterval(5)
+
             inputText = ""
         } catch {
             errorMessage = "메시지 전송 실패: \(error.localizedDescription)"
@@ -481,6 +492,7 @@ public final class ChatViewModel {
         messages.removeAll()
         pendingMessages.removeAll(keepingCapacity: true)
         seenMessageIDs.removeAll(keepingCapacity: true)
+        seenMessageIDQueue.removeAll(keepingCapacity: true)
         batchFlushTask?.cancel()
         batchFlushTask = nil
         messageCount = 0

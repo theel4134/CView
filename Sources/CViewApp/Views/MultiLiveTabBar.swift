@@ -1,6 +1,7 @@
 // MARK: - MultiLiveTabBar.swift
 import SwiftUI
 import CViewCore
+import UniformTypeIdentifiers
 
 // MARK: - Tab Bar
 struct MLTabBar: View {
@@ -10,10 +11,16 @@ struct MLTabBar: View {
     var isAddPanelOpen: Bool = false
     var onSettings: (() -> Void)? = nil
     var isSettingsPanelOpen: Bool = false
-    var hideFollowingList: Bool = false
-    var onToggleFollowingList: (() -> Void)? = nil
+    var showFollowingList: Bool = false
+    var onFollowingToggle: (() -> Void)? = nil
+    // 멀티채팅 토글 (인라인 패널 전용 — 스탠드얼론에서는 숨김)
+    var showMultiChatToggle: Bool = false
+    var isMultiChatOpen: Bool = false
+    var multiChatSessionCount: Int = 0
+    var onMultiChatToggle: (() -> Void)? = nil
 
     @State private var showStopAllConfirm = false
+    @State private var draggingSessionId: UUID?
 
     private var layoutModeIcon: String {
         switch manager.gridLayoutMode {
@@ -29,8 +36,8 @@ struct MLTabBar: View {
             Spacer(minLength: 0)
             gridToolbar
             settingsArea
-            addChannelArea
-            sidebarToggle
+            multiChatToggleArea
+            followingListArea
         }
         .frame(height: 40)
         .background { DesignTokens.Colors.surfaceBase }
@@ -43,27 +50,6 @@ struct MLTabBar: View {
         }
         // [Depth] 탭바 하단 그림자 — 콘텐츠 위에 떠 있는 헤더 느낌
         .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 3)
-    }
-
-    // MARK: - Sidebar Toggle
-
-    @ViewBuilder
-    private var sidebarToggle: some View {
-        if hideFollowingList, let toggle = onToggleFollowingList {
-            Button(action: toggle) {
-                Image(systemName: "sidebar.trailing")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                            .fill(DesignTokens.Colors.surfaceElevated.opacity(0.4))
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("팔로잉 목록 보이기")
-            .padding(.trailing, DesignTokens.Spacing.sm)
-        }
     }
 
     // MARK: - Tab Scroll Area
@@ -87,6 +73,17 @@ struct MLTabBar: View {
                         onMoveLeft:  { manager.moveSessionLeft(session) },
                         onMoveRight: { manager.moveSessionRight(session) }
                     )
+                    .onDrag {
+                        draggingSessionId = session.id
+                        return NSItemProvider(object: session.id.uuidString as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: MLTabReorderDropDelegate(
+                        targetSession: session,
+                        manager: manager,
+                        draggingSessionId: $draggingSessionId
+                    ))
+                    .opacity(draggingSessionId == session.id ? 0.4 : 1.0)
+                    .animation(DesignTokens.Animation.fast, value: draggingSessionId)
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
@@ -170,34 +167,34 @@ struct MLTabBar: View {
             isActive: isGridLayout,
             help: isGridLayout ? "탭 모드로 전환" : "그리드 모드로 전환"
         ) {
+            // [렌더링 최적화] 레이아웃 전환만 애니메이션, VLC 상태 변경은 프레임 드롭 방지를 위해 분리
             withAnimation(DesignTokens.Animation.snappy) {
                 isGridLayout.toggle()
-                if isGridLayout {
-                    for s in manager.sessions { s.setBackgroundMode(false) }
-                    let count = manager.sessions.count
-                    for s in manager.sessions { s.playerViewModel.applyMultiLiveConstraints(paneCount: count) }
-                    if !manager.isMultiAudioMode {
-                        if let sel = manager.selectedSession {
-                            for s in manager.sessions { s.setMuted(s.id != sel.id) }
-                            manager.audioSessionId = sel.id
-                        }
+            }
+            // VLC/오디오 상태 업데이트 — 애니메이션 블록 외부에서 실행
+            if isGridLayout {
+                for s in manager.sessions { s.setBackgroundMode(false) }
+                let count = manager.sessions.count
+                for s in manager.sessions { s.playerViewModel.applyMultiLiveConstraints(paneCount: count) }
+                if !manager.isMultiAudioMode {
+                    if let sel = manager.selectedSession {
+                        for s in manager.sessions { s.setMuted(s.id != sel.id) }
+                        manager.audioSessionId = sel.id
                     }
-                } else {
-                    for s in manager.sessions { s.setBackgroundMode(s.id != manager.selectedSessionId) }
-                    manager.isMultiAudioMode = false
-                    manager.audioEnabledSessionIds.removeAll()
-                    if !manager.isMultiAudioMode {
-                        manager.audioSessionId = nil
-                        for s in manager.sessions { s.setMuted(s.id != manager.selectedSessionId) }
-                    }
+                }
+            } else {
+                for s in manager.sessions { s.setBackgroundMode(s.id != manager.selectedSessionId) }
+                manager.isMultiAudioMode = false
+                manager.audioEnabledSessionIds.removeAll()
+                if !manager.isMultiAudioMode {
+                    manager.audioSessionId = nil
+                    for s in manager.sessions { s.setMuted(s.id != manager.selectedSessionId) }
                 }
             }
             manager.saveState()
-            // [VLC 안정 컨테이너 패턴] 그리드↔탭 전환 시 drawable 재바인딩
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 150_000_000)
-                for s in manager.sessions { s.playerViewModel.mediaPlayer?.refreshDrawable() }
-            }
+            // [drawable 복구] 그리드↔탭 전환 시 drawable 재바인딩은
+            // PlayerContainerView.attachVideoView()에서 자동 처리.
+            // 여기서 중복 호출하면 추가 검은 프레임 플래시 발생.
         }
         .padding(.trailing, DesignTokens.Spacing.xxs)
     }
@@ -237,34 +234,90 @@ struct MLTabBar: View {
         }
     }
 
-    // MARK: - Add Channel Area
+    // MARK: - Multi-Chat Toggle Area
 
     @ViewBuilder
-    private var addChannelArea: some View {
-        if !manager.sessions.isEmpty { mlDivider }
-        Button(action: onAdd) {
+    private var multiChatToggleArea: some View {
+        if showMultiChatToggle, let onToggle = onMultiChatToggle {
+            if !manager.sessions.isEmpty { mlDivider }
+            Button { onToggle() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: isMultiChatOpen
+                          ? "bubble.left.and.bubble.right.fill"
+                          : "bubble.left.and.bubble.right")
+                        .font(DesignTokens.Typography.microSemibold)
+                    Text("멀티채팅")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                    if multiChatSessionCount > 0 {
+                        Text("\(multiChatSessionCount)")
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule().fill(
+                                    isMultiChatOpen
+                                        ? Color.white.opacity(0.22)
+                                        : DesignTokens.Colors.chzzkGreen.opacity(0.18)
+                                )
+                            )
+                    }
+                }
+                .foregroundStyle(
+                    isMultiChatOpen ? .white : DesignTokens.Colors.chzzkGreen
+                )
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule().fill(
+                        isMultiChatOpen
+                            ? DesignTokens.Colors.chzzkGreen
+                            : DesignTokens.Colors.chzzkGreen.opacity(0.10)
+                    )
+                )
+                .overlay(
+                    Capsule().strokeBorder(
+                        isMultiChatOpen
+                            ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
+                            : DesignTokens.Colors.chzzkGreen.opacity(0.22),
+                        lineWidth: 0.5
+                    )
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, DesignTokens.Spacing.xxs)
+            .animation(DesignTokens.Animation.fast, value: isMultiChatOpen)
+            .help(isMultiChatOpen ? "멀티채팅 닫기" : "멀티채팅 열기")
+        }
+    }
+
+    // MARK: - Following List Toggle Area
+
+    @ViewBuilder
+    private var followingListArea: some View {
+        if !manager.sessions.isEmpty || showMultiChatToggle { mlDivider }
+        Button { onFollowingToggle?() } label: {
             HStack(spacing: 4) {
-                Image(systemName: isAddPanelOpen ? "list.bullet" : "plus")
+                Image(systemName: "sidebar.left")
                     .font(DesignTokens.Typography.microSemibold)
-                Text(isAddPanelOpen ? "채널 목록" : "추가")
+                Text("팔로잉")
                     .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
             }
             .foregroundStyle(
-                isAddPanelOpen ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.chzzkGreen
+                showFollowingList ? .white : DesignTokens.Colors.chzzkGreen
             )
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(
                 Capsule().fill(
-                    isAddPanelOpen
-                        ? DesignTokens.Colors.surfaceElevated.opacity(0.6)
+                    showFollowingList
+                        ? DesignTokens.Colors.chzzkGreen
                         : DesignTokens.Colors.chzzkGreen.opacity(0.10)
                 )
             )
             .overlay(
                 Capsule().strokeBorder(
-                    isAddPanelOpen
-                        ? DesignTokens.Glass.borderColor
+                    showFollowingList
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
                         : DesignTokens.Colors.chzzkGreen.opacity(0.22),
                     lineWidth: 0.5
                 )
@@ -272,7 +325,8 @@ struct MLTabBar: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, DesignTokens.Spacing.sm)
-        .animation(DesignTokens.Animation.fast, value: isAddPanelOpen)
+        .animation(DesignTokens.Animation.fast, value: showFollowingList)
+        .help(showFollowingList ? "팔로잉 목록 닫기" : "팔로잉 목록 열기")
     }
 
     // MARK: - Divider Helper
@@ -323,6 +377,45 @@ private struct MLToolButton: View {
     }
 }
 
+// MARK: - Tab Reorder Drop Delegate
+
+private struct MLTabReorderDropDelegate: DropDelegate {
+    let targetSession: MultiLiveSession
+    let manager: MultiLiveManager
+    @Binding var draggingSessionId: UUID?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragId = draggingSessionId,
+              dragId != targetSession.id,
+              let fromIndex = manager.sessions.firstIndex(where: { $0.id == dragId }),
+              let toIndex = manager.sessions.firstIndex(where: { $0.id == targetSession.id })
+        else { return }
+
+        withAnimation(DesignTokens.Animation.fast) {
+            manager.sessions.move(
+                fromOffsets: IndexSet(integer: fromIndex),
+                toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex
+            )
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingSessionId = nil
+        manager.saveState()
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggingSessionId != nil
+    }
+}
+
 // MARK: - Tab Chip
 struct MLTabChip: View {
     let session: MultiLiveSession
@@ -351,28 +444,31 @@ struct MLTabChip: View {
     // MARK: - Chip Content
 
     private var chipContent: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             avatarView
             channelInfo
-            reorderArrows
+            if isHovered || isSelected { reorderArrows }
             closeButton
         }
-        .padding(.leading, 5)
-        .padding(.trailing, 5)
-        .padding(.vertical, 3)
+        .padding(.leading, 6)
+        .padding(.trailing, isHovered ? 4 : 6)
+        .padding(.vertical, 4)
         .background(chipBackground)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
+        .clipShape(Capsule(style: .continuous))
         .overlay(chipBorder)
-        .shadow(color: isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.04) : .clear, radius: 2, y: 1)
+        .shadow(
+            color: isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.10) : .clear,
+            radius: 4, y: 1
+        )
     }
 
     // MARK: - Channel Info
 
     private var channelInfo: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
                 Text(tabTitle)
-                    .font(DesignTokens.Typography.custom(size: 11, weight: isSelected ? .semibold : .medium))
+                    .font(DesignTokens.Typography.custom(size: 11.5, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(
                         isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary
                     )
@@ -404,12 +500,12 @@ struct MLTabChip: View {
 
     @ViewBuilder
     private var reorderArrows: some View {
-        if isHovered && manager.sessions.count > 1 {
-            HStack(spacing: 1) {
+        if manager.sessions.count > 1 {
+            HStack(spacing: 2) {
                 reorderButton(icon: "chevron.left",  action: onMoveLeft)
                 reorderButton(icon: "chevron.right", action: onMoveRight)
             }
-            .transition(.opacity.combined(with: .scale(scale: 0.85)))
+            .transition(.opacity.combined(with: .scale(scale: 0.8)))
         }
     }
 
@@ -418,33 +514,37 @@ struct MLTabChip: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
+                .font(DesignTokens.Typography.custom(size: 8, weight: .bold))
                 .foregroundStyle(
                     isCloseHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary
                 )
-                .frame(width: 18, height: 18)
+                .frame(width: 16, height: 16)
                 .contentShape(Circle())
                 .background {
-                    if isCloseHovered {
-                        Circle().fill(DesignTokens.Colors.surfaceElevated.opacity(0.8))
-                    } else if isHovered {
-                        Circle().fill(DesignTokens.Colors.surfaceElevated.opacity(0.4))
-                    }
+                    Circle().fill(
+                        isCloseHovered
+                            ? DesignTokens.Colors.surfaceOverlay.opacity(0.9)
+                            : (isHovered ? DesignTokens.Colors.surfaceElevated.opacity(0.5) : Color.clear)
+                    )
                 }
+                .scaleEffect(isCloseHovered ? 1.08 : 1.0)
+                .compositingGroup()
         }
         .buttonStyle(.plain)
         .onHover { isCloseHovered = $0 }
+        .animation(DesignTokens.Animation.fast, value: isCloseHovered)
+        .opacity(isHovered || isSelected ? 1 : 0)
     }
 
     // MARK: - Chip Border
 
     private var chipBorder: some View {
-        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+        Capsule(style: .continuous)
             .strokeBorder(
                 isSelected
-                    ? DesignTokens.Colors.chzzkGreen.opacity(0.25)
-                    : (isHovered ? DesignTokens.Glass.borderColorLight.opacity(0.6) : Color.clear),
-                lineWidth: isSelected ? 0.5 : 0.5
+                    ? DesignTokens.Colors.chzzkGreen.opacity(0.30)
+                    : (isHovered ? DesignTokens.Glass.borderColorLight.opacity(0.5) : Color.clear),
+                lineWidth: isSelected ? 1.0 : 0.5
             )
     }
 
@@ -454,8 +554,14 @@ struct MLTabChip: View {
         ZStack(alignment: .bottomTrailing) {
             ZStack {
                 Circle()
-                    .fill(avatarColor)
-                    .frame(width: 22, height: 22)
+                    .fill(
+                        LinearGradient(
+                            colors: [avatarColor, avatarColor.opacity(0.65)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 24, height: 24)
                     .overlay(
                         Circle().stroke(
                             isAudioActive && isGridMode ? DesignTokens.Colors.chzzkGreen : Color.clear,
@@ -463,8 +569,9 @@ struct MLTabChip: View {
                         )
                     )
                 Text(String(tabTitle.prefix(1)).uppercased())
-                    .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
             }
             statusDot
         }
@@ -475,26 +582,28 @@ struct MLTabChip: View {
         switch session.loadState {
         case .playing:
             ZStack {
-                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
-                Circle().fill(DesignTokens.Colors.chzzkGreen).frame(width: 6, height: 6)
+                Circle().fill(DesignTokens.Colors.surfaceBase).frame(width: 10, height: 10)
+                Circle().fill(DesignTokens.Colors.chzzkGreen).frame(width: 7, height: 7)
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.5), radius: 2)
             }
             .offset(x: 3, y: 3)
         case .loading:
             ZStack {
-                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
-                ProgressView().scaleEffect(0.34).tint(DesignTokens.Colors.chzzkGreen)
+                Circle().fill(DesignTokens.Colors.surfaceBase).frame(width: 10, height: 10)
+                ProgressView().scaleEffect(0.36).tint(DesignTokens.Colors.chzzkGreen)
             }
             .offset(x: 3, y: 3)
         case .error:
             ZStack {
-                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
-                Circle().fill(DesignTokens.Colors.error).frame(width: 6, height: 6)
+                Circle().fill(DesignTokens.Colors.surfaceBase).frame(width: 10, height: 10)
+                Circle().fill(DesignTokens.Colors.error).frame(width: 7, height: 7)
+                    .shadow(color: DesignTokens.Colors.error.opacity(0.4), radius: 2)
             }
             .offset(x: 3, y: 3)
         case .offline:
             ZStack {
-                Circle().fill(DesignTokens.Colors.surfaceOverlay).frame(width: 9, height: 9)
-                Circle().fill(DesignTokens.Colors.textTertiary).frame(width: 6, height: 6)
+                Circle().fill(DesignTokens.Colors.surfaceBase).frame(width: 10, height: 10)
+                Circle().fill(DesignTokens.Colors.textTertiary).frame(width: 7, height: 7)
             }
             .offset(x: 3, y: 3)
         default:
@@ -555,13 +664,23 @@ struct MLTabChip: View {
     private var chipBackground: some View {
         if isSelected {
             ZStack {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.7))
-                DesignTokens.Colors.chzzkGreen.opacity(0.08)
+                Capsule(style: .continuous)
+                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.75))
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                DesignTokens.Colors.chzzkGreen.opacity(0.10),
+                                DesignTokens.Colors.chzzkGreen.opacity(0.04),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
             }
         } else if isHovered {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.15))
+            Capsule(style: .continuous)
+                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.25))
         } else {
             Color.clear
         }
@@ -572,12 +691,12 @@ struct MLTabChip: View {
     private func reorderButton(icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(DesignTokens.Typography.custom(size: 8, weight: .bold))
+                .font(DesignTokens.Typography.custom(size: 7, weight: .bold))
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .frame(width: 15, height: 15)
+                .frame(width: 14, height: 14)
                 .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
-                        .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+                    Circle()
+                        .fill(DesignTokens.Colors.surfaceElevated.opacity(0.6))
                 )
         }
         .buttonStyle(.plain)

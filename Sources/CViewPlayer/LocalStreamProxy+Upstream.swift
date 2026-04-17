@@ -10,14 +10,15 @@ extension LocalStreamProxy {
     // MARK: - Connection Handling (HTTP/1.1 Keep-Alive)
     
     func handleConnection(_ connection: NWConnection) {
-        // 활성 연결 수 제한 — 연결 누수 시 시스템 자원 고갈 방지
-        let count = activeConnectionCount.withLock { count -> Int in
-            count += 1
-            return count
+        let wrapper = NWConnectionWrapper(connection)
+        // [Fix 26A] 활성 연결 추적 — stop() 시 일괄 cancel 가능
+        let count = _activeConnections.withLock { conns -> Int in
+            conns.insert(wrapper)
+            return conns.count
         }
         if count > maxActiveConnections {
             logger.warning("Proxy: max connections (\(self.maxActiveConnections)) exceeded, rejecting")
-            activeConnectionCount.withLock { $0 -= 1 }
+            _activeConnections.withLock { $0.remove(wrapper) }
             connection.cancel()
             return
         }
@@ -25,11 +26,10 @@ extension LocalStreamProxy {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .cancelled:
-                self?.activeConnectionCount.withLock { $0 -= 1 }
+                self?._activeConnections.withLock { $0.remove(wrapper) }
             case .failed:
-                // cancel() 전에 handler를 nil로 설정하여 .cancelled 재진입 방지 → 이중 decrement 방지
                 connection.stateUpdateHandler = nil
-                self?.activeConnectionCount.withLock { $0 -= 1 }
+                self?._activeConnections.withLock { $0.remove(wrapper) }
                 connection.cancel()
             default:
                 break

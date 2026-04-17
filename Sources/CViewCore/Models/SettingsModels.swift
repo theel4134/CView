@@ -3,6 +3,21 @@
 
 import Foundation
 
+/// 스크린샷 저장 포맷
+public enum ScreenshotFormat: String, Codable, Sendable, CaseIterable {
+    case png
+    case jpeg
+
+    public var displayName: String {
+        switch self {
+        case .png: "PNG"
+        case .jpeg: "JPEG"
+        }
+    }
+
+    public var fileExtension: String { rawValue }
+}
+
 /// 플레이어 설정
 public struct PlayerSettings: Codable, Sendable, Equatable {
     public var quality: StreamQuality
@@ -14,6 +29,14 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
     public var autoPlay: Bool
     /// 백그라운드 및 비활성 상태에서도 라이브 방송 재생을 유지할지 여부
     public var continuePlaybackInBackground: Bool
+    /// 항상 최고 화질(1080p60) 유지 — ABR 하향/해상도 캡핑/프레임 스킵 비활성화
+    public var forceHighestQuality: Bool
+
+    // MARK: - 스크린샷 설정
+    /// 스크린샷 저장 경로
+    public var screenshotPath: String
+    /// 스크린샷 저장 포맷
+    public var screenshotFormat: ScreenshotFormat
 
     // MARK: - VLC 4.0 고급 설정
 
@@ -36,6 +59,11 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
     public var videoHue: Float
     /// 감마 (0~10, 기본 1.0)
     public var videoGamma: Float
+
+    /// 선명한 화면 — nearest-neighbor 스케일링 (픽셀 엣지 선명)
+    /// AV엔진: AVPlayerLayer.magnificationFilter = .nearest
+    /// VLC엔진: VLCLayerHostView 레이어 및 서브레이어 magnificationFilter = .nearest
+    public var sharpPixelScaling: Bool
 
     /// 화면 비율 (nil = 기본, "16:9", "4:3", "21:9" 등)
     public var aspectRatio: String?
@@ -81,10 +109,14 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         volumeLevel: Float = 1.0,
         autoPlay: Bool = true,
         continuePlaybackInBackground: Bool = true,
+        forceHighestQuality: Bool = true,
+        screenshotPath: String = "~/Pictures/CView Screenshots",
+        screenshotFormat: ScreenshotFormat = .png,
         equalizerPreset: String? = nil,
         equalizerPreAmp: Float = 0,
         equalizerBands: [Float] = [],
         videoAdjustEnabled: Bool = false,
+        sharpPixelScaling: Bool = false,
         videoBrightness: Float = 1.0,
         videoContrast: Float = 1.0,
         videoSaturation: Float = 1.0,
@@ -114,9 +146,13 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         self.volumeLevel = volumeLevel
         self.autoPlay = autoPlay
         self.continuePlaybackInBackground = continuePlaybackInBackground
+        self.forceHighestQuality = forceHighestQuality
+        self.screenshotPath = screenshotPath
+        self.screenshotFormat = screenshotFormat
         self.equalizerPreset = equalizerPreset
         self.equalizerPreAmp = equalizerPreAmp
         self.equalizerBands = equalizerBands
+        self.sharpPixelScaling = sharpPixelScaling
         self.videoAdjustEnabled = videoAdjustEnabled
         self.videoBrightness = videoBrightness
         self.videoContrast = videoContrast
@@ -145,8 +181,11 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case quality, preferredEngine, lowLatencyMode, catchupRate, bufferDuration, volumeLevel
         case autoPlay, continuePlaybackInBackground
+        case forceHighestQuality
+        case screenshotPath, screenshotFormat
         case equalizerPreset, equalizerPreAmp, equalizerBands
         case videoAdjustEnabled, videoBrightness, videoContrast, videoSaturation, videoHue, videoGamma
+        case sharpPixelScaling
         case aspectRatio, audioStereoMode, audioMixMode, audioDelay
         case latencyPreset, latencyTarget, latencyMax, latencyMin
         case latencyMaxRate, latencyMinRate
@@ -164,7 +203,11 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         volumeLevel = try c.decode(Float.self, forKey: .volumeLevel)
         autoPlay = try c.decode(Bool.self, forKey: .autoPlay)
         continuePlaybackInBackground = try c.decode(Bool.self, forKey: .continuePlaybackInBackground)
+        forceHighestQuality = try c.decodeIfPresent(Bool.self, forKey: .forceHighestQuality) ?? true
+        screenshotPath = try c.decodeIfPresent(String.self, forKey: .screenshotPath) ?? "~/Pictures/CView Screenshots"
+        screenshotFormat = try c.decodeIfPresent(ScreenshotFormat.self, forKey: .screenshotFormat) ?? .png
         equalizerPreset = try c.decodeIfPresent(String.self, forKey: .equalizerPreset)
+        sharpPixelScaling = try c.decodeIfPresent(Bool.self, forKey: .sharpPixelScaling) ?? false
         equalizerPreAmp = try c.decodeIfPresent(Float.self, forKey: .equalizerPreAmp) ?? 0
         equalizerBands = try c.decodeIfPresent([Float].self, forKey: .equalizerBands) ?? []
         videoAdjustEnabled = try c.decodeIfPresent(Bool.self, forKey: .videoAdjustEnabled) ?? false
@@ -312,6 +355,7 @@ public struct ChatSettings: Codable, Sendable, Equatable {
     public var ttsEnabled: Bool
     public var ttsVolume: Float
     public var ttsRate: Float
+    public var ttsVoiceIdentifier: String?
 
     // 채팅 표시 모드
     public var displayMode: ChatDisplayMode
@@ -341,6 +385,7 @@ public struct ChatSettings: Codable, Sendable, Equatable {
         ttsEnabled: Bool = false,
         ttsVolume: Float = 0.8,
         ttsRate: Float = 200,
+        ttsVoiceIdentifier: String? = nil,
         displayMode: ChatDisplayMode = .side,
         overlayWidth: CGFloat = 340,
         overlayHeight: CGFloat = 400,
@@ -365,6 +410,7 @@ public struct ChatSettings: Codable, Sendable, Equatable {
         self.ttsEnabled = ttsEnabled
         self.ttsVolume = ttsVolume
         self.ttsRate = ttsRate
+        self.ttsVoiceIdentifier = ttsVoiceIdentifier
         self.displayMode = displayMode
         self.overlayWidth = overlayWidth
         self.overlayHeight = overlayHeight

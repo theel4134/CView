@@ -115,15 +115,6 @@ struct MLControlOverlay: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.xl)
         .padding(.vertical, DesignTokens.Spacing.sm + 2)
-        .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
-                }
-                .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
-        }
         .padding(.horizontal, DesignTokens.Spacing.xl)
         .padding(.bottom, DesignTokens.Spacing.md)
     }
@@ -157,7 +148,8 @@ private struct MLOverlayControlButton: View {
                         .fill(.white.opacity(isHovered ? 0.15 : 0))
                 )
                 .contentShape(Circle())
-                .scaleEffect(isHovered ? 1.1 : 1.0)
+                .scaleEffect(isHovered ? 1.05 : 1.0)
+                .compositingGroup()
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -361,6 +353,7 @@ struct MLEmptyState: View {
                     .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(isAddHovered ? 0.5 : 0.2), radius: 8, y: 3)
             )
             .scaleEffect(isAddHovered ? 1.05 : 1.0)
+            .compositingGroup()
         }
         .buttonStyle(.plain)
         .onHover { isAddHovered = $0 }

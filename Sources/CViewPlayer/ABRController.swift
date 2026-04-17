@@ -32,11 +32,11 @@ public actor ABRController {
         public static let `default` = Configuration(
             minBandwidthBps: 500_000,
             maxBandwidthBps: 50_000_000,
-            bandwidthSafetyFactor: 0.7,
-            switchUpThreshold: 1.2,
-            switchDownThreshold: 0.8,
-            minSwitchInterval: 5.0,
-            initialBandwidthEstimate: 5_000_000
+            bandwidthSafetyFactor: 0.9,  // [Fix 23A] 0.7→0.9: 1080p(~8Mbps) 유지 위해 BW 활용률 향상
+            switchUpThreshold: 1.15,     // [Fix 23A] 1.2→1.15: 1080p 업그레이드 더 적극적
+            switchDownThreshold: 0.65,   // [Fix 23A] 0.7→0.65: 다운그레이드 더 보수적 (1080p 유지)
+            minSwitchInterval: 8.0,      // [Fix 19] 5→8초: 대역폭 추정 안정화
+            initialBandwidthEstimate: 8_000_000  // [Fix 23A] 5→8Mbps: 1080p 기준 초기값
         )
 
         /// 멀티라이브 전용 ABR 프로파일
@@ -47,9 +47,9 @@ public actor ABRController {
         public static let multiLive = Configuration(
             minBandwidthBps: 300_000,
             maxBandwidthBps: 20_000_000,
-            bandwidthSafetyFactor: 0.85,
-            switchUpThreshold: 1.3,
-            switchDownThreshold: 0.7,
+            bandwidthSafetyFactor: 0.9,  // [Fix 23A] 0.85→0.9: 멀티라이브에서도 1080p 활용률 향상
+            switchUpThreshold: 1.2,      // [Fix 23A] 1.3→1.2: 1080p 복귀 촉진
+            switchDownThreshold: 0.65,   // [Fix 23A] 0.7→0.65: 다운그레이드 보수적
             minSwitchInterval: 3.0,
             initialBandwidthEstimate: 2_500_000
         )
@@ -59,8 +59,8 @@ public actor ABRController {
             maxBandwidthBps: Int = 50_000_000,
             bandwidthSafetyFactor: Double = 0.7,
             switchUpThreshold: Double = 1.2,
-            switchDownThreshold: Double = 0.8,
-            minSwitchInterval: TimeInterval = 5.0,
+            switchDownThreshold: Double = 0.7,
+            minSwitchInterval: TimeInterval = 8.0,
             initialBandwidthEstimate: Int = 5_000_000
         ) {
             self.minBandwidthBps = minBandwidthBps
@@ -155,16 +155,21 @@ public actor ABRController {
     public func setLevels(_ variants: [MasterPlaylist.Variant]) {
         // Sort ascending by bandwidth
         availableLevels = variants.sorted { $0.bandwidth < $1.bandwidth }
-        // 레벨 변경 시 currentLevelIndex 범위 초과 방지
+        // initialBandwidthEstimate 기반 초기 레벨 선택 (실제 재생 variant와 ABR 상태 동기화)
         if !availableLevels.isEmpty {
-            currentLevelIndex = min(currentLevelIndex, availableLevels.count - 1)
+            let safeBw = Double(config.initialBandwidthEstimate) * config.bandwidthSafetyFactor
+            var best = 0
+            for (i, level) in availableLevels.enumerated() {
+                if Double(level.bandwidth) <= safeBw { best = i }
+            }
+            currentLevelIndex = best
         } else {
             currentLevelIndex = 0
         }
         // flashls AutoLevelManager: 비트레이트 간격 기반 동적 전환 임계값 계산
         computeDynamicThresholds()
         let levelCount = self.availableLevels.count
-        logger.info("ABR: Set \(levelCount) levels, dynamic thresholds computed")
+        logger.info("ABR: Set \(levelCount) levels, initial=\(self.currentLevelIndex), dynamic thresholds computed")
     }
     
     /// Record a bandwidth measurement sample
@@ -272,7 +277,8 @@ public actor ABRController {
             return Double(config.initialBandwidthEstimate)
         }
         
-        // Use the lower of fast and slow EWMA for conservative estimate
+        // [Fix 23C] 가중 평균 EWMA: min(fast,slow)는 과소 추정 → 1080p 불필요한 강등
+        // slow(안정) 70% + fast(반응) 30% 가중 평균으로 변동에 민감하되 안정적
         let fast = fastEWMA.current
         let slow = slowEWMA.current
         
@@ -280,7 +286,10 @@ public actor ABRController {
             return Double(config.initialBandwidthEstimate)
         }
         
-        return min(fast, slow)
+        // 둘 다 유효하면 가중 평균, 하나만 유효하면 해당 값 사용
+        if fast == 0 { return slow }
+        if slow == 0 { return fast }
+        return 0.7 * slow + 0.3 * fast
     }
     
     /// Force a specific quality level
@@ -327,6 +336,27 @@ public actor ABRController {
         bandwidthHistory = []
         dynamicSwitchUp = []
         dynamicSwitchDown = []
+    }
+
+    /// [Fix 26] 화질 프로빙용 합성 대역폭 샘플 주입
+    /// EWMA가 현재 (저)화질 throughput에 수렴하여 switchUp이 불가능해지는
+    /// "death spiral"을 해소합니다. 목표 비트레이트의 1.3배를 주입하여
+    /// ABR이 상위 레벨 선택을 허용하도록 합니다.
+    public func injectSyntheticSample(targetBitrate: Double) {
+        let syntheticBps = targetBitrate * 1.3  // switchUp 임계값 통과용 여유 30%
+        // fast EWMA를 즉시 업데이트하여 상위 레벨 허용
+        let _ = fastEWMA.update(syntheticBps)
+        let _ = fastEWMA.update(syntheticBps)
+        // slow EWMA에도 부분 주입 (느린 수렴 끌어올리기)
+        let _ = slowEWMA.update(syntheticBps)
+        // 히스토리에도 반영
+        bandwidthHistory.append(syntheticBps)
+        if bandwidthHistory.count > bandwidthHistoryMaxSize {
+            bandwidthHistory.removeFirst()
+        }
+        // minSwitchInterval 리셋으로 즉시 전환 허용
+        lastSwitchTime = nil
+        logger.info("ABR: 합성 샘플 주입 target=\(Int(targetBitrate / 1000))kbps synthetic=\(Int(syntheticBps / 1000))kbps")
     }
 
     // MARK: - flashls-style 동적 전환 임계값
@@ -440,8 +470,10 @@ public actor ABRController {
             }
         }
 
-        // 긴급 강등: 버퍼 비율이 매우 낮으면 bandwidth-only 방식으로 즉시 결정
-        if bufferRatio < ABRDefaults.emergencyBufferRatio && currentLevelIndex > 0 {
+        // [Fix 23B] 긴급 강등: 버퍼 비율 + 절대 길이 이중 조건
+        // 기존: bufferRatio < 2.0만 → 정상 버퍼(4초/2초seg=2.0)에서도 발동
+        // 개선: 절대 길이 < 2초 추가 — 실제 위험할 때만 긴급 강등
+        if bufferRatio < ABRDefaults.emergencyBufferRatio && context.bufferLength < 2.0 && currentLevelIndex > 0 {
             let emergencyLevel = findSafeLevel(
                 below: currentLevelIndex,
                 estimatedBandwidth: estimatedBandwidth,

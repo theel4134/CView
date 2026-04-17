@@ -22,8 +22,8 @@ public actor AuthManager: AuthTokenProvider {
     
     /// 자동 토큰 갱신 백그라운드 태스크
     private var tokenRefreshTask: Task<Void, Never>?
-    /// 동시 갱신 방지 플래그
-    private var isRefreshing: Bool = false
+    /// 동시 갱신 방지 — in-flight refresh Task 공유 (이전 isRefreshing flag + sleep 대체)
+    private var inFlightRefresh: Task<Bool, Never>?
 
     public init(
         cookieManager: CookieManager = CookieManager(),
@@ -222,14 +222,21 @@ public actor AuthManager: AuthTokenProvider {
         // 아직 유효하면 갱신 불필요
         if !tokens.isExpired { return true }
 
-        // 동시 갱신 방지 — 다른 caller가 이미 갱신 중이면 대기 후 결과 반환
-        guard !isRefreshing else {
-            try? await Task.sleep(for: .milliseconds(200))
-            return _oauthTokens?.isExpired == false
+        // [Fix] in-flight Task 공유 — 동시 호출자는 실제 갱신 1회만 수행하고 결과 await
+        if let existing = inFlightRefresh {
+            return await existing.value
         }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+            return await self.performTokenRefresh(tokens: tokens)
+        }
+        inFlightRefresh = task
+        let result = await task.value
+        inFlightRefresh = nil
+        return result
+    }
+
+    private func performTokenRefresh(tokens: OAuthTokens) async -> Bool {
         guard let refreshToken = tokens.refreshToken else {
             Log.auth.warning("No refresh token available")
             updateState(.expired)
@@ -330,17 +337,25 @@ public actor AuthManager: AuthTokenProvider {
     /// - 1차 실패 시 30초 후 재시도
     /// - 2차 실패 시 세션 만료 상태로 전환
     private func performAutoRefresh() async {
-        guard !isRefreshing else {
-            Log.auth.info("Token refresh already in progress — skipping")
+        // [Fix] in-flight Task가 있으면 중복 갱신 방지 — 결과만 await
+        if let existing = inFlightRefresh {
+            _ = await existing.value
             return
         }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+            return await self.performAutoRefreshAttempts()
+        }
+        inFlightRefresh = task
+        _ = await task.value
+        inFlightRefresh = nil
+    }
+
+    private func performAutoRefreshAttempts() async -> Bool {
         guard let tokens = _oauthTokens, let refreshToken = tokens.refreshToken else {
             Log.auth.warning("No refresh token available for auto-refresh")
             updateState(.expired)
-            return
+            return false
         }
         
         // 1차 시도
@@ -350,7 +365,7 @@ public actor AuthManager: AuthTokenProvider {
             updateState(.loggedIn(userId: "oauth"))
             Log.auth.info("Token auto-refresh succeeded")
             scheduleTokenAutoRefresh()
-            return
+            return true
         } catch {
             Log.auth.warning("Token auto-refresh attempt 1 failed: \(error.localizedDescription)")
         }
@@ -359,9 +374,9 @@ public actor AuthManager: AuthTokenProvider {
         do {
             try await Task.sleep(for: .seconds(30), clock: .continuous)
         } catch {
-            return // Task cancelled
+            return false // Task cancelled
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return false }
         
         // 2차 시도
         do {
@@ -370,9 +385,11 @@ public actor AuthManager: AuthTokenProvider {
             updateState(.loggedIn(userId: "oauth"))
             Log.auth.info("Token auto-refresh succeeded (attempt 2)")
             scheduleTokenAutoRefresh()
+            return true
         } catch {
             Log.auth.error("Token auto-refresh failed permanently: \(error.localizedDescription)")
             updateState(.expired)
+            return false
         }
     }
     

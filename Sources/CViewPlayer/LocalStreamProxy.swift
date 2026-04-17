@@ -43,9 +43,22 @@ public final class LocalStreamProxy: @unchecked Sendable {
         return try! NSRegularExpression(pattern: pattern) // swiftlint:disable:this force_try
     }()
     
-    /// 활성 NWConnection 수 추적 — 연결 누수 감지 및 제한용
-    let activeConnectionCount = Mutex<Int>(0)
+    /// 활성 NWConnection 추적 — stop() 시 일괄 cancel용 + 연결 수 제한
+    /// [Fix 26A] 기존 Int 카운터 → 실제 참조 컬렉션으로 변경하여 CLOSE_WAIT 누수 방지
+    let _activeConnections = Mutex<Set<NWConnectionWrapper>>([])
     let maxActiveConnections = ProxyDefaults.maxActiveConnections
+    
+    /// NWConnection을 Set에 저장하기 위한 ObjectIdentifier 기반 래퍼
+    final class NWConnectionWrapper: Hashable, Sendable {
+        let connection: NWConnection
+        nonisolated init(_ connection: NWConnection) { self.connection = connection }
+        nonisolated static func == (lhs: NWConnectionWrapper, rhs: NWConnectionWrapper) -> Bool {
+            ObjectIdentifier(lhs.connection) == ObjectIdentifier(rhs.connection)
+        }
+        nonisolated func hash(into hasher: inout Hasher) {
+            hasher.combine(ObjectIdentifier(connection))
+        }
+    }
     
     /// CDN 인증 실패(403) 연속 카운터 — 토큰 만료 감지용
     let _consecutive403Count = Mutex<Int>(0)
@@ -79,7 +92,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
             let sum = times.reduce(0, +)
             return (sum / Double(times.count), times.max() ?? 0)
         }
-        let active = activeConnectionCount.withLock { $0 }
+        let active = _activeConnections.withLock { $0.count }
         let c403 = _consecutive403Count.withLock { $0 }
 
         return ProxyNetworkStats(
@@ -113,8 +126,9 @@ public final class LocalStreamProxy: @unchecked Sendable {
         let timestamp: Date
     }
     let _m3u8Cache = Mutex<[String: M3U8CacheEntry]>([:])
-    // [Fix 16h-opt3] 0.5→0.3초: 새 세그먼트 감지 속도 40% 향상 → 초기 버퍼링 단축
-    let _m3u8CacheTTL: TimeInterval = 0.3
+    // [Fix 19] 0.3→0.8초: CDN 중복 요청 감소 + 세그먼트 도착 지터 흡수
+    // 2초 세그먼트 기준 매니페스트 갱신 주기(~1s)의 80% 커버
+    let _m3u8CacheTTL: TimeInterval = 0.8
     /// 캐시 최대 엔트리 수 — CDN 토큰 변경으로 URL 키가 누적되므로 제한 필수
     let _m3u8CacheMaxEntries = 50
     let _m3u8DebugCount = Mutex<Int>(0)
@@ -233,6 +247,16 @@ public final class LocalStreamProxy: @unchecked Sendable {
     public func stop() {
         listener?.cancel()
         listener = nil
+        // [Fix 26A] 모든 활성 NWConnection을 명시적으로 cancel — CLOSE_WAIT 방지
+        let connections = _activeConnections.withLock { conns -> Set<NWConnectionWrapper> in
+            let snapshot = conns
+            conns.removeAll()
+            return snapshot
+        }
+        for wrapper in connections {
+            wrapper.connection.stateUpdateHandler = nil  // .cancelled 콜백에서 이중 제거 방지
+            wrapper.connection.cancel()
+        }
         // proxySession 무효화 — 장시간 재생 시 URLSession 연결 풀 축적 방지
         _proxySessionStorage.withLock { session in
             session?.invalidateAndCancel()
@@ -243,7 +267,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
             $0.port = 0
             $0.targetHost = ""
         }
-        activeConnectionCount.withLock { $0 = 0 }
+        // _activeConnections는 stop()에서 이미 정리됨
         _consecutive403Count.withLock { $0 = 0 }
         _m3u8Cache.withLock { $0.removeAll() }
         resetNetworkStats()

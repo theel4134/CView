@@ -13,6 +13,8 @@ extension FollowingView {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(!multiLiveManager.sessions.isEmpty ? DesignTokens.Colors.background : DesignTokens.Colors.background)
+        // 비디오 영역은 패널 슬라이드 애니메이션 전파 차단 (Metal 렌더링 보호)
+        .transaction { $0.animation = nil }
         .task {
             if multiLiveManager.sessions.isEmpty {
                 await multiLiveManager.restoreState(appState: appState)
@@ -39,20 +41,24 @@ extension FollowingView {
                     get: { multiLiveManager.isGridLayout },
                     set: { multiLiveManager.isGridLayout = $0 }
                 ),
-                onAdd: { withAnimation(DesignTokens.Animation.snappy) {
-                    hideFollowingList.toggle()
-                    if !hideFollowingList { showMLSettings = false }
-                }},
-                isAddPanelOpen: !hideFollowingList,
+                onAdd: {},
+                isAddPanelOpen: true,
                 onSettings: { withAnimation(DesignTokens.Animation.snappy) {
                     showMLSettings.toggle()
-                    if showMLSettings { hideFollowingList = true }
                 }},
                 isSettingsPanelOpen: showMLSettings,
-                hideFollowingList: hideFollowingList,
-                onToggleFollowingList: {
-                    withAnimation(DesignTokens.Animation.glassAppear) {
-                        hideFollowingList = false
+                showFollowingList: showFollowingList,
+                onFollowingToggle: {
+                    withAnimation(DesignTokens.Animation.snappy) {
+                        showFollowingList.toggle()
+                    }
+                },
+                showMultiChatToggle: true,
+                isMultiChatOpen: showMultiChat,
+                multiChatSessionCount: chatSessionManager.sessions.count,
+                onMultiChatToggle: {
+                    withAnimation(DesignTokens.Animation.snappy) {
+                        showMultiChat.toggle()
                     }
                 }
             )
@@ -98,19 +104,19 @@ extension FollowingView {
             if multiLiveManager.sessions.isEmpty {
                 MLEmptyState(onAdd: {
                     withAnimation(DesignTokens.Animation.snappy) {
-                        hideFollowingList = false
+                        showFollowingList = true
                     }
                 })
             } else if multiLiveManager.isGridLayout && multiLiveManager.sessions.count >= 2 {
                 MLGridLayout(manager: multiLiveManager, appState: appState, onAdd: {
                     withAnimation(DesignTokens.Animation.snappy) {
-                        hideFollowingList = false
+                        showFollowingList = true
                     }
                 })
             } else {
                 ForEach(multiLiveManager.sessions) { session in
                     let isActive = session.id == multiLiveManager.selectedSessionId
-                    MLPlayerPane(session: session, appState: appState, isActive: isActive)
+                    MLPlayerPane(session: session, manager: multiLiveManager, appState: appState, isActive: isActive)
                         .frame(
                             maxWidth: isActive ? .infinity : 0,
                             maxHeight: isActive ? .infinity : 0

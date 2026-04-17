@@ -102,26 +102,20 @@ struct ChzzkEndpointMethodTests {
 @Suite("ChzzkEndpoint — QueryItems")
 struct ChzzkEndpointQueryTests {
 
-    @Test("following queryItems에 size, sortType 포함")
+    @Test("following queryItems에 size, sortType, page 포함")
     func followingQuery() {
         let ep = ChzzkEndpoint.following(size: 20, page: 0)
         let items = ep.queryItems ?? []
         #expect(items.contains { $0.name == "size" && $0.value == "20" })
         #expect(items.contains { $0.name == "sortType" && $0.value == "FOLLOW" })
+        #expect(items.contains { $0.name == "page" && $0.value == "0" })
     }
 
-    @Test("following page > 0 이면 page 파라미터 추가")
+    @Test("following page 값이 queryItems에 반영")
     func followingWithPage() {
         let ep = ChzzkEndpoint.following(size: 10, page: 2)
         let items = ep.queryItems ?? []
         #expect(items.contains { $0.name == "page" && $0.value == "2" })
-    }
-
-    @Test("following page=0 이면 page 파라미터 없음")
-    func followingNoPage() {
-        let ep = ChzzkEndpoint.following(size: 10, page: 0)
-        let items = ep.queryItems ?? []
-        #expect(!items.contains { $0.name == "page" })
     }
 
     @Test("searchChannel queryItems")

@@ -202,6 +202,8 @@ extension VLCPlayerEngine {
             setVideoHue(settings.videoHue)
             setVideoGamma(settings.videoGamma)
         }
+        // 선명한 화면 (픽셀 샤프 스케일링)
+        sharpPixelScaling = settings.sharpPixelScaling
         // 화면 비율
         setAspectRatio(settings.aspectRatio)
         // 오디오 고급

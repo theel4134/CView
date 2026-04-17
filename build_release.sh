@@ -12,8 +12,17 @@ APP_NAME="CView"
 BUNDLE_ID="com.cview.CView2"
 EXECUTABLE="CViewApp"
 VERSION="2.0.0"
-BUILD_NUMBER="1"
 MIN_MACOS="15.0"
+
+# ── 빌드 번호 자동 증가 ──────────────────────────────────────────────
+BUILD_NUMBER_FILE="${0:A:h}/.build_number"
+if [[ -f "$BUILD_NUMBER_FILE" ]]; then
+    BUILD_NUMBER=$(( $(cat "$BUILD_NUMBER_FILE") + 1 ))
+else
+    BUILD_NUMBER=1
+fi
+echo "$BUILD_NUMBER" > "$BUILD_NUMBER_FILE"
+echo "📦 버전: ${VERSION} (${BUILD_NUMBER})"
 
 SCRIPT_DIR="${0:A:h}"
 cd "$SCRIPT_DIR"

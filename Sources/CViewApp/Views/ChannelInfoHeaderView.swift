@@ -11,6 +11,8 @@ struct ChannelInfoHeroHeader: View {
     let channelInfo: ChannelInfo
     let liveInfo: LiveInfo?
 
+    private var isLive: Bool { liveInfo != nil }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // 배너 배경 — 라이브 썸네일 or 그라데이션
@@ -27,7 +29,7 @@ struct ChannelInfoHeroHeader: View {
             HStack(alignment: .bottom, spacing: DesignTokens.Spacing.md) {
                 // 아바타
                 ZStack {
-                    if liveInfo != nil {
+                    if isLive {
                         Circle()
                             .strokeBorder(
                                 LinearGradient(
@@ -70,15 +72,37 @@ struct ChannelInfoHeroHeader: View {
                     }
 
                     HStack(spacing: 8) {
-                        if liveInfo != nil {
+                        // 라이브 / 오프라인 상태 배지
+                        if isLive {
                             HStack(spacing: 4) {
                                 Circle()
-                                    .fill(DesignTokens.Colors.live)
-                                    .frame(width: 7, height: 7)
+                                    .fill(Color.white)
+                                    .frame(width: 6, height: 6)
                                 Text("LIVE")
                                     .font(DesignTokens.Typography.custom(size: 10, weight: .black))
-                                    .foregroundStyle(DesignTokens.Colors.live)
+                                    .foregroundStyle(Color.white)
                             }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(DesignTokens.Colors.live.gradient)
+                            .clipShape(Capsule())
+                            .shadow(color: DesignTokens.Colors.live.opacity(0.5), radius: 4)
+                        } else {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(DesignTokens.Colors.textTertiary)
+                                    .frame(width: 6, height: 6)
+                                Text("OFFLINE")
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .black))
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(DesignTokens.Colors.surfaceElevated.opacity(0.85))
+                            .overlay {
+                                Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                            }
+                            .clipShape(Capsule())
                         }
 
                         HStack(spacing: 4) {

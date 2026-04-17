@@ -5,6 +5,7 @@ import SwiftUI
 import CViewCore
 import CViewPersistence
 import ServiceManagement
+import AppKit
 
 // MARK: - General Settings
 
@@ -13,7 +14,9 @@ struct GeneralSettingsTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                SettingsPageHeader("일반")
+
                 SettingsSection(title: "앱 동작", icon: "app.badge", color: DesignTokens.Colors.chzzkGreen) {
                     SettingsRow("시작 시 자동 실행",
                                 description: "로그인 시 CView를 자동으로 시작합니다",
@@ -30,6 +33,24 @@ struct GeneralSettingsTab: View {
                         Toggle("", isOn: $settings.general.showInMenuBar)
                             .toggleStyle(.switch)
                             .tint(DesignTokens.Colors.accentBlue)
+                            .labelsHidden()
+                    }
+                    RowDivider()
+                    SettingsRow("항상 최상위",
+                                description: "창을 항상 다른 앱 위에 표시합니다",
+                                icon: "macwindow.on.rectangle", iconColor: DesignTokens.Colors.accentPurple) {
+                        Toggle("", isOn: $settings.general.alwaysOnTop)
+                            .toggleStyle(.switch)
+                            .tint(DesignTokens.Colors.accentPurple)
+                            .labelsHidden()
+                    }
+                    RowDivider()
+                    SettingsRow("시작 시 창 복원",
+                                description: "앱 시작 시 이전 창 크기와 위치를 복원합니다",
+                                icon: "arrow.uturn.backward.circle", iconColor: DesignTokens.Colors.accentOrange) {
+                        Toggle("", isOn: $settings.general.restoreWindowOnLaunch)
+                            .toggleStyle(.switch)
+                            .tint(DesignTokens.Colors.accentOrange)
                             .labelsHidden()
                     }
                 }
@@ -99,11 +120,12 @@ struct GeneralSettingsTab: View {
                 }
             }
             .padding(DesignTokens.Spacing.xl)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
         }
         .onChange(of: settings.general) { _, _ in Task { await settings.save() } }
         .onChange(of: settings.appearance) { _, _ in Task { await settings.save() } }
+        .onChange(of: settings.general.alwaysOnTop) { _, newValue in
+            NSApplication.shared.windows.first?.level = newValue ? .floating : .normal
+        }
         .onChange(of: settings.general.launchAtLogin) { _, newValue in
             do {
                 if newValue {
@@ -128,14 +150,15 @@ private struct ShortcutBindingRow: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DesignTokens.Spacing.md) {
             Image(systemName: action.icon)
-                .font(DesignTokens.Typography.caption)
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                .frame(width: 18)
+                .frame(width: 26, height: 26)
+                .background(DesignTokens.Colors.chzzkGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(action.displayName)
-                    .font(DesignTokens.Typography.captionMedium)
+                    .font(DesignTokens.Typography.body)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
             }
             Spacer()
@@ -183,8 +206,8 @@ private struct ShortcutBindingRow: View {
                     return .handled
                 }
         }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.md)
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, 11)
         .animation(DesignTokens.Animation.fast, value: isRecording)
     }
 

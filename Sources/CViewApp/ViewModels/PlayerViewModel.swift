@@ -46,6 +46,11 @@ public final class PlayerViewModel {
     public var recordingURL: URL?
     var recordingTimerTask: Task<Void, Never>?
 
+    // MARK: - 스크린샷 설정
+
+    public var screenshotSavePath: String = "~/Pictures/CView Screenshots"
+    public var screenshotSaveFormat: ScreenshotFormat = .png
+
     // MARK: - 스트림 메타정보
 
     public var channelName: String = ""
@@ -167,7 +172,8 @@ public final class PlayerViewModel {
                 callback(metrics)
                 if metrics.networkBytesPerSec > 0 {
                     let bytes = Int(metrics.networkBytesPerSec * 2)
-                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0) }
+                    let bh = metrics.bufferHealth
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0, bufferHealth: bh) }
                 }
             }
         } else {
@@ -213,7 +219,8 @@ public final class PlayerViewModel {
                 }
                 if metrics.networkBytesPerSec > 0 {
                     let bytes = Int(metrics.networkBytesPerSec * 2)
-                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0) }
+                    let bh = metrics.bufferHealth
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0, bufferHealth: bh) }
                 }
             }
         } else {
@@ -226,11 +233,29 @@ public final class PlayerViewModel {
 
     /// 서버 동기화 추천에 따른 재생 속도 적용
     /// MetricsForwarder 콜백에서 호출 (백그라운드 스레드 → Main Actor)
+    /// 
+    /// 속도 범위는 MetricsForwarder의 validateAndComputeSyncSpeed()에서 이미 계산되어
+    /// 델타 크기에 비례한 값이 넘어옴 (최대 ±0.05). 안전 하한/상한만 적용.
+    /// 버퍼 상태에 따라 가속을 제한하여 버퍼링을 방지합니다.
     public func applySyncSpeed(_ speed: Float) {
         Task { @MainActor [weak self] in
             guard let self, let engine = self.playerEngine else { return }
-            // 동기화 속도는 0.95~1.05 범위 내에서만 적용 (안전 범위)
-            let clamped = max(0.95, min(1.05, speed))
+
+            // 버퍼 상태 기반 가속 제한 — 버퍼가 낮으면 가속을 억제
+            let bh = self.latestMetrics?.bufferHealth ?? 1.0
+            let maxAllowed: Float
+            if bh < 0.3 {
+                // 버퍼 위험 — 가속 금지, 감속만 허용
+                maxAllowed = 1.0
+            } else if bh < 0.6 {
+                // 버퍼 주의 — 미세 가속만 허용 (최대 1.02)
+                maxAllowed = 1.02
+            } else {
+                // 버퍼 정상 — 완화된 범위 허용 (최대 1.08)
+                maxAllowed = 1.08
+            }
+
+            let clamped = max(0.93, min(maxAllowed, speed))
             engine.setRate(clamped)
         }
     }
@@ -246,6 +271,26 @@ public final class PlayerViewModel {
                vlc.streamingProfile != .multiLive {
                 vlc.streamingProfile = .lowLatency
             }
+        }
+    }
+
+    /// [Quality Lock] 최고 화질 유지 설정 — 런타임 변경 시 VLC 엔진에 즉시 반영
+    public func applyForceHighestQuality(_ enabled: Bool) {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.forceHighestQuality = enabled
+            if enabled {
+                vlc.maxAdaptiveHeight = 0
+            }
+        }
+    }
+
+    /// 선명한 화면(픽셀 샤프 스케일링) 설정 — VLC/AV 양쪽 엔진에 즉시 반영
+    public func applySharpPixelScaling(_ enabled: Bool) {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.sharpPixelScaling = enabled
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            av.setSharpPixelScaling(enabled)
         }
     }
 
@@ -319,16 +364,11 @@ public final class PlayerViewModel {
         guard streamPhase == .playing || streamPhase == .buffering else { return }
         guard let engine = playerEngine else { return }
 
-        // VLC: drawable 재바인딩 (NSView 계층 변경 대응)
-        // 비디오 트랙은 항상 활성 상태이므로 vout은 살아있다.
-        // 탭 전환 시 NSView가 다른 PlayerContainerView로 이동할 수 있으므로
-        // drawable만 재바인딩하여 렌더링 서피스를 갱신한다.
+        // VLC: drawable 재바인딩이 필요한 경우는 PlayerContainerView.attachVideoView()에서 처리.
+        // vout은 항상 살아있으므로 (비디오 트랙 토글 없음) 여기서 drawable 리셋을 하면
+        // 불필요한 검은 프레임(플리커)이 발생한다. statsTimer 업데이트 모드만 복원.
         if let vlcEngine = engine as? VLCPlayerEngine {
-            Task { @MainActor [weak vlcEngine] in
-                guard let vlcEngine else { return }
-                vlcEngine.refreshDrawable()
-                vlcEngine.setTimeUpdateMode(background: false)
-            }
+            vlcEngine.setTimeUpdateMode(background: false)
         }
 
         // AVPlayer: 백그라운드에서 macOS가 자동 일시정지한 경우 재개
@@ -367,7 +407,13 @@ public final class PlayerViewModel {
         self.currentChannelId = channelId
 
         let lowLatencyConfig: LowLatencyController.Configuration = playerSettings.map { Self.lowLatencyConfig(from: $0) } ?? .webSync
-        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, lowLatencyConfig: lowLatencyConfig, abrConfig: isMultiLive ? .multiLive : .default)
+        let forceMax = playerSettings?.forceHighestQuality ?? true
+        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, lowLatencyConfig: lowLatencyConfig, abrConfig: isMultiLive ? .multiLive : .default, forceHighestQuality: forceMax)
+        // [Fix 26B] 이전 coordinator를 ARC deinit에 의존하지 않고 명시적 정리
+        // — LocalStreamProxy NWConnection CLOSE_WAIT 방지
+        if let old = streamCoordinator {
+            await old.stopStream()
+        }
         let coordinator = StreamCoordinator(configuration: config)
         streamCoordinator = coordinator
         
@@ -394,6 +440,10 @@ public final class PlayerViewModel {
             logger.info("PlayerViewModel: 엔진 생성 → \(self.preferredEngineType.rawValue)")
         }
         engine.setVolume(isMuted ? 0 : volume)
+        // [Quality Lock] VLC 엔진에 최고 화질 유지 플래그 전파
+        if let vlc = engine as? VLCPlayerEngine {
+            vlc.forceHighestQuality = forceMax
+        }
         await coordinator.setPlayerEngine(engine)
 
         // VLC onStateChange 콜백 연결
@@ -470,6 +520,8 @@ public final class PlayerViewModel {
 
     public func stopStream() async {
         if isRecording { await stopRecording() }
+        // [Fix 25C] 녹화 타이머 방어적 정리 — isRecording 상태 불일치 시에도 누수 방지
+        recordingTimerTask?.cancel(); recordingTimerTask = nil
 
         // VLC 콜백 정리 — 엔진 재사용(풀 반납) 시 이전 세션의 dangling callback 방지
         if let vlc = playerEngine as? VLCPlayerEngine {
@@ -489,6 +541,7 @@ public final class PlayerViewModel {
         controlHideTask?.cancel(); controlHideTask = nil
         _bufferingDebounceTask?.cancel(); _bufferingDebounceTask = nil
         _refreshDrawableTask?.cancel(); _refreshDrawableTask = nil
+        _lastPlayingTime = nil  // [플리커 방지] 다음 재생 시 초기 drawable refresh 보장
 
         await streamCoordinator?.stopStream()
         streamCoordinator = nil

@@ -70,7 +70,13 @@ public actor NetworkMonitor {
         Log.network.info("Network: \(self.isConnected ? "connected" : "disconnected") via \(String(describing: self.connectionType))")
     }
 
-    private func stopIfNeeded() {
-        // 참조 카운트 기반 정리는 향후 구현
+    /// 모니터링 중지 — 앱 종료 시 NWPathMonitor 리소스 해제
+    public func stop() {
+        if isMonitoring {
+            monitor.cancel()
+            isMonitoring = false
+        }
+        activeContinuation?.finish()
+        activeContinuation = nil
     }
 }

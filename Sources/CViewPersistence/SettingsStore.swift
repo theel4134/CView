@@ -47,6 +47,12 @@ public final class SettingsStore {
     public func load() async {
         guard let store = dataStore else { return }
 
+        // 앱 종료 시 설정된 멀티채팅 초기화 플래그 확인
+        let shouldClearMultiChat = UserDefaults.standard.bool(forKey: "multiChatShouldClear")
+        if shouldClearMultiChat {
+            UserDefaults.standard.removeObject(forKey: "multiChatShouldClear")
+        }
+
         // 모든 설정 로드를 동시에 시작 — DataStore actor hop 5회→1회 수준으로 단축
         async let p = loadSettingLogged(from: store, key: "player", as: PlayerSettings.self)
         async let c = loadSettingLogged(from: store, key: "chat", as: ChatSettings.self)
@@ -69,7 +75,13 @@ public final class SettingsStore {
         if let val = await k, val != self.keyboard { self.keyboard = val }
         if let val = await cn, val != self.channelNotifications { self.channelNotifications = val }
         if let val = await ml, val != self.multiLive { self.multiLive = val }
-        if let val = await mc, val != self.multiChat { self.multiChat = val }
+        if shouldClearMultiChat {
+            // 종료 시 플래그가 설정되었으므로 저장된 멀티채팅 세션 무시 + DB에서도 초기화
+            self.multiChat = .default
+            try? await store.saveSetting(key: "multiChat", value: MultiChatSettings.default)
+        } else if let val = await mc, val != self.multiChat {
+            self.multiChat = val
+        }
 
         Log.persistence.info("Settings loaded")
     }

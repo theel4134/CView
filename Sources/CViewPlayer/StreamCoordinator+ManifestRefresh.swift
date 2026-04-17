@@ -25,12 +25,12 @@ extension StreamCoordinator {
         
         _manifestRefreshTask = Task { [weak self] in
             // 초기 대기 (최초 재생 직후에는 굳이 갱신 필요 없음)
-            try? await Task.sleep(for: .seconds(refreshInterval))
+            do { try await Task.sleep(for: .seconds(refreshInterval)) } catch { return }
             
             while !Task.isCancelled {
                 guard let self else { break }
                 await self.refreshMasterManifest()
-                try? await Task.sleep(for: .seconds(refreshInterval))
+                do { try await Task.sleep(for: .seconds(refreshInterval)) } catch { return }
             }
         }
     }
@@ -63,7 +63,20 @@ extension StreamCoordinator {
             _masterPlaylist = master
             _manifestRefreshFailCount = 0  // 성공 시 실패 카운터 리셋
             await abrController?.setLevels(master.variants)
-            
+
+            // [Fix 28] 사용자가 수동으로 화질을 고정한 상태면 해당 화질의 최신 URL로 갱신
+            // 기존: refreshMasterManifest가 항상 1080p variant로 _currentVariantURL과
+            // _currentQuality를 덮어써 사용자 선택이 무효화되고 재연결 시 1080p로 강제 복귀.
+            if let userVariant = _userSelectedVariant,
+               let freshVariant = master.variants.first(where: { $0.bandwidth == userVariant.bandwidth }) {
+                _userSelectedVariant = freshVariant
+                _preferredQualityVariant = freshVariant
+                _currentVariantURL = freshVariant.uri
+                _currentQuality = qualityFromVariant(freshVariant)
+                logger.debug("매니페스트 갱신: 사용자 선택 화질(\(freshVariant.qualityLabel)) URL 동기화")
+                return
+            }
+
             // 1080p variant URL 갱신
             let sortedVariants = master.variants.sorted { $0.bandwidth > $1.bandwidth }
             let target = sortedVariants.first(where: { $0.resolution.contains("1080") })
@@ -73,8 +86,17 @@ extension StreamCoordinator {
                 let newURL = variant.uri
                 let oldURL = _currentVariantURL
                 _currentVariantURL = newURL
-                _preferredQualityVariant = variant
-                _currentQuality = qualityFromVariant(variant)
+                
+                // [Fix 26] 화질 저하 상태에서는 _currentQuality를 덮어쓰지 않음
+                // — VLC가 실제 재생 중인 저화질과 UI 표시가 불일치하는 문제 방지
+                // — _preferredQualityVariant만 갱신하여 복귀 시 최신 URL 사용
+                if _isQualityDegraded {
+                    _preferredQualityVariant = variant
+                    logger.debug("매니페스트 갱신: 화질 저하 상태 — preferredVariant URL만 갱신 (currentQuality 유지)")
+                } else {
+                    _preferredQualityVariant = variant
+                    _currentQuality = qualityFromVariant(variant)
+                }
 
                 if oldURL != newURL {
                     logger.info("매니페스트 갱신: variant URL 변경됨 (토큰 리프레시)")

@@ -87,6 +87,7 @@ struct LivePulseBadge: View {
                 .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 4, y: 1)
         )
         .clipShape(Capsule())
+        .compositingGroup()
         .onAppear {
             withAnimation(DesignTokens.Animation.motionSafe(
                 .easeInOut(duration: 3.0).repeatForever(autoreverses: true)
@@ -113,6 +114,7 @@ struct SubtleGlowModifier: ViewModifier {
                 radius: isActive ? 8 : 0,
                 y: isActive ? 2 : 0
             )
+            .animation(DesignTokens.Animation.fast, value: isActive)
     }
 }
 

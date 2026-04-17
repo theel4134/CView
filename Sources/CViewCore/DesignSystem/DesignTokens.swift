@@ -498,6 +498,8 @@ public enum DesignTokens {
         public static let menuPulse: SwiftUI.Animation = .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
         /// 이미지 페이드인 — 썸네일/프로필 등장 (즉각)
         public static let fadeIn: SwiftUI.Animation = .easeOut(duration: 0.16)
+        /// 채팅 메시지 등장 — slide-up + fade-in용 경쾌한 spring (0.12초)
+        public static let chatMessage: SwiftUI.Animation = .spring(response: 0.12, dampingFraction: 0.92)
 
         // ── Metal 3 고주사율 (카드 그리드, 페이지 전환) ──
         /// 카드 호버 — 고정밀 spring (Metal GPU 오프스크린 합성에 최적화, 짧은 response로 즉각 반응)

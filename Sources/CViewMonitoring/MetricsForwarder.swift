@@ -32,6 +32,10 @@ public actor MetricsForwarder {
         public let lastRecommendation: CViewSyncRecommendation?
         /// 서버에서 수신한 최신 동기화 데이터
         public let lastSyncData: CViewSyncData?
+        /// 적응형 동기화 현재 폴링 간격 (초)
+        public let adaptiveSyncInterval: TimeInterval
+        /// 클라이언트 측 직접 계산 델타 (ms, 양수=앱 뒤처짐)
+        public let lastClientDelta: Double
     }
 
     // MARK: - State
@@ -75,6 +79,12 @@ public actor MetricsForwarder {
     /// 서버 동기화 추천에 따른 재생 속도 변경 콜백
     /// MetricsForwarder → 외부 PlayerEngine 연결용
     private var onSyncSpeedChange: (@Sendable (Float) -> Void)?
+    
+    /// [Fix 20] PID 활성 상태 확인 콜백 — PID가 능동 제어 중이면 서버 추천 무시
+    private var isPIDActiveCallback: (@Sendable () async -> Bool)?
+    
+    /// [Fix 20 Phase3] PID 현재 재생 배율 콜백 — Rate Arbiter 중재에 사용
+    private var pidCurrentRateCallback: (@Sendable () async -> Double)?
 
     /// 플레이어 목표 지연시간 (ms) — VLC liveCaching 또는 AVPlayer targetLatency
     private var targetLatencyMs: Double?
@@ -95,6 +105,15 @@ public actor MetricsForwarder {
     private var isEnabled: Bool
     private var forwardInterval: TimeInterval
     private var pingInterval: TimeInterval
+
+    // MARK: - Adaptive Sync
+
+    /// 현재 적응형 동기화 폴링 간격 (델타 크기에 따라 3~30초 동적 조절)
+    private var adaptiveSyncInterval: TimeInterval = 30.0
+    /// 연속 hold 카운트 (서버가 동기화 양호를 N회 연속 반환 시 폴링 간격 확대)
+    private var consecutiveHoldCount: Int = 0
+    /// 마지막 클라이언트 측 보정 델타 (ms)
+    private var lastClientDelta: Double = 0
     
     /// CView 클라이언트 고유 ID (서버 연결 시 부여 또는 로컬 생성)
     private var clientId: String
@@ -328,7 +347,9 @@ public actor MetricsForwarder {
             pingInterval: pingInterval,
             isForwarding: forwardingTask != nil,
             lastRecommendation: lastRecommendation,
-            lastSyncData: lastSyncData
+            lastSyncData: lastSyncData,
+            adaptiveSyncInterval: adaptiveSyncInterval,
+            lastClientDelta: lastClientDelta
         )
     }
 
@@ -707,17 +728,24 @@ public actor MetricsForwarder {
                 }
             }
             
-            // 서버 동기화 추천 → 재생 속도 적용 (confidence 30% 이상, hold 아닌 경우)
+            // 서버 동기화 추천 → 클라이언트 측 검증 + 재생 속도 적용
+            // [Fix 20 Phase3] Rate Arbiter — PID/서버 통합 속도 결정
             if let rec = response.recommendation,
-               let speed = rec.suggestedSpeed,
                let confidence = rec.confidence, confidence >= 0.3,
-               let action = rec.action, action != "hold" && action != "waiting",
-               abs(speed - 1.0) > 0.001 {
-                onSyncSpeedChange?(Float(speed))
-            } else if let action = response.recommendation?.action, action == "hold" {
-                // hold → 정상 속도 복원
-                onSyncSpeedChange?(1.0)
+               let action = rec.action, action != "waiting" {
+                let validatedSpeed = validateAndComputeSyncSpeed(
+                    recommendation: rec,
+                    syncData: response.syncData
+                )
+                if let arbitrated = await arbitrateServerSpeed(validatedSpeed) {
+                    onSyncSpeedChange?(Float(arbitrated))
+                }
             }
+            // 하트비트 응답에서도 적응형 폴링 간격 업데이트
+            updateAdaptiveSyncInterval(
+                recommendation: response.recommendation,
+                syncData: response.syncData
+            )
         } catch is DecodingError {
             // HTTP 200 성공했으나 서버 응답 형식 불일치 — 전송은 완료된 상태
             totalSent += 1
@@ -967,13 +995,15 @@ public actor MetricsForwarder {
         syncStatusTask = nil
     }
 
-    // MARK: - Sync Status Polling
+    // MARK: - Sync Status Polling (Adaptive)
 
     private func startSyncStatusPolling() {
         syncStatusTask?.cancel()
+        adaptiveSyncInterval = pingInterval  // 초기값
+        consecutiveHoldCount = 0
         syncStatusTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(self.pingInterval))
+                try? await Task.sleep(for: .seconds(self.adaptiveSyncInterval))
                 guard !Task.isCancelled else { break }
                 await self.fetchSyncStatus()
             }
@@ -983,6 +1013,7 @@ public actor MetricsForwarder {
     private func stopSyncStatusPolling() {
         syncStatusTask?.cancel()
         syncStatusTask = nil
+        consecutiveHoldCount = 0
     }
 
     private func fetchSyncStatus() async {
@@ -992,10 +1023,218 @@ public actor MetricsForwarder {
             lastSyncData = response.syncData
             if let rec = response.recommendation {
                 lastRecommendation = rec
+
+                // 적응형 폴링 간격 재계산
+                let validatedSpeed = validateAndComputeSyncSpeed(
+                    recommendation: rec,
+                    syncData: response.syncData
+                )
+                // [Fix 20 Phase3] Rate Arbiter — PID/서버 통합 속도 결정
+                if let arbitrated = await arbitrateServerSpeed(validatedSpeed) {
+                    onSyncSpeedChange?(Float(arbitrated))
+                }
+
+                updateAdaptiveSyncInterval(recommendation: rec, syncData: response.syncData)
             }
         } catch {
             Log.network.debug("Sync status fetch failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Adaptive Sync Intelligence
+
+    /// 적응형 폴링 간격 계산
+    /// - 큰 델타 (>2000ms): 3~5초 간격으로 빠르게 수렴
+    /// - 중간 델타 (500~2000ms): 8~12초 간격
+    /// - 작은 델타 (<500ms): 20~30초 간격으로 리소스 절약
+    /// - [Fix 20] 히스테리시스: 경계값에서 빈번한 전환 방지 (±150ms 히스테리시스 밴드)
+    private func updateAdaptiveSyncInterval(
+        recommendation: CViewSyncRecommendation?,
+        syncData: CViewSyncData?
+    ) {
+        let absDelta = computeClientSideDelta(syncData: syncData)
+        
+        // [Fix 20] 히스테리시스 — 현재 간격 기준으로 경계값 조정
+        // 빠른 폴링 상태에서 느린 폴링으로 전환할 때는 임계값을 낮게 (더 빨리 전환)
+        // 느린 폴링 상태에서 빠른 폴링으로 전환할 때는 임계값을 높게 (지연 전환)
+        let hysteresis: Double = 150.0  // ms
+        let isCurrentlyFast = adaptiveSyncInterval <= 12.0
+        
+        // 경계값 조정: 빠른→느린 전환은 더 낮은 값에서, 느린→빠른 전환은 더 높은 값에서
+        let threshold500 = isCurrentlyFast ? (500.0 - hysteresis) : (500.0 + hysteresis)
+        let threshold1000 = isCurrentlyFast ? (1000.0 - hysteresis) : (1000.0 + hysteresis)
+        let threshold2000 = isCurrentlyFast ? (2000.0 - hysteresis) : (2000.0 + hysteresis)
+
+        let newInterval: TimeInterval
+        if absDelta > 3000 {
+            // 심각한 격차 — 가장 빠른 폴링
+            newInterval = 3.0
+            consecutiveHoldCount = 0
+        } else if absDelta > threshold2000 {
+            // 큰 격차 — 빠른 폴링
+            newInterval = 5.0
+            consecutiveHoldCount = 0
+        } else if absDelta > threshold1000 {
+            // 중간 격차
+            newInterval = 8.0
+            consecutiveHoldCount = 0
+        } else if absDelta > threshold500 {
+            // 작은 격차
+            newInterval = 12.0
+            consecutiveHoldCount = 0
+        } else {
+            // 동기화 양호 — hold 연속 시 점진적 확대
+            if recommendation?.action == "hold" {
+                consecutiveHoldCount += 1
+            } else {
+                consecutiveHoldCount = 0
+            }
+            // hold 3회 이상 연속 → 최대 간격, 아니면 기본 간격
+            newInterval = consecutiveHoldCount >= 3 ? 30.0 : 20.0
+        }
+
+        // 간격이 변경되면 동기화 태스크 재시작
+        if abs(newInterval - adaptiveSyncInterval) > 1.0 {
+            adaptiveSyncInterval = newInterval
+            restartSyncPolling()
+        }
+    }
+
+    /// 동기화 폴링 태스크 재시작 (새 간격 적용)
+    private func restartSyncPolling() {
+        syncStatusTask?.cancel()
+        syncStatusTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(self.adaptiveSyncInterval))
+                guard !Task.isCancelled else { break }
+                await self.fetchSyncStatus()
+            }
+        }
+    }
+
+    /// 클라이언트 측 델타 계산 (서버 데이터 검증용)
+    /// 서버의 latencyDelta 부호가 이상할 수 있으므로 원시 값에서 직접 계산
+    private func computeClientSideDelta(syncData: CViewSyncData?) -> Double {
+        guard let sd = syncData,
+              let appLat = sd.appLatency, appLat > 0,
+              let webLat = sd.webLatency, webLat > 0 else {
+            return abs(lastClientDelta)
+        }
+        let delta = appLat - webLat
+        lastClientDelta = delta
+        return abs(delta)
+    }
+
+    // MARK: - Rate Arbiter (Fix 20 Phase3)
+    
+    /// [Fix 20 Phase3] 통합 속도 결정기 — PID 출력과 서버 추천을 중재
+    ///
+    /// 규칙:
+    /// 1. PID 비활성 → 서버 추천 그대로 적용
+    /// 2. PID 활성 + PID 보정량 > 서버 보정량 → PID 우선 (서버 무시)
+    /// 3. PID 활성 + 방향 불일치 → 보수적 판단 (서버 무시)
+    /// 4. PID 활성 + 미미한 보정 + 같은 방향 → 서버 미세 조정 허용
+    private func arbitrateServerSpeed(_ serverSpeed: Double) async -> Double? {
+        let pidActive = await isPIDActiveCallback?() ?? false
+        
+        // PID 비활성(데드존/idle) → 서버 추천 그대로 적용
+        guard pidActive else { return serverSpeed }
+        
+        let pidRate = await pidCurrentRateCallback?() ?? 1.0
+        let pidOffset = abs(pidRate - 1.0)
+        let serverOffset = abs(serverSpeed - 1.0)
+        
+        // PID가 활발한 보정 중 (0.5% 이상) + PID 보정 ≥ 서버 보정 → 서버 무시
+        if pidOffset >= 0.005 && pidOffset >= serverOffset {
+            return nil
+        }
+        
+        // 방향 불일치 → 보수적으로 서버 무시
+        let pidDirection = pidRate - 1.0
+        let serverDirection = serverSpeed - 1.0
+        if pidDirection * serverDirection < 0 && pidOffset > 0.002 {
+            return nil
+        }
+        
+        // PID 미미한 보정 + 서버가 더 큰 보정 + 같은 방향 → 서버 미세 조정 허용
+        return serverSpeed
+    }
+    
+    /// 서버 추천 검증 + 클라이언트 보정 속도 계산
+    ///
+    /// **핵심 로직**: 서버의 delta 부호가 데이터 타이밍 차로 뒤집힐 수 있으므로
+    /// syncData의 원시 webLatency/appLatency에서 직접 방향 판단
+    ///
+    /// - 앱 > 웹: 앱이 뒤처짐 → 가속 (>1.0)
+    /// - 앱 < 웹: 앱이 앞섬 → 감속 (<1.0)
+    /// - 차이 < 200ms: 동기화 양호 → 1.0
+    private func validateAndComputeSyncSpeed(
+        recommendation: CViewSyncRecommendation,
+        syncData: CViewSyncData?
+    ) -> Double {
+        // 원시 레이턴시 값이 없으면 서버 추천 그대로 사용
+        guard let sd = syncData,
+              let appLat = sd.appLatency, appLat > 0,
+              let webLat = sd.webLatency, webLat > 0 else {
+            return recommendation.suggestedSpeed ?? 1.0
+        }
+
+        // 클라이언트 직접 계산: 양수 = 앱 뒤처짐, 음수 = 앱 앞섬
+        let clientDelta = appLat - webLat
+        let absDelta = abs(clientDelta)
+        lastClientDelta = clientDelta
+
+        // 500ms 이내 — 동기화 양호, 속도 복원 (VLC 버퍼링 방지를 위해 넓은 허용 범위)
+        if absDelta < 500 {
+            return 1.0
+        }
+
+        // 방향 결정: 앱이 뒤처지면 가속, 앞서면 감속
+        let direction: Double = clientDelta > 0 ? 1.0 : -1.0
+
+        // 서버 추천 방향과 클라이언트 판단이 일치하는지 검증
+        let serverDirection: Double
+        if let action = recommendation.action {
+            serverDirection = action == "speed_up" ? 1.0 : action == "slow_down" ? -1.0 : 0.0
+        } else {
+            serverDirection = 0.0
+        }
+
+        let directionMismatch = direction * serverDirection < 0
+
+        // 델타 크기 기반 속도 결정 — 완화된 보정폭 (버퍼링 방지 우선)
+        let speedOffset: Double
+        if absDelta > 3000 {
+            // 심각한 격차 — 중간 보정 (급격한 속도 변화 방지)
+            speedOffset = 0.05
+        } else if absDelta > 2000 {
+            speedOffset = 0.04
+        } else if absDelta > 1000 {
+            speedOffset = 0.03
+        } else if absDelta > 800 {
+            // 중간 격차 — 미세 보정
+            speedOffset = 0.02
+        } else {
+            // 500~800ms — 매우 미세 보정
+            speedOffset = 0.01
+        }
+
+        let computedSpeed = 1.0 + (direction * speedOffset)
+
+        if directionMismatch {
+            // 서버와 방향 불일치 → 클라이언트 계산 사용 (서버 데이터 타이밍 차 보정)
+            let action = recommendation.action ?? "unknown"
+            Log.network.debug("동기화 방향 보정: 서버=\(action), 클라이언트 델타=\(clientDelta, format: .fixed(precision: 0))ms → 속도=\(computedSpeed, format: .fixed(precision: 4))")
+            return computedSpeed
+        }
+
+        // 서버와 방향 일치 — 서버 추천과 클라이언트 계산의 가중 평균
+        if let serverSpeed = recommendation.suggestedSpeed, abs(serverSpeed - 1.0) > 0.001 {
+            // 서버 40% + 클라이언트 60% (클라이언트가 더 최신 판단)
+            let blended = serverSpeed * 0.4 + computedSpeed * 0.6
+            return blended
+        }
+        return computedSpeed
     }
     
     // MARK: - Sync Data Access
@@ -1010,6 +1249,16 @@ public actor MetricsForwarder {
     /// - Parameter handler: 서버 추천 속도(Float)를 받아 PlayerEngine.setRate()를 호출
     public func setSyncSpeedCallback(_ handler: @escaping @Sendable (Float) -> Void) {
         onSyncSpeedChange = handler
+    }
+    
+    /// [Fix 20] PID 활성 상태 확인 콜백 등록 — LowLatencyController.isPIDActive 연결
+    public func setPIDActiveCallback(_ callback: @escaping @Sendable () async -> Bool) {
+        isPIDActiveCallback = callback
+    }
+    
+    /// [Fix 20 Phase3] PID 현재 재생 배율 콜백 — Rate Arbiter에서 사용
+    public func setPIDCurrentRateCallback(_ callback: @escaping @Sendable () async -> Double) {
+        pidCurrentRateCallback = callback
     }
 
     /// 플레이어 목표 지연시간 설정 (ms) — VLC liveCaching 또는 AVPlayer targetLatency 기반
