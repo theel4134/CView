@@ -256,7 +256,7 @@ struct MLTabBar: View {
                             .background(
                                 Capsule().fill(
                                     isMultiChatOpen
-                                        ? Color.white.opacity(0.22)
+                                        ? DesignTokens.Colors.controlOnDarkMediaHover
                                         : DesignTokens.Colors.chzzkGreen.opacity(0.18)
                                 )
                             )

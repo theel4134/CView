@@ -48,7 +48,7 @@ struct ClipPlayerView: View {
                                 .tint(.white)
                             Text("클립 로딩 중...")
                                 .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.8))
+                                .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.8))
                         }
                     }
                 }
@@ -125,14 +125,14 @@ struct ClipPlayerView: View {
                             Text(viewModel.channelName)
                                 .font(DesignTokens.Typography.caption)
                         }
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     }
                 }
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(DesignTokens.Typography.headline)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.8))
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -253,22 +253,22 @@ struct ClipPlayerView: View {
                             }
                             Text(channel.channelName)
                                 .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                         } else if !viewModel.channelName.isEmpty {
                             Text(viewModel.channelName)
                                 .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                         }
                         if clipInfo.readCount > 0 {
                             Text("·")
                                 .font(DesignTokens.Typography.micro)
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim.opacity(0.7))
                             Image(systemName: "eye.fill")
                                 .font(DesignTokens.Typography.custom(size: 8))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim.opacity(0.7))
                             Text(formattedCount(clipInfo.readCount))
                                 .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim.opacity(0.7))
                         }
                     }
                 }
@@ -278,7 +278,7 @@ struct ClipPlayerView: View {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(DesignTokens.Typography.headline)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.8))
                 }
                 .buttonStyle(.plain)
             }
@@ -335,7 +335,7 @@ struct ClipPlayerView: View {
             VStack(spacing: 14) {
                 Image(systemName: "arrow.counterclockwise.circle.fill")
                     .font(DesignTokens.Typography.custom(size: 48))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.85))
                 Text("재생 완료")
                     .font(.headline)
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)

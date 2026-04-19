@@ -36,27 +36,8 @@ public enum DesignTokens {
         /// 80pt — 페이지 레벨 마진
         public static let page: CGFloat = 80
 
-        // ── Deprecated aliases (점진 마이그레이션) ──
-        @available(*, deprecated, renamed: "xxs")
-        public static let hair: CGFloat = 1
-        @available(*, deprecated, renamed: "xxs")
-        public static let xxxs: CGFloat = 2
-        @available(*, deprecated, renamed: "xxs")
-        public static let nano: CGFloat = 3
-        @available(*, deprecated, renamed: "xs")
-        public static let mini: CGFloat = 5
-        @available(*, deprecated, renamed: "xs")
-        public static let xss: CGFloat = 6
-        @available(*, deprecated, renamed: "sm")
-        public static let xsm: CGFloat = 7
-        @available(*, deprecated, renamed: "sm")
-        public static let smXs: CGFloat = 9
-        @available(*, deprecated, renamed: "md")
-        public static let compact: CGFloat = 10
-        @available(*, deprecated, renamed: "md")
-        public static let cozy: CGFloat = 14
-        @available(*, deprecated, renamed: "xl")
-        public static let mdl: CGFloat = 20
+        // [Cleanup Q-1] Deprecated aliases (hair/xxxs/nano/mini/xss/xsm/smXs/compact/cozy/mdl)
+        // — 사용처 0건 확인(2026-04) 후 제거. 사용 의도가 있다면 표준 토큰(xxs/xs/sm/md/xl) 사용.
     }
 
     // MARK: - Typography (Streamlined Presets)
@@ -103,69 +84,21 @@ public enum DesignTokens {
             Font.system(size: size, weight: weight, design: design)
         }
 
-        // ── Deprecated aliases ──
-        @available(*, deprecated, renamed: "display")
-        public static let hero: Font = .system(size: 40, weight: .bold)
-        @available(*, deprecated, renamed: "display")
-        public static let largeTitle: Font = .system(size: 32, weight: .bold)
-        @available(*, deprecated, renamed: "titleSemibold")
-        public static let title2: Font = .system(size: 22, weight: .bold)
-        @available(*, deprecated, renamed: "headline")
-        public static let subtitle: Font = .system(size: 20, weight: .semibold)
-        @available(*, deprecated, renamed: "subhead")
-        public static let title3: Font = .system(size: 18, weight: .semibold)
-        @available(*, deprecated, renamed: "subheadSemibold")
-        public static let heading: Font = .system(size: 17, weight: .semibold)
-        @available(*, deprecated, renamed: "bodySemibold")
-        public static let sectionTitle: Font = .system(size: 15, weight: .bold)
-        @available(*, deprecated, renamed: "captionMedium")
-        public static let cardTitle: Font = .system(size: 13, weight: .medium)
-        @available(*, deprecated, renamed: "captionSemibold")
-        public static let cardTitleSemibold: Font = .system(size: 13, weight: .semibold)
-        @available(*, deprecated, renamed: "caption")
-        public static let bodySmall: Font = .system(size: 12, weight: .regular)
-        @available(*, deprecated, renamed: "captionMedium")
-        public static let bodySmallMedium: Font = .system(size: 12, weight: .medium)
-        @available(*, deprecated, renamed: "captionSemibold")
-        public static let bodySmallSemibold: Font = .system(size: 12, weight: .semibold)
-        @available(*, deprecated, renamed: "captionSemibold")
-        public static let bodySmallBold: Font = .system(size: 12, weight: .bold)
-        @available(*, deprecated, renamed: "footnoteMedium")
-        public static let badge: Font = .system(size: 10, weight: .bold)
-        @available(*, deprecated, renamed: "footnoteMedium")
-        public static let badgeMedium: Font = .system(size: 10, weight: .medium)
-        @available(*, deprecated, renamed: "micro")
-        public static let pico: Font = .system(size: 8, weight: .bold)
-        @available(*, deprecated, renamed: "body")
-        public static let chat: Font = .system(size: 14, weight: .regular)
+        // ── Dynamic Type 매핑 (2026-04 추가) ──
+        // macOS 시스템 텍스트 스타일과 매핑 — 시스템 텍스트 크기 변경 + 접근성 응답.
+        // 채팅/설정/Empty/Error 등 가독성·접근성 민감 영역에 우선 채택.
+        public static let bodyDynamic     = Font.body
+        public static let bodyDynamicSemibold = Font.body.weight(.semibold)
+        public static let calloutDynamic  = Font.callout
+        public static let calloutDynamicSemibold = Font.callout.weight(.semibold)
+        public static let captionDynamic  = Font.caption
+        public static let captionDynamicMedium = Font.caption.weight(.medium)
+        public static let headlineDynamic = Font.headline
+        public static let title3Dynamic   = Font.title3
+        public static let footnoteDynamic = Font.footnote
 
-        // ── Deprecated size tokens ──
-        @available(*, deprecated, renamed: "displaySize")
-        public static let heroSize: CGFloat = 40
-        @available(*, deprecated, renamed: "displaySize")
-        public static let largeTitleSize: CGFloat = 32
-        @available(*, deprecated, renamed: "titleSize")
-        public static let title2Size: CGFloat = 22
-        @available(*, deprecated, renamed: "headlineSize")
-        public static let subtitleSize: CGFloat = 20
-        @available(*, deprecated, renamed: "subheadSize")
-        public static let title3Size: CGFloat = 18
-        @available(*, deprecated, renamed: "subheadSize")
-        public static let headingSize: CGFloat = 17
-        @available(*, deprecated, renamed: "bodySize")
-        public static let sectionTitleSize: CGFloat = 15
-        @available(*, deprecated, renamed: "captionSize")
-        public static let cardTitleSize: CGFloat = 13
-        @available(*, deprecated, renamed: "captionSize")
-        public static let bodySmallSize: CGFloat = 12
-        @available(*, deprecated, renamed: "footnoteSize")
-        public static let captionSize_old: CGFloat = 11
-        @available(*, deprecated, renamed: "bodySize")
-        public static let chatSize: CGFloat = 14
-        @available(*, deprecated, renamed: "footnoteSize")
-        public static let badgeSize: CGFloat = 10
-        @available(*, deprecated, renamed: "microSize")
-        public static let picoSize: CGFloat = 8
+        // [Cleanup Q-1] Deprecated Typography aliases (hero/largeTitle/title2/subtitle/title3/heading/sectionTitle/cardTitle/cardTitleSemibold/bodySmall*/badge*/pico/chat 및 *Size 변형) 제거.
+        // 사용처 0건 확인(2026-04). 표준 토큰(display/title/headline/subhead/body/caption/footnote/micro 및 *Size) 사용.
     }
 
     // MARK: - Colors (4-Layer Surface Stack + Glass — Adaptive Light/Dark)
@@ -231,27 +164,52 @@ public enum DesignTokens {
         public static let onPrimary    = adaptive(dark: 0x0A0A0A, light: 0x0A0A0A)
         public static let textOnOverlay = Color.white
 
-        // ── Deprecated aliases ──
-        @available(*, deprecated, renamed: "background")
-        public static let backgroundDark: Color = adaptive(dark: 0x141416, light: 0xF5F5F7)
-        @available(*, deprecated, renamed: "surfaceOverlay")
-        public static let backgroundElevated: Color = adaptive(dark: 0x242426, light: 0xF0F0F5)
-        @available(*, deprecated, renamed: "surfaceBase")
-        public static let surface: Color = adaptive(dark: 0x1C1C1E, light: 0xFFFFFF)
-        @available(*, deprecated, renamed: "surfaceElevated")
-        public static let surfaceLight: Color = adaptive(dark: 0x242426, light: 0xF0F0F5)
-        @available(*, deprecated, renamed: "surfaceOverlay")
-        public static let surfaceHover: Color = adaptive(dark: 0x2C2C2E, light: 0xEAEAF0)
-        @available(*, deprecated, renamed: "borderSubtle")
-        public static let borderLight: Color = adaptive(dark: 0x2C2C2E, light: 0xE5E5EA)
-        @available(*, deprecated, message: "Use primary instead")
-        public static let primaryDark: Color = Color(hex: 0x00CC82)
-        @available(*, deprecated, message: "Use primary instead")
-        public static let primaryLight: Color = Color(hex: 0x33FFB8)
+        // ── On-Dark-Media (영상/썸네일 위 전용 — Light/Dark 모두 어두운 매체이므로 항상 흰색 계열) ──
+        // docs/design-improvement-plan-2026-04.md §3.2 참조 — `.white.opacity(...)` 직접 호출을 이 어휘로 치환
+        /// 어두운 미디어 위 주 텍스트 (예: 플레이어 시간 표시)
+        public static let textOnDarkMedia        = Color.white
+        /// 어두운 미디어 위 보조 텍스트 (예: "/" 구분자, 부가 라벨)
+        public static let textOnDarkMediaMuted   = Color.white.opacity(0.72)
+        /// 어두운 미디어 위 비활성/희미한 텍스트
+        public static let textOnDarkMediaDim     = Color.white.opacity(0.55)
+        /// 어두운 미디어 위 컨트롤 표면 (음소거 토글, 화질 버튼 배경 등)
+        public static let controlOnDarkMedia       = Color.white.opacity(0.14)
+        /// 어두운 미디어 위 컨트롤 호버 상태
+        public static let controlOnDarkMediaHover  = Color.white.opacity(0.24)
+        /// 어두운 미디어 위 컨트롤 트랙 (슬라이더 배경 등)
+        public static let trackOnDarkMedia         = Color.white.opacity(0.20)
+        /// 어두운 미디어 위 미세 테두리 (Capsule 스트로크 등)
+        public static let borderOnDarkMedia        = Color.white.opacity(0.12)
+        /// 어두운 미디어 위 미세 테두리 (강조)
+        public static let borderOnDarkMediaStrong  = Color.white.opacity(0.20)
+        /// 영상 로딩 / 모달 베일 — Light: 0.32 / Dark: 0.62 (Light 모드에서 과도한 어둡힘 방지)
+        public static let mediaVeil = Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return NSColor.black.withAlphaComponent(isDark ? 0.62 : 0.32)
+        }))
+
+        // [Cleanup Q-1] Deprecated Color aliases (backgroundDark/backgroundElevated/surface/surfaceLight/surfaceHover/borderLight/primaryDark/primaryLight) 제거.
+        // 사용처 0건 확인(2026-04). 표준 토큰(background/surfaceBase/surfaceElevated/surfaceOverlay/borderSubtle/primary) 사용.
     }
 
     // MARK: - Glass (Material 기반 Glassmorphism)
-
+    //
+    // 사용 정책 (2026-04 정착)
+    // ─────────────────────────────────────────────────────────────────────
+    // ✅ 사용 권장:
+    //   - 영상/썸네일 위 일시적 오버레이 (PlayerControls, StreamAlert, StreamLoadingOverlay)
+    //   - 모달/팝오버/커맨드 팔레트 (커맨드 팔레트, 시트)
+    //   - 아이콘/픽커 (이모티콘 픽커)
+    //
+    // ❌ 사용 지양 (솔리드 surface 권장):
+    //   - 상시 표시되는 패널 (ChatPanel, Sidebar, Settings) → 60fps 부담
+    //   - LazyVStack/LazyVGrid 안의 셀 → 매 프레임 blur 재계산
+    //   - 1080p+ 영상 위 풀스크린 (CPU/GPU 비용 큼)
+    //
+    // 코드 룰:
+    //   - SwiftUI 코드에서 `.ultraThinMaterial`/`.regularMaterial` 직접 호출 금지
+    //   - 항상 `DesignTokens.Glass.thin/regular/thick/sidebar/bar` 경유
+    //
     public enum Glass {
         /// 얇은 유리 — 사이드바, 호버 오버레이
         public static let thin: Material = .ultraThinMaterial
@@ -398,25 +356,8 @@ public enum DesignTokens {
         /// 999pt — Pill, 원형
         public static let full: CGFloat = 999
 
-        // ── Deprecated aliases ──
-        @available(*, deprecated, renamed: "xs")
-        public static let hair: CGFloat = 1
-        @available(*, deprecated, renamed: "xs")
-        public static let xxs: CGFloat = 2
-        @available(*, deprecated, renamed: "xs")
-        public static let nano: CGFloat = 3
-        @available(*, deprecated, renamed: "xs")
-        public static let mini: CGFloat = 5
-        @available(*, deprecated, renamed: "sm")
-        public static let xsm: CGFloat = 6
-        @available(*, deprecated, renamed: "sm")
-        public static let xsml: CGFloat = 7
-        @available(*, deprecated, renamed: "md")
-        public static let smMd: CGFloat = 9
-        @available(*, deprecated, renamed: "md")
-        public static let smd: CGFloat = 10
-        @available(*, deprecated, renamed: "lg")
-        public static let mdl: CGFloat = 14
+        // [Cleanup Q-1] Deprecated Radius aliases (hair/xxs/nano/mini/xsm/xsml/smMd/smd/mdl) 제거.
+        // 사용처 0건 확인(2026-04). 표준 토큰(xs/sm/md/lg) 사용.
     }
 
     public typealias CornerRadius = Radius
@@ -511,6 +452,12 @@ public enum DesignTokens {
 
         // ── macOS 26+ 최신 전환 ──
         // 미사용 토큰 정리: dimTransition, staggerAppear, overlayBlur, elasticRelease 제거 (2026-04-04)
+
+        // ── 호흡/탭 (2026-04 추가) ──
+        /// 호흡 애니메이션 — 라이브 인디케이터 등 느린 맥동 (2.2s)
+        public static let breath: SwiftUI.Animation = .easeInOut(duration: 2.2).repeatForever(autoreverses: true)
+        /// 탭 전환 — 0.18s 표준 탭 스위칭
+        public static let tabSwitch: SwiftUI.Animation = .spring(response: 0.18, dampingFraction: 0.9)
 
         /// reduceMotion 고려 — 모션 감소 설정 시 nil 반환 (즉시 전환)
         public static func motionSafe(_ animation: SwiftUI.Animation?) -> SwiftUI.Animation? {

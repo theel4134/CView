@@ -34,6 +34,19 @@ struct PlayerSettingsTab: View {
                         .labelsHidden()
                     }
                     RowDivider()
+                    SettingsRow("스트림 보정 모드",
+                                description: settings.player.streamProxyMode.description
+                                    + (settings.player.streamProxyMode.isExperimental ? " · 실험적" : ""),
+                                icon: "network", iconColor: DesignTokens.Colors.accentBlue) {
+                        Picker("", selection: $settings.player.streamProxyMode) {
+                            ForEach(StreamProxyMode.allCases, id: \.self) { m in
+                                Text(m.displayName).tag(m)
+                            }
+                        }
+                        .frame(width: 220)
+                        .labelsHidden()
+                    }
+                    RowDivider()
                     SettingsRow("자동 재생",
                                 description: "채널 진입 시 즉시 재생을 시작합니다",
                                 icon: "play.fill", iconColor: DesignTokens.Colors.chzzkGreen) {

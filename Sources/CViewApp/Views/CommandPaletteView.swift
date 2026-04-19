@@ -5,6 +5,7 @@
 import SwiftUI
 import CViewCore
 import CViewPlayer
+import CViewUI
 
 // MARK: - Command Category
 
@@ -349,19 +350,12 @@ struct CommandPaletteView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: DesignTokens.Spacing.sm) {
-            Image(systemName: "magnifyingglass")
-                .font(DesignTokens.Typography.display)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            Text("일치하는 명령이 없습니다")
-                .font(DesignTokens.Typography.bodyMedium)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 120)
-        .onKeyPress(.escape) {
-            isPresented = false
-            return .handled
-        }
+        EmptyStateView(icon: "magnifyingglass", title: "일치하는 명령이 없습니다", style: .inline)
+            .frame(minHeight: 120)
+            .onKeyPress(.escape) {
+                isPresented = false
+                return .handled
+            }
     }
 
     // MARK: - Category Header

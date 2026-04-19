@@ -10,6 +10,13 @@ import CViewUI
 
 struct ChatInputView: View {
     let viewModel: ChatViewModel?
+    /// 컴팩트 모드 — 그리드 셀/통합 모드의 좁은 공간에서 사용
+    /// · 이모티콘 버튼 숨김
+    /// · 폰트/패딩/버튼 크기 축소
+    /// · placeholder 단축
+    var compact: Bool = false
+    /// 컴팩트 모드 시 placeholder에 표시할 채널명 (옵션)
+    var compactChannelHint: String? = nil
     @State private var inputText = ""
     @FocusState private var isFocused: Bool
     @State private var showEmoticonPicker = false
@@ -55,7 +62,8 @@ struct ChatInputView: View {
             }
 
             HStack(spacing: DesignTokens.Spacing.xs) {
-                // Emoticon button — Glass circle
+                // Emoticon button — Glass circle (컴팩트 모드에서는 숨김)
+                if !compact {
                 Button {
                     showEmoticonPicker.toggle()
                 } label: {
@@ -91,16 +99,19 @@ struct ChatInputView: View {
                 .help("이모티콘")
                 .disabled(!canSend)
                 .opacity(canSend ? 1 : 0.4)
+                } // if !compact
 
                 // Glass 입력 필드
                 HStack(spacing: 8) {
+                    if !compact {
                     Image(systemName: canSend ? "text.bubble" : "lock")
                         .font(DesignTokens.Typography.caption)
                         .foregroundStyle(isFocused ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                    }
 
-                    TextField(canSend ? "채팅을 입력하세요..." : "로그인 후 채팅 참여 가능", text: $inputText)
+                    TextField(placeholderText, text: $inputText)
                         .textFieldStyle(.plain)
-                        .font(DesignTokens.Typography.captionMedium)
+                        .font(compact ? DesignTokens.Typography.custom(size: 11, weight: .regular) : DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .focused($isFocused)
                         .onSubmit {
@@ -115,11 +126,11 @@ struct ChatInputView: View {
                             viewModel?.updateAutocompleteSuggestions(for: newValue)
                         }
                 }
-                .padding(.horizontal, DesignTokens.Spacing.sm)
-                .padding(.vertical, DesignTokens.Spacing.xs)
+                .padding(.horizontal, compact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.sm)
+                .padding(.vertical, compact ? DesignTokens.Spacing.xxs : DesignTokens.Spacing.xs)
                 // [GPU 최적화] Material blur → 솔리드 반투명 색상으로 교체
                 // ultraThinMaterial은 비디오 레이어 변경 시 매 프레임 blur 재계산 → GPU 부하
-                .background(DesignTokens.Colors.surfaceBase.opacity(0.85), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+                .background(DesignTokens.Colors.surfaceBase.opacity(0.85), in: RoundedRectangle(cornerRadius: compact ? DesignTokens.Radius.sm : DesignTokens.Radius.lg))
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                         .strokeBorder(
@@ -137,9 +148,9 @@ struct ChatInputView: View {
                     sendMessage()
                 } label: {
                     Image(systemName: "paperplane.fill")
-                        .font(DesignTokens.Typography.captionMedium)
+                        .font(compact ? DesignTokens.Typography.custom(size: 10, weight: .semibold) : DesignTokens.Typography.captionMedium)
                         .foregroundStyle(isReady ? .black : DesignTokens.Colors.textTertiary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
                         .background(
                             isReady
                                 ? AnyShapeStyle(DesignTokens.Colors.chzzkGreen)
@@ -163,8 +174,8 @@ struct ChatInputView: View {
                 .animation(DesignTokens.Animation.fast, value: isReady)
                 .animation(DesignTokens.Animation.fast, value: isSendHovered)
             }
-            .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.sm)
+            .padding(.horizontal, compact ? DesignTokens.Spacing.xs : DesignTokens.Spacing.sm)
+            .padding(.vertical, compact ? DesignTokens.Spacing.xxs : DesignTokens.Spacing.sm)
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(DesignTokens.Glass.dividerColor)
@@ -191,6 +202,16 @@ struct ChatInputView: View {
             viewModel?.dismissAutocomplete()
             return .handled
         }
+    }
+
+    /// 컴팩트/일반 모드별 placeholder 텍스트
+    private var placeholderText: String {
+        if !canSend { return compact ? "로그인 필요" : "로그인 후 채팅 참여 가능" }
+        if compact {
+            if let hint = compactChannelHint, !hint.isEmpty { return "→ \(hint)" }
+            return "메시지..."
+        }
+        return "채팅을 입력하세요..."
     }
 
     private func sendMessage() {

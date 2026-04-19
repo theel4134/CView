@@ -10,6 +10,23 @@ extension LocalStreamProxy {
     // MARK: - Connection Handling (HTTP/1.1 Keep-Alive)
     
     func handleConnection(_ connection: NWConnection) {
+        // [Fix 32 / SEC-6] Defense-in-depth: 원격 endpoint 검증 — loopback이 아니면 거절
+        // requiredInterfaceType = .loopback 이 1차 방어이고, 이것은 2차 방어 (설정 누락 대비).
+        if case let .hostPort(host, _) = connection.endpoint {
+            let isLocal: Bool
+            switch host {
+            case .ipv4(let addr): isLocal = (addr == .loopback)
+            case .ipv6(let addr): isLocal = (addr == .loopback)
+            case .name(let name, _): isLocal = (name == "localhost")
+            @unknown default: isLocal = false
+            }
+            guard isLocal else {
+                logger.warning("Proxy: rejecting non-loopback connection from \(String(describing: host), privacy: .public)")
+                connection.cancel()
+                return
+            }
+        }
+        
         let wrapper = NWConnectionWrapper(connection)
         // [Fix 26A] 활성 연결 추적 — stop() 시 일괄 cancel 가능
         let count = _activeConnections.withLock { conns -> Int in
@@ -147,6 +164,13 @@ extension LocalStreamProxy {
         )
         request.setValue(CommonHeaders.chzzkReferer, forHTTPHeaderField: "Referer")
         request.setValue(CommonHeaders.chzzkOrigin, forHTTPHeaderField: "Origin")
+
+        // [패킷 압축] M3U8 매니페스트만 gzip 요청 — 텍스트는 70-85% 압축, 세그먼트는 이미
+        // 압축된 바이너리라 CPU만 소모하므로 제외. URLSession은 gzip 응답을 자동 해제하므로
+        // VLC에는 평문으로 전달되어 프로토콜 변경 없이 업스트림 대역폭만 절감된다.
+        if isLikelyM3U8 {
+            request.setValue(ProxyDefaults.manifestAcceptEncoding, forHTTPHeaderField: "Accept-Encoding")
+        }
         
         let requestStart = CFAbsoluteTimeGetCurrent()
         proxySession.dataTask(with: request) { [weak self] data, response, error in

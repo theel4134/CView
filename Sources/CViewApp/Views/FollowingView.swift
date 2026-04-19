@@ -9,50 +9,11 @@ import CViewUI
 import CViewNetworking
 import CViewChat
 
-// MARK: - Sort Order
-
-enum FollowingSortOrder: String, CaseIterable, Identifiable {
-    case liveFirst    = "라이브 우선"
-    case viewers      = "시청자 많은 순"
-    case nameAsc      = "채널명 가나다순"
-    case original     = "기본 순서"
-
-    var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .liveFirst: return "dot.radiowaves.left.and.right"
-        case .viewers:   return "person.2"
-        case .nameAsc:   return "textformat.abc"
-        case .original:  return "list.bullet"
-        }
-    }
-
-    func sort(_ channels: [LiveChannelItem]) -> [LiveChannelItem] {
-        switch self {
-        case .liveFirst:
-            return channels.sorted { lhs, rhs in
-                if lhs.isLive != rhs.isLive { return lhs.isLive }
-                return lhs.viewerCount > rhs.viewerCount
-            }
-        case .viewers:
-            return channels.sorted { $0.viewerCount > $1.viewerCount }
-        case .nameAsc:
-            return channels.sorted { $0.channelName < $1.channelName }
-        case .original:
-            return channels
-        }
-    }
-}
-
-// MARK: - Preference Key for Live Grid Height
-
-struct LiveGridHeightKey: PreferenceKey {
-    nonisolated(unsafe) static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
+// MARK: - Sort Order, Preference Key
+//
+// 분리 위치:
+// - FollowingSortOrder enum   → FollowingSortOrder.swift
+// - LiveGridHeightKey         → LiveGridHeightKey.swift
 
 // MARK: - Following View
 
@@ -199,7 +160,8 @@ struct FollowingView: View {
 
         _recomputeTask = Task {
             // 백그라운드에서 무거운 정렬/필터 수행
-            let result: (live: [LiveChannelItem], offline: [LiveChannelItem], cats: [(String, Int)]) = await Task.detached(priority: .userInitiated) {
+            // [Fix 32] PowerAware: 배터리에서는 .utility로 자동 강등(E-core 유도)
+            let result: (live: [LiveChannelItem], offline: [LiveChannelItem], cats: [(String, Int)]) = await Task.detached(priority: PowerAwareTaskPriority.userVisible) {
                 // 카테고리 계수 (필터 적용 전 전체 라이브 기준)
                 var counts: [String: Int] = [:]
                 for ch in allChannels where ch.isLive {
@@ -464,8 +426,8 @@ struct FollowingView: View {
                     .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.xs)
             .background(
                 Capsule()
                     .fill(showFollowingList
@@ -477,54 +439,7 @@ struct FollowingView: View {
         .help(showFollowingList ? "팔로잉 목록 닫기" : "팔로잉 목록 열기")
     }
 
-    // MARK: - 듀얼 패널 리사이즈 디바이더
-
-    @State private var dualSplitDragStartRatio: CGFloat = 0
-    @State private var isDualSplitDragging: Bool = false
-
-    /// 멀티라이브 ↔ 멀티채팅 리사이즈 디바이더
-    private func dualPanelResizeDivider(containerWidth: CGFloat) -> some View {
-        let thickness: CGFloat = 3
-        return ZStack {
-            Rectangle()
-                .fill(Color.clear)
-                .frame(width: thickness + 12)
-                .contentShape(Rectangle())
-
-            RoundedRectangle(cornerRadius: 1)
-                .fill(
-                    isDualSplitDragging
-                        ? DesignTokens.Colors.accentBlue.opacity(0.8)
-                        : DesignTokens.Glass.dividerColor
-                )
-                .frame(width: thickness)
-                .shadow(
-                    color: isDualSplitDragging ? DesignTokens.Colors.accentBlue.opacity(0.3) : .clear,
-                    radius: 4
-                )
-        }
-        .frame(width: thickness)
-        .gesture(
-            DragGesture(minimumDistance: 2)
-                .onChanged { value in
-                    if !isDualSplitDragging {
-                        isDualSplitDragging = true
-                        dualSplitDragStartRatio = ps.dualSplitRatio
-                    }
-                    guard containerWidth > 0 else { return }
-                    let newRatio = dualSplitDragStartRatio + value.translation.width / containerWidth
-                    ps.dualSplitRatio = min(0.85, max(0.35, newRatio))
-                }
-                .onEnded { _ in
-                    isDualSplitDragging = false
-                }
-        )
-        .transaction { $0.animation = nil }
-        .onHover { hovering in
-            if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-        }
-        .animation(DesignTokens.Animation.fast, value: isDualSplitDragging)
-    }
+    // MARK: - 듀얼 패널 리사이즈 디바이더 [Removed 2026-04: dead code — 호출처 없음]
 
     /// 멀티라이브 + 멀티채팅 동시 또는 단독 표시
     /// 멀티채팅 너비는 사용자 설정(`SettingsStore.multiChat.panelWidthRatio`, 기본 25%)을 따름.
@@ -774,7 +689,8 @@ struct FollowingView: View {
             }
         }
         guard !urls.isEmpty else { return }
-        Task.detached(priority: .utility) {
+        // [Fix 32] PowerAware: 프리페치는 항상 .background (배터리 보호)
+        Task.detached(priority: PowerAwareTaskPriority.prefetch) {
             await ImageCacheService.shared.prefetchAndDecode(urls)
         }
     }
@@ -789,7 +705,8 @@ struct FollowingView: View {
             }
         }
         guard !urls.isEmpty else { return }
-        Task.detached(priority: .utility) {
+        // [Fix 32] PowerAware: 프리페치는 항상 .background (배터리 보호)
+        Task.detached(priority: PowerAwareTaskPriority.prefetch) {
             await ImageCacheService.shared.prefetchAndDecode(urls)
         }
     }

@@ -56,7 +56,7 @@ struct VODPlayerView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
                         .font(DesignTokens.Typography.custom(size: 50))
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.8))
                     Text("재생 완료")
                         .font(.headline)
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
@@ -169,7 +169,7 @@ struct VODPlayerView: View {
                     if !viewModel.channelName.isEmpty {
                         Text(viewModel.channelName)
                             .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     }
                 }
                 Spacer()

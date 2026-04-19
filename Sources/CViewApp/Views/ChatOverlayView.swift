@@ -52,7 +52,7 @@ struct ChatOverlayView: View {
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                .strokeBorder(.white.opacity(isHovering ? 0.2 : 0.08), lineWidth: 0.5)
+                .strokeBorder(isHovering ? DesignTokens.Colors.borderOnDarkMediaStrong : DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
         }
         // [GPU 최적화] shadow radius 12 → 4로 축소 — blur radius가 클수록 offscreen pass 비용 증가
         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
@@ -90,7 +90,7 @@ struct ChatOverlayView: View {
         HStack(spacing: DesignTokens.Spacing.xs) {
             Image(systemName: "line.3.horizontal")
                 .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 .frame(maxWidth: .infinity)
 
             // 사이드 모드로 전환
@@ -99,9 +99,9 @@ struct ChatOverlayView: View {
             } label: {
                 Image(systemName: "sidebar.right")
                     .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(isSideHovered ? 0.95 : 0.7))
+                    .foregroundStyle(isSideHovered ? DesignTokens.Colors.textOnDarkMedia.opacity(0.95) : DesignTokens.Colors.textOnDarkMediaMuted)
                     .frame(width: 22, height: 22)
-                    .background(.white.opacity(isSideHovered ? 0.18 : 0.1), in: Circle())
+                    .background(isSideHovered ? DesignTokens.Colors.controlOnDarkMediaHover : DesignTokens.Colors.controlOnDarkMedia, in: Circle())
                     .scaleEffect(isSideHovered ? 1.08 : 1.0)
                     .animation(DesignTokens.Animation.fast, value: isSideHovered)
             }
@@ -115,9 +115,9 @@ struct ChatOverlayView: View {
             } label: {
                 Image(systemName: "eye.slash")
                     .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(isHideHovered ? 0.95 : 0.7))
+                    .foregroundStyle(isHideHovered ? DesignTokens.Colors.textOnDarkMedia.opacity(0.95) : DesignTokens.Colors.textOnDarkMediaMuted)
                     .frame(width: 22, height: 22)
-                    .background(.white.opacity(isHideHovered ? 0.18 : 0.1), in: Circle())
+                    .background(isHideHovered ? DesignTokens.Colors.controlOnDarkMediaHover : DesignTokens.Colors.controlOnDarkMedia, in: Circle())
                     .scaleEffect(isHideHovered ? 1.08 : 1.0)
                     .animation(DesignTokens.Animation.fast, value: isHideHovered)
             }
@@ -136,7 +136,7 @@ struct ChatOverlayView: View {
     private var resizeHandle: some View {
         Image(systemName: "arrow.down.right.and.arrow.up.left")
             .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
-            .foregroundStyle(.white.opacity(0.4))
+            .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
             .frame(width: 16, height: 16)
             .contentShape(Rectangle())
             .gesture(

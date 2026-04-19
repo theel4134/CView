@@ -56,7 +56,7 @@ struct ChatResizeHandle: View {
         } else if isHovering {
             return DesignTokens.Colors.chzzkGreen.opacity(0.25)
         } else {
-            return Color.white.opacity(0.08)
+            return DesignTokens.Colors.borderOnDarkMedia
         }
     }
 }

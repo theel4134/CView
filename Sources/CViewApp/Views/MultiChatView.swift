@@ -164,11 +164,13 @@ struct MultiChatView: View {
                     gridCell(session: s1, width: geo.size.width - leftW, height: geo.size.height)
                 }
             } else if count >= 3 {
-                // 3~4개: 상하 분할 (각 행은 좌우 균등)
+                // 3개 이상: 상하 분할 — 상단 행 = ceil(count/2), 하단 행 = 나머지
+                // · 3,4 → (2,1) (2,2)  · 5,6 → (3,2) (3,3)  · 7,8 → (4,3) (4,4)
                 let topH = geo.size.height * sessionManager.gridVerticalRatio
                 let botH = geo.size.height - topH
-                let topRow = Array(sessions.prefix(min(2, count)))
-                let bottomRow = Array(sessions.dropFirst(2))
+                let topCount = (count + 1) / 2
+                let topRow = Array(sessions.prefix(topCount))
+                let bottomRow = Array(sessions.dropFirst(topCount))
                 VStack(spacing: 0) {
                     HStack(spacing: 1) {
                         ForEach(topRow) { session in
@@ -198,11 +200,7 @@ struct MultiChatView: View {
         VStack(spacing: 0) {
             // 채널 헤더
             HStack(spacing: 6) {
-                Circle()
-                    .fill(session.chatViewModel.connectionState.isConnected
-                        ? DesignTokens.Colors.chzzkGreen
-                        : DesignTokens.Colors.error)
-                    .frame(width: 5, height: 5)
+                ChatConnectionStatusBadge(state: session.chatViewModel.connectionState, compact: true)
 
                 Text(session.channelName)
                     .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
@@ -232,14 +230,29 @@ struct MultiChatView: View {
 
             ChatMessagesView(viewModel: session.chatViewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // P0-1: 그리드 모드 채팅 입력 — 일던 chat-only 이동 제거
+            // · compact: true → 이모티콘 버튼 숨김 + 패딩/버튼 축소
+            // · 최소 놈이 의미 있는 경우에만 표시(항상 표시 — 로그인 안된 경우도 안내 차원에서 유용)
+            ChatInputView(viewModel: session.chatViewModel, compact: true, compactChannelHint: session.channelName)
         }
         .frame(width: width, height: height)
         .background(DesignTokens.Colors.surfaceBase)
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: DesignTokens.Border.thin)
+                .strokeBorder(
+                    sessionManager.selectedChannelId == session.id
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.6)
+                        : DesignTokens.Glass.borderColor,
+                    lineWidth: sessionManager.selectedChannelId == session.id ? 1.0 : DesignTokens.Border.thin
+                )
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // 그리드 셀 탭 → 통합 모드/사이드바 모드의 타겟 채널도 자연스럽게 움직이도록 선택 상태 동기
+            sessionManager.selectChannel(session.id)
+        }
     }
 
     // MARK: - Merged Layout (통합 타임라인)
@@ -481,29 +494,14 @@ struct MultiChatView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(DesignTokens.Typography.custom(size: 40))
-                .foregroundStyle(.tertiary)
-
-            Text("멀티채팅")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-
-            Text("좌측에서 채널을 추가하면\n여러 채널의 채팅을 동시에 볼 수 있습니다")
-                .font(.body)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-
-            Button {
-                showAddChannel = true
-            } label: {
-                Label("채널 추가", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(DesignTokens.Colors.chzzkGreen)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyStateView(
+            icon: "bubble.left.and.bubble.right",
+            title: "멀티채팅",
+            message: "좌측에서 채널을 추가하면\n여러 채널의 채팅을 동시에 볼 수 있습니다",
+            actionTitle: "채널 추가",
+            action: { showAddChannel = true },
+            style: .page
+        )
         .background(DesignTokens.Colors.surfaceOverlay)
     }
 

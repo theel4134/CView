@@ -77,8 +77,12 @@ struct DashboardStatCard: View {
 
 struct MiniChannelCard: View {
     let channel: LiveChannelItem
+    /// 호버 상태 변화 콜백 (프리페치 등 사이드 이펙트용)
+    /// - 외부에서 `.onHover`를 추가하면 카드당 NSTrackingArea 와 cursor push가 이중 등록되므로
+    ///   반드시 이 콜백을 사용할 것.
+    var onHoverChange: ((Bool) -> Void)? = nil
     @State private var isHovered = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Thumbnail
@@ -156,7 +160,10 @@ struct MiniChannelCard: View {
         }
         .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
         .animation(DesignTokens.Animation.fast, value: isHovered)
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            isHovered = hovering
+            onHoverChange?(hovering)
+        }
         .customCursor(.pointingHand)
     }
 }

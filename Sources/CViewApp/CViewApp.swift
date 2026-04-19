@@ -3,6 +3,7 @@
 // 원본: chzzkViewApp.swift → 개선: 모듈화된 DI, @Observable, SwiftData
 
 import SwiftUI
+import AppKit
 import CViewCore
 import CViewNetworking
 import CViewAuth
@@ -27,9 +28,26 @@ struct CViewApplication: App {
     private let metricsClient: MetricsAPIClient
     private let metricsWebSocket: MetricsWebSocketClient
 
+    /// CommandLine 파싱 결과 (메인 / 자식 인스턴스)
+    private let launchMode: AppLaunchMode
+
     // MARK: - Initialization
 
     init() {
+        // 실행 모드 결정 (메인 / 맠티라이브 자식)
+        self.launchMode = AppLaunchModeParser.detect()
+
+        // [프로세스 격리 2026-04-19] embedded 자식: WindowGroup 가 창을 만들기 전에
+        // activation policy 를 .accessory 로 미리 설정해 Dock 아이콘이 잠깐 뜨는 것을 방지.
+        // 또한 NSWindow.didBecomeKey 를 한 번 가로채 borderless 스타일을 즉시 적용.
+        // 주의: App.init() 시점에는 `NSApp` 전역이 아직 nil 일 수 있어 NSApplication.shared 를 사용한다.
+        if let cfg = launchMode.childConfig, cfg.hideFromDock {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
+        if let cfg = launchMode.childConfig {
+            ChildWindowChromeApplier.install(config: cfg)
+        }
+
         // Initialize service container
         serviceContainer = ServiceContainer.shared
 
@@ -48,10 +66,21 @@ struct CViewApplication: App {
 
     var body: some Scene {
         WindowGroup {
-            MainContentView()
-                .environment(router)
-                .environment(appState)
-                .frame(minWidth: 960, maxWidth: .infinity, minHeight: 540, maxHeight: .infinity)
+            Group {
+                if let childCfg = launchMode.childConfig {
+                    // ✨ 자식 인스턴스: 단독 채널 플레이어만 띄움
+                    MultiLiveChildRootView(config: childCfg)
+                        .environment(router)
+                        .environment(appState)
+                        .preferredColorScheme(.dark)
+                } else {
+                    MainContentView()
+                        .environment(router)
+                        .environment(appState)
+                        .frame(minWidth: 960, maxWidth: .infinity, minHeight: 540, maxHeight: .infinity)
+                        .windowFrameAutosave("cview.main")
+                }
+            }
                 // 60fps: 트랜잭션 기본값 — 모든 암묵적 애니메이션에 spring 적용
                 .transaction { t in
                     if t.animation == nil {
@@ -80,7 +109,8 @@ struct CViewApplication: App {
                     Task { await appState.initialize(apiClient: apiClient, authManager: authManager, metricsClient: metricsClient, metricsWebSocket: metricsWebSocket) }
 
                     // 만료된 이미지 캐시 백그라운드 정리 (앱 시작 3초 후)
-                    Task.detached(priority: .background) {
+                    // [Fix 32] PowerAware: 캐시 정리는 항상 .background
+                    Task.detached(priority: PowerAwareTaskPriority.prefetch) {
                         try? await Task.sleep(for: .seconds(3))
                         await ImageCacheService.shared.pruneExpiredEntries()
                     }
@@ -112,6 +142,7 @@ struct CViewApplication: App {
                     .onAppear { appState.registerDetachedChannel(channelId) }
                     .onDisappear { appState.unregisterDetachedChannel(channelId) }
                     .preferredColorScheme(.dark)
+                    .windowFrameAutosave("cview.player")
             }
         }
         .defaultSize(width: 960, height: 600)
@@ -120,6 +151,8 @@ struct CViewApplication: App {
         WindowGroup("통계", id: "statistics-window") {
             StatisticsView()
                 .environment(appState)
+                .environment(router)
+                .windowFrameAutosave("cview.statistics")
         }
         .defaultSize(width: 700, height: 500)
 
@@ -127,6 +160,8 @@ struct CViewApplication: App {
         WindowGroup("채팅", id: "chat-window") {
             ChatWindowWrapper()
                 .environment(appState)
+                .environment(router)
+                .windowFrameAutosave("cview.chat")
         }
         .defaultSize(width: 360, height: 600)
 
@@ -135,9 +170,12 @@ struct CViewApplication: App {
             if let vm = appState.homeViewModel {
                 FollowingView(viewModel: vm)
                     .environment(appState)
+                    .environment(router)
+                    .windowFrameAutosave("cview.multichat")
             } else {
                 ProgressView()
                     .environment(appState)
+                    .environment(router)
             }
         }
         .defaultSize(width: 700, height: 550)
@@ -146,6 +184,8 @@ struct CViewApplication: App {
         WindowGroup("네트워크 모니터", id: "ml-network-window") {
             MLNetworkWindowView()
                 .environment(appState)
+                .environment(router)
+                .windowFrameAutosave("cview.ml-network")
         }
         .defaultSize(width: 440, height: 600)
 
@@ -153,13 +193,25 @@ struct CViewApplication: App {
         WindowGroup("메트릭 전송", id: "ml-metrics-window") {
             MLMetricsWindowView()
                 .environment(appState)
+                .environment(router)
+                .windowFrameAutosave("cview.ml-metrics")
         }
         .defaultSize(width: 420, height: 500)
+
+        // System usage monitor window (보기 > 시스템 사용률 모니터)
+        WindowGroup("시스템 사용률 모니터", id: "system-usage-window") {
+            SystemUsageWindowView()
+                .environment(appState)
+                .environment(router)
+                .windowFrameAutosave("cview.system-usage")
+        }
+        .defaultSize(width: 400, height: 460)
 
         // Settings window
         Settings {
             SettingsView()
                 .environment(appState)
+                .environment(router)
         }
 
         // MenuBarExtra (macOS 메뉴바 아이콘)
@@ -168,6 +220,7 @@ struct CViewApplication: App {
         MenuBarExtra("CView", systemImage: "play.tv") {
             MenuBarView()
                 .environment(appState)
+                .environment(router)
         }
         .menuBarExtraStyle(.window)
     }
@@ -198,6 +251,11 @@ struct CViewApplication: App {
             Button("메트릭 전송 현황") {
                 openWindow(id: "ml-metrics-window")
             }
+
+            Button("시스템 사용률 모니터") {
+                openWindow(id: "system-usage-window")
+            }
+            .keyboardShortcut("m", modifiers: [.command, .shift])
         }
 
         // ── 보기 메뉴 ──

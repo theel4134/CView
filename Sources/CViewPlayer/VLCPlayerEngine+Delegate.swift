@@ -74,9 +74,15 @@ extension VLCPlayerEngine: VLCMediaPlayerDelegate {
     /// 재생 위치 변경 — VLCKit 4.0: Notification 파라미터
     /// [스로틀링] VLC는 초당 10~30회 호출 → 멀티라이브 4세션 = 초당 40~120회
     /// 1초 미만 간격의 콜백은 무시하여 CPU 부하 대폭 감소
+    /// [Opt-V-C] 티어별 차등 throttle:
+    ///   - .hidden: 콜백 전파 완전 스킵 (UI 바인딩 없음)
+    ///   - .visible(비선택): 5s throttle
+    ///   - .active: 기본 2s throttle
     public func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        if sessionTier == .hidden { return }
+        let throttle: UInt64 = (sessionTier == .active) ? _timeChangeThrottleNs : 5_000_000_000
         let now = DispatchTime.now().uptimeNanoseconds
-        guard now - _lastTimeChangeNotify >= _timeChangeThrottleNs else { return }
+        guard now - _lastTimeChangeNotify >= throttle else { return }
         _lastTimeChangeNotify = now
         let t = TimeInterval(player.time.intValue) / 1000.0
         let d = TimeInterval(player.media?.length.intValue ?? 0) / 1000.0

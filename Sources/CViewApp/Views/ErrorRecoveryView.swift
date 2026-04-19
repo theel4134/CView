@@ -230,43 +230,6 @@ struct ErrorBanner: View {
     }
 }
 
-// MARK: - Empty State View
-
-struct EmptyStateView: View {
-    let icon: String
-    let title: String
-    let message: String
-    var actionTitle: String?
-    var action: (() -> Void)?
-    
-    var body: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            Image(systemName: icon)
-                .font(DesignTokens.Typography.custom(size: 48))
-                .foregroundStyle(.tertiary)
-            
-            Text(title)
-                .font(.title3)
-                .fontWeight(.semibold)
-            
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 300)
-            
-            if let actionTitle, let action {
-                Button(actionTitle) {
-                    action()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(DesignTokens.Colors.chzzkGreen)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 // MARK: - View Extension for Error Handling
 
 extension View {

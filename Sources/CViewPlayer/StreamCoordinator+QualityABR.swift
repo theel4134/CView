@@ -66,15 +66,19 @@ extension StreamCoordinator {
                     guard let self, !Task.isCancelled else { return }
 
                     // bufferHealth ≥ 0.7 + VLC 버퍼 ≥ 4초로 3회 연속 확인되면 복귀
+                    // [Fix 28] VLC 엔진 미사용 시 `_lastVLCBufferLength`가 갱신되지 않아
+                    //        영구적으로 bufferOk=false가 되어 복귀가 불가능해지는 문제 수정.
+                    //        0 (미샘플링)이면 bufferHealth만으로 판단하도록 완화.
                     var stableCount = 0
                     for _ in 0..<12 {  // 최대 ~36초 대기
                         try? await Task.sleep(for: .seconds(3))
                         guard !Task.isCancelled else { return }
-                        
+
                         let healthOk = self._lastBufferHealth >= 0.7
                         // [Fix 22B] VLC 실제 버퍼 길이 확인 (recordBandwidthSample에서 갱신)
-                        let bufferOk = self._lastVLCBufferLength >= 4.0
-                        
+                        let vlcBuf = self._lastVLCBufferLength
+                        let bufferOk = vlcBuf == 0 || vlcBuf >= 4.0
+
                         if healthOk && bufferOk {
                             stableCount += 1
                             if stableCount >= 3 {
@@ -228,7 +232,9 @@ extension StreamCoordinator {
                                 try? await Task.sleep(for: .seconds(3))
                                 guard !Task.isCancelled else { return }
                                 let healthOk = _lastBufferHealth >= 0.7
-                                let bufferOk = _lastVLCBufferLength >= 4.0
+                                // [Fix 28] VLC 버퍼 길이 미샘플링(0)이면 버퍼 체크를 bypass
+                                let vlcBuf = _lastVLCBufferLength
+                                let bufferOk = vlcBuf == 0 || vlcBuf >= 4.0
                                 if healthOk && bufferOk {
                                     stableCount += 1
                                     if stableCount >= 3 {
@@ -311,7 +317,8 @@ extension StreamCoordinator {
                 guard !Task.isCancelled else { break }
 
                 let probeHealthOk = _lastBufferHealth >= 0.5
-                let probeBufferOk = _lastVLCBufferLength >= 2.0
+                // [Fix 28] VLC 버퍼 길이 미샘플링(0)이면 bypass
+                let probeBufferOk = _lastVLCBufferLength == 0 || _lastVLCBufferLength >= 2.0
 
                 if probeHealthOk && probeBufferOk {
                     logger.info("Quality probe: \(nextVariant.qualityLabel) 안정 확인 ✓")

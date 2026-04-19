@@ -97,8 +97,8 @@ struct KeyboardShortcutsHelpView: View {
                     Text(key)
                         .font(DesignTokens.Typography.custom(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
+                        .padding(.horizontal, DesignTokens.Spacing.sm)
+                        .padding(.vertical, DesignTokens.Spacing.xxs)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
                                 .fill(DesignTokens.Colors.surfaceElevated)

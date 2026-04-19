@@ -180,15 +180,15 @@ struct FollowingLiveCard: View, Equatable {
         ZStack {
             DesignTokens.Colors.surfaceElevated
 
-            if let url = thumbnailURL ?? profileURL {
-                CachedAsyncImage(url: url) {
-                    thumbnailFallback
-                }
-                .scaledToFill()
-                .clipped()
-            } else {
-                thumbnailFallback
-            }
+            // 라이브 채널: LiveThumbnailView로 주기적 자동 갱신 (메트릭 서버 + 90s TTL)
+            // 백그라운드/숨김 시 자동 중지, 복귀 시 즉시 재갱신
+            LiveThumbnailView(
+                channelId: channel.channelId,
+                thumbnailUrl: thumbnailURL,
+                isLive: channel.isLive
+            )
+            .scaledToFill()
+            .clipped()
 
             // 하단 그라디언트 베일
             VStack(spacing: 0) {
@@ -243,15 +243,6 @@ struct FollowingLiveCard: View, Equatable {
         .compositingGroup()
     }
 
-    private var thumbnailFallback: some View {
-        ZStack {
-            DesignTokens.Colors.surfaceElevated
-            Image(systemName: "play.tv")
-                .font(.system(size: 24, weight: .ultraLight))
-                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.3))
-        }
-    }
-
     // MARK: - Viewer Badge (Simple Pill)
 
     private var viewerBadge: some View {
@@ -282,7 +273,7 @@ struct FollowingLiveCard: View, Equatable {
             Text(text)
                 .font(.system(size: 9.5, weight: .medium, design: .rounded))
         }
-        .foregroundStyle(.white.opacity(0.9))
+        .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.9))
         .padding(.horizontal, 5)
         .padding(.vertical, 2.5)
         .background(Capsule().fill(.black.opacity(0.45)))
@@ -293,10 +284,10 @@ struct FollowingLiveCard: View, Equatable {
     private func categoryTag(_ name: String) -> some View {
         Text(name)
             .font(.system(size: layout.categoryFontSize + 1, weight: .medium))
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.9))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Capsule().fill(.white.opacity(0.15)))
+            .background(Capsule().fill(DesignTokens.Colors.controlOnDarkMediaHover))
     }
 
     // MARK: - Hover Overlay

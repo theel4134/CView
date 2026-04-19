@@ -85,7 +85,7 @@ struct MLControlOverlay: View {
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     Image(systemName: "speaker.fill")
                         .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                     OverlayVolumeSlider(
                         value: Binding(
                             get: { Double(session.playerViewModel.volume) },
@@ -96,7 +96,7 @@ struct MLControlOverlay: View {
                     )
                     Image(systemName: "speaker.wave.3.fill")
                         .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 }
             }
 
@@ -145,7 +145,7 @@ private struct MLOverlayControlButton: View {
                 .frame(width: 30, height: 30)
                 .background(
                     Circle()
-                        .fill(.white.opacity(isHovered ? 0.15 : 0))
+                        .fill(isHovered ? DesignTokens.Colors.controlOnDarkMediaHover : Color.clear)
                 )
                 .contentShape(Circle())
                 .scaleEffect(isHovered ? 1.05 : 1.0)
@@ -184,7 +184,7 @@ struct MLGridControlOverlay: View {
                 // 더블클릭 힌트
                 Text(isFocused ? "더블클릭: 그리드 복귀" : "더블클릭: 확대")
                     .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
             }
         }
     }
@@ -217,7 +217,7 @@ struct MLGridControlOverlay: View {
             HStack(spacing: DesignTokens.Spacing.xs) {
                 Image(systemName: "speaker.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 OverlayVolumeSlider(
                     value: Binding(
                         get: { Double(session.playerViewModel.volume) },
@@ -228,7 +228,7 @@ struct MLGridControlOverlay: View {
                 )
                 Image(systemName: "speaker.wave.3.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
             }
         }
     }
@@ -253,11 +253,11 @@ private struct MLGridActionButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(opacity))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(opacity))
                 .frame(width: 32, height: 32)
                 .background(
                     Circle()
-                        .fill(.white.opacity(isHovered ? 0.22 : 0.12))
+                        .fill(isHovered ? DesignTokens.Colors.controlOnDarkMediaHover : DesignTokens.Colors.controlOnDarkMedia)
                 )
                 .scaleEffect(isHovered ? 1.1 : 1.0)
         }
@@ -482,7 +482,7 @@ struct MLStatsOverlay: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             statsHeader
-            Divider().overlay(.white.opacity(0.12))
+            Divider().overlay(DesignTokens.Colors.borderOnDarkMedia)
             videoMetrics
             proxyMetrics
         }
@@ -494,7 +494,7 @@ struct MLStatsOverlay: View {
                 .environment(\.colorScheme, .dark)
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                        .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                 )
                 .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
         )
@@ -509,7 +509,7 @@ struct MLStatsOverlay: View {
                 .frame(width: 5, height: 5)
             Text("MONITOR")
                 .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
         }
     }
 
@@ -577,7 +577,7 @@ struct MLStatsOverlay: View {
         HStack {
             Text(label)
                 .font(labelFont)
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 .frame(width: 62, alignment: .leading)
             Spacer()
             Text(value)

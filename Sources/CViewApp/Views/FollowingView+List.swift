@@ -61,7 +61,7 @@ extension FollowingView {
                         }
                         .foregroundStyle(isOverflowSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
                         .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.vertical, 7)
+                        .padding(.vertical, DesignTokens.Spacing.sm)
                         .background {
                             if isOverflowSelected {
                                 Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
@@ -98,7 +98,7 @@ extension FollowingView {
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, 7)
+            .padding(.vertical, DesignTokens.Spacing.sm)
             .background {
                 if isSelected {
                     Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
@@ -140,8 +140,8 @@ extension FollowingView {
                 .font(DesignTokens.Typography.custom(size: layout.sectionCountSize + 1, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.vertical, DesignTokens.Spacing.xs)
                 .background(color.opacity(0.75), in: Capsule())
 
             Spacer()
@@ -158,7 +158,9 @@ extension FollowingView {
                         channel: channel,
                         index: index,
                         onPlay: {
-                            Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
+                            // [2026-04-19] 라이브 메뉴는 항상 단일 인스턴스(.embedded) 경로 사용 —
+                            // 설정의 useSeparateProcesses 값과 무관하게 인라인 멀티라이브 패널로 표시.
+                            Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine, presentationOverride: .embedded) }
                             showMultiLive = true
                         },
                         layout: layout
@@ -175,7 +177,8 @@ extension FollowingView {
                         }
                         if channel.isLive {
                             Button {
-                                Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
+                                // [2026-04-19] 라이브 메뉴 컨텍스트 메뉴: 항상 .embedded 경로
+                                Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine, presentationOverride: .embedded) }
                                 showMultiLive = true
                             } label: {
                                 Label("멀티라이브에 추가", systemImage: "rectangle.split.2x2")
@@ -294,7 +297,8 @@ extension FollowingView {
         ) {
             ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
                 FollowingLiveCard(channel: channel, index: index, onPlay: {
-                    Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
+                    // [2026-04-19] 라이브 그리드: 항상 .embedded 경로 (단일 인스턴스)
+                    Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine, presentationOverride: .embedded) }
                     showMultiLive = true
                 }, onPrefetch: { channelId in
                     if let service = appState.hlsPrefetchService {
@@ -313,7 +317,8 @@ extension FollowingView {
                     }
                     if channel.isLive {
                         Button {
-                            Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine) }
+                            // [2026-04-19] 라이브 그리드 컨텍스트 메뉴: 항상 .embedded 경로
+                            Task { await multiLiveManager.addSession(channelId: channel.channelId, preferredEngine: appState.settingsStore.player.preferredEngine, presentationOverride: .embedded) }
                             showMultiLive = true
                         } label: {
                             Label("멀티라이브에 추가", systemImage: "rectangle.split.2x2")
@@ -582,7 +587,7 @@ extension FollowingView {
                                     }
                                     Spacer()
                                 }
-                                .padding(.vertical, 9)
+                                .padding(.vertical, DesignTokens.Spacing.sm)
                             }
                         }
                     }
@@ -686,7 +691,7 @@ extension FollowingView {
             }
             .foregroundStyle(DesignTokens.Colors.textSecondary)
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, 3)
+            .padding(.vertical, DesignTokens.Spacing.xxs)
             .background(DesignTokens.Colors.surfaceElevated.opacity(0.4), in: Capsule())
         }
         .buttonStyle(.plain)

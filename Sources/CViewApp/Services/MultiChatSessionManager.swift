@@ -54,6 +54,11 @@ public final class MultiChatSessionManager {
     /// 세션 영속 저장용 SettingsStore 참조
     private var settingsStore: SettingsStore?
 
+    /// P0-4: addSession 중복 진입 방지 가드 (channelId 단위)
+    /// MainActor 격리이지만 await 경계에서 다른 호출이 끼어들 수 있어
+    /// 동일 channelId의 중복 connect/append를 차단한다.
+    private var inFlightChannelIds: Set<String> = []
+
     public var selectedSession: ChatSession? {
         sessions.first { $0.id == selectedChannelId }
     }
@@ -95,6 +100,10 @@ public final class MultiChatSessionManager {
         uid: String? = nil,
         nickname: String? = nil
     ) async -> AddSessionResult {
+        // P0-4: 동일 channelId 중복 진입 차단 (await 경계 race 방지)
+        guard !inFlightChannelIds.contains(channelId) else {
+            return .alreadyExists
+        }
         // 이미 존재하면 피드백
         guard !sessions.contains(where: { $0.id == channelId }) else {
             return .alreadyExists
@@ -105,12 +114,16 @@ public final class MultiChatSessionManager {
             return .maxSessionsReached
         }
 
+        inFlightChannelIds.insert(channelId)
+        defer { inFlightChannelIds.remove(channelId) }
+
         let vm = ChatViewModel()
         vm.currentUserUid = uid
         vm.currentUserNickname = nickname
 
         // 이미 세션이 있으면 새 세션은 백그라운드 모드로 시작 (CPU/메모리 절약)
-        if !sessions.isEmpty {
+        let startAsBackground = !sessions.isEmpty
+        if startAsBackground {
             vm.isBackgroundMode = true
             vm.messages.resize(to: 50)
         }
@@ -122,6 +135,18 @@ public final class MultiChatSessionManager {
             uid: uid,
             channelId: channelId
         )
+
+        // [M-3] connect 이전에 isBackgroundMode를 세팅했으나 당시 chatEngine이 nil이었으므로
+        // connect 완료 후 엔진에 재전파 (ping 주기 감쇄)
+        if startAsBackground, let engine = vm.chatEngine {
+            await engine.setBackgroundMode(true)
+        }
+
+        // connect await 동안 다른 경로로 동일 채널이 추가되었을 수 있음 — 최종 방어
+        if sessions.contains(where: { $0.id == channelId }) {
+            await vm.disconnect()
+            return .alreadyExists
+        }
 
         let session = ChatSession(
             channelId: channelId,
@@ -154,14 +179,27 @@ public final class MultiChatSessionManager {
         }
     }
 
-    /// 모든 세션 해제
+    /// 모든 세션 해제 — TaskGroup으로 병렬 처리 (각 WebSocket close는 독립적)
     public func disconnectAll() async {
-        for session in sessions {
-            await session.chatViewModel.disconnect()
+        let viewModels = sessions.map(\.chatViewModel)
+        await withTaskGroup(of: Void.self) { group in
+            for vm in viewModels {
+                group.addTask { await vm.disconnect() }
+            }
         }
         sessions.removeAll()
         selectedChannelId = nil
         persistSessions()
+    }
+
+    /// 사용자 정보 업데이트 (로그인/로그아웃/프로필 로드 시)
+    /// 기존 모든 세션의 ChatViewModel에 새 uid/nickname을 전파하여
+    /// 채팅 입력 활성화(canSendChat) 상태가 즉시 갱신되도록 한다.
+    public func updateUserInfo(uid: String?, nickname: String?) {
+        for session in sessions {
+            session.chatViewModel.currentUserUid = uid
+            session.chatViewModel.currentUserNickname = nickname
+        }
     }
 
     /// 채널 선택
@@ -186,10 +224,13 @@ public final class MultiChatSessionManager {
         persistSelection()
     }
 
-    /// 모든 세션 재연결
+    /// 모든 세션 재연결 — TaskGroup으로 병렬 시도 (각 세션의 재연결은 독립적)
     public func reconnectAll() async {
-        for session in sessions {
-            await session.chatViewModel.reconnect()
+        let viewModels = sessions.map(\.chatViewModel)
+        await withTaskGroup(of: Void.self) { group in
+            for vm in viewModels {
+                group.addTask { await vm.reconnect() }
+            }
         }
     }
 
@@ -237,40 +278,111 @@ public final class MultiChatSessionManager {
         }
     }
 
+    /// 저장된 세션 복원 결과 요약 (P1-3)
+    /// - restored: 성공적으로 복원된 세션 수
+    /// - skippedOffline: 오프라인(방송 미진행)으로 건너뛴 채널명
+    /// - failed: 네트워크/토큰 오류 등으로 실패한 (채널명, 사유) 페어
+    public struct RestoreSummary: Sendable {
+        public let restored: Int
+        public let skippedOffline: [String]
+        public let failed: [(name: String, reason: String)]
+        public var anyRestored: Bool { restored > 0 }
+        public var hasIssues: Bool { !skippedOffline.isEmpty || !failed.isEmpty }
+        public var total: Int { restored + skippedOffline.count + failed.count }
+    }
+
     /// 저장된 세션 복원 (앱 시작 시 호출)
-    /// - Returns: 하나 이상의 세션이 복원되었는지 여부
+    /// - Returns: 복원 결과 요약 (실패/스킵 사유 포함)
     @discardableResult
     public func restoreSessions(
         apiClient: ChzzkAPIClient,
         uid: String?,
         nickname: String?
-    ) async -> Bool {
+    ) async -> RestoreSummary {
         let saved = savedSessions
-        guard !saved.isEmpty else { return false }
+        guard !saved.isEmpty else {
+            return RestoreSummary(restored: 0, skippedOffline: [], failed: [])
+        }
 
-        var restoredAny = false
+        var restored = 0
+        var skippedOffline: [String] = []
+        var failed: [(name: String, reason: String)] = []
         let lastSelected = savedSelectedChannelId
 
-        for session in saved {
-            do {
-                let liveDetail = try await apiClient.liveDetail(channelId: session.channelId)
-                guard let chatChannelId = liveDetail.chatChannelId else { continue }
-                let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
-                let channelName = liveDetail.channel?.channelName ?? session.channelName
-                let result = await addSession(
-                    channelId: session.channelId,
+        // [M-5] liveDetail + chatAccessToken 조회를 병렬화 — 순차 호출 대비 N배 빠름 (8채널 기준).
+        // addSession 자체는 MainActor 직렬성 유지를 위해 이후 순차 실행.
+        struct PrefetchResult: Sendable {
+            let savedChannelId: String
+            let savedChannelName: String
+            let outcome: Outcome
+            enum Outcome: Sendable {
+                case ready(chatChannelId: String, accessToken: String, extraToken: String?, channelName: String)
+                case offline
+                case error(String)
+            }
+        }
+
+        let prefetched: [PrefetchResult] = await withTaskGroup(of: PrefetchResult.self) { group in
+            for session in saved {
+                group.addTask {
+                    do {
+                        let liveDetail = try await apiClient.liveDetail(channelId: session.channelId)
+                        guard let chatChannelId = liveDetail.chatChannelId else {
+                            return PrefetchResult(savedChannelId: session.channelId, savedChannelName: session.channelName, outcome: .offline)
+                        }
+                        let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
+                        let channelName = liveDetail.channel?.channelName ?? session.channelName
+                        return PrefetchResult(
+                            savedChannelId: session.channelId,
+                            savedChannelName: session.channelName,
+                            outcome: .ready(
+                                chatChannelId: chatChannelId,
+                                accessToken: tokenInfo.accessToken,
+                                extraToken: tokenInfo.extraToken,
+                                channelName: channelName
+                            )
+                        )
+                    } catch {
+                        return PrefetchResult(
+                            savedChannelId: session.channelId,
+                            savedChannelName: session.channelName,
+                            outcome: .error(error.localizedDescription)
+                        )
+                    }
+                }
+            }
+            // 저장 순서 보존을 위해 savedChannelId 인덱스로 정렬
+            var byId: [String: PrefetchResult] = [:]
+            for await result in group { byId[result.savedChannelId] = result }
+            return saved.compactMap { byId[$0.channelId] }
+        }
+
+        for result in prefetched {
+            switch result.outcome {
+            case .offline:
+                skippedOffline.append(result.savedChannelName)
+            case .error(let msg):
+                failed.append((name: result.savedChannelName, reason: msg))
+            case .ready(let chatChannelId, let accessToken, let extraToken, let channelName):
+                let addResult = await addSession(
+                    channelId: result.savedChannelId,
                     channelName: channelName,
                     chatChannelId: chatChannelId,
-                    accessToken: tokenInfo.accessToken,
-                    extraToken: tokenInfo.extraToken,
+                    accessToken: accessToken,
+                    extraToken: extraToken,
                     uid: uid,
                     nickname: nickname
                 )
-                if case .success = result {
-                    restoredAny = true
+                switch addResult {
+                case .success:
+                    restored += 1
+                case .alreadyExists:
+                    break
+                case .maxSessionsReached:
+                    failed.append((name: channelName, reason: "최대 세션 수 초과"))
+                case .connectionFailed(let msg):
+                    failed.append((name: channelName, reason: msg))
                 }
-            } catch {
-                continue
             }
         }
 
@@ -278,6 +390,6 @@ public final class MultiChatSessionManager {
             selectChannel(lastSelected)
         }
 
-        return restoredAny
+        return RestoreSummary(restored: restored, skippedOffline: skippedOffline, failed: failed)
     }
 }

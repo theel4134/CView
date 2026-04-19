@@ -35,6 +35,8 @@ final class MultiLiveSession: Identifiable {
     var thumbnailURL: URL?
     var profileImageURL: URL?
     var viewerCount: Int = 0
+    /// 누적 시청자 수 (chzzk live-status `accumulateCount`)
+    var accumulateCount: Int = 0
     var isOffline: Bool = false
 
     /// MultiLiveManager 방식: 세션 내부에 apiClient 보관 (파라미터 없는 start() 지원)
@@ -66,7 +68,13 @@ final class MultiLiveSession: Identifiable {
         if n >= 1_000  { return String(format: "%.1fk", Double(n) / 1_000) }
         return "\(n) 명"
     }
-
+    /// 누적 시청자 수 포맷 (예: "12.3만", "5.4k", "234")
+    var formattedAccumulateCount: String {
+        let n = accumulateCount
+        if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000) }
+        if n >= 1_000  { return String(format: "%.1fk", Double(n) / 1_000) }
+        return "\(n)"
+    }
     // MARK: - 태스크
 
     var pollTask: Task<Void, Never>?
@@ -140,6 +148,10 @@ final class MultiLiveSession: Identifiable {
             channelName = liveInfo.channel?.channelName ?? channelId
             liveTitle = liveInfo.liveTitle
             thumbnailURL = liveInfo.liveImageURL
+            viewerCount = liveInfo.concurrentUserCount
+            if liveInfo.accumulateCount > 0 {
+                accumulateCount = liveInfo.accumulateCount
+            }
             loadState = .playing(channelName: channelName, liveTitle: liveTitle)
             // 방송 종료 확인 콜백 설정 — 재연결 시 API로 라이브 상태 확인
             let _channelId = channelId
@@ -221,9 +233,9 @@ final class MultiLiveSession: Identifiable {
                         guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 1.0 }
                         return await coord.lowLatencyController?.currentRate ?? 1.0
                     }
-                    // VLC 엔진의 liveCaching 값을 targetLatency로 전달
-                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
-                        await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
+                    // 현재 엔진의 목표 레이턴시를 서버 동기화 기준값으로 전달
+                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                        await _forwarder?.setTargetLatency(targetLatencyMs)
                     }
                     // 재생 위치(currentTime) 콜백 연결
                     await _forwarder?.setCurrentTimeCallback { [weak _playerVM] in
@@ -250,8 +262,8 @@ final class MultiLiveSession: Identifiable {
                 Task {
                     await _forwarder?.registerMultiLiveChannel(channelId: channelId, channelName: channelName)
                     // 채널별 콜백 등록
-                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
-                        await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching), forChannel: sessionChannelId)
+                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                        await _forwarder?.setTargetLatency(targetLatencyMs, forChannel: sessionChannelId)
                     }
                     await _forwarder?.setCurrentTimeCallback({ [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
@@ -329,6 +341,10 @@ final class MultiLiveSession: Identifiable {
             channelName  = liveInfo.channel?.channelName ?? channelId
             liveTitle    = liveInfo.liveTitle
             thumbnailURL = liveInfo.liveImageURL
+            viewerCount  = liveInfo.concurrentUserCount
+            if liveInfo.accumulateCount > 0 {
+                accumulateCount = liveInfo.accumulateCount
+            }
 
             let ps = appState.settingsStore.player
             playerViewModel.preferredEngineType = ps.preferredEngine
@@ -359,6 +375,15 @@ final class MultiLiveSession: Identifiable {
             playerViewModel.applyForceHighestQuality(ps.forceHighestQuality)
             playerViewModel.applySharpPixelScaling(ps.sharpPixelScaling)
             playerViewModel.applyMultiLiveConstraints(paneCount: paneCount)
+
+            // [Quality Lock 2026-04-18] 최고 화질 유지 모드: 비선택 세션도 즉시 multiLiveHQ tier 로
+            // 승격하여 1080p 변종을 선택하도록 한다. (기본은 .multiLive=480p 로 시작)
+            if ps.forceHighestQuality, let vlc = playerViewModel.playerEngine as? VLCPlayerEngine {
+                vlc.updateSessionTier(.active)
+            }
+            if ps.forceHighestQuality, let av = playerViewModel.playerEngine as? AVPlayerEngine {
+                av.isSelectedMultiLiveSession = true
+            }
 
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             let _forwarder2 = metricsForwarder ?? appState.metricsForwarder
@@ -420,8 +445,8 @@ final class MultiLiveSession: Identifiable {
                     await _forwarder2?.setCurrentTimeCallback { [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
                     }
-                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
-                        await _forwarder2?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
+                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                        await _forwarder2?.setTargetLatency(targetLatencyMs)
                     }
                 }
             } else {
@@ -429,8 +454,8 @@ final class MultiLiveSession: Identifiable {
                 let _playerVM = playerViewModel
                 Task {
                     await _forwarder2?.registerMultiLiveChannel(channelId: channelId, channelName: channelName)
-                    if let vlc = _playerVM.playerEngine as? VLCPlayerEngine {
-                        await _forwarder2?.setTargetLatency(Double(vlc.streamingProfile.liveCaching), forChannel: sessionChannelId2)
+                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                        await _forwarder2?.setTargetLatency(targetLatencyMs, forChannel: sessionChannelId2)
                     }
                     await _forwarder2?.setCurrentTimeCallback({ [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
@@ -561,7 +586,8 @@ final class MultiLiveSession: Identifiable {
             do {
                 while !Task.isCancelled {
                     // [장시간 안정성] sleep 전에는 weak 접근만 — sleep 중 세션 해제 허용
-                    let interval: Duration = (self?.isBackground ?? false) ? .seconds(60) : .seconds(30)
+                    // [Tune] 배경 모드 60→180s: 비활성 윈도우에서 폴링 빈도 1/3로 축소 — 배터리/데이터 절감
+                    let interval: Duration = (self?.isBackground ?? false) ? .seconds(180) : .seconds(30)
                     try await Task.sleep(for: interval)
                     guard !Task.isCancelled, let self else { break }
 
@@ -569,6 +595,9 @@ final class MultiLiveSession: Identifiable {
                     do {
                         let status = try await apiClient.liveStatus(channelId: self.channelId)
                         self.viewerCount = status.concurrentUserCount
+                        if status.accumulateCount > 0 {
+                            self.accumulateCount = status.accumulateCount
+                        }
                         if status.status == .close {
                             if !self.isOffline {
                                 self.isOffline = true
@@ -618,12 +647,12 @@ final class MultiLiveSession: Identifiable {
         scheduleProactiveRefresh(apiClient: apiClient, appState: appState)
     }
 
-    /// CDN 토큰 만료 대비 55분마다 스트림 URL 재취득
+    /// CDN 토큰 만료 대비 50분마다 스트림 URL 재취득 — [Tune] 55→50분으로 안전 마진 확대 (일반적으로 CDN 토큰은 60분 TTL)
     private func scheduleProactiveRefresh(apiClient: ChzzkAPIClient, appState: AppState) {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             do {
-                try await Task.sleep(for: .seconds(55 * 60))
+                try await Task.sleep(for: .seconds(50 * 60))
                 while !Task.isCancelled {
                     // [장시간 안정성] sleep 전에는 weak 접근만
                     if self?.isOffline ?? true {
@@ -634,7 +663,7 @@ final class MultiLiveSession: Identifiable {
                     Log.player.info("멀티라이브 주기적 URL 재취득 — CDN 토큰 만료 예방 channelId=\(self.channelId, privacy: .public)")
                     self.playerViewModel.playerEngine?.resetRetries()
                     await self.retry(using: apiClient, appState: appState)
-                    try await Task.sleep(for: .seconds(55 * 60))
+                    try await Task.sleep(for: .seconds(50 * 60))
                 }
             } catch {
                 // CancellationError → 정상 종료

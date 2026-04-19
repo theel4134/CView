@@ -147,6 +147,18 @@ extension VLCPlayerEngine {
         }
     }
 
+    /// 멀티라이브 GPU 렌더 계층만 조정 (디코딩/프로파일 변경 없음).
+    /// `updateSessionTier()` 는 프로파일·트랙·타이밍까지 변경하므로 quality-lock 모드에서
+    /// 호출하지 않는다. 이 메서드는 compositor 단의 contentsScale / isHidden 만 수정하여
+    /// 디코딩 품질과 완전히 독립적인 GPU 절감을 제공한다.
+    public func setGPURenderTier(_ tier: SessionTier) {
+        let doApply = { [weak self] in
+            self?.playerView.setGPURenderTier(tier)
+        }
+        if Thread.isMainThread { doApply() }
+        else { DispatchQueue.main.async { doApply() } }
+    }
+
     // MARK: - 3-Tier 세션 계층 관리
 
     /// 멀티라이브 세션 계층을 업데이트하여 리소스를 동적으로 배분한다.
@@ -164,10 +176,23 @@ extension VLCPlayerEngine {
         // isSelectedSession도 동기화
         isSelectedSession = (newTier == .active)
 
+        // [HQ 프로파일] 멀티라이브 계열인 경우, 선택 세션은 multiLiveHQ로 자동 승격
+        // (프로파일 변경은 다음 play()/switchMedia() 미디어 옵션에 반영된다.
+        //  runtime timing 설정은 아래에서 즉시 반영.)
+        let oldProfile = streamingProfile
+        if streamingProfile.isMultiLiveFamily {
+            streamingProfile = (newTier == .active) ? .multiLiveHQ : .multiLive
+        }
+        let profileChanged = (oldProfile != streamingProfile)
+
         let doUpdate = { [weak self] in
             guard let self else { return }
             let state = self.player.state
             guard state != .stopped && state != .stopping else { return }
+
+            // [GPU] tier 변경마다 compositor 렌더 스케일/가시성 동기 업데이트
+            // (디코딩 경로와 독립이므로 state 체크 이후에도 항상 안전하게 적용)
+            self.playerView.setGPURenderTier(newTier)
 
             switch newTier {
             case .active:
@@ -180,7 +205,19 @@ extension VLCPlayerEngine {
 
                 // 통계 수집 주기 정상화
                 self.startStatsTimer()
-                Log.player.info("[Tier] → active: video ON, timing normal")
+                Log.player.info("[Tier] → active: video ON, timing normal, profile=\(String(describing: self.streamingProfile))")
+
+                // [Quality 2026-04-18] multiLive → multiLiveHQ 승격 시 미디어 옵션
+                //   (:adaptive-maxheight 등) 이 재생 중에는 변경되지 않으므로,
+                //   현재 재생 중인 URL로 switchMedia() 를 호출하여 새 옵션을 반영한다.
+                //   짧은 검은 화면(~300ms)을 감수하고 1080p 변종 선택을 즉시 가능하게 한다.
+                if profileChanged, let url = self.player.media?.url {
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        Log.player.info("[Tier] HQ 프로파일 승격 → switchMedia 재로드")
+                        await self.switchMedia(to: url)
+                    }
+                }
 
             case .visible:
                 // Tier 2: 비디오 유지 + 축소 타이밍
@@ -215,18 +252,36 @@ extension VLCPlayerEngine {
     }
 
     /// 백그라운드 모드 시 통계 수집 주기 조절 + 오디오 디코딩 비활성화
+    /// [Opt-A4] 추가로 VLC 내부 타이머(minimalTimePeriod/timeChangeUpdateInterval)를
+    /// 배경 세션일 때 축소하여 델리게이트 콜백/라이브러리 내부 타임 워커 부하 절감.
     public func setTimeUpdateMode(background: Bool) {
         if background {
             statsTask?.cancel()
             statsTask = nil
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // 배경: VLC 내부 타이머 최대한 느슨하게 — 시간 델리게이트 호출 거의 없음
+                self.player.minimalTimePeriod = 2_000_000   // 2s
+                self.player.timeChangeUpdateInterval = 10.0 // 10s
                 self.player.deselectAllAudioTracks()
             }
         } else {
             startStatsTimer()
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // 전경 복귀: 프로파일/선택 상태에 맞게 타이밍 복원
+                if self.streamingProfile.isMultiLiveFamily {
+                    if self.streamingProfile == .multiLiveHQ || self.isSelectedSession {
+                        self.player.minimalTimePeriod = 500_000
+                        self.player.timeChangeUpdateInterval = 1.0
+                    } else {
+                        self.player.minimalTimePeriod = 1_000_000
+                        self.player.timeChangeUpdateInterval = 5.0
+                    }
+                } else {
+                    self.player.minimalTimePeriod = 500_000
+                    self.player.timeChangeUpdateInterval = 1.0
+                }
                 if !self.player.audioTracks.isEmpty {
                     self.player.selectTrack(at: 0, type: .audio)
                     self.player.currentAudioPlaybackDelay = 0
@@ -312,7 +367,14 @@ extension VLCPlayerEngine {
 
     func startStatsTimer() {
         statsTask?.cancel()
-        let interval: UInt64 = streamingProfile == .multiLive ? 10_000_000_000 : 5_000_000_000
+        // [CPU 최적화] 단일 5s → 10s, 멀티 10s → 15s
+        // [Power-Aware] 배터리 사용 시 1.5배 올려 추가 절전 (E-core 친화적)
+        // — VLC 통계 수집은 player.media?.statistics 접근 시 내부 뮤텍스 경합 가능
+        // — PerformanceMonitor가 별도 10s 주기로 시스템 메트릭 수집 중이므로 중복 줄임
+        // 비선택 멀티라이브만 15s, 선택(HQ) 세션은 표준 10s 수집
+        let baseSecs: Double = (streamingProfile == .multiLive) ? 15 : 10
+        let scaledSecs = PowerAwareInterval.scaled(baseSecs)
+        let interval: UInt64 = UInt64(scaledSecs * 1_000_000_000)
         statsTask = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(nanoseconds: interval) } catch { break }
@@ -485,7 +547,7 @@ extension VLCPlayerEngine {
             // [Quality] 4회 연속 안정 → 빠른 원본 복귀 (기존 6회 → 4회, 단일=20초, 멀티=40초)
             if _qualityStableCount >= 4 {
                 _qualityStableCount = 0
-                Log.player.info("[QualityAdapt] ⬆ upgrade: stable_\(self.streamingProfile == .multiLive ? "40s" : "20s")")
+                Log.player.info("[QualityAdapt] ⬆ upgrade: stable_\(self.streamingProfile == .multiLive ? "40s" : "20s") profile=\(String(describing: self.streamingProfile))")
                 onQualityAdaptationRequest?(.upgrade(reason: "stable"))
             }
         }

@@ -22,27 +22,41 @@ public actor ImageCacheService {
     /// 진행 중인 다운로드 태스크 — 동일 URL 중복 요청 방지 (thundering herd)
     private var inFlightDownloads: [String: Task<Data?, Never>] = [:]
 
+    /// [Tune] 동시 다운로드 제한 게이트 — burst 트래픽 완화 (API 경합 방지)
+    private var activeDownloadCount: Int = 0
+    private var downloadWaitQueue: [CheckedContinuation<Void, Never>] = []
+    /// 최대 동시 이미지 다운로드 수 — OS 수준 connection limit과 별개로 actor 레벨 제한
+    private let maxConcurrentDownloads: Int = 4
+
     /// 주기적 디스크 캐시 정리 타이머 — 장시간 재생 시 만료 파일 자동 제거
     private var pruneTask: Task<Void, Never>?
-    /// 캐시 정리 주기 (초) — 30분마다 만료 엔트리 삭제
-    private let pruneInterval: TimeInterval = 1800
+    /// 캐시 정리 주기 (초) — [Tune] 30분→15분: 디스크 200MB 상한 도달 전에 더 자주 정리.
+    private let pruneInterval: TimeInterval = 900
 
     /// 이미지 전용 URLSession — API 세션과 연결 풀 분리하여 경합 방지
     /// HTTP/2 멀티플렉싱 활성화, 쿠키 비활성화(이미지에 불필요)
+    /// [Tune] httpMaximumConnectionsPerHost를 활성 코어 수에 비례 (4~8) — 멀티라이브에서 썸네일 동시 로딩 가속
+    /// networkServiceType=.background, qualityOfService=.utility — UI/Player보다 낮은 우선순위로 메인 스레드 양보
     private static let imageSession: URLSession = {
         let config = URLSessionConfiguration.default
-        config.httpMaximumConnectionsPerHost = 4
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        config.httpMaximumConnectionsPerHost = max(4, min(cores, 8))
         config.timeoutIntervalForRequest = ImageCacheDefaults.requestTimeout
         config.timeoutIntervalForResource = 30
         config.requestCachePolicy = .reloadIgnoringLocalCacheData  // 자체 캐시 사용
         config.urlCache = nil                                       // URLCache 비활성화
         config.httpCookieAcceptPolicy = .never                      // 이미지에 쿠키 불필요
         config.httpShouldSetCookies = false
-        return URLSession(configuration: config)
+        config.networkServiceType = .background                     // 썸네일은 배경 트래픽
+        config.waitsForConnectivity = true                          // 일시 단절 시 자동 대기
+        let session = URLSession(configuration: config)
+        session.delegateQueue.qualityOfService = .utility
+        return session
     }()
 
     /// NSCache에 저장할 래퍼 (Sendable-safe)
-    final class CacheEntry: @unchecked Sendable {
+    /// - 모든 프로퍼티가 `let` + Sendable 타입(Data/Date) → @unchecked 불필요
+    final class CacheEntry: Sendable {
         let data: Data
         let timestamp: Date
         init(data: Data) {
@@ -86,9 +100,12 @@ public actor ImageCacheService {
     /// 주기적으로 만료된 디스크 캐시 엔트리를 정리
     private func startAutoPruneTimer() {
         pruneTask?.cancel()
-        let interval = pruneInterval  // actor-isolated 값을 미리 캡처
+        let baseInterval = pruneInterval  // actor-isolated 값을 미리 캡처
         pruneTask = Task { [weak self] in
             while !Task.isCancelled {
+                // [Fix P-8] PowerAware: 배터리 모드에서 prune 주기를 1.5배로 연장
+                // → AC 15분 / Battery 22.5분, IO·CPU 부담 완화
+                let interval = PowerAwareInterval.scaled(baseInterval)
                 do {
                     try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 } catch {
@@ -234,7 +251,7 @@ public actor ImageCacheService {
     /// 이미 캐시에 있는 항목은 건너뜀. 최대 동시 다운로드 수 제한.
     /// - Parameters:
     ///   - urls: 프리페치할 이미지 URL 배열
-    ///   - concurrency: 동시 다운로드 수 (기본 6)
+    ///   - concurrency: 동시 다운로드 수 (기본 6) — 시스템 부하(thermal/lowPower)에 따라 자동 축소
     public func prefetch(_ urls: [URL], concurrency: Int = 6) async {
         // 캐시에 없는 URL만 필터링
         let uncached = urls.filter { url in
@@ -245,10 +262,13 @@ public actor ImageCacheService {
         }
         guard !uncached.isEmpty else { return }
 
+        // [Tune] thermalState/lowPowerMode 부하 시 자동 축소 (warm: 2/3, hot: 1/3)
+        let effective = SystemLoadMonitor.shared.currentMode.adjustedDecoderThreads(base: concurrency)
+
         await withTaskGroup(of: Void.self) { group in
             var launched = 0
             for url in uncached {
-                if launched >= concurrency {
+                if launched >= effective {
                     await group.next()
                 }
                 launched += 1
@@ -263,7 +283,7 @@ public actor ImageCacheService {
     /// 페이지 전환 시 다음 페이지 썸네일을 미리 디코딩하여 즉시 표시 가능
     /// - Parameters:
     ///   - urls: 프리페치할 이미지 URL 배열
-    ///   - concurrency: 동시 처리 수 (기본 4)
+    ///   - concurrency: 동시 처리 수 (기본 4) — 시스템 부하에 따라 자동 축소
     public func prefetchAndDecode(_ urls: [URL], concurrency: Int = 4) async {
         // 이미 디코딩 캐시에 있는 항목은 건너뜀
         let uncached = urls.filter { url in
@@ -272,10 +292,13 @@ public actor ImageCacheService {
         }
         guard !uncached.isEmpty else { return }
 
+        // [Tune] thermalState/lowPowerMode 부하 시 자동 축소 — 디코딩은 CPU 집약적
+        let effective = SystemLoadMonitor.shared.currentMode.adjustedDecoderThreads(base: concurrency)
+
         await withTaskGroup(of: Void.self) { group in
             var launched = 0
             for url in uncached {
-                if launched >= concurrency {
+                if launched >= effective {
                     await group.next()
                 }
                 launched += 1
@@ -390,6 +413,9 @@ public actor ImageCacheService {
             return await existing.value
         }
 
+        // [Tune] 동시 다운로드 수 제한 — 슬롯 획득 대기
+        await acquireDownloadSlot()
+
         let task = Task<Data?, Never> {
             do {
                 var request = URLRequest(url: url)
@@ -409,6 +435,7 @@ public actor ImageCacheService {
         inFlightDownloads[key] = task
         let data = await task.value
         inFlightDownloads.removeValue(forKey: key)
+        releaseDownloadSlot()
 
         if let data {
             let entry = CacheEntry(data: data)
@@ -421,5 +448,29 @@ public actor ImageCacheService {
         }
 
         return data
+    }
+
+    // MARK: - Download Slot Gate
+
+    /// 다운로드 슬롯 획득 — maxConcurrentDownloads 이하면 즉시, 아니면 대기
+    private func acquireDownloadSlot() async {
+        if activeDownloadCount < maxConcurrentDownloads {
+            activeDownloadCount += 1
+            return
+        }
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            downloadWaitQueue.append(c)
+        }
+        // resume 시 슬롯은 이미 양도됨 (release에서 activeDownloadCount를 감소시키지 않음)
+    }
+
+    /// 다운로드 슬롯 반납 — 대기 Task가 있으면 그대로 양도, 없으면 카운터 감소
+    private func releaseDownloadSlot() {
+        if let next = downloadWaitQueue.first {
+            downloadWaitQueue.removeFirst()
+            next.resume()
+        } else {
+            activeDownloadCount = max(0, activeDownloadCount - 1)
+        }
     }
 }

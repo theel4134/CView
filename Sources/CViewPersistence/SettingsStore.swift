@@ -5,11 +5,30 @@ import Foundation
 import SwiftData
 import CViewCore
 
+// MARK: - Live Settings Change Notifications
+
+extension Notification.Name {
+    /// 스트림 보정 모드(`StreamProxyMode`)가 변경되었음을 활성 스트림에 통지
+    /// userInfo: ["mode": StreamProxyMode]
+    public static let cviewStreamProxyModeChanged = Notification.Name("com.cview.streamProxyModeChanged")
+}
+
 /// 설정 저장소 — 카테고리별 분리된 설정 관리
 @Observable
 @MainActor
 public final class SettingsStore {
-    public var player: PlayerSettings
+    public var player: PlayerSettings {
+        didSet {
+            // 스트림 보정 모드 실시간 반영 — 변경 시 활성 스트림에 재시작 알림
+            if oldValue.streamProxyMode != player.streamProxyMode {
+                NotificationCenter.default.post(
+                    name: .cviewStreamProxyModeChanged,
+                    object: nil,
+                    userInfo: ["mode": player.streamProxyMode]
+                )
+            }
+        }
+    }
     public var chat: ChatSettings
     public var general: GeneralSettings
     public var appearance: AppearanceSettings

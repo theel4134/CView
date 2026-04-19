@@ -198,6 +198,11 @@ struct ChatPanelView: View {
 struct ChatMessagesView: View {
     let viewModel: ChatViewModel?
 
+    /// 앱 active 상태 추적 — NotificationCenter publisher 대신 SwiftUI native scenePhase 사용
+    /// (publisher 기반 onReceive 가 SubscriptionView lifecycle race 로 freed actor 를 캡처해
+    ///  `swift_task_isCurrentExecutorImpl` 단계에서 SIGSEGV 가 발생하는 문제 회피, 2026-04-19)
+    @Environment(\.scenePhase) private var scenePhase
+
     /// 하단 고정 sentinel ID (scrollTo 안정화용)
     fileprivate static let bottomAnchorID = "__chat_bottom_anchor__"
 
@@ -241,6 +246,11 @@ struct ChatMessagesView: View {
                     .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .bottom)
                     .padding(.vertical, DesignTokens.Spacing.xs)
                 }
+                // [Jitter Fix] 새 메시지 삽입·레이아웃 변화 에 대한 SwiftUI 암시적 애니메이션을 전면 차단 —
+                // 상위 뉴의 `.animation(_, value:)` 가 LazyVStack 행 삽입에 전파되어
+                // "새 행이 위에서 아래로 생성 후 다시 위로 올라가는" 화면을 만드는 것을 방지.
+                // `defaultScrollAnchor(.bottom)` 은 offset 으로만 동작하므로 애니메이션이 필요 없다.
+                .transaction { $0.animation = nil }
                 .scrollIndicators(.hidden)
                 .defaultScrollAnchor(.bottom)
                 // Rebuilt scroll detection — 적응형 거리 기반 하단 감지
@@ -265,14 +275,29 @@ struct ChatMessagesView: View {
                 }
                 // 새 메시지 도착 시 자동 스크롤 — 치지직 웹처럼 애니메이션 없이 즉시 하단 고정
                 .onChange(of: viewModel?.messages.last?.id) { _, _ in
+                    // [Auto-scroll Recovery 2026-04-18] replay mode 가 geometry oscillation 으로
+                    // 잘못 진입되어 "먹통" 으로 지각될 수 있으므로, 새 메시지 도착을 트리거로
+                    // 사용하여 사용자가 하단 근처일 경우(unreadCount==0, 이전 자동스크롤
+                    // 활성 상태에서 변경 없음) replay mode 를 강제 해제하고 자동 스크롤을 재개.
+                    if let vm = viewModel, vm.isReplayMode, vm.unreadCount == 0 {
+                        vm.exitReplayMode()
+                    }
                     guard viewModel?.isAutoScrollEnabled == true,
                           viewModel?.isReplayMode != true else { return }
                     stickyScroll(proxy: proxy)
                 }
                 // 앱이 다시 포그라운드로 돌아올 때 자동 스크롤 복원
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                    guard viewModel?.isAutoScrollEnabled == true,
-                          viewModel?.isReplayMode != true else { return }
+                // ⚠️ 이전에는 NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification) 를
+                //    onReceive 로 구독했으나, SwiftUI 의 SubscriptionView.Subscriber lifecycle 와
+                //    @MainActor @Observable ChatViewModel 의 deinit 사이 race 로 인해
+                //    freed actor 가 캡처된 콜백이 한 번 더 호출되어 `swift_task_isCurrentExecutorImpl`
+                //    단계에서 SIGSEGV(EXC_BAD_ACCESS at 0x0) 가 발생함 (2.0.0 (47) 크래시 리포트).
+                //    SwiftUI native scenePhase 로 교체하면 subscription lifecycle 가 SwiftUI 가 관리해 안전.
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active,
+                          let vm = viewModel,
+                          vm.isAutoScrollEnabled,
+                          !vm.isReplayMode else { return }
                     scrollToLatest(proxy: proxy)
                 }
                 // Floating scroll-to-bottom button
@@ -299,20 +324,18 @@ struct ChatMessagesView: View {
 
     // MARK: - Scroll Helpers
 
-    /// 새 메시지 자동 스크롤 — 하단 sentinel을 타겟으로 하여 마지막 행 높이 변동에 영향받지 않음
-    /// · 다음 runloop로 defer: 현재 레이아웃 패스 완료 후 실행되어 스크롤 위치 재계산 경합 제거
-    /// · withAnimation 제거: 드립 간격(50ms)에서 animation transaction이 LazyVStack 뷰 재사용과 충돌
+    /// 새 메시지 자동 스크롤 — `defaultScrollAnchor(.bottom)` 의 macOS 버그로
+    /// contentSize/containerSize 변동 직후 앵커가 종종 떨어져 "먹통" 으로 지각되는
+    /// 문제를 해결하기 위해 명시적 `proxy.scrollTo(bottomAnchorID)` 를 폭주 호출한다.
+    /// 애니메이션 없이 이동 — jitter 없이 이전 동작(챘지직 웹 스타일) 완전 일치.
+    /// `scrollSuppressionCount` 은 geometry oscillation 으로 인한 replay mode 오진입 차단에 사용.
     private func stickyScroll(proxy: ScrollViewProxy) {
         guard viewModel?.messages.isEmpty == false else { return }
         viewModel?.cancelReplayDebounce()
         scrollSuppressionCount += 1
+        // 명시적 스크롤 — SwiftUI 의 내부 anchor 상태와 무관하게 하단 고정
+        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
         Task { @MainActor in
-            await Task.yield()
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-            }
             try? await Task.sleep(for: .milliseconds(80))
             self.scrollSuppressionCount = max(0, self.scrollSuppressionCount - 1)
         }

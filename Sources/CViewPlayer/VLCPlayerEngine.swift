@@ -68,6 +68,64 @@ public final class VLCLayerHostView: NSView {
             sub.minificationFilter = min
         }
     }
+
+    /// 현재 적용된 GPU 렌더 계층 (기본 active = 풀 품질)
+    private var _gpuRenderTier: SessionTier = .active
+
+    /// 멀티라이브 GPU 렌더 계층에 따라 Metal drawable 해상도(contentsScale)와
+    /// 레이어 가시성을 조정한다.
+    ///
+    /// VLC 가 생성하는 CAMetalLayer 서브레이어의 `contentsScale` 을 조정하면
+    /// Metal drawable 크기 = `bounds × contentsScale` 이 줄어들어, GPU가 렌더링하는
+    /// 픽셀 수가 비례하여 감소한다. (예: 2.0 → 1.5 = 43% 픽셀 감소)
+    ///
+    /// - `.active`   : 풀 백킹 스케일 (Retina 원본 선명도)
+    /// - `.visible`  : 백킹 × 0.75 (약 44% 픽셀 감소, 비선택 패널 스케일링 자연스러움 유지)
+    /// - `.hidden`   : 레이어 자체 숨김 (GPU 합성 패스 완전 생략)
+    ///
+    /// 디코딩 품질/해상도와는 독립적 — quality-lock 모드(1080p 유지)에서도 안전하게 동작.
+    public func setGPURenderTier(_ tier: SessionTier) {
+        _gpuRenderTier = tier
+        applyGPURenderTier()
+    }
+
+    /// 현재 저장된 tier 를 실제 레이어에 반영. 서브레이어가 뒤늦게 추가되어도
+    /// (VLC 가 play 시점에 Metal layer 를 붙임) `layout()` 등에서 재호출 가능.
+    fileprivate func applyGPURenderTier() {
+        guard let layer else { return }
+        let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let targetScale: CGFloat
+        let shouldHide: Bool
+        switch _gpuRenderTier {
+        case .active:
+            targetScale = backing
+            shouldHide = false
+        case .visible:
+            // 0.75× → 44% 픽셀 감소. 그리드 셀은 원본보다 작게 표시되므로
+            // 시각적 열화는 미미하되 GPU 합성/샘플링 비용이 크게 감소한다.
+            targetScale = max(1.0, backing * 0.75)
+            shouldHide = false
+        case .hidden:
+            // 비디오 트랙은 VLC 가 이미 중단 (setVideoTrackEnabled(false)),
+            // 레이어 숨김으로 CA 합성 패스까지 완전 제거
+            targetScale = backing
+            shouldHide = true
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.isHidden = shouldHide
+        layer.contentsScale = targetScale
+        layer.sublayers?.forEach { sub in
+            sub.contentsScale = targetScale
+        }
+        CATransaction.commit()
+    }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // 스크린 전환 시 tier 재적용 (백킹 스케일 변경 반영)
+        applyGPURenderTier()
+    }
 }
 
 // MARK: - 화질 적응 액션
@@ -103,7 +161,8 @@ public enum SessionTier: Int, Sendable, Comparable {
 public enum VLCStreamingProfile: Sendable {
     case ultraLow             // 라이브 (최저 지연, 유선/고속WiFi 전용)
     case lowLatency           // 라이브 (저지연 기본)
-    case multiLive            // 멀티라이브 (GPU/메모리 절약 우선)
+    case multiLive            // 멀티라이브 비선택 세션 (GPU/메모리 절약 우선)
+    case multiLiveHQ          // 멀티라이브 선택 세션 (1080p60 / 8Mbps 유지)
 
     // [Fix 19] 네트워크 지터 흡수 + 초기 재생 지연 균형
     // lowLatency 500ms: 2초 세그먼트 25% 커버리지, prefetch 병용
@@ -113,21 +172,24 @@ public enum VLCStreamingProfile: Sendable {
         switch self {
         case .ultraLow: return 300
         case .lowLatency: return 500
-        case .multiLive: return 1500   // 1000→1500ms: 지터 흡수 마진 확보
+        case .multiLive: return 1500     // 1000→1500ms: 지터 흡수 마진 확보
+        case .multiLiveHQ: return 800    // 선택 HQ: 지터 흡수는 유지하되 저지연 쪽으로 이동
         }
     }
     public var liveCaching: Int {
         switch self {
         case .ultraLow: return 300
         case .lowLatency: return 500
-        case .multiLive: return 1500   // network-caching과 동일
+        case .multiLive: return 1500     // network-caching과 동일
+        case .multiLiveHQ: return 800
         }
     }
     var manifestRefreshInterval: Int {
         switch self {
         case .ultraLow: return 8    // LL-HLS 부분 세그먼트(~200ms) 대응: 빠른 매니페스트 리프레시
         case .lowLatency: return 4  // 10→4s: 2×TARGETDURATION(2s) — 새 세그먼트 조기 발견으로 레이턴시 단축
-        case .multiLive: return 20  // 멀티라이브: 비활성 세션 네트워크 부하 절감
+        case .multiLive: return 20  // 멀티라이브 비선택: 네트워크 부하 절감
+        case .multiLiveHQ: return 5 // 선택 HQ: variant 조기 갱신으로 1080p 유지 안정화
         }
     }
     /// clock-jitter 허용 범위 (µs) — 프레임 타이밍 편차 허용량
@@ -137,6 +199,7 @@ public enum VLCStreamingProfile: Sendable {
         case .ultraLow: return 0
         case .lowLatency: return 5000
         case .multiLive: return 10000 // 10ms — 영상/소리 싱크 정밀도 향상
+        case .multiLiveHQ: return 5000 // 선택 HQ: 저지연 프로파일과 동일한 싱크 정밀도
         }
     }
     /// cr-average 클럭 복구 평균 (ms) — 낮을수록 더 빠른 타이밍 조정
@@ -146,6 +209,7 @@ public enum VLCStreamingProfile: Sendable {
         case .ultraLow: return 20
         case .lowLatency: return 30
         case .multiLive: return 30  // 50→30ms: A/V 싱크 보정 가속
+        case .multiLiveHQ: return 30
         }
     }
     /// 디코딩 스레드 수 — multiLive는 세션이 여러 개이므로 낮게 제한
@@ -154,22 +218,26 @@ public enum VLCStreamingProfile: Sendable {
         case .ultraLow:   return min(ProcessInfo.processInfo.processorCount, 4)
         case .lowLatency: return min(ProcessInfo.processInfo.processorCount, 4)
         case .multiLive:  return 1  // 다중 세션 GPU/CPU 경합 방지, VideoToolbox 주체
+        case .multiLiveHQ: return min(ProcessInfo.processInfo.processorCount, 3) // 선택 세션은 P-core 적극 활용
         }
     }
     /// HLS adaptive 최대 해상도 — 멀티라이브 그리드 셀에서는 해상도 제한
     /// isSelected: 현재 선택된(포그라운드) 세션 여부
-    /// [Opt] 멀티라이브 비선택 세션: 720p→480p — GPU 디코딩 부하 40% 절감
+    /// [Quality 2026-04-18] 비선택 480p → 720p 완화 — 사용자 선택 시점 즉시 가시 화질 보장
+    ///   (이전: 480p 고정 → 선택 후 switchMedia 전까지 480p 유지되는 회귀 발견)
     /// [Quality] 싱글 스트림: 0 = 무제한 (소스 원본 해상도 사용)
     func adaptiveMaxWidth(isSelected: Bool) -> Int {
         switch self {
         case .ultraLow, .lowLatency: return 0  // 무제한 — 소스 원본 해상도
-        case .multiLive: return isSelected ? 1920 : 854
+        case .multiLive: return isSelected ? 1920 : 1280
+        case .multiLiveHQ: return 0            // 선택 HQ: 무제한 (1080p 유지)
         }
     }
     func adaptiveMaxHeight(isSelected: Bool) -> Int {
         switch self {
         case .ultraLow, .lowLatency: return 0  // 무제한 — 소스 원본 해상도
-        case .multiLive: return isSelected ? 1080 : 480
+        case .multiLive: return isSelected ? 1080 : 720
+        case .multiLiveHQ: return 0            // 선택 HQ: 무제한 (1080p 유지)
         }
     }
     /// 늦은 프레임 드롭 여부
@@ -184,6 +252,7 @@ public enum VLCStreamingProfile: Sendable {
         switch self {
         case .ultraLow, .lowLatency: return false
         case .multiLive: return true
+        case .multiLiveHQ: return false        // 선택 HQ: 프레임 스킵 금지
         }
     }
     /// avcodec-fast 모드 — 빠른 디코딩 경로 (일부 디블로킹 생략 가능)
@@ -192,6 +261,7 @@ public enum VLCStreamingProfile: Sendable {
         switch self {
         case .ultraLow, .lowLatency: return false
         case .multiLive: return true
+        case .multiLiveHQ: return false        // 선택 HQ: 디블로킹 완전 적용
         }
     }
     /// 루프필터 스킵 레벨 (0=없음, 1=Non-ref, 4=전체)
@@ -200,6 +270,7 @@ public enum VLCStreamingProfile: Sendable {
         switch self {
         case .ultraLow, .lowLatency: return 0
         case .multiLive: return 4
+        case .multiLiveHQ: return 0            // 선택 HQ: 루프 필터 유지
         }
     }
     /// avcodec-hurry-up 모드 — 디코더 품질 단계 건너뛰기
@@ -208,6 +279,15 @@ public enum VLCStreamingProfile: Sendable {
         switch self {
         case .ultraLow, .lowLatency: return false
         case .multiLive: return true
+        case .multiLiveHQ: return false        // 선택 HQ: 품질 단계 전체 적용
+        }
+    }
+
+    /// 멀티라이브 계열 프로파일 여부 (`multiLive` / `multiLiveHQ`)
+    public var isMultiLiveFamily: Bool {
+        switch self {
+        case .multiLive, .multiLiveHQ: return true
+        default: return false
         }
     }
 }
@@ -239,6 +319,11 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     /// 항상 최고 화질(1080p60) 유지 — true면 ABR 하향/해상도 캡핑/프레임 스킵 비활성화
     public var forceHighestQuality: Bool = true
 
+    /// 스트림 프록시 / 인터셉트 모드. StreamCoordinator 가 재생 시작 직전 주입.
+    /// - .directVLCAdaptive : `:demux=adaptive,hls` 강제 + Content-Type 무시
+    /// - 그 외              : 기본 자동 데모서 선택
+    public var streamProxyMode: StreamProxyMode = .localProxy
+
     /// 선명한 화면(픽셀 샤프 스케일링) 여부 — play() 이후 drawable 재생성 시에도 자동 재적용
     public var sharpPixelScaling: Bool = false {
         didSet {
@@ -269,6 +354,11 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
 
     /// 재생 정체 감지 콜백 — 디코딩 프레임 0이 연속 발생할 때 호출
     public var onPlaybackStalled: (@Sendable () -> Void)?
+
+    /// [No-Proxy] VLC 가 chzzk CDN fMP4 응답을 처리하지 못해 FIX14 35초 타임아웃이
+    /// 발생했을 때 호출. 상위(PlayerViewModel/MultiLiveManager) 가 이 콜백을 받으면
+    /// AVPlayer 엔진으로 자동 전환한다. nil 이면 기존처럼 .error(.networkTimeout) 으로 진입.
+    public var onEngineFallbackRequested: (@Sendable (String) -> Void)?
 
     // MARK: - PlayerEngineProtocol
 

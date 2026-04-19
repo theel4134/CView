@@ -38,6 +38,40 @@ private func makeCoordinator(
     ))
 }
 
+private let staleVariantURL = URL(string: "https://cdn.example.com/live/chunklist_1080p.m3u8?token=stale")!
+
+// MARK: - Reconnect URL Selection Tests
+
+@Suite("preferredReconnectBaseURL")
+struct PreferredReconnectBaseURLTests {
+
+    @Test("AVPlayer는 stale variant 대신 master URL로 재연결")
+    func avPlayerReconnectUsesMasterURL() async {
+        let coordinator = makeCoordinator()
+
+        let result = await coordinator.preferredReconnectBaseURL(
+            rawURL: baseURL,
+            currentVariantURL: staleVariantURL,
+            keepCurrentVariant: false
+        )
+
+        #expect(result == baseURL)
+    }
+
+    @Test("VLC는 현재 variant URL을 유지해 재연결")
+    func vlcReconnectKeepsVariantURL() async {
+        let coordinator = makeCoordinator()
+
+        let result = await coordinator.preferredReconnectBaseURL(
+            rawURL: baseURL,
+            currentVariantURL: staleVariantURL,
+            keepCurrentVariant: true
+        )
+
+        #expect(result == staleVariantURL)
+    }
+}
+
 // MARK: - select1080p60Variant Tests
 
 @Suite("select1080p60Variant")

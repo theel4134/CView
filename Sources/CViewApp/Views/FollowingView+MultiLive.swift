@@ -63,8 +63,10 @@ extension FollowingView {
                 }
             )
 
-            // 탭 모드 세션 정보 바
-            if !multiLiveManager.isGridLayout || multiLiveManager.sessions.count < 2,
+            // [중복 제목 fix 2026-04-19] MLTabBar 채널 칩이 이미 채널명을 표시하므로
+            // 그리드 모드에서는 SessionInfoBar 를 띄우지 않는다 (제목 중복으로 보이는 문제).
+            // 탭 모드에서만 단일 활성 세션의 상세(라이브 제목/카테고리)를 표시.
+            if !multiLiveManager.isGridLayout,
                let active = multiLiveManager.selectedSession {
                 MLSessionInfoBar(session: active, manager: multiLiveManager)
             }
@@ -98,6 +100,15 @@ extension FollowingView {
     }
 
     /// 비디오 전용 영역 (채팅 제거됨 — 채팅은 멀티채팅 패널에서 관리)
+    ///
+    /// [프로세스 격리 2026-04-19] 라이브 메뉴 인라인 패널은 사용자가 부모 창 안에서
+    /// 영상을 보기를 기대하므로, `useSeparateProcesses` 설정과 무관하게 항상
+    /// 레거시 in-process MLGridLayout으로 렌더링한다 (자식 프로세스 분리 모드는 독립 창 컨텍스트용).
+    /// `MultiLiveManager.addSession(…, presentationOverride: .embedded)` 이 launcher 경로를 건너뛰고
+    /// `multiLiveManager.sessions` 에 세션을 추가 → 이 레이아웃이 VLC 플레이어를 직접 임베드.
+    ///
+    /// [Single View 2026-04-19] 탭 모드(`isGridLayout == false`) 일 때는 `MLSingleChannelStage`
+    /// 로 라우팅 — 채널별 싱글 화면처럼 헤더 오버레이(채널명/제목/시청자수) 와 함께 풀 임베드.
     @ViewBuilder
     var mlVideoOnlyArea: some View {
         ZStack {
@@ -107,27 +118,14 @@ extension FollowingView {
                         showFollowingList = true
                     }
                 })
-            } else if multiLiveManager.isGridLayout && multiLiveManager.sessions.count >= 2 {
+            } else if !multiLiveManager.isGridLayout, let active = multiLiveManager.selectedSession {
+                MLSingleChannelStage(session: active, manager: multiLiveManager, appState: appState)
+            } else {
                 MLGridLayout(manager: multiLiveManager, appState: appState, onAdd: {
                     withAnimation(DesignTokens.Animation.snappy) {
                         showFollowingList = true
                     }
                 })
-            } else {
-                ForEach(multiLiveManager.sessions) { session in
-                    let isActive = session.id == multiLiveManager.selectedSessionId
-                    MLPlayerPane(session: session, manager: multiLiveManager, appState: appState, isActive: isActive)
-                        .frame(
-                            maxWidth: isActive ? .infinity : 0,
-                            maxHeight: isActive ? .infinity : 0
-                        )
-                        .clipped()
-                        .opacity(isActive ? 1 : 0)
-                        .zIndex(isActive ? 1 : 0)
-                        .allowsHitTesting(isActive)
-                        .transaction { $0.animation = nil }
-                }
-                .animation(nil, value: multiLiveManager.sessions.count)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

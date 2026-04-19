@@ -108,28 +108,14 @@ extension FollowingView {
     // MARK: - Chat Empty State
 
     var chatEmptyState: some View {
-        VStack(spacing: DesignTokens.Spacing.md) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(DesignTokens.Typography.display.weight(.ultraLight))
-                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.4))
-            Text("멀티채팅")
-                .font(DesignTokens.Typography.bodySemibold)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-            Text("여러 채널의 채팅을 동시에\n모니터링할 수 있습니다")
-                .font(DesignTokens.Typography.footnote)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .multilineTextAlignment(.center)
-            Button {
-                showChatAddChannel = true
-            } label: {
-                Label("채널 추가", systemImage: "plus")
-                    .font(DesignTokens.Typography.footnoteMedium)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(DesignTokens.Colors.chzzkGreen)
-            .controlSize(.small)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyStateView(
+            icon: "bubble.left.and.bubble.right",
+            title: "멀티채팅",
+            message: "여러 채널의 채팅을 동시에\n모니터링할 수 있습니다",
+            actionTitle: "채널 추가",
+            action: { showChatAddChannel = true },
+            style: .panel
+        )
     }
 
     // MARK: - Chat Actions
@@ -150,13 +136,22 @@ extension FollowingView {
             }
             let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
             let channelName = liveDetail.channel?.channelName ?? channelId
+            // 채팅 입력 활성화를 위해 userIdHash 조회 (단일 채팅과 동일한 패턴)
+            // userChannelId(OAuth 전용) 폴백 — 쿠키 로그인 사용자도 채팅 가능하도록 보장
+            let chatUid: String?
+            if appState.isLoggedIn,
+               let userInfo = try? await apiClient.userStatus() {
+                chatUid = userInfo.userIdHash ?? appState.userChannelId
+            } else {
+                chatUid = appState.userChannelId
+            }
             let result = await chatSessionManager.addSession(
                 channelId: channelId,
                 channelName: channelName,
                 chatChannelId: chatChannelId,
                 accessToken: tokenInfo.accessToken,
                 extraToken: tokenInfo.extraToken,
-                uid: appState.userChannelId,
+                uid: chatUid,
                 nickname: appState.userNickname
             )
             switch result {
@@ -178,14 +173,41 @@ extension FollowingView {
     func restoreSavedChatSessions() async {
         guard let apiClient = appState.apiClient else { return }
 
-        let restoredAny = await chatSessionManager.restoreSessions(
+        // 채팅 입력 활성화에 필요한 userIdHash 선조회 (쿠키/OAuth 모두 대응)
+        let chatUid: String?
+        if appState.isLoggedIn,
+           let userInfo = try? await apiClient.userStatus() {
+            chatUid = userInfo.userIdHash ?? appState.userChannelId
+        } else {
+            chatUid = appState.userChannelId
+        }
+
+        let summary = await chatSessionManager.restoreSessions(
             apiClient: apiClient,
-            uid: appState.userChannelId,
+            uid: chatUid,
             nickname: appState.userNickname
         )
 
-        if restoredAny {
+        if summary.anyRestored {
             showMultiChat = true
+        }
+
+        // P1-3: 복원 중 일부 채널이 오프라인이거나 실패한 경우 사용자에게 알림
+        if summary.hasIssues {
+            var lines: [String] = []
+            if summary.restored > 0 {
+                lines.append("\(summary.restored)개 채널 복원 완료")
+            }
+            if !summary.skippedOffline.isEmpty {
+                let names = summary.skippedOffline.prefix(3).joined(separator: ", ")
+                let suffix = summary.skippedOffline.count > 3 ? " 외 \(summary.skippedOffline.count - 3)개" : ""
+                lines.append("방송 종료: \(names)\(suffix)")
+            }
+            if !summary.failed.isEmpty {
+                let detail = summary.failed.prefix(3).map { "\($0.name) — \($0.reason)" }.joined(separator: "\n")
+                lines.append("연결 실패:\n\(detail)")
+            }
+            chatAddError = lines.joined(separator: "\n\n")
         }
     }
 }
@@ -471,16 +493,12 @@ private struct MCTabChip: View {
 
     @ViewBuilder
     private var statusSubtext: some View {
-        let isConnected = session.chatViewModel.connectionState.isConnected
+        let state = session.chatViewModel.connectionState
         let count = session.chatViewModel.messageCount
         HStack(spacing: 4) {
-            Text(isConnected ? "연결됨" : "연결 끊김")
+            Text(statusLabel(state))
                 .font(DesignTokens.Typography.micro)
-                .foregroundStyle(
-                    isConnected
-                        ? DesignTokens.Colors.chzzkGreen.opacity(0.8)
-                        : DesignTokens.Colors.textTertiary
-                )
+                .foregroundStyle(statusLabelColor(state))
             if count > 0 {
                 Text("·")
                     .font(DesignTokens.Typography.micro)
@@ -489,6 +507,26 @@ private struct MCTabChip: View {
                     .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
+        }
+    }
+
+    private func statusLabel(_ state: ChatConnectionState) -> String {
+        switch state {
+        case .connected: return "연결됨"
+        case .connecting: return "연결 중..."
+        case .reconnecting(let attempt) where attempt > 0: return "재연결 \(attempt)회"
+        case .reconnecting: return "재연결 중..."
+        case .disconnected: return "연결 끊김"
+        case .failed: return "연결 실패"
+        }
+    }
+
+    private func statusLabelColor(_ state: ChatConnectionState) -> Color {
+        switch state {
+        case .connected: return DesignTokens.Colors.chzzkGreen.opacity(0.8)
+        case .connecting, .reconnecting: return DesignTokens.Colors.warning
+        case .failed: return DesignTokens.Colors.error
+        case .disconnected: return DesignTokens.Colors.textTertiary
         }
     }
 

@@ -18,35 +18,48 @@ extension StreamCoordinator {
         do {
             var playbackURL = url
             let isVLCEngine = playerEngine is VLCPlayerEngine
+            let isAVEngine = playerEngine is AVPlayerEngine
 
-            // [Fix 16] VLC + AVPlayer 모두 프록시 경유
-            // CDN이 fMP4 세그먼트를 Content-Type: video/MP2T로 잘못 응답
-            // → 프록시에서 video/mp4로 교정하여 VLC MP4→TS 전환 버그 방지
-            // Fix 15 회귀(프록시 과부하) 대응: M3U8 응답 1초 캐싱으로 VLC 폴링 부하 해소
-            if LocalStreamProxy.needsProxy(for: url) {
-                if let host = url.host {
-                    var proxyStarted = false
-                    do {
-                        try await streamProxy.start(for: host)
-                        proxyStarted = true
-                        _isProxyActive = true
-                        streamProxy.onUpstreamAuthFailure = { [weak self] in
-                            Task { [weak self] in
-                                await self?.triggerReconnect(reason: "CDN 403 토큰 만료 감지")
-                            }
+            // [Stream Proxy Mode] 사용자 선택에 따라 Content-Type 교정 전략 결정.
+            // 호환되지 않는 (엔진 × 모드) 조합은 자동으로 .localProxy 로 폴백.
+            let resolvedMode = Self.resolveProxyMode(
+                requested: config.streamProxyMode,
+                isVLC: isVLCEngine,
+                isAV: isAVEngine,
+                url: url
+            )
+
+            // 엔진에 모드 전파 (avInterceptor / avAssetDownload / urlProtocolHook 처리에 사용)
+            if let av = playerEngine as? AVPlayerEngine {
+                av.streamProxyMode = resolvedMode
+            }
+            if let vlc = playerEngine as? VLCPlayerEngine {
+                vlc.streamProxyMode = resolvedMode
+            }
+
+            // .urlProtocolHook 모드는 글로벌 등록만 보장 (이미 등록되어 있으면 no-op)
+            if resolvedMode == .urlProtocolHook {
+                CViewHTTPURLProtocol.registerIfNeeded()
+            }
+
+            // 로컬 프록시는 .localProxy 모드일 때만 시작
+            if resolvedMode == .localProxy, LocalStreamProxy.needsProxy(for: url), let host = url.host {
+                do {
+                    try await streamProxy.start(for: host)
+                    _isProxyActive = true
+                    streamProxy.onUpstreamAuthFailure = { [weak self] in
+                        Task { [weak self] in
+                            await self?.triggerReconnect(reason: "CDN 403 토큰 만료 감지")
                         }
-                        let engineLabel: String
-                        if isVLCEngine { engineLabel = "VLC" }
-                        else if playerEngine is HLSJSPlayerEngine { engineLabel = "HLS.js" }
-                        else { engineLabel = "AVPlayer" }
-                        logger.info("CDN proxy active (\(engineLabel, privacy: .public)): \(host, privacy: .public) → localhost:\(self.streamProxy.port, privacy: .public)")
-                    } catch {
-                        logger.warning("CDN proxy failed: \(error.localizedDescription, privacy: .public)")
                     }
-                    if !proxyStarted {
-                        logger.warning("CDN proxy failed, direct connection fallback")
-                    }
+                    logger.info("Proxy[\(resolvedMode.rawValue, privacy: .public)]: 시작 (host=\(host, privacy: .public) → localhost:\(self.streamProxy.port, privacy: .public))")
+                } catch {
+                    _isProxyActive = false
+                    logger.warning("Proxy: 시작 실패 — 직접 재생 시도 (\(error.localizedDescription, privacy: .public))")
                 }
+            } else {
+                _isProxyActive = false
+                logger.info("Proxy mode = \(resolvedMode.rawValue, privacy: .public) (로컬 프록시 미사용)")
             }
 
             if isVLCEngine {
@@ -145,8 +158,12 @@ extension StreamCoordinator {
                 loadManifestInfo(from: url)
             }
 
-            // 매니페스트 주기적 갱신 타이머 시작 (VLC 토큰 리프레시 + variant URL 갱신)
-            if isVLCEngine {
+            // 매니페스트 주기적 갱신 타이머 시작
+            // VLC는 기존과 동일하게 토큰/variant URL을 주기적으로 갱신하고,
+            // AVPlayer는 최고 화질 고정 모드에서 variant URL을 직접 사용하므로
+            // 장시간 재생 시 URL 만료로 멈춤화면이 생기지 않도록 동일하게 갱신한다.
+            let needsPinnedManifestRefresh = isVLCEngine || ((playerEngine is AVPlayerEngine) && config.forceHighestQuality)
+            if needsPinnedManifestRefresh {
                 startManifestRefreshTimer()
             }
 
@@ -394,5 +411,41 @@ extension StreamCoordinator {
             uptime: uptime,
             timestamp: Date()
         )
+    }
+
+    // MARK: - Stream Proxy Mode Resolution
+
+    /// 사용자 선택 모드를 현재 (엔진 × URL) 조합에 맞게 보정한다.
+    /// - 호환되지 않는 조합(예: VLC 엔진 + .avInterceptor)은 안전한 기본값(.localProxy)으로 폴백.
+    /// - chzzk CDN 이 아닌 URL 이면 .none 으로 폴백 (교정 불필요).
+    static func resolveProxyMode(
+        requested: StreamProxyMode,
+        isVLC: Bool,
+        isAV: Bool,
+        url: URL
+    ) -> StreamProxyMode {
+        // chzzk CDN 이 아니면 어떤 모드든 사실상 의미 없음 → .none
+        if !LocalStreamProxy.needsProxy(for: url) {
+            return .none
+        }
+
+        switch requested {
+        case .localProxy, .none:
+            return requested
+
+        case .urlProtocolHook:
+            // 글로벌 URLProtocol 만으로는 미디어 재생 보정 불가 → 안전망으로 localProxy 동시 사용
+            // (등록은 진행하되 실제 재생은 프록시 경유)
+            return .localProxy
+
+        case .avInterceptor:
+            return isAV ? .avInterceptor : .localProxy
+
+        case .directVLCAdaptive:
+            return isVLC ? .directVLCAdaptive : .localProxy
+
+        case .avAssetDownload:
+            return isAV ? .avAssetDownload : .localProxy
+        }
     }
 }

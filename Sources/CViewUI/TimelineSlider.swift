@@ -37,7 +37,7 @@ public struct TimelineSlider: View {
                 ZStack(alignment: .leading) {
                     // Background track
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                        .fill(Color.white.opacity(0.2))
+                        .fill(DesignTokens.Colors.trackOnDarkMedia)
                         .frame(height: isHovering || isDragging ? 8 : 4)
                     
                     // Progress fill

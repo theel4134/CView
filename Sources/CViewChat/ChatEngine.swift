@@ -177,6 +177,12 @@ public actor ChatEngine {
     public func events() -> AsyncStream<ChatEngineEvent> {
         return _eventStream
     }
+
+    /// [M-3] 백그라운드 모드 전파 — WebSocket ping 주기/QoS 감쇄.
+    /// MultiChatSessionManager가 비활성 세션을 백그라운드로 전환할 때 호출.
+    public func setBackgroundMode(_ enabled: Bool) async {
+        await webSocket?.setBackgroundMode(enabled)
+    }
     
     /// Clear message buffer
     public func clearMessages() {

@@ -9,6 +9,8 @@ public struct LiveInfo: Sendable, Codable, Identifiable, Hashable {
     public let liveTitle: String
     public let status: LiveStatus
     public let concurrentUserCount: Int
+    /// 누적 시청자 수 (chzzk live-status 의 accumulateCount)
+    public let accumulateCount: Int
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -17,6 +19,7 @@ public struct LiveInfo: Sendable, Codable, Identifiable, Hashable {
         liveTitle = (try? container.decode(String.self, forKey: .liveTitle)) ?? ""
         status = (try? container.decode(LiveStatus.self, forKey: .status)) ?? .open
         concurrentUserCount = (try? container.decode(Int.self, forKey: .concurrentUserCount)) ?? 0
+        accumulateCount = (try? container.decode(Int.self, forKey: .accumulateCount)) ?? 0
         categoryType = try? container.decode(String.self, forKey: .categoryType)
         liveCategory = try? container.decode(String.self, forKey: .liveCategory)
         liveCategoryValue = try? container.decode(String.self, forKey: .liveCategoryValue)
@@ -57,6 +60,7 @@ public struct LiveInfo: Sendable, Codable, Identifiable, Hashable {
         liveTitle: String,
         status: LiveStatus = .open,
         concurrentUserCount: Int = 0,
+        accumulateCount: Int = 0,
         categoryType: String? = nil,
         liveCategory: String? = nil,
         liveCategoryValue: String? = nil,
@@ -73,6 +77,7 @@ public struct LiveInfo: Sendable, Codable, Identifiable, Hashable {
         self.liveTitle = liveTitle
         self.status = status
         self.concurrentUserCount = concurrentUserCount
+        self.accumulateCount = accumulateCount
         self.categoryType = categoryType
         self.liveCategory = liveCategory
         self.liveCategoryValue = liveCategoryValue
@@ -91,6 +96,7 @@ public struct LiveInfo: Sendable, Codable, Identifiable, Hashable {
         case liveTitle
         case status
         case concurrentUserCount
+        case accumulateCount
         case categoryType
         case liveCategory
         case liveCategoryValue

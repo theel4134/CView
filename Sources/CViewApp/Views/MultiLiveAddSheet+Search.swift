@@ -42,8 +42,8 @@ extension MultiLiveAddSheet {
             Text("\(count)")
                 .font(DesignTokens.Typography.custom(size: 9, weight: .medium).monospacedDigit())
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
+                .padding(.horizontal, DesignTokens.Spacing.xs)
+                .padding(.vertical, DesignTokens.Spacing.xxs)
                 .background(Capsule().fill(DesignTokens.Colors.surfaceOverlay.opacity(0.4)))
             Spacer()
         }
@@ -193,7 +193,7 @@ extension MultiLiveAddSheet {
                 addButtonLabel(isAdding: isAddingThis, alreadyAdded: alreadyAdded, isLive: true)
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignTokens.Spacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))

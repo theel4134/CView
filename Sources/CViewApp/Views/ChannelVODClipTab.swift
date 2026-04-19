@@ -113,20 +113,14 @@ struct ChannelClipTab: View {
 
 // MARK: - Shared Components
 
+/// 채널 상세 탭 빈 상태 — `EmptyStateView(.inline)` 의 thin wrapper (호출부 호환 유지)
 struct ChannelInfoEmptyState: View {
     let icon: String
     let message: String
 
     var body: some View {
-        VStack(spacing: DesignTokens.Spacing.sm) {
-            Image(systemName: icon)
-                .font(DesignTokens.Typography.display)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            Text(message)
-                .font(DesignTokens.Typography.captionMedium)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 150)
+        EmptyStateView(icon: icon, title: message, style: .inline)
+            .frame(minHeight: 150)
     }
 }
 

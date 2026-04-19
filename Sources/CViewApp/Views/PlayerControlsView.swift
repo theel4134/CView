@@ -23,9 +23,8 @@ struct PlayerOverlayView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar — stream info
-            StreamInfoBar(playerVM: playerVM)
-
+            // [Design Unify 2026-04-18] 상단 StreamInfoBar 제거 — 채널명/제목/배지는
+            // SLSessionInfoBar (LiveStreamHeader.swift) 가 멀티라이브와 동일한 디자인으로 표시.
             Spacer()
 
             // Bottom area — progress bar (VOD) or LIVE badge + controls
@@ -93,7 +92,7 @@ struct PlayerProgressSection: View {
                     ZStack(alignment: .leading) {
                         // Background track
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                            .fill(Color.white.opacity(0.2))
+                            .fill(DesignTokens.Colors.trackOnDarkMedia)
                             .frame(height: isHovering || isDragging ? 8 : 4)
 
                         // Progress fill
@@ -124,7 +123,7 @@ struct PlayerProgressSection: View {
                                 .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
                                 .overlay {
                                     RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                                        .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                                 }
                                 .offset(x: max(20, min(width - 50, hoverPosition - 25)), y: -24)
                         }
@@ -167,13 +166,13 @@ struct PlayerProgressSection: View {
                 HStack {
                     Text(PlayerViewModel.formatTimeInterval(currentTime))
                         .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
 
                     Spacer()
 
                     Text(PlayerViewModel.formatTimeInterval(duration))
                         .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                 }
             }
             .padding(.horizontal, 32)
@@ -230,7 +229,7 @@ struct StreamInfoBar: View {
 
                 Text(playerVM?.liveTitle ?? "")
                     .font(DesignTokens.Typography.custom(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     .lineLimit(1)
             }
 
@@ -253,10 +252,10 @@ struct StreamInfoBar: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
+        .background(DesignTokens.Glass.thin, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
         }
         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
         .padding(.horizontal, DesignTokens.Spacing.lg)
@@ -309,7 +308,7 @@ struct PlayerControlsBar: View {
 
                         Text("\(Int((playerVM?.volume ?? 1.0) * 100))%")
                             .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                             .frame(width: 32, alignment: .trailing)
                     }
                     .transition(.asymmetric(
@@ -393,11 +392,11 @@ struct PlayerControlsBar: View {
                     Text(playerVM?.formattedPlaybackRate ?? "1.0x")
                         .font(DesignTokens.Typography.captionMedium)
                 }
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.9))
                 .padding(.horizontal, DesignTokens.Spacing.xs)
                 .padding(.vertical, DesignTokens.Spacing.xs)
                 .background(Color.black.opacity(0.55), in: Capsule())
-                .overlay { Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5) }
+                .overlay { Capsule().strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5) }
             }
             .buttonStyle(.plain)
 
@@ -442,12 +441,8 @@ struct PlayerControlsBar: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.3), radius: 16, y: 6)
+        // [Design Unify 2026-04-18] 재생바 배경/테두리/그림자 제거 — 아이콘만 표시.
+        // 비디오 위 가독성은 PlayerButton 내부의 아이콘 자체 그림자로 확보.
         .padding(.horizontal, 32)
         .padding(.bottom, 16)
     }
@@ -485,12 +480,12 @@ struct QualitySelector: View {
                         .font(DesignTokens.Typography.captionMedium)
                 }
             }
-            .foregroundStyle(.white.opacity(isHovered ? 1.0 : 0.9))
+            .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(isHovered ? 1.0 : 0.9))
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.xs)
             .background(Color.black.opacity(0.55), in: Capsule())
             .overlay {
-                Capsule().strokeBorder(.white.opacity(isHovered ? 0.2 : 0.1), lineWidth: 0.5)
+                Capsule().strokeBorder(isHovered ? DesignTokens.Colors.borderOnDarkMediaStrong : DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
             }
         }
         .buttonStyle(.plain)
@@ -580,7 +575,7 @@ struct QualityRow: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(isHovered ? Color.white.opacity(0.08) : Color.clear)
+            .background(isHovered ? DesignTokens.Colors.controlOnDarkMedia.opacity(0.6) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -612,7 +607,7 @@ struct OverlayVolumeSlider: View {
             ZStack(alignment: .leading) {
                 // Background track
                 Capsule()
-                    .fill(.white.opacity(0.2))
+                    .fill(DesignTokens.Colors.trackOnDarkMedia)
                     .frame(height: trackHeight)
 
                 // Filled track
@@ -662,11 +657,11 @@ struct PlayerButton: View {
                 .background {
                     if isPrimary {
                         Circle()
-                            .fill(isHovered ? .white.opacity(0.28) : .white.opacity(0.14))
-                            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+                            .fill(isHovered ? DesignTokens.Colors.controlOnDarkMediaHover : DesignTokens.Colors.controlOnDarkMedia)
+                            .overlay(Circle().strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5))
                     } else {
                         Circle()
-                            .fill(isHovered ? .white.opacity(0.14) : .clear)
+                            .fill(isHovered ? DesignTokens.Colors.controlOnDarkMedia : Color.clear)
                     }
                 }
                 .scaleEffect(isHovered ? 1.06 : 1.0)
@@ -698,7 +693,7 @@ struct InfoBadge: View {
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, DesignTokens.Spacing.xxs + 1)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(DesignTokens.Glass.thin, in: Capsule())
         .overlay {
             Capsule().strokeBorder(color.opacity(0.35), lineWidth: 0.5)
         }
@@ -745,7 +740,7 @@ struct RecordButton: View {
                         )
                 } else {
                     Circle()
-                        .fill(isHovered ? .white.opacity(0.15) : .clear)
+                        .fill(isHovered ? DesignTokens.Colors.controlOnDarkMedia : Color.clear)
                 }
             }
         }

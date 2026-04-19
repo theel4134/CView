@@ -45,6 +45,19 @@ extension LiveStreamView {
         loadError = nil
 
         do {
+            // [2026-04-19] 분리 인스턴스(자식 프로세스) 대응:
+            // 자식 프로세스가 막 부팅한 직후에는 `AppState.initialize(...)` 가 아직 완료되지
+            // 않아 `appState.apiClient` 가 nil 일 수 있음. `.task(id: channelId)` 는 한 번만
+            // 실행되므로 그 틈에 에러로 떨어지면 "다시 시도"를 눌러야만 재생이 시작됨.
+            // → 최대 ~8s 동안 100ms 간격으로 초기화 완료를 기다림.
+            // 추가로 `isAuthInitialized` 도 함께 대기 — 자식 프로세스는 자체 HTTPCookieStorage 를
+            // 가지므로 authManager.initialize() 가 끝나 키체인 NID 쿠키가 복원되기 전에 채팅이
+            // 연결되면 "로그인 필요" 상태로 뜬다.
+            var waitIterations = 0
+            while (appState.apiClient == nil || !appState.isAuthInitialized) && waitIterations < 80 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waitIterations += 1
+            }
             guard let apiClient = appState.apiClient else {
                 loadError = "API 클라이언트가 초기화되지 않았습니다."
                 isLoadingStream = false
@@ -113,6 +126,24 @@ extension LiveStreamView {
                         return false
                     }
                 }
+                // [No-Proxy] VLC 가 chzzk CDN 을 처리하지 못해 자동 폴백을 요청하면
+                // AVPlayer 엔진으로 startStream() 을 재호출한다.
+                // (preferredEngineType 은 PlayerViewModel 내부에서 .avPlayer 로 이미 전환됨)
+                playerVM?.onEngineFallbackRequested = { @Sendable [weak playerVM] _ in
+                    Task { @MainActor [weak playerVM] in
+                        guard let vm = playerVM else { return }
+                        await vm.stopStream()
+                        await vm.startStream(
+                            channelId: _channelId,
+                            streamUrl: streamURL,
+                            channelName: channelName,
+                            liveTitle: liveTitle,
+                            thumbnailURL: liveInfo.liveImageURL,
+                            prefetchedManifest: _prefetchedManifest,
+                            playerSettings: ps
+                        )
+                    }
+                }
                 isStreamOffline = false
                 await playerVM?.startStream(
                     channelId: channelId,
@@ -134,10 +165,16 @@ extension LiveStreamView {
             let _streamURL = streamURL
             Task { await appState.metricsForwarder?.activateChannel(channelId: channelId, channelName: _channelName, streamUrl: _streamURL.absoluteString) }
 
-            // VLC 메트릭 콜백 연결 — VLCPlayerEngine의 2초 타이머 → MetricsForwarder
+            // 엔진별 메트릭 콜백 연결 — 모든 재생 엔진의 메트릭을 서버로 전달
             let _forwarder = appState.metricsForwarder
             playerVM?.setVLCMetricsCallback { metrics in
                 Task { await _forwarder?.updateVLCMetrics(metrics) }
+            }
+            playerVM?.setAVPlayerMetricsCallback { metrics in
+                Task { await _forwarder?.updateAVPlayerMetrics(metrics) }
+            }
+            playerVM?.setHLSJSMetricsCallback { metrics in
+                Task { await _forwarder?.updateHLSJSMetrics(metrics) }
             }
 
             // 서버 동기화 추천 → VLC 재생 속도 적용 콜백
@@ -156,9 +193,9 @@ extension LiveStreamView {
                     guard let coord = await MainActor.run(body: { _playerVM?.streamCoordinator }) else { return 1.0 }
                     return await coord.lowLatencyController?.currentRate ?? 1.0
                 }
-                // VLC 엔진의 liveCaching 값을 targetLatency로 전달
-                if let vlc = _playerVM?.playerEngine as? VLCPlayerEngine {
-                    await _forwarder?.setTargetLatency(Double(vlc.streamingProfile.liveCaching))
+                // 현재 엔진의 목표 레이턴시를 서버 동기화 기준값으로 전달
+                if let targetLatencyMs = _playerVM?.currentTargetLatencyMs() {
+                    await _forwarder?.setTargetLatency(targetLatencyMs)
                 }
                 // 레이턴시(ms) 콜백 — StreamCoordinator에서 직접 조회
                 await _forwarder?.setLatencyMsCallback { [weak _playerVM] in

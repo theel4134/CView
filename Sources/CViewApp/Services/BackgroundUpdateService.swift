@@ -132,7 +132,8 @@ final class BackgroundUpdateService {
             let prevTitleMap = previousTitleMap
 
             // 데이터 가공/비교를 백그라운드 스레드에서 수행 — 메인 스레드 차단 방지
-            let result = await Task.detached(priority: .utility) {
+            // [Fix 32] PowerAware: AC=.utility, Battery=.background로 자동 조절
+            let result = await Task.detached(priority: PowerAwareTaskPriority.periodic) {
                 let currentOnline = following
                     .filter { $0.isLive }
                     .map { item in

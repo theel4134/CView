@@ -37,7 +37,9 @@ let package = Package(
         // MARK: - Core Module (도메인 모델, 프로토콜, 유틸리티)
         .target(
             name: "CViewCore",
-            swiftSettings: commonSwiftSettings
+            swiftSettings: commonSwiftSettings,
+            // IOKit: PowerSourceMonitor 가 IOPSGetProvidingPowerSourceType / IOPSNotificationCreateRunLoopSource 사용
+            linkerSettings: [.linkedFramework("IOKit")]
         ),
 
         // MARK: - Networking Module (API 클라이언트, 엔드포인트)

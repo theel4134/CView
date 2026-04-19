@@ -200,6 +200,140 @@ extension AVPlayerEngine {
             return state.recentReconnectTimestamps.count > maxReconnectsInWindow
         }
     }
+
+    // MARK: - HQ 복귀 워치독
+
+    /// AVFoundation 내부 ABR이 레이턴시 캐치업(`rate > 1.0`) 중 버퍼 부족으로
+    /// 720p 이하 variant 에 "고정"되는 현상을 복구하기 위한 워치독.
+    ///
+    /// 동작 원리:
+    /// - `isQualityLocked=true` 상태에서 `preferredPeakBitRate`(ceiling)는 재업그레이드 요인이 되지 못한다.
+    ///   AVPlayer 내부 ABR은 observedBitrate/buffer 조건이 좋아져도 ceiling 밑에서 머무는 경우가 많다.
+    /// - 주기적으로 AccessLog 의 `indicatedBitrate`가 ceiling 의 70% 미만으로 오래 지속되고,
+    ///   버퍼가 정상이며 재생 속도가 1.0 근처로 돌아왔다면(레이턴시 정상화) ceiling 을 잠시 해제했다가
+    ///   다시 적용하여 내부 ABR 재평가를 유도한다. (업계 통용되는 nudge 패턴)
+    ///
+    /// [Safety]
+    /// - 실제로 비트레이트 상향이 관찰되지 않으면 60초 쿨다운 후 재시도.
+    /// - `isSelectedMultiLiveSession=false` / `isBackgroundMode=true` 세션은 건너뜀.
+    /// - 화질 잠금이 꺼진 경우에도 아무것도 하지 않는다.
+    internal func startHQRecoveryWatchdog() {
+        let task = Task { [weak self] in
+            // 초기 안정화 대기 (readyToPlay 직후에는 ABR 정보가 부정확)
+            try? await Task.sleep(nanoseconds: 12_000_000_000)  // 12s
+
+            var lowBitrateSamples: Int = 0
+            var lastNudgeAt: Date = .distantPast
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)  // 6s 주기
+                guard let self, !Task.isCancelled else { return }
+
+                // 가드: 잠금 해제 / 비활성 세션 / 비라이브 / 비선택 멀티라이브 → 건너뜀
+                let snap = self.stateLock.withLock { s in
+                    (
+                        locked: s.isQualityLocked,
+                        bgMode: s.isBackgroundMode,
+                        isLive: s.isLiveStream,
+                        isSelMulti: s.isSelectedMultiLiveSession,
+                        warmup: s.isWarmingUpForHQ,
+                        peakCeiling: s.lockedPeakBitRate,
+                        indicated: s.indicatedBitrate
+                    )
+                }
+                if !snap.locked || !snap.isLive { continue }
+                if snap.bgMode { continue }
+                if !snap.isSelMulti { continue }          // 비선택 멀티라이브 세션은 절약 우선
+                if snap.warmup { continue }                // warm-up 중에는 건드리지 않음
+                guard snap.peakCeiling > 0 else { continue }
+
+                // 현재 재생/버퍼/속도 상태 확인 (MainActor)
+                let status = await MainActor.run { () -> (keepUp: Bool, rate: Float, hasItem: Bool) in
+                    guard let item = self.player.currentItem else { return (false, 1.0, false) }
+                    return (item.isPlaybackLikelyToKeepUp, self.player.rate, true)
+                }
+                guard status.hasItem else { continue }
+
+                // 네트워크/버퍼 전제: 재생 쾌적 + 속도 정상(≤1.05) → 레이턴시 캐치업 종료 상태
+                let bufferOk = status.keepUp
+                let rateNormal = status.rate > 0 && status.rate <= 1.05
+
+                // AccessLog 기반 observedBitrate (indicatedBitrate) 정확도 확보
+                let indicated = snap.indicated
+                let ceiling = snap.peakCeiling
+                let threshold = ceiling * 0.70  // ceiling 대비 70% 미만 = 저화질 고정 의심
+
+                // 조건 미충족 시 카운터 리셋
+                guard bufferOk, rateNormal, indicated > 0, indicated < threshold else {
+                    lowBitrateSamples = 0
+                    continue
+                }
+
+                // 쿨다운 (nudge 후 60초 이내 재시도 금지)
+                if Date().timeIntervalSince(lastNudgeAt) < 60 { continue }
+
+                lowBitrateSamples += 1
+                // 3 연속 샘플(≈18s) 동안 저화질 고정 → nudge
+                guard lowBitrateSamples >= 3 else { continue }
+                lowBitrateSamples = 0
+
+                await MainActor.run {
+                    guard let item = self.player.currentItem else { return }
+                    self.logger.info(
+                        "AVPlayerEngine: HQ recovery nudge — indicated=\(Int(indicated/1000))kbps ceiling=\(Int(ceiling/1000))kbps"
+                    )
+                    // ceiling 잠시 해제 → AVFoundation 내부 ABR 재평가 유도
+                    item.preferredPeakBitRate = 0
+                    item.preferredMaximumResolution = .zero
+                }
+                // 250ms 후 ceiling 복구 (충분히 ABR 재탐색 트리거하는 최소 시간)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard let item = self.player.currentItem else { return }
+                    let (locked2, bitrate2, res2) = self.stateLock.withLock { s in
+                        (s.isQualityLocked, s.lockedPeakBitRate, s.lockedMaximumResolution)
+                    }
+                    // 도중 잠금 해제된 경우 ceiling 을 그대로 둔다(시스템 자동 ABR 유지).
+                    if locked2 {
+                        item.preferredPeakBitRate = bitrate2
+                        item.preferredMaximumResolution = res2
+                    }
+                }
+                lastNudgeAt = Date()
+            }
+        }
+        tasks.set(AVPlayerTaskBag.kHQRecovery, task)
+    }
+
+    /// [Quality 2026-04-18] 외부에서 즉시 화질 ceiling nudge 를 요청하는 진입점.
+    /// 멀티라이브 세션이 비선택 → 선택 으로 전환되었을 때 워치독의 60s 쿨다운/3샘플
+    /// 누적을 기다리지 않고 즉시 ABR 재평가를 트리거한다.
+    /// (`isQualityLocked=true` 가 아니면 no-op)
+    public func nudgeQualityCeiling(reason: String) {
+        let (locked, isLive, bitrate, res) = stateLock.withLock { s in
+            (s.isQualityLocked, s.isLiveStream, s.lockedPeakBitRate, s.lockedMaximumResolution)
+        }
+        guard locked, isLive, bitrate > 0 else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let item = self.player.currentItem else { return }
+            self.logger.info("AVPlayerEngine: HQ nudge (immediate) — reason=\(reason)")
+            // ceiling 잠시 해제 → AVFoundation 내부 ABR 재평가 유도
+            item.preferredPeakBitRate = 0
+            item.preferredMaximumResolution = .zero
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            // 도중 잠금 해제된 경우 ceiling 을 그대로 둔다
+            let (locked2, bitrate2, res2) = self.stateLock.withLock { s in
+                (s.isQualityLocked, s.lockedPeakBitRate, s.lockedMaximumResolution)
+            }
+            if locked2 {
+                item.preferredPeakBitRate = bitrate2
+                item.preferredMaximumResolution = res2
+            } else {
+                _ = (bitrate, res) // 잠금 해제 시 값 사용 안 함
+            }
+        }
+    }
 }
 
 /// 스톨 워치독이 감시해야 하는 단계인지 판정.
@@ -216,6 +350,34 @@ private func phaseIsWatchable(_ phase: PlayerState.Phase) -> Bool {
 // MARK: - Live Catchup Loop
 
 extension AVPlayerEngine {
+
+    /// 라이브 정체 복구용: 현재 seekable range 기준 라이브 엣지 근처로 다시 맞춘 뒤 재생을 재개.
+    @MainActor
+    internal func seekToLiveEdgeForRecovery(reason: String) {
+        guard let item = player.currentItem,
+              let seekRange = item.seekableTimeRanges.last?.timeRangeValue else {
+            player.play()
+            return
+        }
+
+        let liveEdge = CMTimeGetSeconds(CMTimeRangeGetEnd(seekRange))
+        guard liveEdge.isFinite, liveEdge > 0 else {
+            player.play()
+            return
+        }
+
+        let cfg = catchupConfig
+        let target = max(0, liveEdge - cfg.targetLatency)
+        logger.info("AVPlayerEngine: recover to live edge (\(reason)) → \(String(format: "%.1f", target))s")
+
+        player.seek(
+            to: CMTime(seconds: target, preferredTimescale: 600),
+            toleranceBefore: CMTime(seconds: 1.0, preferredTimescale: 600),
+            toleranceAfter: .zero
+        ) { [weak self] _ in
+            self?.player.play()
+        }
+    }
 
     /// 3초 주기로 지연 측정 → EMA 스무딩된 속도 조정.
     internal func startLiveCatchupLoop() {

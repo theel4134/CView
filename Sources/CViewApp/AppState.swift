@@ -19,6 +19,10 @@ final class AppState {
 
     var isInitialized = false
     var isLoggedIn = false
+    /// [2026-04-19] 자식 프로세스(분리 인스턴스) 대응: `authManager.initialize()`가 완료되어
+    /// 키체인/WebKit에서 NID 쿠키 복원이 끝났는지 여부. 채팅 WebSocket 연결 시 쿠키 헤더 주입에
+    /// 사용되므로, 채팅 시작 전 이 플래그를 대기해야 로그인 상태가 정확히 반영된다.
+    var isAuthInitialized = false
     var userNickname: String?
     var userChannelId: String?
     var userProfileURL: URL?
@@ -51,6 +55,9 @@ final class AppState {
     var settingsStore: SettingsStore = SettingsStore()
     let multiLiveManager = MultiLiveManager()
 
+    /// 멀티라이브 자식 프로세스 launcher (각 채널을 별도 CView 인스턴스로 띄울 때 사용)
+    let multiLiveLauncher = MultiLiveProcessLauncher()
+
     /// 라이브(팔로잉) 메뉴 영속 상태 — 메뉴 전환 시에도 설정/패널/채팅 유지
     let followingViewState = FollowingViewState()
 
@@ -64,6 +71,9 @@ final class AppState {
 
     /// 백그라운드 팔로잉 업데이트 서비스
     let backgroundUpdateService = BackgroundUpdateService()
+
+    /// 자동 업데이트 서비스 (GitHub Releases 기반 앱 버전 업데이트)
+    let updateService = UpdateService()
 
     /// HLS 매니페스트 프리페치 서비스 (채널 카드 호버 시 사전 로드)
     var hlsPrefetchService: HLSPrefetchService?
@@ -90,12 +100,21 @@ final class AppState {
     var sessionExpiryObserver: (any NSObjectProtocol)?
     var deminiaturizeObserver: (any NSObjectProtocol)?
     var terminateObserver: (any NSObjectProtocol)?
+    /// 스트림 보정 모드 변경 옵저버 — 멀티라이브 세션 재시작용
+    var streamProxyModeObserver: (any NSObjectProtocol)?
+    /// 전원 소스(AC↔Battery) 변경 옵저버 — P-core/E-core QoS 동적 전환 로깅용
+    var powerSourceObserver: (any NSObjectProtocol)?
+    /// 창 가림 상태(occlusion) 변경 옵저버 — 백그라운드 가림 시 화질 재확인용
+    var windowOcclusionObserver: (any NSObjectProtocol)?
 
     /// App Nap 방지 activity 토큰 — 재생 중 시스템 절전 및 스로틀링 방지
     var playbackActivity: NSObjectProtocol?
 
     /// 백그라운드 진입 시각 — 포그라운드 복귀 시 체류 시간 산출용
     var _backgroundEntryTime: Date?
+
+    /// [Tune] 장기 idle으로 인한 메트릭 WS 단절 예약 Task
+    var longIdleSuspendTask: Task<Void, Never>?
 
     // MARK: - Detached Channels
 
@@ -107,133 +126,9 @@ final class AppState {
         detachedChannelIds.remove(channelId)
     }
 
-    // MARK: - Auth & Login
-
-    /// 로그인 성공 처리 (LoginWebView에서 호출)
-    func handleLoginSuccess() async {
-        guard let authManager else { return }
-        await authManager.handleLoginSuccess()
-        isLoggedIn = await authManager.isAuthenticated
-        logger.info("Login success, isLoggedIn: \(self.isLoggedIn)")
-
-        // 쿠키 로그인 성공 → 팔로잉 재시도
-        homeViewModel?.needsCookieLogin = false
-        await homeViewModel?.loadFollowingChannels()
-
-        // 프로필 로드
-        if isLoggedIn, let apiClient {
-            await loadUserProfile(apiClient: apiClient)
-            startBackgroundUpdates()
-        }
-    }
-
-    /// OAuth 로그인 성공 처리 (OAuthLoginWebView에서 호출)
-    func handleOAuthLoginSuccess() async {
-        guard let authManager else { return }
-        isLoggedIn = await authManager.isAuthenticated
-        logger.info("OAuth login success, isLoggedIn: \(self.isLoggedIn)")
-
-        // 팔로잉 목록 새로 고침
-        await homeViewModel?.loadFollowingChannels()
-
-        // OAuth 프로필 로드 (채널 ID 포함)
-        if isLoggedIn {
-            await loadOAuthUserProfile(authManager: authManager)
-            if let apiClient {
-                await loadUserProfile(apiClient: apiClient)
-            }
-            startBackgroundUpdates()
-        }
-    }
-
-    /// AuthManager 접근
-    func getAuthManager() -> AuthManager? {
-        authManager
-    }
-
-    /// 로그아웃 처리
-    func handleLogout() async {
-        guard let authManager else { return }
-        await authManager.logout()
-        isLoggedIn = false
-        userNickname = nil
-        userChannelId = nil
-        userProfileURL = nil
-        multiLiveManager.updateUserInfo(uid: nil, nickname: nil)
-        backgroundUpdateService.stop()
-        logger.info("Logged out")
-    }
-
-    // MARK: - Metrics
-
-    /// 메트릭 서버 연결 테스트 (설정된 URL 기준)
-    func testMetricsConnection() async -> (success: Bool, latencyMs: Double, message: String) {
-        guard let client = metricsClient else {
-            return (false, 0, "메트릭 클라이언트가 초기화되지 않았습니다")
-        }
-        // 최신 URL 반영
-        if let url = URL(string: settingsStore.metrics.serverURL), !settingsStore.metrics.serverURL.isEmpty {
-            await client.updateBaseURL(url)
-        }
-        return await client.testConnection()
-    }
-
-    /// 메트릭 설정을 MetricsAPIClient · MetricsForwarder에 적용
-    /// DataStore 로드 완료 후, 또는 사용자가 설정을 변경할 때 호출
-    func applyMetricsSettings() async {
-        let ms = settingsStore.metrics
-
-        // 서버 URL 업데이트
-        if let url = URL(string: ms.serverURL), !ms.serverURL.isEmpty {
-            await metricsClient?.updateBaseURL(url)
-        }
-
-        // 전송 주기 업데이트
-        await metricsForwarder?.updateIntervals(
-            forward: ms.forwardInterval,
-            ping: ms.pingInterval
-        )
-
-        // 활성화/비활성화 (setEnabled가 내부에서 상태 변화 감지)
-        await metricsForwarder?.setEnabled(ms.metricsEnabled)
-
-        logger.info("Metrics settings applied – enabled: \(ms.metricsEnabled), url: \(ms.serverURL, privacy: .private)")
-    }
-
-    // MARK: - User Profile
-
-    /// 사용자 프로필 정보 로드
-    func loadUserProfile(apiClient: ChzzkAPIClient) async {
-        do {
-            let userInfo = try await apiClient.userStatus()
-            if userNickname == nil {
-                userNickname = userInfo.nickname
-            }
-            if let imageURL = userInfo.profileImageURL, userProfileURL == nil {
-                userProfileURL = URL(string: imageURL)
-            }
-            // 멀티라이브 채팅 전송용 사용자 정보 동기화
-            multiLiveManager.updateUserInfo(uid: userChannelId, nickname: userNickname)
-            logger.info("프로필 로드 완료: \(userInfo.nickname ?? "unknown"), channelId: \(self.userChannelId ?? "none")")
-        } catch {
-            logger.error("프로필 로드 실패: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    /// OAuth 사용자 프로필 로드 (채널 ID 포함)
-    func loadOAuthUserProfile(authManager: AuthManager) async {
-        do {
-            let profile = try await authManager.fetchOAuthProfile()
-            userNickname = profile.nickname ?? userNickname
-            userChannelId = profile.channelId
-            if let imageURL = profile.profileImageUrl {
-                userProfileURL = URL(string: imageURL)
-            }
-            // 멀티라이브 채팅 전송용 사용자 정보 동기화
-            multiLiveManager.updateUserInfo(uid: userChannelId, nickname: userNickname)
-            logger.info("OAuth 프로필: \(profile.nickname ?? "unknown"), 채널ID: \(profile.channelId ?? "none")")
-        } catch {
-            logger.error("OAuth 프로필 로드 실패: \(error.localizedDescription)")
-        }
-    }
+    // MARK: - Responsibility Splits
+    //
+    // 인증/로그인/프로필 로직 → AppState+Auth.swift
+    // 메트릭 설정/테스트 로직 → AppState+Metrics.swift
+    // 라이프사이클(앱 활성/비활성, 백그라운드 업데이트, 옵저버) → AppLifecycle.swift
 }

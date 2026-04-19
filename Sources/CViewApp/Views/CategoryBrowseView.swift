@@ -409,17 +409,8 @@ struct CategoryBrowseView: View {
     }
 
     private func emptyState(_ message: String) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: "tv.slash")
-                .font(DesignTokens.Typography.custom(size: 32, weight: .thin))
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-            Text(message)
-                .font(DesignTokens.Typography.bodyMedium)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, minHeight: 260)
-        .padding(.horizontal, 40)
+        EmptyStateView(icon: "tv.slash", title: message, style: .panel)
+            .frame(minHeight: 260)
     }
 
     private func accentColor(for category: String) -> Color {
@@ -496,7 +487,7 @@ private struct CategoryGridCard: View {
                             .frame(width: 5, height: 5)
                         Text("라이브 \(liveCount)개")
                             .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.78))
+                            .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     }
                 }
                 .padding(.horizontal, DesignTokens.Spacing.md)
@@ -587,7 +578,7 @@ private struct CategoryChannelCard: View {
                 }
                 Text(channel.liveTitle)
                     .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(.white.opacity(0.72))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }

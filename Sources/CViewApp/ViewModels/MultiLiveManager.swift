@@ -55,6 +55,12 @@ public final class MultiLiveManager {
     /// 대역폭 코디네이터 주기적 업데이트 태스크
     private var bwCoordinatorTask: Task<Void, Never>?
 
+    // [BW Smoothing] 네트워크 사용률 변동 완화용 — 마지막 적용된 ABR cap / 해상도 캡 추적
+    /// 세션별 마지막 적용 ABR 비트레이트 (bps). EMA + 데드밴드 비교에 사용.
+    private var _lastAppliedABRBitrate: [UUID: Double] = [:]
+    /// 세션별 마지막 적용 해상도 캡(높이). 동일값 재적용 차단.
+    private var _lastAppliedCapHeight: [UUID: Int] = [:]
+
     /// 선택된 세션
     var selectedSession: MultiLiveSession? {
         sessions.first { $0.id == selectedSessionId }
@@ -80,6 +86,8 @@ public final class MultiLiveManager {
 
     private weak var apiClient: ChzzkAPIClient?
     private weak var settingsStore: SettingsStore?
+    /// 멀티라이브 자식 프로세스 launcher (프로세스 격리 모드에서 사용)
+    private weak var processLauncher: MultiLiveProcessLauncher?
     private let logger = AppLogger.player
 
     /// 메트릭 전송 포워더 (AppState에서 주입)
@@ -98,12 +106,20 @@ public final class MultiLiveManager {
     init() {}
 
     /// API 클라이언트 + 사용자 정보 설정 (AppState에서 지연 주입)
-    func configure(apiClient: ChzzkAPIClient?, settingsStore: SettingsStore? = nil, userUid: String? = nil, userNickname: String? = nil, metricsForwarder: MetricsForwarder? = nil) {
+    func configure(
+        apiClient: ChzzkAPIClient?,
+        settingsStore: SettingsStore? = nil,
+        userUid: String? = nil,
+        userNickname: String? = nil,
+        metricsForwarder: MetricsForwarder? = nil,
+        processLauncher: MultiLiveProcessLauncher? = nil
+    ) {
         self.apiClient = apiClient
         self.settingsStore = settingsStore
         self.userUid = userUid
         self.userNickname = userNickname
         self.metricsForwarder = metricsForwarder
+        self.processLauncher = processLauncher
     }
 
     /// 캐시된 기본 이모티콘 업데이트 (프리로드 완료 후 호출)
@@ -131,7 +147,63 @@ public final class MultiLiveManager {
     }
 
     /// 채널 ID로 새 세션 추가 (엔진 풀에서 엔진 할당)
-    func addSession(channelId: String, preferredEngine: PlayerEngineType? = nil, startImmediately: Bool = true) async {
+    /// - Parameter presentationOverride: nil 이면 설정값(`useSeparateProcesses`) 기반,
+    ///   `.embedded` 전달 시 라이브 메뉴 인라인 패널 등 부모 창 임베드 컨텍스트를 강제.
+    func addSession(
+        channelId: String,
+        preferredEngine: PlayerEngineType? = nil,
+        startImmediately: Bool = true,
+        presentationOverride: MultiLiveProcessPresentation? = nil
+    ) async {
+        // [프로세스 격리 2026-04-19] 분리 인스턴스 모드(독립 창)만 자식 프로세스 경로로 라우팅한다.
+        // 라이브 메뉴 인라인 패널(`presentationOverride == .embedded`)은 기존 in-process MLGridLayout으로
+        // 렌더링되므로 launcher 경로를 건너뛰고 아래 레거시 패스로 세션을 추가한다 (채팅도 sessions onChange로 자동 추가됨).
+        let routeViaLauncher: Bool = {
+            if presentationOverride == .embedded { return false }
+            if presentationOverride == .standalone { return true }
+            return (settingsStore?.multiLive.useSeparateProcesses ?? false)
+        }()
+        if routeViaLauncher, let launcher = processLauncher {
+            // 이미 자식으로 떠 있으면 forefront
+            if let existing = launcher.instanceId(forChannel: channelId) {
+                launcher.activate(instanceId: existing)
+                return
+            }
+
+            let isolationSettings = settingsStore?.multiLive ?? .default
+            let presentation = presentationOverride ?? isolationSettings.effectivePresentation
+            let layoutMode = isolationSettings.processLayoutMode
+            let newIndex = launcher.instances.count
+            let initialFrame = launcher.suggestedInitialFrame(
+                for: newIndex,
+                totalAfterLaunch: newIndex + 1,
+                mode: layoutMode,
+                presentation: presentation
+            )
+
+            // 채널명을 알기 위해 가볍게 liveDetail 조회 (실패 시 channelId 그대로 사용)
+            var displayName = channelId
+            if let api = apiClient {
+                if let info = try? await api.liveDetail(channelId: channelId),
+                   let name = info.channel?.channelName, !name.isEmpty {
+                    displayName = name
+                }
+            }
+            await launcher.launchChild(
+                channelId: channelId,
+                channelName: displayName,
+                initialFrame: initialFrame,
+                initialVolume: 1.0,
+                startMuted: false,
+                borderless: presentation == .embedded,
+                hideFromDock: presentation == .embedded
+            )
+            // launch 후 현재 선택된 표시 방식 + 배치 모드 재적용
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            launcher.applyLayout(mode: layoutMode, presentation: presentation)
+            return
+        }
+
         let preferredEngine = preferredEngine ?? configuredEngine
         let maxSessions = effectiveMaxSessions
         guard canAddSession else {
@@ -197,6 +269,15 @@ public final class MultiLiveManager {
             session.metricsForwarder = metricsForwarder
             sessions.append(session)
 
+            // [No-Proxy] VLC 폴백 — 세션의 playerVM 이 AVPlayer 전환을 요청하면
+            // MultiLiveManager 가 enginePool 을 통해 엔진 교체 + 재시작.
+            session.playerViewModel.onEngineFallbackRequested = { @Sendable [weak self, weak session] _ in
+                Task { @MainActor [weak self, weak session] in
+                    guard let self, let session else { return }
+                    await self.switchEngine(session: session, to: .avPlayer)
+                }
+            }
+
             // 대역폭 코디네이터에 세션 등록
             let isFirst = sessions.count == 1
             await bandwidthCoordinator.registerStream(
@@ -207,6 +288,15 @@ public final class MultiLiveManager {
             // 첫 세션이면 자동 선택 + 오디오 활성화
             if sessions.count == 1 {
                 selectedSessionId = session.id
+                // [Quality 2026-04-18] 첫 세션은 곧바로 선택되므로 multiLiveHQ 프로파일로 승격.
+                // injectEngine() 가 .multiLive 로 초기화하지만, 첫 시작 시 isSelected=true 이므로
+                // multiLiveHQ 옵션(adaptive-maxheight=0, manifestRefresh=5s, decoderThreads=3, ...)으로
+                // 미디어가 생성되도록 사전 설정한다. 추가 세션은 .multiLive 유지.
+                if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+                    vlc.streamingProfile = .multiLiveHQ
+                    vlc.isSelectedSession = true
+                    vlc.sessionTier = .active
+                }
             } else {
                 // 추가 세션은 음소거 + 백그라운드 모드로 시작
                 session.playerViewModel.toggleMute()
@@ -249,24 +339,86 @@ public final class MultiLiveManager {
     }
 
     /// 세션 엔진 전환 — 정지 → 엔진 교체 → 재시작
+    ///
+    /// ## 수정 내역 (검은 화면 버그)
+    /// 이전에는 `detachEngine()`을 `session.stop()` 보다 먼저 호출하여
+    /// `playerViewModel.stopStream()`이 `isPreallocated=false` 분기로 들어갔다.
+    /// `streamCoordinator.stopStream()`이 엔진 참조로 `stop()`을 호출하긴 했으나,
+    /// `session.stop()` 이후 `startStream()` 재진입 시 새 엔진의 `videoView`가 SwiftUI
+    /// 레이아웃 패스에 마운트되기 전 `play()`가 선행되어 VLC vout이 구 레이어 계층에
+    /// 바인딩되는 문제가 발생. 전환 후 검은 화면만 남는 증상으로 나타난다.
+    ///
+    /// 개선 사항:
+    /// 1. `session.stop()` 을 `detachEngine()` 보다 먼저 호출 — 엔진 참조가 정상 유지된
+    ///    상태에서 coordinator/playerViewModel가 일관된 종료 경로로 이동.
+    /// 2. `injectEngine` 후 `Task.yield()` 로 SwiftUI 의 `PlayerContainerView.attachVideoView()`
+    ///    가 실행되도록 1 RunLoop 양보 → VLC drawable 이 새 컨테이너에 바인딩.
+    /// 3. 세션 선택 상태(`isSelectedSession`), 백그라운드 모드(`setBackgroundMode`),
+    ///    멀티라이브 제약(`applyMultiLiveConstraints`)을 새 엔진에 재적용.
+    /// 4. 이전 세션의 `errorMessage` 를 제거하여 전환 직후 오류 오버레이가 남지 않도록 보정.
     func switchEngine(session: MultiLiveSession, to newType: PlayerEngineType) async {
-        let oldEngine = session.playerViewModel.detachEngine()
-        await session.stop()
-        if let oldEngine { await enginePool.release(oldEngine) }
+        let currentType = session.playerViewModel.currentEngineType
+        guard currentType != newType else { return }
 
-        guard let engine = await enginePool.acquire(type: newType) else {
-            logger.error("MultiLive: 엔진 전환 실패 — 풀 할당 불가")
-            // 복구: 이전 엔진 재획득 시도
-            if let fallback = await enginePool.acquire(type: session.playerViewModel.currentEngineType) {
+        logger.info("MultiLive: 엔진 전환 시작 \(currentType.rawValue) → \(newType.rawValue) [\(session.channelName)]")
+
+        // 1) 세션을 완전히 정지 (엔진이 playerViewModel에 연결된 상태에서)
+        await session.stop()
+
+        // 2) 엔진 분리 → 풀 반납
+        if let oldEngine = session.playerViewModel.detachEngine() {
+            await enginePool.release(oldEngine)
+        }
+
+        // 3) 새 엔진 획득 (실패 시 이전 엔진 타입으로 복구 재시작)
+        guard let newEngine = await enginePool.acquire(type: newType) else {
+            logger.error("MultiLive: 엔진 전환 실패 — 풀 할당 불가 (\(newType.rawValue))")
+            if let fallback = await enginePool.acquire(type: currentType) {
                 session.playerViewModel.injectEngine(fallback)
+                await session.start()
             }
             return
         }
 
+        // 4) 새 엔진 주입 + preferredEngineType 동기화
         session.playerViewModel.preferredEngineType = newType
-        session.playerViewModel.injectEngine(engine)
+        session.playerViewModel.injectEngine(newEngine)
+
+        // 5) 세션 상태 반영 — resetForReuse 가 기본값(isSelectedSession=true, tier=.active)으로
+        //    리셋하므로 비선택/백그라운드 세션이면 보정
+        let isSelected = session.id == selectedSessionId
+        if let vlc = newEngine as? VLCPlayerEngine, !isSelected {
+            vlc.isSelectedSession = false
+        }
+        if session.isBackground {
+            session.playerViewModel.setBackgroundMode(true)
+        }
+
+        // 6) 이전 스트림의 잔여 에러 메시지 제거 — 전환 직후 오버레이 잔존 방지
+        session.playerViewModel.errorMessage = nil
+
+        // 7) SwiftUI re-render 대기 — PlayerContainerView.attachVideoView() 가
+        //    새 engine.videoView 를 마운트해야 VLC vout 이 올바른 레이어에 바인딩된다.
+        //    Task.yield() + 1프레임(17ms) 대기로 레이아웃 확정.
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        // 8) 재생 재시작
         await session.start()
-        logger.info("MultiLive: 엔진 전환 → \(newType.rawValue) [\(session.channelName)]")
+
+        // 9) 멀티라이브 제약/설정 재적용 (parameterless start는 이 작업을 수행하지 않음)
+        session.playerViewModel.applyMultiLiveConstraints(paneCount: sessions.count)
+        if let ps = settingsStore?.player {
+            session.playerViewModel.applySettings(
+                volume: ps.volumeLevel,
+                lowLatency: ps.lowLatencyMode,
+                catchupRate: ps.catchupRate
+            )
+            session.playerViewModel.applyForceHighestQuality(ps.forceHighestQuality)
+            session.playerViewModel.applySharpPixelScaling(ps.sharpPixelScaling)
+        }
+
+        logger.info("MultiLive: 엔진 전환 완료 → \(newType.rawValue) [\(session.channelName)]")
     }
 
     /// 세션 제거 — 엔진 풀 반환 포함
@@ -286,6 +438,9 @@ public final class MultiLiveManager {
         }
         // 대역폭 코디네이터에서 세션 해제
         await bandwidthCoordinator.unregisterStream(sessionId: id)
+        // [BW Smoothing] 평활화 추적 캐시도 정리
+        _lastAppliedABRBitrate.removeValue(forKey: id)
+        _lastAppliedCapHeight.removeValue(forKey: id)
         // [Fix 24A] await 후 index 재계산 — stale index 크래시 방지
         guard let freshIndex = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions.remove(at: freshIndex)
@@ -354,6 +509,12 @@ public final class MultiLiveManager {
 
         // 오디오 라우팅 + CPU 최적화: 이전 세션 → 백그라운드, 새 세션 → 포그라운드
         if previousId != id {
+            // [Quality Lock 2026-04-18] 최고 화질 유지 모드에서는 비선택 세션도 1080p(HQ) 를 유지하여
+            // 탭 전환 시 화질 다운/스위치 미디어 검은 프레임을 모두 제거한다.
+            //   · VLC: updateSessionTier(.visible) 강등 스킵 (1080p 프로파일 유지)
+            //   · AVPlayer: isSelectedMultiLiveSession=false / isWarmingUpForHQ=false 강등 스킵
+            //     (긴 버퍼·preferredPeakBitRate ceiling 모두 HQ 유지)
+            let qualityLocked = settingsStore?.player.forceHighestQuality ?? true
             if let prev = sessions.first(where: { $0.id == previousId }) {
                 if !isMultiAudioMode {
                     if !prev.playerViewModel.isMuted {
@@ -362,9 +523,26 @@ public final class MultiLiveManager {
                 }
                 prev.chatViewModel.isBackgroundMode = true
                 prev.playerViewModel.setBackgroundMode(true)
-                // [P0: 적응형 해상도] 비선택 세션 → 720p 다운그레이드
+                // [GPU] quality-lock 과 독립적으로 compositor 렌더 스케일만 축소
+                //   · 디코딩 해상도는 건드리지 않음 (1080p 유지)
+                //   · CALayer.contentsScale 을 0.75× 로 낮춰 Metal drawable 픽셀 ~44% 감소
+                //   · 비선택 패널에서만 적용되므로 화질 저하 체감 최소
                 if let vlc = prev.playerViewModel.playerEngine as? VLCPlayerEngine {
-                    vlc.isSelectedSession = false
+                    vlc.setGPURenderTier(.visible)
+                }
+                if let av = prev.playerViewModel.playerEngine as? AVPlayerEngine {
+                    av.setGPURenderTier(.visible)
+                }
+                if !qualityLocked {
+                    // [P0: 적응형 해상도] 비선택 세션 → 720p 다운그레이드 (잠금 해제 시에만)
+                    if let vlc = prev.playerViewModel.playerEngine as? VLCPlayerEngine {
+                        vlc.updateSessionTier(.visible)  // 비선택 → multiLive 프로파일로 강등
+                    }
+                    // [P0: AVPlayer 이원화] 비선택 세션은 긴 버퍼 유지 (잠금 해제 시에만)
+                    if let av = prev.playerViewModel.playerEngine as? AVPlayerEngine {
+                        av.isWarmingUpForHQ = false
+                        av.isSelectedMultiLiveSession = false
+                    }
                 }
             }
             if let current = sessions.first(where: { $0.id == id }) {
@@ -376,9 +554,34 @@ public final class MultiLiveManager {
                 current.chatViewModel.isBackgroundMode = false
                 current.playerViewModel.setBackgroundMode(false)
                 current.playerViewModel.recoverFromBackground()
-                // [P0: 적응형 해상도] 선택된 세션 → 1080p 업그레이드
+                // [GPU] 선택 세션 → compositor 풀 스케일 복원 (Retina 원본)
                 if let vlc = current.playerViewModel.playerEngine as? VLCPlayerEngine {
-                    vlc.isSelectedSession = true
+                    vlc.setGPURenderTier(.active)
+                }
+                if let av = current.playerViewModel.playerEngine as? AVPlayerEngine {
+                    av.setGPURenderTier(.active)
+                }
+                // [P0: 적응형 해상도] 선택된 세션 → 1080p 업그레이드 (multiLiveHQ)
+                if let vlc = current.playerViewModel.playerEngine as? VLCPlayerEngine {
+                    vlc.updateSessionTier(.active)   // 선택 → multiLiveHQ로 승격
+                }
+                // [P0: AVPlayer warm-up → lock 2단계 승격]
+                //   1) 선택 즉시 isSelectedMultiLiveSession=true + warming=true (2.5s 버퍼)
+                //   2) ~1.2s 후 warming=false로 해제하여 1.5s 이하 짧은 버퍼로 고정
+                if let av = current.playerViewModel.playerEngine as? AVPlayerEngine {
+                    av.isSelectedMultiLiveSession = true
+                    av.isWarmingUpForHQ = true
+                    // [Quality 2026-04-18] 비선택 동안 ABR 이 720p 이하로 강등되었을 가능성 → 즉시 nudge
+                    //   워치독 60s 쿨다운/3샘플 누적을 기다리지 않고 곧바로 ceiling 재평가 트리거.
+                    av.nudgeQualityCeiling(reason: "session-selected")
+                    let targetId = id
+                    Task { @MainActor [weak self, weak av] in
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
+                        guard let self else { return }
+                        // 승격 완료 시점에도 여전히 선택 상태인 경우에만 lock 단계로 전환
+                        guard self.selectedSessionId == targetId else { return }
+                        av?.isWarmingUpForHQ = false
+                    }
                 }
                 // 메트릭 포워더: 선택된 세션으로 채널 전환 (기존 주 채널은 부가 채널로 이동)
                 if let forwarder = metricsForwarder {
@@ -440,7 +643,12 @@ public final class MultiLiveManager {
             guard let self else { return }
             do {
                 while !Task.isCancelled {
-                    try await Task.sleep(for: .seconds(MultiLiveBWDefaults.updateIntervalSecs))
+                    // [BW Smoothing] 코디네이터 주기에 ±18% 지터를 추가하여
+                    // 다중 세션의 ABR 재평가 / 매니페스트 리프레시가 동일 시점에 정렬되어
+                    // 네트워크 사용률이 톱니파(주기적 스파이크) 형태로 보이는 현상을 완화.
+                    let baseInterval = PowerAwareInterval.scaled(MultiLiveBWDefaults.updateIntervalSecs)
+                    let jitter = Double.random(in: -0.18...0.18) * baseInterval
+                    try await Task.sleep(for: .seconds(max(2.0, baseInterval + jitter)))
                     guard !Task.isCancelled else { break }
 
                     // [Fix 24B] MainActor 진입 1회로 통합 — 기존 3회 → 1회
@@ -486,8 +694,21 @@ public final class MultiLiveManager {
     }
 
     /// 어드바이스를 각 세션에 적용 (MainActor)
+    ///
+    /// [BW Smoothing] 네트워크 사용률 변동 완화 정책
+    /// 1. **선택 세션 ABR 캡 면제**: 포커스 세션은 사용자 체감 화질 유지 우선.
+    ///    `setMaxAllowedBitrate(0)`로 잠금 해제하여 코디네이터의 분배가
+    ///    체감 화질을 흔들지 못하게 한다. (긴급 강등 시에도 보호)
+    /// 2. **EMA 평활화 (α=0.4)**: 새 어드바이스를 직접 적용하지 않고
+    ///    이전값과 가중 평균하여 P20 분위수 추정 변동의 영향을 완화.
+    /// 3. **데드밴드 12%**: 직전 적용값과 12% 미만 차이는 무시 → 잦은
+    ///    ABR 변종 스위칭으로 인한 burst 스파이크 방지.
+    /// 4. **해상도 캡 동일값 무시**: VLC 엔진에 같은 maxAdaptiveHeight 재할당
+    ///    하지 않아 내부 ABR 재평가 트리거 빈도 감소.
+    /// 5. **순차 적용 분산**: 세션별 setMaxAllowedBitrate 호출 사이에 짧은
+    ///    sleep을 삽입해 매니페스트 fetch / variant switch 가 동시 발생하지
+    ///    않게 한다. (코디네이터 8s 주기 내에서만 적용 가능한 작은 분산)
     private func applyBandwidthAdvices(_ advices: [BandwidthAdvice]) {
-        // [Fix 24B] ABR 설정을 단일 Task에서 배치 적용 (세션당 개별 Task 제거)
         var abrUpdates: [(PlayerViewModel, Double)] = []
         for advice in advices {
             guard let session = sessions.first(where: { $0.id == advice.sessionId }) else { continue }
@@ -500,27 +721,60 @@ public final class MultiLiveManager {
                 continue
             }
 
-            // VLC 엔진에 해상도 캡핑 적용 (동기 — MainActor에서 직접)
-            if let vlc {
-                if advice.cappedMaxHeight > 0 {
+            let isSelected = (advice.sessionId == selectedSessionId)
+
+            // [BW Smoothing #1] 선택 세션 ABR 캡 면제
+            // — 코디네이터 분배 비트레이트가 체감 화질을 좌우하지 않도록
+            //   포커스 세션은 항상 잠금 해제(maxBps=0). 화면 캡핑도 적용하지 않음.
+            if isSelected {
+                if let vlc { vlc.maxAdaptiveHeight = 0 }
+                // 이전 cap 추적값 정리 — 추후 비선택 전환 시 재차 EMA 처음부터 시작
+                _lastAppliedABRBitrate[advice.sessionId] = 0
+                _lastAppliedCapHeight[advice.sessionId] = 0
+                abrUpdates.append((session.playerViewModel, 0))
+                continue
+            }
+
+            // [BW Smoothing #4] 해상도 캡: 동일값이면 재적용 생략
+            if let vlc, advice.cappedMaxHeight > 0 {
+                let lastH = _lastAppliedCapHeight[advice.sessionId] ?? 0
+                if lastH != advice.cappedMaxHeight {
                     vlc.maxAdaptiveHeight = advice.cappedMaxHeight
+                    _lastAppliedCapHeight[advice.sessionId] = advice.cappedMaxHeight
                 }
             }
 
-            abrUpdates.append((session.playerViewModel, Double(advice.maxAllowedBitrate)))
+            // [BW Smoothing #2/#3] EMA 평활화 + 데드밴드
+            let raw = Double(advice.maxAllowedBitrate)
+            let last = _lastAppliedABRBitrate[advice.sessionId] ?? raw
+            let smoothed = (last == 0) ? raw : (0.4 * raw + 0.6 * last)
+            // 데드밴드: 직전 적용값과의 비율 차가 12% 미만이면 push 생략
+            let baseline = max(1, last)
+            let relDelta = abs(smoothed - last) / baseline
+            if last > 0, relDelta < 0.12, !advice.emergencyDowngrade {
+                // 변화가 작으면 적용 자체를 건너뜀 — 네트워크 트래픽 일정성 우선
+            } else {
+                _lastAppliedABRBitrate[advice.sessionId] = smoothed
+                abrUpdates.append((session.playerViewModel, smoothed))
+            }
 
-            // 긴급 강등: 버퍼 부족 시 최저 품질 트리거
+            // 긴급 강등: 버퍼 부족 시 최저 품질 트리거 (선택 세션은 위에서 이미 continue 됨)
             if advice.emergencyDowngrade {
                 if let vlc {
                     vlc.onQualityAdaptationRequest?(.downgrade(reason: "BW 코디네이터 긴급 강등"))
                 }
             }
         }
-        // ABR 비트레이트 설정을 단일 Task에서 순차 처리
+        // [BW Smoothing #5] 세션별 setMaxAllowedBitrate 호출 사이 80ms 분산
+        // — 코디네이터 8s 주기 내 작은 분산이지만, 동일 시점 다중 ABR 변종 스위칭
+        //   (= burst spike) 발생을 차단한다.
         if !abrUpdates.isEmpty {
             Task {
-                for (vm, maxBitrate) in abrUpdates {
-                    await vm.streamCoordinator?.setMaxAllowedBitrate(maxBitrate)
+                for (i, pair) in abrUpdates.enumerated() {
+                    if i > 0 {
+                        try? await Task.sleep(nanoseconds: 80_000_000)
+                    }
+                    await pair.0.streamCoordinator?.setMaxAllowedBitrate(pair.1)
                 }
             }
         }

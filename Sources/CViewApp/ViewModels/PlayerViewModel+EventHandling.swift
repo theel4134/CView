@@ -196,6 +196,29 @@ extension PlayerViewModel {
         }
     }
 
+    // MARK: - VLC → AVPlayer 자동 폴백 (No-Proxy 모드)
+
+    /// VLC 가 chzzk CDN 응답을 처리하지 못해 FIX14 35초 타임아웃이 발생했을 때 호출.
+    /// preferredEngineType 을 AVPlayer 로 전환하고, 외부에 재시작을 요청한다.
+    /// (단일 라이브: View 가 startStream 재호출 / 멀티라이브: MultiLiveManager.switchEngine)
+    @MainActor
+    func _handleVLCFallback(reason: String) async {
+        guard preferredEngineType == .vlc else { return }
+        logger.warning("PlayerViewModel: VLC → AVPlayer 폴백 트리거 — \(reason)")
+
+        // 화면에 에러를 띄우지 않도록 정리 (전환 직후 오버레이 방지)
+        errorMessage = nil
+        // 전환 의사를 영구화 — 재시작 시 AVPlayer 로 생성되도록
+        preferredEngineType = .avPlayer
+
+        // 외부 컨테이너(LiveStreamView / MultiLiveManager) 가 실제 재시작을 담당
+        if let cb = onEngineFallbackRequested {
+            cb(reason)
+        } else {
+            logger.warning("PlayerViewModel: onEngineFallbackRequested 미설정 — 자동 폴백 불가")
+        }
+    }
+
     /// 재생 시작 시 VLC 고급 설정 적용 (기본값이 아닌 항목만)
     func _applyVLCAdvancedSettingsIfNeeded() {
         guard let vlc = playerEngine as? VLCPlayerEngine else { return }

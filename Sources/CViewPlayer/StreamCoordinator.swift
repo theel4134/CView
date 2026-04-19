@@ -23,6 +23,8 @@ public actor StreamCoordinator {
         public let abrConfig: ABRController.Configuration
         /// 항상 최고 화질(1080p60) 유지 — ABR 하향/대역폭 캡 무시
         public let forceHighestQuality: Bool
+        /// 스트림 Content-Type 교정 / 인터셉트 모드
+        public let streamProxyMode: StreamProxyMode
         
         public init(
             channelId: String,
@@ -31,7 +33,8 @@ public actor StreamCoordinator {
             preferredQuality: StreamQuality? = nil,
             lowLatencyConfig: LowLatencyController.Configuration = .webSync,
             abrConfig: ABRController.Configuration = .default,
-            forceHighestQuality: Bool = true
+            forceHighestQuality: Bool = true,
+            streamProxyMode: StreamProxyMode = .localProxy
         ) {
             self.channelId = channelId
             self.enableLowLatency = enableLowLatency
@@ -40,6 +43,7 @@ public actor StreamCoordinator {
             self.lowLatencyConfig = lowLatencyConfig
             self.abrConfig = abrConfig
             self.forceHighestQuality = forceHighestQuality
+            self.streamProxyMode = streamProxyMode
         }
     }
     
@@ -82,12 +86,14 @@ public actor StreamCoordinator {
     let streamProxy = LocalStreamProxy()
 
     // P0-2: HLS 전용 URLSession — ephemeral(쿠키 격리) + 캐시 비활성화(라이브 스트림)
+    // [패킷 압축] M3U8 매니페스트는 텍스트이므로 gzip 70-85% 압축 — 멀티라이브 대역폭 절감
     nonisolated let hlsSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 30
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpAdditionalHeaders = ["Accept-Encoding": ProxyDefaults.manifestAcceptEncoding]
         return URLSession(configuration: config)
     }()
     
@@ -306,10 +312,16 @@ public actor StreamCoordinator {
     
     // MARK: - Low Latency Config Update
     
-    /// 런타임 레이턴시 설정 변경 — LowLatencyController를 새 config로 재생성
-    public func updateLowLatencyConfig(_ newConfig: LowLatencyController.Configuration) {
-        self.lowLatencyController = LowLatencyController(configuration: newConfig)
-        logger.info("LowLatencyController reconfigured: target=\(newConfig.targetLatency)s")
+    /// 런타임 레이턴시 설정 변경 — LowLatencyController의 config를 in-place 교체
+    /// [Fix 보정모드] 컨트롤러 인스턴스를 교체하지 않고 설정만 바꿔 콜백/sync 루프/쿨다운 상태를 모두 유지.
+    /// 이전에는 새 LowLatencyController를 생성하여 콜백 미등록 + sync 루프 미시작으로 보정 기능이 완전 중단되었던 버그 수정.
+    public func updateLowLatencyConfig(_ newConfig: LowLatencyController.Configuration) async {
+        guard let controller = lowLatencyController else {
+            logger.info("LowLatencyController 미활성 — 설정 업데이트 스킵 (enableLowLatency=false)")
+            return
+        }
+        await controller.updateConfiguration(newConfig)
+        logger.info("LowLatencyController reconfigured in-place: target=\(newConfig.targetLatency)s, maxRate=\(newConfig.maxPlaybackRate)")
     }
     
     // MARK: - Setup

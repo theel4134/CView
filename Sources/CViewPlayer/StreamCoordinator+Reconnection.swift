@@ -8,6 +8,16 @@ import CViewCore
 
 extension StreamCoordinator {
 
+    /// 엔진 특성에 맞춰 재연결 기준 URL을 선택합니다.
+    /// - VLC: 이미 선택된 variant URL 유지 (수동 화질/ABR 상태 보존)
+    /// - AVPlayer/HLS.js: master URL에서 다시 시작해 최신 토큰/매니페스트를 재해석
+    func preferredReconnectBaseURL(rawURL: URL, currentVariantURL: URL?, keepCurrentVariant: Bool) -> URL {
+        if keepCurrentVariant {
+            return currentVariantURL ?? rawURL
+        }
+        return rawURL
+    }
+
     /// 재연결 트리거 — 현재 URL로 재시도
     /// - Parameter reason: 로그용 재연결 원인
     public func triggerReconnect(reason: String = "") {
@@ -65,9 +75,15 @@ extension StreamCoordinator {
                     if attempt > 1 {
                         await self.refreshMasterManifest()
                     }
-                    let reconnectBase = await self._currentVariantURL ?? rawURL
+                    let currentVariantURL = await self._currentVariantURL
+                    let keepCurrentVariant = await (self.playerEngine is VLCPlayerEngine)
+                    let reconnectBase = await self.preferredReconnectBaseURL(
+                        rawURL: rawURL,
+                        currentVariantURL: currentVariantURL,
+                        keepCurrentVariant: keepCurrentVariant
+                    )
                     let isProxyActive = await self._isProxyActive
-                    let url = isProxyActive ? await self.streamProxy.proxyURL(from: reconnectBase) : reconnectBase
+                    let url = isProxyActive ? self.streamProxy.proxyURL(from: reconnectBase) : reconnectBase
                     await self.performReconnectAttempt(url: url)
                 },
                 onExhausted: { [weak self] in

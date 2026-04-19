@@ -194,7 +194,19 @@ public final class ChatViewModel {
     @ObservationIgnored var recentMessageTimestamps: [Date] = []
     
     /// 멀티라이브 비활성 세션 CPU 절약: 백그라운드 모드에서 flush 간격 증가 + 통계 중단
-    @ObservationIgnored public var isBackgroundMode: Bool = false
+    /// [M-3] didSet으로 ChatEngine/WebSocketService까지 전파 — ping 주기/QoS 감쇄.
+    @ObservationIgnored public var isBackgroundMode: Bool = false {
+        didSet {
+            guard oldValue != isBackgroundMode else { return }
+            let enabled = isBackgroundMode
+            // engine은 actor이므로 async로 propagate — 실패해도 flush 간격 변화는 즉시 반영됨
+            if let engine = chatEngine {
+                Task.detached(priority: .utility) {
+                    await engine.setBackgroundMode(enabled)
+                }
+            }
+        }
+    }
     /// [Fix 24E] 백그라운드 모드에서의 배치 flush 간격 (3초 — 기존 1초에서 완화)
     /// 4세션 인기채널 기준 초당 수십 메시지 × 4 = CPU 부하 → 3초 배치로 파싱 횟수 감소
     @ObservationIgnored let backgroundFlushIntervalNs: UInt64 = 3_000_000_000
@@ -206,9 +218,10 @@ public final class ChatViewModel {
     /// Active batch‐flush timer task.
     @ObservationIgnored var batchFlushTask: Task<Void, Never>?
     /// Batch flush interval in nanoseconds.
-    /// 치지직 웹 채팅처럼 1개씩 드립 표시: 50ms 간격으로 메시지 1개씩 flush.
+    /// 치지직 웹 채팅과 동일한 30fps 페이싱: 33ms 간격 (동영상 프레임 타이밍과 정렬).
+    /// 이전 50ms(20fps) 는 드립이 끊겨 보여 "렉" 으로 지각되는 원인.
     /// 멀티라이브 비활성 세션은 backgroundFlushIntervalNs(3초)로 CPU 절약.
-    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 50_000_000
+    @ObservationIgnored let batchFlushIntervalNs: UInt64 = 33_000_000
     
     // MARK: - Incremental Stats Cache (O(n) computed → O(batch) 증분 업데이트)
     

@@ -44,29 +44,21 @@ struct MultiLiveView: View {
 
                 // ── 콘텐츠 ──
                 ZStack {
-                    if manager.sessions.isEmpty {
-                        MLEmptyState(onAdd: {
-                            withAnimation(DesignTokens.Animation.snappy) {
-                                showAddChannel = true
-                            }
-                        })
-                    } else if manager.isGridLayout && manager.sessions.count >= 2 {
-                        MLGridLayout(manager: manager, appState: appState, onAdd: {
+                    // [프로세스 격리 2026-04-19] 분리/단일 인스턴스 분기
+                    if appState.settingsStore.multiLive.useSeparateProcesses {
+                        // 분리 인스턴스: 독립 액 창 컨트롤러 뜒
+                        MLProcessIsolatedListView(onAdd: {
                             withAnimation(DesignTokens.Animation.snappy) {
                                 showAddChannel = true
                             }
                         })
                     } else {
-                        // [VLC 안정성] ForEach + opacity 전환 — drawable 연결 유지
-                        // 개별 pane의 .transaction으로 VLC NSView 애니메이션 차단
-                        ForEach(manager.sessions) { session in
-                            let isActive = session.id == manager.selectedSessionId
-                            MLPlayerPane(session: session, manager: manager, appState: appState, isActive: isActive)
-                                .opacity(isActive ? 1 : 0)
-                                .zIndex(isActive ? 1 : 0)
-                                .allowsHitTesting(isActive)
-                                .transaction { $0.animation = nil }
-                        }
+                        // 단일 인스턴스: 기존처럼 부모 앱 영역(red box) 안 그리드/탭으로 표시, 각 채널은 자식 프로세스(embedded)
+                        MLEmbeddedProcessStage(onAdd: {
+                            withAnimation(DesignTokens.Animation.snappy) {
+                                showAddChannel = true
+                            }
+                        })
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

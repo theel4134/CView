@@ -99,7 +99,8 @@ extension ChatViewModel {
 
         // moderation 필터링 + 이모티콘 변환 + 후원 필터를 단일 백그라운드 파이프라인에서 처리
         // (MainActor 경유 없이 actor hop → 변환 → 필터를 연속 실행)
-        let items = await Task.detached(priority: .userInitiated) {
+        // [Power-Aware] AC: .userInitiated (P-core), Battery: .utility (E-core)
+        let items = await Task.detached(priority: PowerAwareTaskPriority.userVisible) {
             let filtered: [ChatMessage]
             if let modService {
                 filtered = await modService.filterMessages(msgs)
@@ -200,7 +201,7 @@ extension ChatViewModel {
         let channelEmotes = channelEmoticons
         let donationsOnly = showDonationsOnly
         let showDon = showDonation
-        let items = await Task.detached(priority: .userInitiated) {
+        let items = await Task.detached(priority: PowerAwareTaskPriority.userVisible) {
             let raw = filtered.map { Self.enrichWithChannelEmoticonsPure(ChatMessageItem(from: $0), channelEmoticons: channelEmotes) }
             return Self.filterByDonationPrefsPure(raw, donationsOnly: donationsOnly, showDonation: showDon)
         }.value
@@ -246,21 +247,25 @@ extension ChatViewModel {
     }
 
     /// Schedule a single batch-flush task.
-    /// 치지직 웹 채팅처럼 1개씩 드립 표시:
-    /// - 포그라운드: 50ms 간격으로 메시지 1개씩 flush
+    /// 치지직 웹 채팅과 동일한 30fps 드립:
+    /// - 포그라운드: 33ms 간격으로 적응형 drip (큐 길이에 따라 1~8개)
     /// - 백그라운드: 3초 간격으로 일괄 flush (CPU 절약)
     func scheduleBatchFlush() {
         guard batchFlushTask == nil else { return }
         guard !pendingMessages.isEmpty else { return }
-        let interval = isBackgroundMode ? backgroundFlushIntervalNs : batchFlushIntervalNs
-        batchFlushTask = Task { [weak self] in
+        let baseInterval = isBackgroundMode ? backgroundFlushIntervalNs : batchFlushIntervalNs
+        // [Perf] thermal pressure 시 flush 간격을 늘려 SwiftUI 업데이트/CPU 부하 자동 감쇄
+        let interval = SystemLoadMonitor.shared.currentMode.adjustedChatFlushIntervalNs(base: baseInterval)
+        // [Perf] 백그라운드 세션은 .utility QoS → E-core로 자연 라우팅 (P-core를 비디오 디코딩에 양보)
+        let priority: TaskPriority = isBackgroundMode ? .utility : .userInitiated
+        batchFlushTask = Task(priority: priority) { [weak self] in
             try? await Task.sleep(nanoseconds: interval)
             guard !Task.isCancelled, let self else { return }
             self.flushPendingMessages()
         }
     }
 
-    /// 포그라운드: 메시지 1개씩 드립 flush (큐 밀리면 catch-up)
+    /// 포그라운드: 적응형 drip flush (큐 길이에 따라 점진적 catch-up)
     /// 백그라운드: 일괄 flush
     func flushPendingMessages() {
         batchFlushTask = nil
@@ -273,13 +278,30 @@ extension ChatViewModel {
             return
         }
 
-        // 포그라운드 드립: 기본 1개, 큐가 15개 이상 밀리면 절반을 한 번에 flush
+        // 포그라운드 적응형 drip — 큰 스파이크 없이 점진적으로 catch-up:
+        //   queue ≤ 5 : 1개  (평시태 하나씩 드립)
+        //   queue ≤ 15 : 2개  (약간 밀리는 상황)
+        //   queue ≤ 30 : 3개  (번짜)
+        //   queue ≤ 60 : 4개
+        //   queue > 60  : min(count/8, 8) (대폭주 — 단일 flush 상한 8개로 프레임 블록 방지)
+        // 이전에는 count>15 에서 갑자기 count/2 를 flush 해 렌더링 스파이크가 "렉 걸린 느낌"을 유발했다.
         let count = pendingMessages.count
-        let flushCount: Int
-        if count > 15 {
-            flushCount = count / 2
-        } else {
-            flushCount = 1
+        var flushCount: Int
+        switch count {
+        case ...5:   flushCount = 1
+        case ...15:  flushCount = 2
+        case ...30:  flushCount = 3
+        case ...60:  flushCount = 4
+        default:     flushCount = min(count / 8, 8)
+        }
+
+        // 후원/구독/공지 우선 flush — drip 페이싱에 의해 뒤로 밀리지 않도록
+        // 이벤트 메시지가 pending 안에 존재하면 해당 위치까지는 반드시 포함해 flush.
+        if let lastPriorityIdx = pendingMessages.lastIndex(where: { m in
+            m.type == .donation || m.type == .subscription || m.type == .notice
+        }) {
+            // lastPriorityIdx 까지(포함) 모두 flush — 상한 20개로 렌더링 부하 제한
+            flushCount = max(flushCount, min(lastPriorityIdx + 1, 20))
         }
 
         let toFlush = Array(pendingMessages.prefix(flushCount))
@@ -358,7 +380,9 @@ extension ChatViewModel {
         statsTask = Task { [weak self] in
             guard let self else { return }
 
-            let timer = AsyncTimerSequence(interval: 3.0)
+            // [Fix N-5] PowerAware: 메시지/초 통계는 추세 표시용 — Battery 4.5초로 완화
+            let interval = PowerAwareInterval.scaled(3.0)
+            let timer = AsyncTimerSequence(interval: interval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
 

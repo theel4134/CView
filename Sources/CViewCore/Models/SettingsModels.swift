@@ -26,11 +26,16 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
     public var catchupRate: Double
     public var bufferDuration: TimeInterval
     public var volumeLevel: Float
+    /// [Persistence 2026-04-18] 마지막 음소거 상태 — 재실행 시 복원
+    public var startMuted: Bool
     public var autoPlay: Bool
     /// 백그라운드 및 비활성 상태에서도 라이브 방송 재생을 유지할지 여부
     public var continuePlaybackInBackground: Bool
     /// 항상 최고 화질(1080p60) 유지 — ABR 하향/해상도 캡핑/프레임 스킵 비활성화
     public var forceHighestQuality: Bool
+
+    /// 스트림 Content-Type 교정 / 인터셉트 모드 (chzzk CDN video/MP2T 이슈 대응)
+    public var streamProxyMode: StreamProxyMode
 
     // MARK: - 스크린샷 설정
     /// 스크린샷 저장 경로
@@ -107,9 +112,11 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         catchupRate: Double = 1.05,
         bufferDuration: TimeInterval = 2.0,
         volumeLevel: Float = 1.0,
+        startMuted: Bool = false,
         autoPlay: Bool = true,
         continuePlaybackInBackground: Bool = true,
         forceHighestQuality: Bool = true,
+        streamProxyMode: StreamProxyMode = .localProxy,
         screenshotPath: String = "~/Pictures/CView Screenshots",
         screenshotFormat: ScreenshotFormat = .png,
         equalizerPreset: String? = nil,
@@ -126,17 +133,18 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         audioStereoMode: Int = 0,
         audioMixMode: UInt32 = 0,
         audioDelay: Int64 = 0,
+        // [Fix 보정모드] 기본값을 webSync 프리셋과 일치시킴 (LowLatencyController.Configuration.webSync)
         latencyPreset: String = "webSync",
         latencyTarget: Double = 6.0,
-        latencyMax: Double = 10.0,
+        latencyMax: Double = 12.0,
         latencyMin: Double = 3.0,
-        latencyMaxRate: Double = 1.15,
-        latencyMinRate: Double = 0.90,
-        latencyCatchUpThreshold: Double = 0.5,
-        latencySlowDownThreshold: Double = 0.3,
-        latencyPidKp: Double = 1.2,
-        latencyPidKi: Double = 0.15,
-        latencyPidKd: Double = 0.08
+        latencyMaxRate: Double = 1.08,
+        latencyMinRate: Double = 0.93,
+        latencyCatchUpThreshold: Double = 1.0,
+        latencySlowDownThreshold: Double = 0.8,
+        latencyPidKp: Double = 0.5,
+        latencyPidKi: Double = 0.05,
+        latencyPidKd: Double = 0.03
     ) {
         self.quality = quality
         self.preferredEngine = preferredEngine
@@ -144,9 +152,11 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         self.catchupRate = catchupRate
         self.bufferDuration = bufferDuration
         self.volumeLevel = volumeLevel
+        self.startMuted = startMuted
         self.autoPlay = autoPlay
         self.continuePlaybackInBackground = continuePlaybackInBackground
         self.forceHighestQuality = forceHighestQuality
+        self.streamProxyMode = streamProxyMode
         self.screenshotPath = screenshotPath
         self.screenshotFormat = screenshotFormat
         self.equalizerPreset = equalizerPreset
@@ -180,8 +190,10 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case quality, preferredEngine, lowLatencyMode, catchupRate, bufferDuration, volumeLevel
+        case startMuted
         case autoPlay, continuePlaybackInBackground
         case forceHighestQuality
+        case streamProxyMode
         case screenshotPath, screenshotFormat
         case equalizerPreset, equalizerPreAmp, equalizerBands
         case videoAdjustEnabled, videoBrightness, videoContrast, videoSaturation, videoHue, videoGamma
@@ -201,9 +213,11 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         catchupRate = try c.decode(Double.self, forKey: .catchupRate)
         bufferDuration = try c.decode(TimeInterval.self, forKey: .bufferDuration)
         volumeLevel = try c.decode(Float.self, forKey: .volumeLevel)
+        startMuted = try c.decodeIfPresent(Bool.self, forKey: .startMuted) ?? false
         autoPlay = try c.decode(Bool.self, forKey: .autoPlay)
         continuePlaybackInBackground = try c.decode(Bool.self, forKey: .continuePlaybackInBackground)
         forceHighestQuality = try c.decodeIfPresent(Bool.self, forKey: .forceHighestQuality) ?? true
+        streamProxyMode = try c.decodeIfPresent(StreamProxyMode.self, forKey: .streamProxyMode) ?? .localProxy
         screenshotPath = try c.decodeIfPresent(String.self, forKey: .screenshotPath) ?? "~/Pictures/CView Screenshots"
         screenshotFormat = try c.decodeIfPresent(ScreenshotFormat.self, forKey: .screenshotFormat) ?? .png
         equalizerPreset = try c.decodeIfPresent(String.self, forKey: .equalizerPreset)
@@ -220,17 +234,18 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         audioStereoMode = try c.decodeIfPresent(Int.self, forKey: .audioStereoMode) ?? 0
         audioMixMode = try c.decodeIfPresent(UInt32.self, forKey: .audioMixMode) ?? 0
         audioDelay = try c.decodeIfPresent(Int64.self, forKey: .audioDelay) ?? 0
+        // [Fix 보정모드] 디코드 기본값도 webSync 프리셋과 일치
         latencyPreset = try c.decodeIfPresent(String.self, forKey: .latencyPreset) ?? "webSync"
         latencyTarget = try c.decodeIfPresent(Double.self, forKey: .latencyTarget) ?? 6.0
-        latencyMax = try c.decodeIfPresent(Double.self, forKey: .latencyMax) ?? 10.0
+        latencyMax = try c.decodeIfPresent(Double.self, forKey: .latencyMax) ?? 12.0
         latencyMin = try c.decodeIfPresent(Double.self, forKey: .latencyMin) ?? 3.0
-        latencyMaxRate = try c.decodeIfPresent(Double.self, forKey: .latencyMaxRate) ?? 1.15
-        latencyMinRate = try c.decodeIfPresent(Double.self, forKey: .latencyMinRate) ?? 0.90
-        latencyCatchUpThreshold = try c.decodeIfPresent(Double.self, forKey: .latencyCatchUpThreshold) ?? 0.5
-        latencySlowDownThreshold = try c.decodeIfPresent(Double.self, forKey: .latencySlowDownThreshold) ?? 0.3
-        latencyPidKp = try c.decodeIfPresent(Double.self, forKey: .latencyPidKp) ?? 1.2
-        latencyPidKi = try c.decodeIfPresent(Double.self, forKey: .latencyPidKi) ?? 0.15
-        latencyPidKd = try c.decodeIfPresent(Double.self, forKey: .latencyPidKd) ?? 0.08
+        latencyMaxRate = try c.decodeIfPresent(Double.self, forKey: .latencyMaxRate) ?? 1.08
+        latencyMinRate = try c.decodeIfPresent(Double.self, forKey: .latencyMinRate) ?? 0.93
+        latencyCatchUpThreshold = try c.decodeIfPresent(Double.self, forKey: .latencyCatchUpThreshold) ?? 1.0
+        latencySlowDownThreshold = try c.decodeIfPresent(Double.self, forKey: .latencySlowDownThreshold) ?? 0.8
+        latencyPidKp = try c.decodeIfPresent(Double.self, forKey: .latencyPidKp) ?? 0.5
+        latencyPidKi = try c.decodeIfPresent(Double.self, forKey: .latencyPidKi) ?? 0.05
+        latencyPidKd = try c.decodeIfPresent(Double.self, forKey: .latencyPidKd) ?? 0.03
     }
 
     public static let `default` = PlayerSettings()
@@ -272,13 +287,19 @@ public struct PlayerSettings: Codable, Sendable, Equatable {
         }
 
         /// 프리셋 기본 값 (목표 지연, 최대, 최소, 최대속도, 최소속도, 캐치업임계, 슬로우다운임계, Kp, Ki, Kd)
+        /// [Fix 보정모드] LowLatencyController.Configuration.{webSync,default,ultraLow}와 값 일치 필수
+        /// — UI 슬라이더 표시값과 실제 적용값이 어긋나는 것을 방지
         public var values: (target: Double, max: Double, min: Double, maxRate: Double, minRate: Double,
                             catchUp: Double, slowDown: Double, kp: Double, ki: Double, kd: Double) {
             switch self {
-            case .webSync:   (6.0, 10.0, 3.0, 1.15, 0.90, 0.5, 0.3, 1.2, 0.15, 0.08)
+            // hls.js 6초 동기화 — 보수적 게인 (부드러운 수렴 / 버퍼링 최소화)
+            case .webSync:   (6.0, 12.0, 3.0, 1.08, 0.93, 1.0, 0.8, 0.5, 0.05, 0.03)
+            // 기본 3초 — 중간 공격성
             case .standard:  (3.0,  8.0, 1.0, 1.15, 0.90, 1.2, 0.5, 0.8, 0.12, 0.06)
+            // 초저지연 1.5초 — 공격적 게인 (끊김 가능)
             case .ultraLow:  (1.5,  5.0, 0.5, 1.20, 0.85, 1.0, 0.3, 1.0, 0.15, 0.08)
-            case .custom:    (6.0, 10.0, 3.0, 1.15, 0.90, 0.5, 0.3, 1.2, 0.15, 0.08)
+            // custom은 사용되지 않음 (applyLatencyPreset에서 가드됨) — webSync와 동일
+            case .custom:    (6.0, 12.0, 3.0, 1.08, 0.93, 1.0, 0.8, 0.5, 0.05, 0.03)
             }
         }
     }

@@ -78,6 +78,36 @@ struct MultiLiveSettingsTab: View {
                     }
                 }
 
+                // MARK: - 프로세스 모드 (2026-04-19)
+                SettingsSection(title: "프로세스 모드", icon: "rectangle.split.3x1", color: DesignTokens.Colors.accentPurple) {
+                    SettingsRow("인스턴스 방식",
+                                description: "분리 인스턴스: 각 채널을 별도 CView 프로세스(앱)로 띄워 안정성과 리소스를 분산합니다(권장).  단일 인스턴스: 기존처럼 모든 채널을 부모 앱 한 프로세스에서 함께 실행합니다.",
+                                icon: "rectangle.split.3x1.fill", iconColor: DesignTokens.Colors.accentPurple) {
+                        Picker("", selection: $settings.multiLive.useSeparateProcesses) {
+                            Label("분리 인스턴스", systemImage: "rectangle.split.3x1.fill").tag(true)
+                            Label("단일 인스턴스", systemImage: "square.fill").tag(false)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 280)
+                        .labelsHidden()
+                    }
+                    if settings.multiLive.useSeparateProcesses {
+                        RowDivider()
+                        SettingsRow("자식 창 자동 배치",
+                                    description: "자유 배치는 OS 기본 위치, 그리드는 균등 분할, 탭은 선택된 채널만 전체화면",
+                                    icon: "square.grid.2x2.fill", iconColor: DesignTokens.Colors.accentPurple) {
+                            Picker("", selection: $settings.multiLive.processLayoutMode) {
+                                ForEach(MultiLiveProcessLayoutMode.allCases) { mode in
+                                    Label(mode.displayName, systemImage: mode.systemImage).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 280)
+                            .labelsHidden()
+                        }
+                    }
+                }
+
                 // MARK: - 품질 및 안정성
                 SettingsSection(title: "품질 및 안정성", icon: "gauge.with.dots.needle.33percent", color: DesignTokens.Colors.accentOrange) {
                     SettingsRow("백그라운드 품질 저하",

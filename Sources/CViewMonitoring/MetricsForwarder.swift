@@ -590,9 +590,6 @@ public actor MetricsForwarder {
         let isAVPlayerEngine = !isHLSJSEngine && vlc == nil && avp != nil
         let engineName = isHLSJSEngine ? "HLS.js" : (isAVPlayerEngine ? "AVPlayer" : "VLC")
 
-        // VLC 통계가 있으면 CView 하트비트에 포함
-        let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
-
         // 재생 위치 수집 (seconds)
         let playbackTime = await currentTimeCallback?()
         // PDT 레이턴시 수집 (seconds → ms)
@@ -600,100 +597,25 @@ public actor MetricsForwarder {
         let pdtLatMs = pdtLat.map { $0 * 1000.0 }
         let pdtTimestampMs = pdtLat.map { _ in Date().timeIntervalSince1970 * 1000.0 }
 
-        // NaN/Infinity 방어: finite 값만 전송, 비유한 값은 기본값으로 대체
+        // [Fix 32] 엔진별 payload 빌더로 분리 — forwardCurrentMetrics 가독성 개선
         let payload: CViewHeartbeatPayload
         if isHLSJSEngine, let hlsjs {
-            // HLS.js 엔진 — HLSJSLiveMetrics 기반 하트비트
-            payload = CViewHeartbeatPayload(
-                clientId: clientId,
-                channelId: channelId,
-                channelName: channelName,
-                latency: (hlsjs.latency * 1000.0).safeForJSON, // sec → ms
-                resolution: hlsjs.resolution,
-                bitrate: Int(hlsjs.bitrateKbps.safeForJSON),
-                fps: hlsjs.fps.safeForJSON,
-                bufferHealth: (hlsjs.bufferHealth * 100).safeForJSON,
-                playbackRate: Double(hlsjs.playbackRate).safeForJSON,
-                droppedFrames: hlsjs.droppedFramesDelta,
-                healthScore: hlsjs.healthScore.safeForJSON,
-                engine: engineName,
-                vlcMetrics: nil,
-                targetLatency: targetLatencyMs,
-                connectionState: hlsjs.bufferHealth > 0.5 ? "connected" : "degraded",
-                connectionQuality: hlsjs.bufferHealth > 0.7 ? "excellent" : hlsjs.bufferHealth > 0.3 ? "good" : "poor",
-                isBuffering: hlsjs.bufferHealth < 0.3,
-                latePictures: nil,
-                currentTime: playbackTime?.safeForJSON,
-                pdtTimestamp: pdtTimestampMs?.safeForJSON,
-                pdtLatency: pdtLatMs?.safeForJSON,
-                latencyUnit: "ms"
+            payload = makeHLSJSHeartbeat(
+                hlsjs: hlsjs, channelId: channelId, channelName: channelName,
+                engineName: engineName, playbackTime: playbackTime,
+                pdtLatMs: pdtLatMs, pdtTimestampMs: pdtTimestampMs
             )
         } else if isAVPlayerEngine, let avp {
-            // AVPlayer 엔진 — AVPlayerLiveMetrics 기반 하트비트
-            payload = CViewHeartbeatPayload(
-                clientId: clientId,
-                channelId: channelId,
-                channelName: channelName,
-                latency: (avp.measuredLatency * 1000.0).safeForJSON, // sec → ms
-                resolution: avp.resolution,
-                bitrate: Int(avp.bitrateKbps.safeForJSON),
-                fps: nil, // AVPlayer에서는 FPS 직접 수집 불가
-                bufferHealth: (avp.bufferHealth * 100).safeForJSON,
-                playbackRate: Double(avp.playbackRate).safeForJSON,
-                droppedFrames: avp.droppedFramesDelta,
-                healthScore: avp.healthScore.safeForJSON,
-                engine: engineName,
-                vlcMetrics: nil,
-                targetLatency: targetLatencyMs,
-                connectionState: avp.bufferHealth > 0.5 ? "connected" : "degraded",
-                connectionQuality: avp.bufferHealth > 0.7 ? "excellent" : avp.bufferHealth > 0.3 ? "good" : "poor",
-                isBuffering: avp.bufferHealth < 0.3,
-                latePictures: nil,
-                currentTime: playbackTime?.safeForJSON,
-                pdtTimestamp: pdtTimestampMs?.safeForJSON,
-                pdtLatency: pdtLatMs?.safeForJSON,
-                latencyUnit: "ms"
+            payload = makeAVPlayerHeartbeat(
+                avp: avp, channelId: channelId, channelName: channelName,
+                engineName: engineName, playbackTime: playbackTime,
+                pdtLatMs: pdtLatMs, pdtTimestampMs: pdtTimestampMs
             )
         } else {
-            // VLC 엔진 — 기존 VLC 기반 하트비트
-            // 레이턴시 우선순위: PDT(초→ms) → latencyMsCallback(ms) → PerformanceMonitor
-            let directLatencyMs = await latencyMsCallback?()
-            let effectiveLatencyMs: Double
-            let latencySourceTag: String
-            if let pdt = pdtLatMs, pdt > 0 {
-                effectiveLatencyMs = pdt
-                latencySourceTag = "pdt+buffer"  // PDT + VLC buffer 합산 (StreamCoordinator.currentLatencySeconds)
-            } else if let direct = directLatencyMs, direct > 0 {
-                effectiveLatencyMs = direct
-                latencySourceTag = "buffer"  // VLC buffer fallback (duration - currentTime)
-            } else {
-                effectiveLatencyMs = metrics?.latencyMs ?? 0
-                latencySourceTag = "monitor"  // PerformanceMonitor 추정값
-            }
-            payload = CViewHeartbeatPayload(
-                clientId: clientId,
-                channelId: channelId,
-                channelName: channelName,
-                latency: effectiveLatencyMs.safeForJSON,
-                resolution: vlc?.resolution,
-                bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
-                fps: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
-                bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
-                playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
-                droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
-                healthScore: vlc.map { $0.healthScore.safeForJSON },
-                engine: engineName,
-                vlcMetrics: vlcPayload,
-                targetLatency: targetLatencyMs,
-                connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
-                connectionQuality: deriveConnectionQuality(vlc: vlc, metrics: metrics),
-                isBuffering: vlc.map { $0.bufferHealth < 0.3 },
-                latePictures: vlc.map { $0.latePicturesDelta },
-                currentTime: playbackTime?.safeForJSON,
-                pdtTimestamp: pdtTimestampMs?.safeForJSON,
-                pdtLatency: pdtLatMs?.safeForJSON,
-                latencyUnit: "ms",
-                latencySource: latencySourceTag
+            payload = await makeVLCHeartbeat(
+                vlc: vlc, metrics: metrics, channelId: channelId, channelName: channelName,
+                engineName: engineName, playbackTime: playbackTime,
+                pdtLatMs: pdtLatMs, pdtTimestampMs: pdtTimestampMs
             )
         }
 
@@ -1294,5 +1216,135 @@ public actor MetricsForwarder {
         if health >= 0.7 { return "good" }
         if health >= 0.5 { return "fair" }
         return "poor"
+    }
+
+    // MARK: - [Fix 32] Heartbeat Payload Builders (엔진별)
+    //
+    // forwardCurrentMetrics 가독성 개선 — 228줄 단일 함수 → 메인 50줄 + 빌더 3개로 분리.
+    // NaN/Infinity 방어를 위해 모든 수치는 .safeForJSON 적용.
+
+    /// HLS.js 엔진용 하트비트 페이로드 빌더
+    private func makeHLSJSHeartbeat(
+        hlsjs: HLSJSLiveMetrics,
+        channelId: String,
+        channelName: String,
+        engineName: String,
+        playbackTime: Double?,
+        pdtLatMs: Double?,
+        pdtTimestampMs: Double?
+    ) -> CViewHeartbeatPayload {
+        CViewHeartbeatPayload(
+            clientId: clientId,
+            channelId: channelId,
+            channelName: channelName,
+            latency: (hlsjs.latency * 1000.0).safeForJSON, // sec → ms
+            resolution: hlsjs.resolution,
+            bitrate: Int(hlsjs.bitrateKbps.safeForJSON),
+            fps: hlsjs.fps.safeForJSON,
+            bufferHealth: (hlsjs.bufferHealth * 100).safeForJSON,
+            playbackRate: Double(hlsjs.playbackRate).safeForJSON,
+            droppedFrames: hlsjs.droppedFramesDelta,
+            healthScore: hlsjs.healthScore.safeForJSON,
+            engine: engineName,
+            vlcMetrics: nil,
+            targetLatency: targetLatencyMs,
+            connectionState: hlsjs.bufferHealth > 0.5 ? "connected" : "degraded",
+            connectionQuality: hlsjs.bufferHealth > 0.7 ? "excellent" : hlsjs.bufferHealth > 0.3 ? "good" : "poor",
+            isBuffering: hlsjs.bufferHealth < 0.3,
+            latePictures: nil,
+            currentTime: playbackTime?.safeForJSON,
+            pdtTimestamp: pdtTimestampMs?.safeForJSON,
+            pdtLatency: pdtLatMs?.safeForJSON,
+            latencyUnit: "ms"
+        )
+    }
+
+    /// AVPlayer 엔진용 하트비트 페이로드 빌더
+    private func makeAVPlayerHeartbeat(
+        avp: AVPlayerLiveMetrics,
+        channelId: String,
+        channelName: String,
+        engineName: String,
+        playbackTime: Double?,
+        pdtLatMs: Double?,
+        pdtTimestampMs: Double?
+    ) -> CViewHeartbeatPayload {
+        CViewHeartbeatPayload(
+            clientId: clientId,
+            channelId: channelId,
+            channelName: channelName,
+            latency: (avp.measuredLatency * 1000.0).safeForJSON, // sec → ms
+            resolution: avp.resolution,
+            bitrate: Int(avp.bitrateKbps.safeForJSON),
+            fps: nil, // AVPlayer에서는 FPS 직접 수집 불가
+            bufferHealth: (avp.bufferHealth * 100).safeForJSON,
+            playbackRate: Double(avp.playbackRate).safeForJSON,
+            droppedFrames: avp.droppedFramesDelta,
+            healthScore: avp.healthScore.safeForJSON,
+            engine: engineName,
+            vlcMetrics: nil,
+            targetLatency: targetLatencyMs,
+            connectionState: avp.bufferHealth > 0.5 ? "connected" : "degraded",
+            connectionQuality: avp.bufferHealth > 0.7 ? "excellent" : avp.bufferHealth > 0.3 ? "good" : "poor",
+            isBuffering: avp.bufferHealth < 0.3,
+            latePictures: nil,
+            currentTime: playbackTime?.safeForJSON,
+            pdtTimestamp: pdtTimestampMs?.safeForJSON,
+            pdtLatency: pdtLatMs?.safeForJSON,
+            latencyUnit: "ms"
+        )
+    }
+
+    /// VLC 엔진용 하트비트 페이로드 빌더
+    /// 레이턴시 우선순위: PDT(초→ms) → latencyMsCallback(ms) → PerformanceMonitor
+    private func makeVLCHeartbeat(
+        vlc: VLCLiveMetrics?,
+        metrics: PerformanceMonitor.Metrics?,
+        channelId: String,
+        channelName: String,
+        engineName: String,
+        playbackTime: Double?,
+        pdtLatMs: Double?,
+        pdtTimestampMs: Double?
+    ) async -> CViewHeartbeatPayload {
+        let directLatencyMs = await latencyMsCallback?()
+        let effectiveLatencyMs: Double
+        let latencySourceTag: String
+        if let pdt = pdtLatMs, pdt > 0 {
+            effectiveLatencyMs = pdt
+            latencySourceTag = "pdt+buffer"  // PDT + VLC buffer 합산
+        } else if let direct = directLatencyMs, direct > 0 {
+            effectiveLatencyMs = direct
+            latencySourceTag = "buffer"  // VLC buffer fallback
+        } else {
+            effectiveLatencyMs = metrics?.latencyMs ?? 0
+            latencySourceTag = "monitor"  // PerformanceMonitor 추정값
+        }
+        let vlcPayload = vlc.map { CViewVLCMetrics(from: $0) }
+        return CViewHeartbeatPayload(
+            clientId: clientId,
+            channelId: channelId,
+            channelName: channelName,
+            latency: effectiveLatencyMs.safeForJSON,
+            resolution: vlc?.resolution,
+            bitrate: vlc.map { Int($0.demuxBitrateKbps.safeForJSON) },
+            fps: (vlc.map { $0.fps } ?? metrics?.fps)?.safeForJSON,
+            bufferHealth: (vlc.map { $0.bufferHealth * 100 } ?? metrics?.bufferHealthPercent)?.safeForJSON,
+            playbackRate: vlc.map { Double($0.playbackRate).safeForJSON },
+            droppedFrames: vlc.map { $0.droppedFramesDelta } ?? metrics?.droppedFrames,
+            healthScore: vlc.map { $0.healthScore.safeForJSON },
+            engine: engineName,
+            vlcMetrics: vlcPayload,
+            targetLatency: targetLatencyMs,
+            connectionState: deriveConnectionState(vlc: vlc, metrics: metrics),
+            connectionQuality: deriveConnectionQuality(vlc: vlc, metrics: metrics),
+            isBuffering: vlc.map { $0.bufferHealth < 0.3 },
+            latePictures: vlc.map { $0.latePicturesDelta },
+            currentTime: playbackTime?.safeForJSON,
+            pdtTimestamp: pdtTimestampMs?.safeForJSON,
+            pdtLatency: pdtLatMs?.safeForJSON,
+            latencyUnit: "ms",
+            latencySource: latencySourceTag
+        )
     }
 }

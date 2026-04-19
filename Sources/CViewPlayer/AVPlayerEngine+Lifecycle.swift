@@ -132,4 +132,9 @@ extension AVPlayerTaskBag {
     static let kLiveCatchup = "live.catchup"
     /// 주기 메트릭 수집
     static let kMetricsCollector = "metrics.collector"
+    /// stall notification 직후의 빠른 복구 시도
+    static let kStallRecovery = "stall.recovery"
+    /// [HQ 복귀] 레이턴시 캐치업 등으로 AVFoundation 내부 ABR이 720p 이하로 고정된 경우
+    /// ceiling(preferredPeakBitRate)을 잠시 해제해 재평가를 유도하는 복귀 워치독
+    static let kHQRecovery = "hq.recovery"
 }

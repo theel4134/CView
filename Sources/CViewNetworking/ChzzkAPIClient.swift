@@ -51,8 +51,10 @@ public actor ChzzkAPIClient: APIClientProtocol {
         self.cache = cache
 
         // 5분 간격으로 만료된 응답 캐시 정리 (메모리 누수 방지)
+        // [Fix N-1] PowerAware: Battery 모드에서 7.5분으로 연장 — purge IO·CPU 부담 완화
         cachePurgeTask = Task { [cache] in
-            for await _ in AsyncTimerSequence(interval: APIDefaults.cachePurgeInterval, tolerance: 30) {
+            let interval = PowerAwareInterval.scaled(APIDefaults.cachePurgeInterval)
+            for await _ in AsyncTimerSequence(interval: interval, tolerance: 30) {
                 await cache.purgeExpired(defaultTTL: APIDefaults.defaultCacheTTL)
             }
         }
@@ -205,15 +207,8 @@ public actor ChzzkAPIClient: APIClientProtocol {
                     throw APIError.httpError(statusCode: httpResponse.statusCode)
                 }
 
-                // JSON 구조 사전 검증
-                let validation = ResponseValidator.validateJSONStructure(data)
-                if !validation.warnings.isEmpty {
-                    for warning in validation.warnings {
-                        Log.network.warning("Response validation: \(warning, privacy: .public) — \(endpoint.path, privacy: .public)")
-                    }
-                }
-
-                // JSON 디코딩 (ResponseValidator 경유)
+                // [Opt-N-1] JSON 디코딩 (ResponseValidator 경유) — 내부에서 validateJSONStructure 이미 수행하므로
+                // 여기서 별도 호출하지 않음 (JSON 이중 파싱 제거, allLives 40페이지 × JSONSerialization 비용 절감)
                 let apiResponse = try ResponseValidator.validateAndDecode(
                     ChzzkResponse<T>.self,
                     from: data,

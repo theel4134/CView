@@ -97,7 +97,7 @@ struct ChatMessageRow: View {
                 Text(message.formattedTime)
                     .font(DesignTokens.Typography.custom(size: max(messageFontSize - 3, 9), weight: .regular, design: .monospaced))
                     .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.75))
-                    .padding(.trailing, 6)
+                    .padding(.trailing, DesignTokens.Spacing.xs)
             }
 
             // 역할 아이콘 (스트리머/매니저)
@@ -105,7 +105,7 @@ struct ChatMessageRow: View {
                 Image(systemName: iconName)
                     .font(.system(size: max(messageFontSize - 2, 10), weight: .bold))
                     .foregroundStyle(roleIconColor)
-                    .padding(.trailing, 3)
+                    .padding(.trailing, DesignTokens.Spacing.xxs)
             }
 
             // 뱃지 이미지 (다중 뱃지 지원)

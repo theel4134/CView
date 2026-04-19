@@ -52,7 +52,7 @@ struct MLAudioTab: View {
                             .frame(width: 28, height: 28)
                             .background(
                                 RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                                    .fill(isMuteHovered ? Color.white.opacity(0.06) : .clear)
+                                    .fill(isMuteHovered ? DesignTokens.Colors.borderOnDarkMedia : .clear)
                             )
                             .scaleEffect(isMuteHovered ? 1.08 : 1.0)
                     }

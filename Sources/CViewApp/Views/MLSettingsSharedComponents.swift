@@ -35,7 +35,7 @@ struct MLSettingsTabButton: View {
                         isSelected
                             ? DesignTokens.Colors.chzzkGreen.opacity(0.12)
                             : isHovered
-                                ? Color.white.opacity(0.04)
+                                ? DesignTokens.Colors.borderOnDarkMedia
                                 : .clear
                     )
             )
@@ -66,7 +66,7 @@ struct MLSettingsGridButton: View {
                             isSelected
                                 ? DesignTokens.Colors.chzzkGreen.opacity(0.15)
                                 : isHovered
-                                    ? Color.white.opacity(0.06)
+                                    ? DesignTokens.Colors.borderOnDarkMedia
                                     : Color.gray.opacity(0.08)
                         )
                 )
@@ -76,7 +76,7 @@ struct MLSettingsGridButton: View {
                             isSelected
                                 ? DesignTokens.Colors.chzzkGreen
                                 : isHovered
-                                    ? Color.white.opacity(0.15)
+                                    ? DesignTokens.Colors.borderOnDarkMediaStrong
                                     : Color.clear,
                             lineWidth: 1
                         )

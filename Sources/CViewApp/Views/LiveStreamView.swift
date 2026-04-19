@@ -46,66 +46,122 @@ struct LiveStreamView: View {
     var chatVM: ChatViewModel? { appState.chatViewModel }
 
     var body: some View {
-        HStack(spacing: 0) {
+        // [Design Unify 2026-04-18] 멀티라이브와 동일한 in-app 헤더 패턴 적용
+        // 구성: SLTabBar (height 40) + SLSessionInfoBar + 기존 HStack 컨텐츠
+        VStack(spacing: 0) {
+            // ── 상단 in-app 탭바 (멀티라이브 MLTabBar 와 동일 디자인 토큰) ──
+            SLTabBar(
+                channelName: playerVM?.channelName ?? "",
+                liveTitle: playerVM?.liveTitle ?? "",
+                isFavorite: isFavorite,
+                chatDisplayMode: chatVM?.displayMode ?? .side,
+                isDebugOverlayOn: showDebugOverlay,
+                isSettingsOpen: showSettings,
+                isPiPActive: PiPController.shared.isActive,
+                onToggleFavorite: { Task { await toggleFavorite() } },
+                onCycleChatMode: {
+                    withAnimation(DesignTokens.Animation.normal) {
+                        switch chatVM?.displayMode ?? .side {
+                        case .side: chatVM?.displayMode = .overlay
+                        case .overlay: chatVM?.displayMode = .hidden
+                        case .hidden: chatVM?.displayMode = .side
+                        }
+                    }
+                    // [Persistence 2026-04-18] 채팅 디스플레이 모드 영구 저장
+                    if let mode = chatVM?.displayMode {
+                        appState.settingsStore.chat.displayMode = mode
+                        appState.settingsStore.scheduleDebouncedSave()
+                    }
+                },
+                onOpenNewWindow: { openWindow(id: "player-window", value: channelId) },
+                onToggleDebug: {
+                    withAnimation(DesignTokens.Animation.fast) { showDebugOverlay.toggle() }
+                },
+                onToggleSettings: {
+                    withAnimation(DesignTokens.Animation.snappy) { showSettings.toggle() }
+                },
+                onTogglePiP: { togglePiP() }
+            )
+
+            // ── 세션 정보 바 (MLSessionInfoBar 와 동일 디자인) ──
+            SLSessionInfoBar(
+                channelName: playerVM?.channelName ?? "",
+                liveTitle: playerVM?.liveTitle ?? "",
+                viewerCount: viewerCount,
+                formattedViewerCount: formattedViewerCount,
+                uptime: playerVM?.formattedUptime ?? "00:00",
+                isMuted: playerVM?.isMuted ?? false,
+                engineType: playerVM?.currentEngineType ?? .avPlayer
+            )
+
+            // ── 메인 컨텐츠 (플레이어 + 채팅 + 설정 패널) ──
             HStack(spacing: 0) {
-                // Player area + overlay chat
-                ZStack {
-                    playerArea
-                        .overlay(alignment: .topTrailing) {
-                            if showDebugOverlay {
-                                PerformanceOverlayView(monitor: performanceMonitor)
-                                    .padding(DesignTokens.Spacing.xs)
+                HStack(spacing: 0) {
+                    // Player area + overlay chat
+                    ZStack {
+                        playerArea
+                            .overlay(alignment: .topTrailing) {
+                                if showDebugOverlay {
+                                    PerformanceOverlayView(monitor: performanceMonitor)
+                                        .padding(DesignTokens.Spacing.xs)
+                                }
                             }
+
+                        // 오버레이 모드: 플레이어 위에 반투명 채팅
+                        if chatVM?.displayMode == .overlay {
+                            ChatOverlayView(chatVM: chatVM, containerSize: containerSize)
+                                .allowsHitTesting(true)
+                                .transition(.blurReplace)
+                        }
+                    }
+                    .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .layoutPriority(0)
+
+                    // 사이드 모드: 드래그 핸들 + 채팅 패널
+                    if chatVM?.displayMode == .side {
+                        ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
+                            liveChatWidth = min(max(newWidth, 120), containerSize.width * 0.5)
+                        } onDragEnd: {
+                            savedChatWidth = liveChatWidth
                         }
 
-                    // 오버레이 모드: 플레이어 위에 반투명 채팅
-                    if chatVM?.displayMode == .overlay {
-                        ChatOverlayView(chatVM: chatVM, containerSize: containerSize)
-                            .allowsHitTesting(true)
-                            .transition(.blurReplace)
+                        ChatPanelView(chatVM: chatVM) {
+                            router.presentSheet(.chatSettings)
+                        }
+                        .frame(width: liveChatWidth, alignment: .trailing)
+                        .frame(maxHeight: .infinity)
+                        .layoutPriority(1)
                     }
                 }
-                .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .layoutPriority(0)
+                // GeometryReader 제거 — 리사이즈마다 전체 자식 뷰 트리 재렌더링 유발
+                // onGeometryChange로 컨테이너 크기만 경량 추적 → 채팅 클램핑·오버레이 크기 계산
+                // [Resize 최적화] 정수 픽셀 단위로 스냅 → sub-pixel 변화 시 SwiftUI 변경 알림 차단
+                // 라이브 리사이즈 중 자식 뷰의 frame 재계산 빈도를 1/N로 감소
+                .onGeometryChange(for: CGSize.self) { proxy in
+                    CGSize(
+                        width: proxy.size.width.rounded(.down),
+                        height: proxy.size.height.rounded(.down)
+                    )
+                } action: { newSize in
+                    guard newSize != containerSize else { return }
+                    containerSize = newSize
+                }
 
-                // 사이드 모드: 드래그 핸들 + 채팅 패널
-                if chatVM?.displayMode == .side {
-                    ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
-                        liveChatWidth = min(max(newWidth, 120), containerSize.width * 0.5)
-                    } onDragEnd: {
-                        savedChatWidth = liveChatWidth
-                    }
-
-                    ChatPanelView(chatVM: chatVM) {
-                        router.presentSheet(.chatSettings)
-                    }
-                    .frame(width: liveChatWidth, alignment: .trailing)
-                    .frame(maxHeight: .infinity)
-                    .layoutPriority(1)
+                // ── 설정 슬라이드 패널 (push 방식 — 멀티라이브와 동일) ──
+                if showSettings {
+                    PlayerAdvancedSettingsView(
+                        playerVM: playerVM,
+                        settingsStore: appState.settingsStore,
+                        isPresented: $showSettings
+                    )
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .animation(DesignTokens.Animation.contentTransition, value: showSettings)
                 }
             }
-            // GeometryReader 제거 — 리사이즈마다 전체 자식 뷰 트리 재렌더링 유발
-            // onGeometryChange로 컨테이너 크기만 경량 추적 → 채팅 클램핑·오버레이 크기 계산
-            .onGeometryChange(for: CGSize.self) { proxy in
-                proxy.size
-            } action: { newSize in
-                containerSize = newSize
-            }
-
-            // ── 설정 슬라이드 패널 (push 방식 — 멀티라이브와 동일) ──
-            if showSettings {
-                PlayerAdvancedSettingsView(
-                    playerVM: playerVM,
-                    settingsStore: appState.settingsStore,
-                    isPresented: $showSettings
-                )
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-                .animation(DesignTokens.Animation.contentTransition, value: showSettings)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .toolbar { streamToolbar }
         .id(channelId)
         .onAppear { liveChatWidth = savedChatWidth }
         .task(id: channelId) {
@@ -144,6 +200,17 @@ struct LiveStreamView: View {
         .onKeyPress(phases: .down) { press in
             handleShortcutKeyPress(press)
         }
+        // [Live Settings] 스트림 보정 모드 변경 — 현재 채널이 활성이면 즉시 재시작
+        .onReceive(NotificationCenter.default.publisher(for: .cviewStreamProxyModeChanged)) { _ in
+            guard let vm = playerVM, vm.currentChannelId == channelId else { return }
+            // 로딩 중이면 재시작 충돌 방지
+            guard !isLoadingStream else { return }
+            Task {
+                await vm.stopStream()
+                await chatVM?.disconnect()
+                await startStreamAndChat()
+            }
+        }
     }
 
     // MARK: - Keyboard Shortcut Handling
@@ -170,6 +237,11 @@ struct LiveStreamView: View {
                     case .overlay: chatVM?.displayMode = .hidden
                     case .hidden: chatVM?.displayMode = .side
                     }
+                }
+                // [Persistence 2026-04-18] 채팅 디스플레이 모드 영구 저장
+                if let mode = chatVM?.displayMode {
+                    appState.settingsStore.chat.displayMode = mode
+                    appState.settingsStore.scheduleDebouncedSave()
                 }
             case .togglePiP:
                 togglePiP()
@@ -357,7 +429,7 @@ struct LiveStreamView: View {
                             .padding(.vertical, DesignTokens.Spacing.md)
                             .background {
                                 Capsule()
-                                    .fill(.ultraThinMaterial)
+                                    .fill(DesignTokens.Glass.thin)
                                     .overlay {
                                         Capsule()
                                             .strokeBorder(DesignTokens.Colors.textPrimary.opacity(0.12), lineWidth: 0.5)
@@ -372,11 +444,9 @@ struct LiveStreamView: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            if let vm = playerVM {
-                PlayerEngineBadge(engineType: vm.currentEngineType)
-                    .padding(DesignTokens.Spacing.md)
-                    .transition(.opacity)
-            }
+            // [Design Unify 2026-04-18] 비디오 좌상단 PlayerEngineBadge 제거 — 멀티라이브와 통일.
+            // 엔진 표시는 SLSessionInfoBar (LiveStreamHeader) 의 컴팩트 배지로 이전.
+            EmptyView()
         }
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.fast) { showOverlay = hovering }
@@ -388,64 +458,9 @@ struct LiveStreamView: View {
     }
 
     // MARK: - Toolbar
-
-    @ToolbarContentBuilder
-    private var streamToolbar: some ToolbarContent {
-        ToolbarItemGroup {
-            Button {
-                openWindow(id: "player-window", value: channelId)
-            } label: {
-                Image(systemName: "rectangle.on.rectangle")
-                    .foregroundStyle(.secondary)
-            }
-            .help("새 창에서 재생")
-
-            Button {
-                Task { await toggleFavorite() }
-            } label: {
-                Image(systemName: isFavorite ? "star.fill" : "star")
-                    .foregroundStyle(isFavorite ? .yellow : .secondary)
-            }
-
-            Button {
-                withAnimation(DesignTokens.Animation.normal) {
-                    // 채팅 모드 순환: side → overlay → hidden → side
-                    switch chatVM?.displayMode ?? .side {
-                    case .side: chatVM?.displayMode = .overlay
-                    case .overlay: chatVM?.displayMode = .hidden
-                    case .hidden: chatVM?.displayMode = .side
-                    }
-                }
-            } label: {
-                Image(systemName: chatVM?.displayMode == .hidden ? "bubble.left.and.bubble.right" : "bubble.left.and.bubble.right.fill")
-                    .foregroundStyle(chatVM?.displayMode == .hidden ? .secondary : Color.accentColor)
-            }
-
-            Button {
-                showDebugOverlay.toggle()
-            } label: {
-                Image(systemName: showDebugOverlay ? "gauge.open.with.lines.needle.33percent.badge.arrow.down" : "gauge.open.with.lines.needle.33percent")
-                    .foregroundStyle(showDebugOverlay ? .green : .secondary)
-            }
-
-            if viewerCount > 0 {
-                HStack(spacing: 3) {
-                    Image(systemName: "person.2.fill")
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    Text(formattedViewerCount)
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(playerVM?.formattedUptime ?? "00:00")
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        }
-    }
+    // [Design Unify 2026-04-18] macOS 네이티브 toolbar → in-app SLTabBar 로 이전.
+    // streamToolbar 변수는 SLTabBar 의 onToggleFavorite/onCycleChatMode/onOpenNewWindow/
+    // onToggleDebug 클로저로 동등 기능 제공. viewerCount/uptime 은 SLSessionInfoBar 가 표시.
 
 }
 

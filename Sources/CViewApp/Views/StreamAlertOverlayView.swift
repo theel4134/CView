@@ -119,7 +119,7 @@ private struct StreamAlertCard: View {
                 if !alert.content.isEmpty {
                     Text(alert.content)
                         .font(DesignTokens.Typography.custom(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.85))
                         .lineLimit(2)
                 }
             }
@@ -130,9 +130,9 @@ private struct StreamAlertCard: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                     .frame(width: 20, height: 20)
-                    .background(.white.opacity(0.1), in: Circle())
+                    .background(DesignTokens.Colors.controlOnDarkMedia.opacity(0.7), in: Circle())
             }
             .buttonStyle(.plain)
         }

@@ -39,10 +39,7 @@ final class FollowingViewState {
     var showChatAddChannel: Bool = false
     var showChatSettings: Bool = false
 
-    // MARK: - 듀얼 패널 비율
-
-    /// 멀티라이브 : 멀티채팅 분할 비율 (드래그로 조정 가능, 기본 65%)
-    var dualSplitRatio: CGFloat = 0.65
+    // MARK: - 듀얼 패널 비율 [Removed 2026-04: dualSplitRatio dead — 사용처 없음]
 
     /// 팔로잉 리스트 : 사이드 패널 고정 비율 (패널 열림 시)
     static let followingListRatio: CGFloat = 0.25

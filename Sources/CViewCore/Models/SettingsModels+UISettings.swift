@@ -230,6 +230,62 @@ public enum MultiLiveLayoutMode: String, Codable, Sendable, CaseIterable, Identi
     }
 }
 
+// MARK: - MultiLive Process Layout Mode (격리 모드 자동 정렬)
+
+/// 멀티라이브 프로세스 격리 모드에서 자식 창의 자동 배치 방식
+public enum MultiLiveProcessLayoutMode: String, Codable, Sendable, CaseIterable, Identifiable, Equatable {
+    /// 자유 배치 — 자식 창을 OS 기본 위치에 띄우고 사용자가 직접 이동
+    case free = "free"
+    /// 그리드 — 메인 스크린을 N분할해 모든 자식 창을 균등 배치
+    case grid = "grid"
+    /// 탭 — 선택된 자식만 메인 스크린 전체에 표시, 나머지는 minimize
+    case tab = "tab"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .free: "자유 배치"
+        case .grid: "그리드"
+        case .tab:  "탭"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .free: "rectangle.3.group"
+        case .grid: "square.grid.2x2.fill"
+        case .tab:  "rectangle.stack.fill"
+        }
+    }
+}
+
+// MARK: - MultiLive Process Presentation (격리 모드 표시 방식)
+
+/// 멀티라이브 프로세스 격리 시 자식 인스턴스의 시각적 표시 방식
+public enum MultiLiveProcessPresentation: String, Codable, Sendable, CaseIterable, Identifiable, Equatable {
+    /// 별도의 앱처럼 — 일반 NSWindow(타이틀바 + Dock 아이콘) 로 독립 표시
+    case standalone = "standalone"
+    /// 부모 앱 화면 내 임베드 — 보더리스 창 + 부모 멀티라이브 영역에 정확히 정렬, Dock 아이콘 숨김
+    case embedded = "embedded"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .standalone: "별도 앱"
+        case .embedded:   "부모 앱 내 표시"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .standalone: "macwindow.on.rectangle"
+        case .embedded:   "rectangle.inset.filled"
+        }
+    }
+}
+
 /// 멀티라이브 설정
 public struct MultiLiveSettings: Codable, Sendable, Equatable {
     public var maxConcurrentSessions: Int
@@ -252,6 +308,25 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
     /// 선택 세션에 할당하는 대역폭 가중치 (1.0=균등, 2.0=2배)
     public var selectedSessionBWWeight: Double
 
+    // MARK: - 프로세스 격리 (2026-04-18)
+    /// 멀티라이브 각 채널을 별도의 CView 프로세스로 띄워서 완전 격리합니다.
+    /// 핏제 크래시가 다른 채널에 영향을 주지 않으며 CPU/메모리 도 프로세스 단위로 분산됩니다.
+    public var useSeparateProcesses: Bool
+
+    /// 프로세스 격리 모드에서 자식 창의 자동 배치 방식
+    public var processLayoutMode: MultiLiveProcessLayoutMode
+
+    /// 프로세스 격리 모드에서 자식 창의 표시 방식 (별도 앱 vs 부모 앱 임베드)
+    /// 2026-04-19: 상위 `useSeparateProcesses` 토글로부터 파생됨(`effectivePresentation` 참고). 레거시/황장윺로 보존.
+    public var processPresentation: MultiLiveProcessPresentation
+
+    /// `useSeparateProcesses` 에서 파생되는 실제 표시 방식.
+    /// - true (분리 인스턴스) → .standalone (독립 창)
+    /// - false (단일 인스턴스) → .embedded (부모 창 안 채널별 자식 프로세스)
+    public var effectivePresentation: MultiLiveProcessPresentation {
+        useSeparateProcesses ? .standalone : .embedded
+    }
+
     public init(
         maxConcurrentSessions: Int = 4,
         preferredEngine: PlayerEngineType = .vlc,
@@ -266,7 +341,10 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
         chatOverlayFontSize: Double = 12,
         bandwidthCoordinationEnabled: Bool = true,
         levelCappingEnabled: Bool = true,
-        selectedSessionBWWeight: Double = 1.5
+        selectedSessionBWWeight: Double = 1.5,
+        useSeparateProcesses: Bool = true,
+        processLayoutMode: MultiLiveProcessLayoutMode = .free,
+        processPresentation: MultiLiveProcessPresentation = .standalone
     ) {
         self.maxConcurrentSessions = maxConcurrentSessions
         self.preferredEngine = preferredEngine
@@ -282,6 +360,43 @@ public struct MultiLiveSettings: Codable, Sendable, Equatable {
         self.bandwidthCoordinationEnabled = bandwidthCoordinationEnabled
         self.levelCappingEnabled = levelCappingEnabled
         self.selectedSessionBWWeight = selectedSessionBWWeight
+        self.useSeparateProcesses = useSeparateProcesses
+        self.processLayoutMode = processLayoutMode
+        self.processPresentation = processPresentation
+    }
+
+    // backward-compat: 기존 사용자 설정 JSON 에는 신규 필드가 없으므로 decodeIfPresent 처리
+    private enum CodingKeys: String, CodingKey {
+        case maxConcurrentSessions, preferredEngine, defaultLayoutMode
+        case multiAudioEnabled, secondaryVolume, backgroundQualityReduction
+        case autoReconnect, autoReconnectMaxRetries
+        case chatOverlayInGrid, chatOverlayOpacity, chatOverlayFontSize
+        case bandwidthCoordinationEnabled, levelCappingEnabled, selectedSessionBWWeight
+        case useSeparateProcesses
+        case processLayoutMode
+        case processPresentation
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = MultiLiveSettings.default
+        self.maxConcurrentSessions = try c.decodeIfPresent(Int.self, forKey: .maxConcurrentSessions) ?? d.maxConcurrentSessions
+        self.preferredEngine = try c.decodeIfPresent(PlayerEngineType.self, forKey: .preferredEngine) ?? d.preferredEngine
+        self.defaultLayoutMode = try c.decodeIfPresent(MultiLiveLayoutMode.self, forKey: .defaultLayoutMode) ?? d.defaultLayoutMode
+        self.multiAudioEnabled = try c.decodeIfPresent(Bool.self, forKey: .multiAudioEnabled) ?? d.multiAudioEnabled
+        self.secondaryVolume = try c.decodeIfPresent(Float.self, forKey: .secondaryVolume) ?? d.secondaryVolume
+        self.backgroundQualityReduction = try c.decodeIfPresent(Bool.self, forKey: .backgroundQualityReduction) ?? d.backgroundQualityReduction
+        self.autoReconnect = try c.decodeIfPresent(Bool.self, forKey: .autoReconnect) ?? d.autoReconnect
+        self.autoReconnectMaxRetries = try c.decodeIfPresent(Int.self, forKey: .autoReconnectMaxRetries) ?? d.autoReconnectMaxRetries
+        self.chatOverlayInGrid = try c.decodeIfPresent(Bool.self, forKey: .chatOverlayInGrid) ?? d.chatOverlayInGrid
+        self.chatOverlayOpacity = try c.decodeIfPresent(Double.self, forKey: .chatOverlayOpacity) ?? d.chatOverlayOpacity
+        self.chatOverlayFontSize = try c.decodeIfPresent(Double.self, forKey: .chatOverlayFontSize) ?? d.chatOverlayFontSize
+        self.bandwidthCoordinationEnabled = try c.decodeIfPresent(Bool.self, forKey: .bandwidthCoordinationEnabled) ?? d.bandwidthCoordinationEnabled
+        self.levelCappingEnabled = try c.decodeIfPresent(Bool.self, forKey: .levelCappingEnabled) ?? d.levelCappingEnabled
+        self.selectedSessionBWWeight = try c.decodeIfPresent(Double.self, forKey: .selectedSessionBWWeight) ?? d.selectedSessionBWWeight
+        self.useSeparateProcesses = try c.decodeIfPresent(Bool.self, forKey: .useSeparateProcesses) ?? d.useSeparateProcesses
+        self.processLayoutMode = try c.decodeIfPresent(MultiLiveProcessLayoutMode.self, forKey: .processLayoutMode) ?? d.processLayoutMode
+        self.processPresentation = try c.decodeIfPresent(MultiLiveProcessPresentation.self, forKey: .processPresentation) ?? d.processPresentation
     }
 
     public static let `default` = MultiLiveSettings()

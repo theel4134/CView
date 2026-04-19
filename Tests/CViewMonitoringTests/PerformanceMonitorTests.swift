@@ -199,7 +199,9 @@ struct MetricsForwarderSnapshotTests {
             pingInterval: 30.0,
             isForwarding: true,
             lastRecommendation: recommendation,
-            lastSyncData: syncData
+            lastSyncData: syncData,
+            adaptiveSyncInterval: 8.0,
+            lastClientDelta: 10.0
         )
 
         #expect(snapshot.isEnabled == true)
@@ -234,7 +236,9 @@ struct MetricsForwarderSnapshotTests {
             pingInterval: 30.0,
             isForwarding: false,
             lastRecommendation: nil,
-            lastSyncData: nil
+            lastSyncData: nil,
+            adaptiveSyncInterval: 8.0,
+            lastClientDelta: 0
         )
 
         #expect(snapshot.isEnabled == false)

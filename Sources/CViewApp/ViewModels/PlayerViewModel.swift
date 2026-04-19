@@ -84,6 +84,19 @@ public final class PlayerViewModel {
     /// 방송 종료 여부 확인 콜백 — 재연결 시 API 호출로 라이브 상태 확인
     public var onCheckStreamEnded: (@Sendable () async -> Bool)?
 
+    /// [No-Proxy] VLC 가 chzzk CDN 응답을 처리하지 못해 35초 타임아웃이 발생했을 때 호출.
+    /// 단일 라이브에서는 PlayerViewModel 가 내부적으로 AVPlayer 로 재시작하지만,
+    /// 멀티라이브(엔진 풀 사용 — `isPreallocated == true`) 에서는 외부 컨테이너가
+    /// 엔진을 교체해야 하므로 본 콜백으로 통보만 한다.
+    public var onEngineFallbackRequested: (@Sendable (_ reason: String) -> Void)?
+
+    // [Persistence 2026-04-18] 볼륨/음소거 변경 알림 — AppDependencies 에서
+    // SettingsStore.player.volumeLevel / startMuted 영구 저장에 연결.
+    /// 사용자 볼륨 조절 시 호출 (0.0 ~ 1.0)
+    public var onVolumeChanged: ((Float) -> Void)?
+    /// 음소거 토글 시 호출
+    public var onMuteChanged: ((Bool) -> Void)?
+
     // MARK: - 엔진 선택
 
     public var preferredEngineType: PlayerEngineType = .avPlayer
@@ -189,6 +202,7 @@ public final class PlayerViewModel {
             avEngine.onAVMetrics = { metrics in
                 callback(metrics)
             }
+            avEngine.emitCurrentMetricsSnapshot()
         } else {
             avEngine.onAVMetrics = nil
         }
@@ -205,6 +219,28 @@ public final class PlayerViewModel {
         } else {
             hlsjs.onHLSJSMetrics = nil
         }
+    }
+
+    /// 현재 엔진의 목표 레이턴시를 밀리초 단위로 반환.
+    /// 서버 하트비트의 targetLatency 필드와 동기화 제어에 사용한다.
+    public func currentTargetLatencyMs() -> Double? {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            return Double(vlc.streamingProfile.liveCaching)
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            return av.catchupConfig.targetLatency * 1000.0
+        }
+        if let hlsjs = playerEngine as? HLSJSPlayerEngine {
+            switch hlsjs.streamingProfile {
+            case .ultraLow:
+                return 1_000
+            case .lowLatency:
+                return 2_000
+            case .multiLive:
+                return 3_000
+            }
+        }
+        return nil
     }
 
     /// 싱글 플레이어 네트워크 탭용 자체 메트릭 수집 활성화
@@ -266,19 +302,58 @@ public final class PlayerViewModel {
         // multiLive 프로파일은 MultiLiveManager가 injectEngine()으로 설정하므로
         // lowLatency 설정이 활성화되어도 multiLive를 덮어쓰지 않는다.
         // multiLive 세션에서 lowLatency로 변경하면 재연결 시 잘못된 VLC 옵션이 적용됨.
+        // [Quality 2026-04-18] multiLiveHQ 도 보호 대상에 포함 — isMultiLiveFamily 사용.
         if lowLatency {
             if let vlc = playerEngine as? VLCPlayerEngine,
-               vlc.streamingProfile != .multiLive {
+               !vlc.streamingProfile.isMultiLiveFamily {
                 vlc.streamingProfile = .lowLatency
             }
         }
     }
 
-    /// [Quality Lock] 최고 화질 유지 설정 — 런타임 변경 시 VLC 엔진에 즉시 반영
+    /// [Quality Lock] 최고 화질 유지 설정 — 런타임 변경 시 모든 엔진에 즉시 반영
+    /// VLC: forceHighestQuality / maxAdaptiveHeight 0
+    /// AVPlayer: isQualityLocked + lockedPeakBitRate=8Mbps + lockedMaximumResolution=1920×1080
+    /// (잠금 해제 시 AVPlayer 는 시스템 자동 ABR 로 복귀)
     public func applyForceHighestQuality(_ enabled: Bool) {
         if let vlc = playerEngine as? VLCPlayerEngine {
             vlc.forceHighestQuality = enabled
             if enabled {
+                vlc.maxAdaptiveHeight = 0
+            }
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            if enabled {
+                // 잠금 활성 — 1080p60 / 8Mbps 명시 설정 (디폴트 동일)
+                av.lockedPeakBitRate = 8_000_000
+                av.lockedMaximumResolution = CGSize(width: 1920, height: 1080)
+            }
+            av.isQualityLocked = enabled
+        }
+    }
+
+    /// [백그라운드 화질 유지] macOS 앱 백그라운드/포그라운드/occlusion 전환 시 화질 ceiling을 즉시 재확인.
+    ///
+    /// 배경
+    /// - 앱이 백그라운드일 때 macOS가 렌더링/디코딩을 스로틀링하면 AVPlayer/VLC 내부 ABR이
+    ///   "소비 속도가 느림"으로 해석해 720p 이하 variant 로 다운시프트 후 고정될 수 있다.
+    /// - `isQualityLocked=true` 라도 AVPlayer 내부 ABR 은 ceiling 밑에서 자유롭게 움직이므로,
+    ///   한 번 저화질에 갇히면 `startHQRecoveryWatchdog` 의 18s/60s 쿨다운 없이 즉시 복구하려면
+    ///   외부에서 명시적으로 nudge 를 보내야 한다.
+    ///
+    /// 동작
+    /// - AVPlayer: `nudgeQualityCeiling` 호출 → 250ms 동안 ceiling 해제 후 복원,
+    ///   AVFoundation 내부 ABR 이 즉시 상위 variant 재평가.
+    /// - VLC: 미디어 옵션은 재생 시점 고정이므로 런타임 변경 불가. `forceHighestQuality` 플래그만
+    ///   재확인해 `StreamCoordinator+QualityABR` 의 downgrade 거부 로직이 유지되도록 한다.
+    public func reassertHighestQuality(reason: String) {
+        guard let engine = playerEngine else { return }
+        if let av = engine as? AVPlayerEngine {
+            av.nudgeQualityCeiling(reason: reason)
+        }
+        if let vlc = engine as? VLCPlayerEngine {
+            // 플래그 상태만 재확인 — false 로 떨어졌다면 그대로 둔다(사용자 설정 존중).
+            if vlc.forceHighestQuality {
                 vlc.maxAdaptiveHeight = 0
             }
         }
@@ -407,8 +482,20 @@ public final class PlayerViewModel {
         self.currentChannelId = channelId
 
         let lowLatencyConfig: LowLatencyController.Configuration = playerSettings.map { Self.lowLatencyConfig(from: $0) } ?? .webSync
-        let forceMax = playerSettings?.forceHighestQuality ?? true
-        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, lowLatencyConfig: lowLatencyConfig, abrConfig: isMultiLive ? .multiLive : .default, forceHighestQuality: forceMax)
+        // [Quality Lock] 레이턴시 동기화(lowLatencyMode/catchupRate>1.0) 활성 시
+        // forceHighestQuality 가 꺼져 있어도 1080p60/8Mbps 화질 잠금을 자동 강제.
+        // — sync 가속 중 ABR 강등으로 화질이 떨어지는 회귀 차단.
+        let userForceMax = playerSettings?.forceHighestQuality ?? true
+        let syncActive = (playerSettings?.lowLatencyMode ?? true) || ((playerSettings?.catchupRate ?? 1.0) > 1.0)
+        let requestedForceMax = userForceMax || syncActive
+        // [Quality 2026-04-18] 멀티라이브 + AVPlayer 조합도 forceMax 허용.
+        //   이전에는 1080p variant URL 고정이 ABR 우회로 첫 프레임 정지 회귀를 유발한다는
+        //   우려로 차단했으나, AVPlayerEngine 의 isQualityLocked(8Mbps/1080p ceiling) +
+        //   HQ recovery watchdog 가 회복 경로를 보장하므로 차단을 해제하여 비선택→선택
+        //   전환 시에도 1080p 변종이 즉시 선택되도록 한다.
+        let forceMax = requestedForceMax
+        let proxyMode = playerSettings?.streamProxyMode ?? .localProxy
+        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, lowLatencyConfig: lowLatencyConfig, abrConfig: isMultiLive ? .multiLive : .default, forceHighestQuality: forceMax, streamProxyMode: proxyMode)
         // [Fix 26B] 이전 coordinator를 ARC deinit에 의존하지 않고 명시적 정리
         // — LocalStreamProxy NWConnection CLOSE_WAIT 방지
         if let old = streamCoordinator {
@@ -440,9 +527,16 @@ public final class PlayerViewModel {
             logger.info("PlayerViewModel: 엔진 생성 → \(self.preferredEngineType.rawValue)")
         }
         engine.setVolume(isMuted ? 0 : volume)
-        // [Quality Lock] VLC 엔진에 최고 화질 유지 플래그 전파
+        // [Quality Lock] 모든 엔진에 최고 화질 유지 플래그 전파 (1080p60 / 8Mbps)
         if let vlc = engine as? VLCPlayerEngine {
             vlc.forceHighestQuality = forceMax
+        }
+        if let av = engine as? AVPlayerEngine {
+            if forceMax {
+                av.lockedPeakBitRate = 8_000_000
+                av.lockedMaximumResolution = CGSize(width: 1920, height: 1080)
+            }
+            av.isQualityLocked = forceMax
         }
         await coordinator.setPlayerEngine(engine)
 
@@ -463,6 +557,12 @@ public final class PlayerViewModel {
             vlc.onPlaybackStalled = { [weak coordinator] in
                 guard let coordinator else { return }
                 Task { await coordinator.triggerReconnect(reason: "VLC decoded frames stall") }
+            }
+            // [No-Proxy] FIX14 35초 타임아웃 → AVPlayer 폴백 요청
+            vlc.onEngineFallbackRequested = { [weak self] reason in
+                Task { @MainActor [weak self] in
+                    await self?._handleVLCFallback(reason: reason)
+                }
             }
         }
 
@@ -504,6 +604,7 @@ public final class PlayerViewModel {
                 vlc.onStateChange = nil
                 vlc.onVLCMetrics = nil
                 vlc.onPlaybackStalled = nil
+                vlc.onEngineFallbackRequested = nil
             }
             if let hlsjs = engine as? HLSJSPlayerEngine {
                 hlsjs.onStateChange = nil
@@ -528,6 +629,7 @@ public final class PlayerViewModel {
             vlc.onStateChange = nil
             vlc.onVLCMetrics = nil
             vlc.onPlaybackStalled = nil
+            vlc.onEngineFallbackRequested = nil
         }
         // HLS.js 콜백 정리
         if let hlsjs = playerEngine as? HLSJSPlayerEngine {
@@ -573,11 +675,13 @@ public final class PlayerViewModel {
     public func setVolume(_ newVolume: Float) {
         volume = newVolume
         playerEngine?.setVolume(isMuted ? 0 : newVolume)
+        onVolumeChanged?(newVolume)
     }
 
     public func toggleMute() {
         isMuted.toggle()
         playerEngine?.setVolume(isMuted ? 0 : volume)
+        onMuteChanged?(isMuted)
     }
 
     /// StreamCoordinator 내부 per-instance 프록시의 네트워크 통계 반환

@@ -37,7 +37,7 @@ struct MLToolsTab: View {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .strokeBorder(
                                 isScreenshotHovered
-                                    ? Color.white.opacity(0.12)
+                                    ? DesignTokens.Colors.borderOnDarkMedia
                                     : DesignTokens.Colors.border.opacity(DesignTokens.Glass.contentBorder),
                                 lineWidth: 0.5
                             )
@@ -100,7 +100,7 @@ struct MLToolsTab: View {
                                 isRecording
                                     ? DesignTokens.Colors.live.opacity(0.3)
                                     : isRecordHovered
-                                        ? Color.white.opacity(0.12)
+                                        ? DesignTokens.Colors.borderOnDarkMedia
                                         : DesignTokens.Colors.border.opacity(DesignTokens.Glass.contentBorder),
                                 lineWidth: 0.5
                             )

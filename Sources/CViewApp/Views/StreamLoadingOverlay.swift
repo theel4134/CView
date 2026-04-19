@@ -40,8 +40,8 @@ struct StreamLoadingOverlay: View {
             // ── 배경: 블러된 썸네일 ──────────────────────────
             thumbnailBackground
 
-            // ── 다크 베일 ────────────────────────────────────
-            Color.black.opacity(0.62)
+            // ── 다크 베일 (adaptive: light 0.32 / dark 0.62) ──
+            DesignTokens.Colors.mediaVeil
 
             // ── 콘텐츠 ───────────────────────────────────────
             VStack(spacing: 0) {
@@ -113,9 +113,9 @@ struct StreamLoadingOverlay: View {
 
                 // 내부 배경 원
                 Circle()
-                    .fill(.ultraThinMaterial)
+                    .fill(DesignTokens.Glass.thin)
                     .frame(width: 60, height: 60)
-                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 0.5))
+                    .overlay(Circle().stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5))
 
                 // 회전 호 스피너 — thin stroke
                 Circle()
@@ -130,7 +130,7 @@ struct StreamLoadingOverlay: View {
                 // 중앙 SF Symbol
                 Image(systemName: phaseIcon)
                     .font(DesignTokens.Typography.custom(size: 20, weight: .light))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(0.85))
                     .symbolEffect(.pulse)
             }
 
@@ -145,7 +145,7 @@ struct StreamLoadingOverlay: View {
 
                 Text(phaseSubtitle)
                     .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(Color.white.opacity(0.50))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                     .id(phaseSubtitle)
                     .transition(.blurReplace)
             }
@@ -164,7 +164,7 @@ struct StreamLoadingOverlay: View {
             if !liveTitle.isEmpty {
                 Text(liveTitle)
                     .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(Color.white.opacity(0.55))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, DesignTokens.Spacing.xl)
@@ -178,7 +178,7 @@ struct StreamLoadingOverlay: View {
             HStack {
                 Text("버퍼")
                     .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(Color.white.opacity(0.4))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim.opacity(0.7))
                 Spacer()
                 Text("\(Int(level * 100))%")
                     .font(DesignTokens.Typography.micro)
@@ -192,7 +192,7 @@ struct StreamLoadingOverlay: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.white.opacity(0.12))
+                        .fill(DesignTokens.Colors.borderOnDarkMedia)
                         .frame(height: 3)
                     Capsule()
                         .fill(

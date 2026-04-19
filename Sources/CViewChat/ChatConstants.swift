@@ -6,8 +6,8 @@ import Foundation
 // MARK: - WebSocket
 
 public enum WSDefaults {
-    /// 핑 전송 간격 (초)
-    public static let pingInterval: TimeInterval = 20
+    /// 핑 전송 간격 (초) — [Tune] 20→30s: 일반 방화벽 idle 타임아웃 60s+. 핑 패킷 33% 감소.
+    public static let pingInterval: TimeInterval = 30
     /// 최대 메시지 크기 (64KB — 채팅 메시지는 일반적으로 1KB 미만)
     public static let maxMessageSize = 65_536
     /// WS 세션 요청 타임아웃 (초)
@@ -25,8 +25,8 @@ public enum WSDefaults {
 public enum ChatDefaults {
     /// 최대 메시지 버퍼 크기
     public static let maxMessageBuffer = 500
-    /// 채팅 엔진 핑 간격 (초)
-    public static let pingInterval: TimeInterval = 20
+    /// 채팅 엔진 핑 간격 (초) — [Tune] 20→30s: WSDefaults와 동일 정책.
+    public static let pingInterval: TimeInterval = 30
     /// 디바이스 타입 코드
     public static let deviceType = 2001
     /// 최근 채팅 기본 요청 수

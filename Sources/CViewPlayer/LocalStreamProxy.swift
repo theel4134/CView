@@ -195,6 +195,10 @@ public final class LocalStreamProxy: @unchecked Sendable {
         
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
+        // [Fix 32 / SEC-6] 로컬호스트(loopback) 인터페이스에만 바인드 — LAN 노출 차단
+        // 기본 .any는 0.0.0.0 바인드로 동일 머신/LAN의 다른 프로세스 접근 가능.
+        // requiredInterfaceType = .loopback 으로 제한 시 시스템 레벨에서 외부 접근을 차단함.
+        params.requiredInterfaceType = .loopback
         
         let listener = try NWListener(using: params, on: .any)
         self.listener = listener
@@ -347,7 +351,8 @@ public enum ProxyError: Error, LocalizedError, Sendable {
 
 /// CheckedContinuation을 정확히 한 번만 resume하도록 보장하는 스레드 안전 래퍼.
 /// Swift 6 strict concurrency에서 var 캡처가 불가하므로 클래스 기반으로 구현.
-private final class _ProxyContinuationGuard: @unchecked Sendable {
+/// - `Mutex<Value>`는 Value가 Sendable이면 자동 Sendable이므로 @unchecked 불필요.
+private final class _ProxyContinuationGuard: Sendable {
     private let state = Mutex<CheckedContinuation<UInt16, any Error>?>(nil)
     
     init(continuation: CheckedContinuation<UInt16, any Error>) {

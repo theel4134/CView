@@ -75,6 +75,10 @@ public final class HomeViewModel {
     private var metricsPollingTask: Task<Void, Never>?
     private var wsStreamTask: Task<Void, Never>?
     private var autoRefreshTask: Task<Void, Never>?
+    private var statsAutoRefreshTask: Task<Void, Never>?
+
+    /// 백그라운드 자동 통계 갱신 중 여부 (초기 로딩과 구분 — 캐시 데이터 표시 유지용)
+    public var isAutoRefreshingStats: Bool = false
     
     // MARK: - Cached Stats (데이터 변경 시 1회 계산, body 접근 시 O(1))
     
@@ -153,7 +157,8 @@ public final class HomeViewModel {
         _recomputeStatsTask?.cancel()
         let statChannels = allStatChannels
         let live = liveChannels
-        _recomputeStatsTask = Task.detached(priority: .userInitiated) { [weak self] in
+        // [Fix 32] PowerAware: AC=.userInitiated(P-core), Battery=.utility(E-core)로 통계 재계산
+        _recomputeStatsTask = Task.detached(priority: PowerAwareTaskPriority.userVisible) { [weak self] in
             let result = Self.computeChannelStats(
                 allStatChannels: statChannels,
                 liveChannels: live
@@ -381,9 +386,21 @@ public final class HomeViewModel {
     public func startAutoRefresh() {
         autoRefreshTask?.cancel()
         autoRefreshTask = Task { [weak self] in
-            for await _ in AsyncTimerSequence(interval: .seconds(90), tolerance: .seconds(10)) {
+            // [Fix N-2] PowerAware: AC 90s / Battery 135s — idle 시 폴링 비용 33% 감소
+            let intervalSec = PowerAwareInterval.scaled(90)
+            for await _ in AsyncTimerSequence(interval: .seconds(intervalSec), tolerance: .seconds(10)) {
                 guard !Task.isCancelled else { break }
                 await self?.lightRefresh()
+            }
+        }
+
+        // 치지직 전체 통계(allStatChannels) 자동 갱신 — 300s(AC) / 450s(Battery)
+        statsAutoRefreshTask?.cancel()
+        statsAutoRefreshTask = Task { [weak self] in
+            let statsIntervalSec = PowerAwareInterval.scaled(300)
+            for await _ in AsyncTimerSequence(interval: .seconds(statsIntervalSec), tolerance: .seconds(30)) {
+                guard !Task.isCancelled else { break }
+                await self?.autoRefreshStats()
             }
         }
     }
@@ -392,6 +409,16 @@ public final class HomeViewModel {
     public func stopAutoRefresh() {
         autoRefreshTask?.cancel()
         autoRefreshTask = nil
+        statsAutoRefreshTask?.cancel()
+        statsAutoRefreshTask = nil
+    }
+
+    /// 백그라운드에서 치지직 통계만 갱신 (기존 캐시 데이터는 유지, "자동업데이트 중" 플래그 사용)
+    public func autoRefreshStats() async {
+        guard !isLoadingStats else { return }
+        isAutoRefreshingStats = true
+        await loadAllStatsChannels()
+        isAutoRefreshingStats = false
     }
     
     /// 메트릭 폴링 중지
@@ -414,6 +441,24 @@ public final class HomeViewModel {
                 await self?.loadServerStats()
             }
         }
+    }
+
+    /// [Tune] 장기 비활성(5분+) 시 메트릭 WebSocket 완전 단절 — idle keep-alive 트래픽 제거
+    /// AppState의 5분 타이머에서 호출됨.
+    public func suspendMetricsForLongIdle() {
+        wsStreamTask?.cancel()
+        wsStreamTask = nil
+        let ws = wsClient
+        Task { await ws?.disconnect() }
+        isWebSocketConnected = false
+        logger.info("메트릭 WebSocket 장기 idle 주기로 인해 단절")
+    }
+
+    /// [Tune] 앱 포그라운드 복귀 시 메트릭 WebSocket 재연결
+    public func resumeMetricsAfterIdle() {
+        guard wsStreamTask == nil, wsClient != nil else { return }
+        startWebSocketStream()
+        logger.info("메트릭 WebSocket 재연결")
     }
 
     /// 메트릭 폴링 재개 — 앱 활성화 시 즉시 1회 갱신 후 30s 간격 복구

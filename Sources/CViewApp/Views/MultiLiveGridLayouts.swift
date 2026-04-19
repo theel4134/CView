@@ -334,7 +334,7 @@ private struct MLEmptySlotButton: View {
                         .fill(
                             isHovered
                                 ? DesignTokens.Colors.chzzkGreen.opacity(0.15)
-                                : Color.white.opacity(0.06)
+                                : DesignTokens.Colors.borderOnDarkMedia
                         )
                         .frame(width: 44, height: 44)
 

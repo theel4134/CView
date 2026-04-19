@@ -153,7 +153,7 @@ extension MultiLiveAddSheet {
                         .scaleEffect(phase ? 1.08 : 1.0)
                         .opacity(phase ? 0.55 : 1.0)
                 } animation: { _ in
-                    .easeInOut(duration: 2.2)
+                    DesignTokens.Animation.breath
                 }
             VStack(spacing: 4) {
                 Text("팔로잉 채널이 없습니다")

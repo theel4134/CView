@@ -19,16 +19,35 @@ extension HomeView {
                         .foregroundStyle(.primary)
 
                     HStack(spacing: 8) {
-                        Text(viewModel.liveChannelsCachedAt ?? Date(), format: .dateTime.year().month().day().weekday(.wide))
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                        // 캐시 미스 시에는 body 평가마다 새 Date()가 생성되어 Text id 가 불안정해짐.
+                        // 캐시된 시각이 있을 때만 날짜를 표시하고, 없으면 오늘 날짜를 1회만 캡처한 값을 사용.
+                        if let refDate = viewModel.allStatCachedAt ?? viewModel.liveChannelsCachedAt {
+                            Text(refDate, format: .dateTime.year().month().day().weekday(.wide))
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(todayLabel)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
 
                         if viewModel.isLoadingStats {
                             HStack(spacing: 4) {
                                 ProgressView(value: viewModel.statsCollectionProgress)
                                     .frame(width: 40)
                                     .controlSize(.mini)
-                                if let total = viewModel.statsEstimatedTotal, total > 0 {
+                                if viewModel.isAutoRefreshingStats && !viewModel.allStatChannels.isEmpty {
+                                    // 백그라운드 자동 갱신 — 기존 데이터 유지하면서 진행률 표시
+                                    if let total = viewModel.statsEstimatedTotal, total > 0 {
+                                        Text("자동업데이트 중 \(viewModel.statsCollectedCount)/\(total) (\(Int(viewModel.statsCollectionProgress * 100))%)")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        Text("자동업데이트 중 \(viewModel.statsCollectedCount)개")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                } else if let total = viewModel.statsEstimatedTotal, total > 0 {
                                     Text("수집 중 \(viewModel.statsCollectedCount)/\(total) (\(Int(viewModel.statsCollectionProgress * 100))%)")
                                         .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
@@ -94,11 +113,79 @@ extension HomeView {
                     }
                     .buttonStyle(.plain)
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                    .animation(viewModel.isLoading ? .linear(duration: 0.6) : .default, value: viewModel.isLoading)
+                    .animation(viewModel.isLoading ? DesignTokens.Animation.loadingSpin : DesignTokens.Animation.normal, value: viewModel.isLoading)
+
+                    // 자동 업데이트 버튼
+                    updateButton
                 }
             }
 
             Divider()
+        }
+    }
+
+    // MARK: - Update Button
+
+    /// 자동 업데이트 확인 버튼. 새 버전이 감지되면 파란 점 배지 표시.
+    @ViewBuilder
+    var updateButton: some View {
+        let service = appState.updateService
+        let hasUpdate: Bool = {
+            if case .updateAvailable = service.status { return true }
+            return false
+        }()
+        let isBusy = service.status.isBusy
+
+        Button {
+            showUpdateSheet = true
+            // 시트 열 때 아직 확인한 적 없으면 자동 조회
+            if case .idle = service.status {
+                Task { await service.checkForUpdates() }
+            }
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: iconForUpdateStatus(service.status))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(hasUpdate ? Color.accentColor : .secondary)
+                    .frame(width: 28, height: 28)
+                    .background(.fill.tertiary, in: Circle())
+
+                if hasUpdate {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 8, height: 8)
+                        .overlay(Circle().stroke(Color(NSColor.windowBackgroundColor), lineWidth: 1.5))
+                        .offset(x: 2, y: -2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help(tooltipForUpdateStatus(service.status))
+        .rotationEffect(.degrees(isBusy ? 360 : 0))
+        .animation(isBusy ? DesignTokens.Animation.loadingSpin : DesignTokens.Animation.normal, value: isBusy)
+    }
+
+    private func iconForUpdateStatus(_ status: UpdateStatus) -> String {
+        switch status {
+        case .checking: return "arrow.triangle.2.circlepath"
+        case .updateAvailable: return "arrow.down.circle.fill"
+        case .downloading: return "arrow.down.circle"
+        case .readyToInstall, .installing: return "gearshape.2"
+        case .error: return "exclamationmark.circle"
+        case .upToDate: return "checkmark.circle"
+        case .idle: return "arrow.down.circle"
+        }
+    }
+
+    private func tooltipForUpdateStatus(_ status: UpdateStatus) -> String {
+        switch status {
+        case .idle: return "업데이트 확인 (현재 \(appState.updateService.currentVersion))"
+        case .checking: return "업데이트 확인 중…"
+        case .upToDate: return "최신 버전입니다 (\(appState.updateService.currentVersion))"
+        case .updateAvailable(let r): return "새 버전 \(r.versionString) 사용 가능"
+        case .downloading(let p): return "다운로드 \(Int(p * 100))%"
+        case .readyToInstall, .installing: return "설치 중…"
+        case .error(let msg): return "오류: \(msg)"
         }
     }
 
@@ -126,13 +213,9 @@ extension HomeView {
     // MARK: - 2. Stat Cards
 
     var statCardsGrid: some View {
+        // 좁은 창에서는 2×2로, 넓은 창에서는 4열로 자동 배치
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.md),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.md),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.md),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.md)
-            ],
+            columns: [GridItem(.adaptive(minimum: 180, maximum: 360), spacing: DesignTokens.Spacing.md)],
             spacing: DesignTokens.Spacing.md
         ) {
             DashboardStatCard(
@@ -184,15 +267,24 @@ extension HomeView {
             // 섹션 헤더
             sectionHeader(title: "스트리밍 분석", subtitle: viewModel.categoryTypeDistribution.isEmpty ? nil : "총 \(viewModel.totalLiveChannelCount)채널")
 
-            HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
-                CategoryTypeDonutChart(distribution: viewModel.categoryTypeDistribution)
-                    .frame(maxWidth: .infinity)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
+                    CategoryTypeDonutChart(distribution: viewModel.categoryTypeDistribution)
+                        .frame(maxWidth: .infinity)
 
-                ViewerDistributionChart(
-                    buckets: viewModel.viewerBuckets,
-                    medianViewers: viewModel.medianViewers
-                )
-                .frame(maxWidth: .infinity)
+                    ViewerDistributionChart(
+                        buckets: viewModel.viewerBuckets,
+                        medianViewers: viewModel.medianViewers
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+                    CategoryTypeDonutChart(distribution: viewModel.categoryTypeDistribution)
+                    ViewerDistributionChart(
+                        buckets: viewModel.viewerBuckets,
+                        medianViewers: viewModel.medianViewers
+                    )
+                }
             }
 
             // TOP 3 랭킹 채널
@@ -208,7 +300,8 @@ extension HomeView {
             sectionHeader(title: "시청자 TOP 3", subtitle: nil)
 
             HStack(spacing: DesignTokens.Spacing.sm) {
-                ForEach(Array(viewModel.topThreeChannels.enumerated()), id: \.element.id) { index, channel in
+                ForEach(viewModel.topThreeChannels.indices, id: \.self) { index in
+                    let channel = viewModel.topThreeChannels[index]
                     topRankCard(rank: index + 1, channel: channel)
                         .onHover { hovering in
                             if hovering { triggerPrefetch(channelId: channel.channelId) }

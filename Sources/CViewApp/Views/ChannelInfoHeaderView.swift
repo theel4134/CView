@@ -158,6 +158,7 @@ struct ChannelInfoQuickActionBar: View {
     let onToggleFavorite: () -> Void
 
     @Environment(AppRouter.self) private var router
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         HStack(spacing: 10) {
@@ -179,6 +180,42 @@ struct ChannelInfoQuickActionBar: View {
                     style: .outlined
                 ) {
                     router.navigate(to: .chatOnly(channelId: channelId))
+                }
+
+                // [2026-04-19] 멀티라이브 추가 — 단일 인스턴스(인라인 패널)
+                quickActionButton(
+                    title: "멀티라이브",
+                    icon: "rectangle.split.2x2.fill",
+                    color: DesignTokens.Colors.accentPurple,
+                    style: .outlined
+                ) {
+                    Task {
+                        await appState.multiLiveManager.addSession(
+                            channelId: channelId,
+                            preferredEngine: appState.settingsStore.player.preferredEngine,
+                            presentationOverride: .embedded
+                        )
+                        await MainActor.run {
+                            appState.followingViewState.showMultiLive = true
+                            router.navigate(to: .following)
+                        }
+                    }
+                }
+
+                // [2026-04-19] 분리 인스턴스 — 별도 프로세스 독립 창
+                quickActionButton(
+                    title: "분리 인스턴스",
+                    icon: "macwindow.on.rectangle",
+                    color: DesignTokens.Colors.accentOrange,
+                    style: .outlined
+                ) {
+                    Task {
+                        await appState.multiLiveManager.addSession(
+                            channelId: channelId,
+                            preferredEngine: appState.settingsStore.player.preferredEngine,
+                            presentationOverride: .standalone
+                        )
+                    }
                 }
             }
 

@@ -132,8 +132,11 @@ extension AVPlayerEngine {
         transition(to: .playing)
         logger.info("AVPlayerEngine: readyToPlay")
 
-        // 라이브: 라이브 엣지 근처로 즉시 seek + 스톨 워치독 기동
+        // 라이브: 라이브 엣지로 보정 후 반드시 재생을 재개한다.
+        // 기존 구현은 seek 후 play()를 다시 호출하지 않아 멀티라이브에서
+        // 첫 프레임만 보이고 화면이 멈춘 듯한 정지 현상이 발생할 수 있었다.
         if stateLock.withLock({ $0.isLiveStream }) {
+            let desiredRate = max(0.01, stateLock.withLock { $0.rate })
             if let range = item.seekableTimeRanges.last?.timeRangeValue {
                 let liveEdge = CMTimeGetSeconds(CMTimeRangeGetEnd(range))
                 if liveEdge.isFinite && liveEdge > 0 {
@@ -144,10 +147,19 @@ extension AVPlayerEngine {
                         to: CMTime(seconds: target, preferredTimescale: 600),
                         toleranceBefore: CMTime(seconds: 1.0, preferredTimescale: 600),
                         toleranceAfter: .zero
-                    )
+                    ) { [weak self] _ in
+                        guard let self else { return }
+                        self.player.playImmediately(atRate: desiredRate)
+                        self.stateLock.withLock { $0.lastProgressTime = Date() }
+                    }
+                } else {
+                    player.playImmediately(atRate: desiredRate)
                 }
+            } else {
+                player.playImmediately(atRate: desiredRate)
             }
             startStallWatchdog()
+            startHQRecoveryWatchdog()
         }
     }
 
@@ -169,18 +181,49 @@ extension AVPlayerEngine {
         logger.warning("AVPlayerEngine: AVPlayerItemPlaybackStalled")
         transition(to: .buffering(progress: 0))
 
-        // 0~400ms 지터 — 멀티라이브 동시 스톨 시 재요청 스파이크 완화
+        if let statusCode = player.currentItem?.errorLog()?.events.last?.errorStatusCode,
+           [401, 403, 404, 410, 500, 502, 503, 504].contains(Int(statusCode)) {
+            logger.warning("AVPlayerEngine: stall with HTTP \(statusCode) → reconnect")
+            handleError(.connectionLost)
+            return
+        }
+
         let jitterNs = UInt64.random(in: 0...400_000_000)
-        Task { [weak self] in
+        let recoveryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000 + jitterNs)
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
+
+            let before = CMTimeGetSeconds(self.player.currentTime())
             let keepUp = self.player.currentItem?.isPlaybackLikelyToKeepUp ?? false
+
             if keepUp && self.player.timeControlStatus != .playing {
                 self.logger.info("AVPlayerEngine: stall self-recovery — resume play")
                 await MainActor.run { self.player.play() }
                 self.stateLock.withLock { $0.lastProgressTime = Date() }
+                return
+            }
+
+            await MainActor.run {
+                if self.stateLock.withLock({ $0.isLiveStream }) {
+                    self.seekToLiveEdgeForRecovery(reason: "stall")
+                } else {
+                    self.player.play()
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+
+            let after = CMTimeGetSeconds(self.player.currentTime())
+            let progressed = before.isFinite && after.isFinite && (after - before) > 0.25
+            if progressed {
+                self.stateLock.withLock { $0.lastProgressTime = Date() }
+            } else {
+                self.logger.warning("AVPlayerEngine: stall recovery made no progress → reconnect")
+                self.handleError(.connectionLost)
             }
         }
+        tasks.set(AVPlayerTaskBag.kStallRecovery, recoveryTask)
     }
 
     // MARK: - AccessLog 처리
@@ -188,6 +231,11 @@ extension AVPlayerEngine {
     private func handleAccessLogEntry() {
         guard let log = player.currentItem?.accessLog(),
               let entry = log.events.last else { return }
+
+        // [Multi-live 튜닝] 배경(비선택/음소거) 세션은 지표 갱신/로그 워크를 모두 생략.
+        // AccessLog 콜백은 세그먼트마다(~2s) 발생하므로 N=8 멀티라이브에서 주요 CPU 핫스팟.
+        // HQ 복귀 워치독도 배경에서 건너뛰므로 indicatedBitrate 를 갱신할 필요가 없다.
+        if isBackgroundMode { return }
 
         stateLock.withLock { state in
             if entry.indicatedBitrate > 0 {
@@ -218,13 +266,32 @@ extension AVPlayerEngine {
 extension AVPlayerEngine {
 
     /// 10초 주기로 `AVPlayerLiveMetrics` 스냅샷을 구성해 `onAVMetrics` 발행.
+    ///
+    /// [Multi-live 튜닝]
+    ///   - 배경(비선택) 세션은 interval 을 20s 로 늘리고, 스냅샷 구성/콜백을 완전히 건너뛴다.
+    ///     (배경 세션의 서버 메트릭은 신뢰도가 낮고 UI 에도 노출되지 않음)
+    ///   - 재생 중이 아닐 때도 스냅샷을 구성하지 않는다 — 버퍼링/오류/정지 단계 불필요한 MainActor 트립 제거.
     internal func startMetricsCollection() {
         stateLock.withLock { $0.previousDroppedFrames = 0 }
 
         let task = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                // 현재 세션 상태에 따라 polling 간격 이원화
+                let bg: Bool = self?.isBackgroundMode ?? false
+                let intervalNs: UInt64 = bg ? 20_000_000_000 : 10_000_000_000
+                try? await Task.sleep(nanoseconds: intervalNs)
                 guard let self, !Task.isCancelled else { return }
+
+                // 배경 세션 또는 비재생 단계는 스냅샷 자체를 생성하지 않음
+                if self.isBackgroundMode { continue }
+                let phase = self.currentPhase
+                switch phase {
+                case .playing, .buffering:
+                    break
+                default:
+                    continue
+                }
+
                 let snapshot = await self.makeMetricsSnapshot()
                 if let cb = self.onAVMetrics {
                     Task { @MainActor in cb(snapshot) }
@@ -232,6 +299,18 @@ extension AVPlayerEngine {
             }
         }
         tasks.set(AVPlayerTaskBag.kMetricsCollector, task)
+    }
+
+    /// 현재 시점의 AVPlayer 메트릭 스냅샷을 즉시 한 번 발행.
+    /// 콜백 바인딩 직후 첫 주기(10초)를 기다리지 않고 서버로 초기 데이터를 보낼 때 사용한다.
+    public func emitCurrentMetricsSnapshot() {
+        guard stateLock.withLock({ $0.isLiveStream }) else { return }
+        guard let callback = onAVMetrics else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            callback(self.makeMetricsSnapshot())
+        }
     }
 
     /// 현재 시점 메트릭 스냅샷. AVPlayerItem 트랙 접근이 있으므로 MainActor에서 실행.

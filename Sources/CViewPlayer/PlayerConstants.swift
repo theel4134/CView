@@ -108,6 +108,10 @@ public enum ProxyDefaults {
     /// 최대 동시 활성 연결 수
     /// 80: 멀티라이브 4세션 × ~12-15 연결/세션 = ~60 여유분 포함 (50→80)
     public static let maxActiveConnections = 80
+    /// HLS 매니페스트(M3U8) 요청용 Accept-Encoding 헤더
+    /// 매니페스트는 텍스트이므로 gzip으로 70-85% 압축 — 멀티라이브 4세션 × 초당 1회 폴링 시 대역폭 크게 절감.
+    /// 세그먼트(TS/fMP4)는 이미 압축된 바이너리이므로 적용 대상 아님 (CPU만 소모).
+    public static let manifestAcceptEncoding = "gzip, deflate"
 }
 
 // MARK: - Multi-Pane Quality
@@ -159,9 +163,12 @@ public enum MultiLiveBWDefaults {
     /// 선택 세션 대역폭 가중치 (1.5 = 50% 더 할당)
     public static let selectedSessionWeight: Double = 1.5
     /// 긴급 강등 평균 버퍼 임계값 (초)
-    public static let emergencyBufferThreshold: TimeInterval = 2.0
+    /// — 정말 위급 상황(버퍼 1초 미만)만 강등 → 일시적 지터로 인한 불필요한 화질 저하 차단
+    public static let emergencyBufferThreshold: TimeInterval = 1.0
     /// 코디네이터 업데이트 주기 (초)
-    public static let updateIntervalSecs: TimeInterval = 5.0
+    /// [CPU 최적화] 5s → 8s — 멀티라이브 4채널 환경에서 BW 재배분 빈도를 줄여 메인 액터 부하 감소.
+    /// 화질 강등은 emergencyBufferThreshold(1초) 트리거가 별도로 보호하므로 응답성 유지.
+    public static let updateIntervalSecs: TimeInterval = 8.0
 }
 
 // MARK: - UI Defaults

@@ -148,7 +148,7 @@ private struct PiPControlsSwiftUIView: View {
                 .frame(width: 28, height: 28)
                 .background(DesignTokens.Colors.surfaceElevated)
                 .clipShape(Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
+                .overlay(Circle().strokeBorder(DesignTokens.Colors.borderOnDarkMediaStrong, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .help(help)

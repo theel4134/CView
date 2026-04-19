@@ -117,7 +117,8 @@ public actor LowLatencyController {
     
     // MARK: - Properties
     
-    private let config: Configuration
+    // [Fix 보정모드] 런타임 설정 변경 지원 — 콜백/sync 루프 유지한 채 config만 교체
+    private var config: Configuration
     private let logger = AppLogger.sync
     
     private var pidController: PIDController
@@ -191,6 +192,18 @@ public actor LowLatencyController {
         self.config = configuration
         self.pidController = PIDController(kp: configuration.pidKp, ki: configuration.pidKi, kd: configuration.pidKd)
         self.latencyEWMA = EWMACalculator(alpha: 0.15)
+    }
+
+    // MARK: - Runtime Configuration Update
+
+    /// [Fix 보정모드] 런타임 중 설정만 교체 — 콜백/sync 루프/쿨다운 상태 모두 유지
+    /// 사용자가 프리셋/슬라이더를 조정해도 보정 기능이 중단되지 않도록 함.
+    public func updateConfiguration(_ newConfig: Configuration) {
+        self.config = newConfig
+        // PID 게인이 바뀌었으니 컨트롤러 재생성 (적분 누적은 리셋 — 새 게인에서 이전 적분값은 무의미)
+        self.pidController = PIDController(kp: newConfig.pidKp, ki: newConfig.pidKi, kd: newConfig.pidKd)
+        // EWMA는 그대로 유지 — 레이턴시 추정은 연속성 보존
+        logger.info("LowLatency: configuration updated in-place (target=\(newConfig.targetLatency)s, kp=\(newConfig.pidKp))")
     }
     
     // MARK: - Setup
@@ -289,7 +302,10 @@ public actor LowLatencyController {
             
             // 5.0s: PID 제어 주기를 낮춰 CPU 절약 + 버퍼 안정화. 
             // VLC 내부 버퍼가 안정될 충분한 시간 확보.
-            let timer = AsyncTimerSequence(interval: 5.0 as TimeInterval)
+            // [Fix P-7] PowerAware: Battery 모드에서 7.5초로 연장 (1.5×) — PID 보정은
+            // 추세성이라 정밀도 영향 미미, idle wake-up 33% 감소.
+            let interval = PowerAwareInterval.scaled(5.0 as TimeInterval)
+            let timer = AsyncTimerSequence(interval: interval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 
@@ -369,11 +385,11 @@ public actor LowLatencyController {
         // Determine rate adjustment — 직접 PID 출력을 rate로 변환
         var newRate: Double
         
-        if abs(error) < config.slowDownThreshold {
-            // 데드존 안 — 동기화 완료 상태
-            newRate = 1.0
-            _state = .synced
-        } else if error > 0 {
+        // [Fix 보정모드] 비대칭 데드존 — catchUpThreshold/slowDownThreshold를 각각 독립 사용
+        // error > 0: 뒤처짐 → catchUpThreshold 초과해야 가속 시작
+        // error < 0: 앞서감 → slowDownThreshold 초과해야 감속 시작
+        // 그 사이(데드존)는 synced 유지 — 미세 떨림으로 인한 불필요한 rate 변동 억제
+        if error > config.catchUpThreshold {
             // 뒤쳐짐 — 속도 올림
             // 버퍼 건강도에 따라 가속 댐핑 — 낮은 버퍼에서 과도한 가속 방지
             let bh = bufferHealthProvider?() ?? 1.0
@@ -388,11 +404,15 @@ public actor LowLatencyController {
             let rateOffset = min(pidOutput * 0.3 * damping, config.maxPlaybackRate - 1.0)
             newRate = min(1.0 + max(0.01 * damping, rateOffset), config.maxPlaybackRate)
             _state = .catchingUp
-        } else {
+        } else if error < -config.slowDownThreshold {
             // 앞서감 — 속도 내림
             let rateOffset = max(pidOutput * 0.3, config.minPlaybackRate - 1.0)
             newRate = max(1.0 + min(-0.01, rateOffset), config.minPlaybackRate)
             _state = .slowingDown
+        } else {
+            // 데드존 안 — 동기화 완료 상태
+            newRate = 1.0
+            _state = .synced
         }
         
         // [Fix 20-F] 통합 가속 상한 (쿨다운 + 진동 + 멀티라이브 예산)

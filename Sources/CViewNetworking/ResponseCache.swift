@@ -15,16 +15,22 @@ public actor ResponseCache {
 
     struct CacheEntry {
         let data: any Sendable
+        /// 최초 저장 시각 — TTL 계산용 (불변)
         let timestamp: Date
+        /// 마지막 접근 시각 — LRU 퇴출용 (set/get 시 갱신)
+        var lastAccess: Date
     }
 
     /// 캐시에서 가져오기 (TTL 확인)
+    /// [Opt-N-2] 접근 시 lastAccess 갱신 — true LRU (hot entry가 FIFO로 퇴출되던 문제 해결)
     public func get<T: Sendable>(key: String, ttl: TimeInterval) -> T? {
-        guard let entry = storage[key],
+        guard var entry = storage[key],
               Date.now.timeIntervalSince(entry.timestamp) < ttl,
               let value = entry.data as? T else {
             return nil
         }
+        entry.lastAccess = .now
+        storage[key] = entry
         return value
     }
 
@@ -34,7 +40,8 @@ public actor ResponseCache {
         if storage.count >= maxEntries {
             evictOldest()
         }
-        storage[key] = CacheEntry(data: value, timestamp: .now)
+        let now = Date.now
+        storage[key] = CacheEntry(data: value, timestamp: now, lastAccess: now)
     }
 
     /// 특정 키 삭제
@@ -53,9 +60,10 @@ public actor ResponseCache {
         storage = storage.filter { now.timeIntervalSince($0.value.timestamp) < defaultTTL }
     }
 
-    /// 가장 오래된 25% 항목 제거
+    /// 가장 오래 미접근된 25% 항목 제거 (true LRU)
+    /// [Opt-N-2] lastAccess 기준으로 정렬 → 자주 읽히는 엔트리 보존
     private func evictOldest() {
-        let sorted = storage.sorted { $0.value.timestamp < $1.value.timestamp }
+        let sorted = storage.sorted { $0.value.lastAccess < $1.value.lastAccess }
         let toRemove = max(1, sorted.count / 4)
         for entry in sorted.prefix(toRemove) {
             storage.removeValue(forKey: entry.key)

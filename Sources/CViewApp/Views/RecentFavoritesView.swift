@@ -230,19 +230,8 @@ struct RecentFavoritesView: View {
 
 private extension RecentFavoritesView {
     func emptyState(icon: String, message: String) -> some View {
-        HStack {
-            Spacer()
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                Image(systemName: icon)
-                    .font(DesignTokens.Typography.display)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                Text(message)
-                    .font(DesignTokens.Typography.captionMedium)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-            }
+        EmptyStateView(icon: icon, title: message, style: .panel)
             .padding(.vertical, DesignTokens.Spacing.xl)
-            Spacer()
-        }
     }
 }
 

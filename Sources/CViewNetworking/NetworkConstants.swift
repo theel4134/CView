@@ -6,16 +6,16 @@ import Foundation
 // MARK: - API Client
 
 public enum APIDefaults {
-    /// API 요청 타임아웃 (초)
-    public static let requestTimeout: TimeInterval = 15
+    /// API 요청 타임아웃 (초) — [Tune] 15→10s: 대부분 API는 2~3초 내 응답. 느린 네트워크에서 불필요한 대기 단축.
+    public static let requestTimeout: TimeInterval = 10
     /// API 리소스 타임아웃 (초)
     public static let resourceTimeout: TimeInterval = 30
     /// 캐시 정리 주기 (초, 5분)
     public static let cachePurgeInterval: TimeInterval = 300
     /// 기본 캐시 TTL (초, 5분)
     public static let defaultCacheTTL: TimeInterval = 300
-    /// 전체 라이브 수집 최대 페이지
-    public static let allLivesMaxPages = 200
+    /// 전체 라이브 수집 최대 페이지 — [Tune] 200→40: 40 * 50 = 2,000채널. 실제 동시 라이브 수보다 충분한 상한이며 통계 수집 시 80% 대역폭 절감.
+    public static let allLivesMaxPages = 40
     /// 429 Rate Limit 최대 재대기 (초)
     public static let maxRateLimitRetrySecs: TimeInterval = 30
     /// Clip Inkey 요청 타임아웃 (초)
@@ -76,6 +76,6 @@ public enum CacheTTLDefaults {
     public static let metricsStats: TimeInterval = 10
     /// 채널 메트릭 캐시 TTL (초)
     public static let metricsChannel: TimeInterval = 5
-    /// 라이브 썸네일 캐시 TTL (초)
-    public static let liveThumbnail: TimeInterval = 45
+    /// 라이브 썸네일 캐시 TTL (초) — [Tune] 45→60s: 썸네일 변화 불규칙, 25% 요청 감소.
+    public static let liveThumbnail: TimeInterval = 60
 }

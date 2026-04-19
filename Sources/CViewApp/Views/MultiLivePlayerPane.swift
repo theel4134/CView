@@ -34,6 +34,20 @@ struct MLPlayerPane: View {
             if isActive {
                 loadStateOverlay
             }
+
+            // [Donation Alerts 2026-04-18] 싱글라이브와 동일한 후원/구독/공지 알림 오버레이.
+            // MultiLiveSession.chatViewModel.streamAlerts 가 ChatViewModel+Processing 에서
+            // 채팅 이벤트(.donations / .subscription / .notice) 수신 시 자동 큐잉됨.
+            // 비활성 패인에서는 토스트가 떠도 사용자가 못 보므로 isActive 일 때만 렌더.
+            if isActive {
+                StreamAlertOverlayView(
+                    alerts: session.chatViewModel.streamAlerts,
+                    onDismiss: { session.chatViewModel.dismissStreamAlert($0) }
+                )
+                .allowsHitTesting(true)
+                .animation(DesignTokens.Animation.contentTransition,
+                           value: session.chatViewModel.streamAlerts)
+            }
         }
     }
 
@@ -96,29 +110,21 @@ struct MLPlayerPane: View {
     }
 
     // MARK: - 버퍼링/재연결 오버레이
+    // [Buffering Unify 2026-04-18] 싱글라이브의 StreamLoadingOverlay 와 동일한 디자인으로
+    // 통일하여 멀티라이브에서도 풀 프레임 블러 + 회전 호 스피너 + 단계별 텍스트를 표시한다.
     @ViewBuilder
     private var mlBufferingOverlay: some View {
         if session.playerViewModel.streamPhase == .buffering
             || session.playerViewModel.streamPhase == .connecting
             || session.playerViewModel.streamPhase == .reconnecting {
-            VStack(spacing: DesignTokens.Spacing.sm) {
-                ProgressView()
-                    .scaleEffect(1.1)
-                    .tint(.white)
-                Text(session.playerViewModel.streamPhase == .reconnecting
-                     ? "재연결 중..." : "버퍼링 중...")
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textOnOverlay.opacity(0.85))
-            }
-            .padding(.horizontal, DesignTokens.Spacing.xl)
-            .padding(.vertical, DesignTokens.Spacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .fill(Color.black.opacity(0.7))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+            StreamLoadingOverlay(
+                channelId: session.channelId,
+                channelName: session.channelName,
+                liveTitle: session.liveTitle,
+                thumbnailURL: session.thumbnailURL,
+                streamPhase: session.playerViewModel.streamPhase,
+                bufferLevel: session.playerViewModel.bufferHealth.map { Double($0.currentLevel) },
+                isApiLoading: false
             )
             .transition(.opacity.animation(DesignTokens.Animation.fast))
         }
@@ -208,9 +214,14 @@ struct MLGridLayout: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // [Resize 최적화] 정수 픽셀 스냅 + 변경 가드 → 리사이즈 시 N개 셀 frame 재계산 폭주 차단
         .onGeometryChange(for: CGSize.self) { proxy in
-            proxy.size
+            CGSize(
+                width: proxy.size.width.rounded(.down),
+                height: proxy.size.height.rounded(.down)
+            )
         } action: { newSize in
+            guard newSize != containerSize else { return }
             containerSize = newSize
         }
         .transaction { $0.animation = nil }
@@ -277,9 +288,25 @@ struct MLGridCell: View {
                 Spacer()
 
                 if session.viewerCount > 0 {
-                    Text(session.formattedViewerCount)
-                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    HStack(spacing: 3) {
+                        Image(systemName: "eye.fill")
+                            .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
+                        Text(session.formattedViewerCount)
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    .help("현재 시청자 수")
+                }
+
+                if session.accumulateCount > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "person.2.fill")
+                            .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
+                        Text(session.formattedAccumulateCount)
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.85))
+                    .help("누적 시청자 수")
                 }
             }
             .padding(.horizontal, 8)
@@ -330,9 +357,9 @@ struct MLGridCell: View {
                     .scaleEffect(0.85)
                     .tint(.white)
                     .frame(width: 34, height: 34)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(DesignTokens.Glass.thin, in: Circle())
                     .overlay {
-                        Circle().strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                        Circle().strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                     }
             }
 
@@ -343,9 +370,9 @@ struct MLGridCell: View {
                     .scaleEffect(0.8)
                     .tint(.white)
                     .frame(width: 34, height: 34)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(DesignTokens.Glass.thin, in: Circle())
                     .overlay {
-                        Circle().strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                        Circle().strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                     }
             case .offline:
                 MLStreamEndedOverlay(
@@ -381,10 +408,10 @@ struct MLGridCell: View {
                 .padding(.vertical, DesignTokens.Spacing.sm)
                 .background(
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .fill(.ultraThinMaterial)
+                        .fill(DesignTokens.Glass.thin)
                         .overlay {
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                                .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                         }
                         .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
                 )
@@ -562,12 +589,24 @@ struct MLSessionInfoBar: View {
 
             if session.viewerCount > 0 {
                 HStack(spacing: 3) {
-                    Image(systemName: "person.fill")
+                    Image(systemName: "eye.fill")
                         .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
                     Text(session.formattedViewerCount)
                         .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
                 }
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .help("현재 시청자 수")
+            }
+
+            if session.accumulateCount > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "person.2.fill")
+                        .font(DesignTokens.Typography.custom(size: 8, weight: .medium))
+                    Text(session.formattedAccumulateCount)
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .rounded))
+                }
+                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.85))
+                .help("누적 시청자 수")
             }
         }
         .padding(.horizontal, 10)
@@ -655,10 +694,10 @@ private struct MLStreamEndedOverlay: View {
                 VStack(spacing: compact ? 2 : DesignTokens.Spacing.sm) {
                     Text(compact ? "방송 종료" : "방송이 종료되었습니다")
                         .font(compact ? DesignTokens.Typography.footnoteMedium : DesignTokens.Typography.subhead)
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     Text(session.channelName.isEmpty ? session.channelId : session.channelName)
                         .font(compact ? DesignTokens.Typography.micro : DesignTokens.Typography.bodyMedium)
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                         .lineLimit(1)
                 }
 
@@ -691,7 +730,7 @@ private struct MLStreamEndedOverlay: View {
             ForEach(0..<3, id: \.self) { i in
                 Circle()
                     .strokeBorder(
-                        Color.white.opacity(ringPulse ? 0 : 0.12),
+                        ringPulse ? Color.clear : DesignTokens.Colors.borderOnDarkMedia,
                         lineWidth: compact ? 0.5 : 1
                     )
                     .frame(
@@ -708,15 +747,15 @@ private struct MLStreamEndedOverlay: View {
 
             // 아이콘 원형 배경
             Circle()
-                .fill(Color.white.opacity(0.05))
+                .fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.36))
                 .frame(width: size, height: size)
             Circle()
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: compact ? 0.5 : 1)
+                .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: compact ? 0.5 : 1)
                 .frame(width: size, height: size)
 
             Image(systemName: "tv.slash")
                 .font(DesignTokens.Typography.custom(size: compact ? 18 : 28, weight: .light))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 .symbolEffect(.breathe, options: .repeat(.continuous))
         }
     }
@@ -731,10 +770,10 @@ private struct MLStreamEndedOverlay: View {
             } label: {
                 Text("다시 확인")
                     .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                     .padding(.horizontal, DesignTokens.Spacing.sm)
                     .padding(.vertical, DesignTokens.Spacing.xxs)
-                    .background(Capsule().fill(Color.white.opacity(0.1)))
+                    .background(Capsule().fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.7)))
             }
             .buttonStyle(.plain)
 
@@ -747,10 +786,10 @@ private struct MLStreamEndedOverlay: View {
                     Text("종료")
                         .font(DesignTokens.Typography.micro)
                 }
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.vertical, DesignTokens.Spacing.xxs)
-                .background(Capsule().fill(Color.white.opacity(0.07)))
+                .background(Capsule().fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.5)))
             }
             .buttonStyle(.plain)
         }
@@ -775,8 +814,8 @@ private struct MLStreamEndedOverlay: View {
                 .padding(.vertical, DesignTokens.Spacing.md)
                 .background {
                     Capsule()
-                        .fill(Color.white.opacity(0.12))
-                        .overlay { Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 1) }
+                        .fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.85))
+                        .overlay { Capsule().strokeBorder(DesignTokens.Colors.borderOnDarkMediaStrong, lineWidth: 1) }
                 }
             }
             .buttonStyle(.plain)
@@ -790,13 +829,13 @@ private struct MLStreamEndedOverlay: View {
                     Text("제거")
                         .font(DesignTokens.Typography.bodySemibold)
                 }
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 .padding(.horizontal, DesignTokens.Spacing.lg)
                 .padding(.vertical, DesignTokens.Spacing.md)
                 .background {
                     Capsule()
-                        .fill(Color.white.opacity(0.07))
-                        .overlay { Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1) }
+                        .fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.5))
+                        .overlay { Capsule().strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 1) }
                 }
             }
             .buttonStyle(.plain)
@@ -913,10 +952,10 @@ private struct MLSessionStatusOverlay: View {
                             .padding(.vertical, DesignTokens.Spacing.md)
                             .background {
                                 Capsule()
-                                    .fill(Color.white.opacity(0.07))
+                                    .fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.5))
                                     .overlay {
                                         Capsule()
-                                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                                            .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 1)
                                     }
                             }
                         }

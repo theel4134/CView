@@ -92,6 +92,9 @@ public actor PerformanceMonitor {
     private let memoryTrendMaxSize = 60
     /// 메모리 증가 추세 경고 임계치 (MB/분) — 이 이상이면 누수 의심
     private let memoryGrowthWarningThreshold: Double = 50.0
+    /// 메모리 트렌드 샘플링 간격 (초) — collectMetrics interval 변경과 무관하게 정확히 60으로 유지
+    private let memoryTrendSampleInterval: TimeInterval = 60.0
+    private var _lastMemoryTrendSampleAt: Date = .distantPast
     
     /// CPU/GPU 캐시 — IOKit+task_threads 커널 호출을 매초→5초로 줄임
     /// [GPU/CPU 최적화] IORegistryEntryCreateCFProperties + task_threads 는 무거운 커널 호출.
@@ -118,8 +121,11 @@ public actor PerformanceMonitor {
         guard !isRunning else { return }
         isRunning = true
         
+        // [Fix N-3] PowerAware: 호출자 인자를 그대로 두고 내부에서 Battery 모드 1.5× 적용
+        // — AC 10s / Battery 15s, 추세 확인 정밀도 영향 미미
+        let effectiveInterval = PowerAwareInterval.scaled(interval)
         collectionTask = Task {
-            let timer = AsyncTimerSequence(interval: interval)
+            let timer = AsyncTimerSequence(interval: effectiveInterval)
             for await _ in timer {
                 guard !Task.isCancelled else { break }
                 await self.collectMetrics()
@@ -218,9 +224,11 @@ public actor PerformanceMonitor {
         _kernelSampleCounter += 1
         if _kernelSampleCounter >= kernelSampleInterval {
             _kernelSampleCounter = 0
-            // IOKit(GPU) + task_threads(CPU) 커널 호출을 병렬 실행
-            async let gpuTask = Task.detached(priority: .utility) { self.readGPUStats() }.value
-            async let cpuTask = Task.detached(priority: .utility) { self.currentCPUUsage() }.value
+            // [Power-Aware] AC: .utility (E-core 적당 응답), Battery: .background (E-core+스로틀)
+            // IOKit/task_threads 호출은 반드시 백그라운드이므로 P-core 승격 불필요.
+            let prio = PowerAwareTaskPriority.periodic
+            async let gpuTask = Task.detached(priority: prio) { self.readGPUStats() }.value
+            async let cpuTask = Task.detached(priority: prio) { self.currentCPUUsage() }.value
             let (gpu, cpu) = await (gpuTask, cpuTask)
             _cachedGPU = gpu
             _cachedCPU = cpu
@@ -252,9 +260,11 @@ public actor PerformanceMonitor {
         
         metricsContinuation?.yield(metrics)
         
-        // 메모리 증가 추세 분석 (60초 간격으로 샘플링 — 매초 호출에서 60초마다 1개)
-        // metricsHistory count를 기준으로 60번째마다 기록
-        if metricsHistory.count % 60 == 0 {
+        // [Tune] 메모리 증가 추세 분석 (시간 기반 — collectMetrics interval 변경에 영향 받지 않음)
+        // 매 collectMetrics 시간 기반으로 60초 경과 시마다 1개 샘플 기록 — 5개면 5분간 추세 분석
+        let now = metrics.timestamp
+        if now.timeIntervalSince(_lastMemoryTrendSampleAt) >= memoryTrendSampleInterval {
+            _lastMemoryTrendSampleAt = now
             memoryTrend.append(memUsage)
             if memoryTrend.count > memoryTrendMaxSize {
                 memoryTrend.removeFirst()
@@ -352,7 +362,7 @@ public actor PerformanceMonitor {
     }
 
     /// Get current memory usage in MB
-    private func currentMemoryUsage() -> Double {
+    private nonisolated func currentMemoryUsage() -> Double {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
         
@@ -366,6 +376,53 @@ public actor PerformanceMonitor {
             return Double(info.resident_size) / 1_048_576.0 // bytes to MB
         }
         return 0
+    }
+
+    /// 현재 프로세스 스레드 개수 (task_threads 호출 후 count 반환)
+    private nonisolated func currentThreadCount() -> Int {
+        var threadList: thread_act_array_t?
+        var threadCount = mach_msg_type_number_t(0)
+        guard task_threads(mach_task_self_, &threadList, &threadCount) == KERN_SUCCESS,
+              let list = threadList else { return 0 }
+        vm_deallocate(
+            mach_task_self_,
+            vm_address_t(bitPattern: list),
+            vm_size_t(MemoryLayout<thread_t>.size) * vm_size_t(threadCount)
+        )
+        return Int(threadCount)
+    }
+
+    // MARK: - On-Demand System Usage Snapshot
+
+    /// 메뉴바/간이 모니터용 시스템 사용률 스냅샷
+    /// 앱 프로세스 기준 CPU/Memory/GPU/스레드 수를 즉시 조회한다.
+    /// 모니터 실행 여부와 무관하게 호출 가능 (isolated 상태에 의존하지 않음).
+    public struct SystemUsageSnapshot: Sendable {
+        public let cpuPercent: Double        // 0~N×100 (N=코어 수)
+        public let memoryMB: Double
+        public let gpuPercent: Double        // Device Utilization %
+        public let gpuRendererPercent: Double
+        public let gpuMemoryMB: Double
+        public let threadCount: Int
+        public let timestamp: Date
+    }
+
+    /// 현재 시점의 시스템 사용률을 즉시 반환한다.
+    /// 내부적으로 task_threads + IOKit GPU 조회 수행 (수 밀리초 소요).
+    public nonisolated func systemUsageSnapshot() -> SystemUsageSnapshot {
+        let cpu = currentCPUUsage()
+        let mem = currentMemoryUsage()
+        let gpu = readGPUStats()
+        let threads = currentThreadCount()
+        return SystemUsageSnapshot(
+            cpuPercent: cpu,
+            memoryMB: mem,
+            gpuPercent: gpu.usage,
+            gpuRendererPercent: gpu.renderer,
+            gpuMemoryMB: gpu.memMB,
+            threadCount: threads,
+            timestamp: Date()
+        )
     }
     
     // MARK: - Statistics

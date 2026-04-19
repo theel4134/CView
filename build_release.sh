@@ -81,53 +81,27 @@ fi
 # ── 4. 리소스 복사 ────────────────────────────────────────────────────
 echo "━━━ [4/5] 리소스 복사... ━━━"
 
-# Info.plist 생성 (Xcode 변수 치환 적용)
-cat > "$CONTENTS/Info.plist" << PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>ko</string>
-	<key>CFBundleExecutable</key>
-	<string>${APP_NAME}</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>CFBundleIdentifier</key>
-	<string>${BUNDLE_ID}</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleDisplayName</key>
-	<string>CView 2.0</string>
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
-	<key>CFBundleName</key>
-	<string>CView 2.0</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>${VERSION}</string>
-	<key>CFBundleVersion</key>
-	<string>${BUILD_NUMBER}</string>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.entertainment</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>${MIN_MACOS}</string>
-	<key>NSMainStoryboardFile</key>
-	<string></string>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026. All rights reserved.</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
-</dict>
-</plist>
-PLIST
-echo "   Info.plist 생성 완료"
+# [Fix 32] Info.plist 단일화 (B-1) + ATS 정책 정렬 (SEC-1)
+# SupportFiles/Info.plist 를 single source of truth 로 사용하고 plutil 로 동적 키만 치환.
+# → Xcode 빌드와 SPM 릴리스 빌드의 ATS/권한 정책 차이를 제거.
+INFO_PLIST_SRC="$SCRIPT_DIR/SupportFiles/Info.plist"
+if [[ ! -f "$INFO_PLIST_SRC" ]]; then
+    echo "❌ SupportFiles/Info.plist 를 찾을 수 없습니다: $INFO_PLIST_SRC"
+    exit 1
+fi
+cp "$INFO_PLIST_SRC" "$CONTENTS/Info.plist"
+plutil -replace CFBundleExecutable        -string "$APP_NAME"     "$CONTENTS/Info.plist"
+plutil -replace CFBundleIdentifier        -string "$BUNDLE_ID"    "$CONTENTS/Info.plist"
+plutil -replace CFBundleShortVersionString -string "$VERSION"     "$CONTENTS/Info.plist"
+plutil -replace CFBundleVersion           -string "$BUILD_NUMBER" "$CONTENTS/Info.plist"
+plutil -replace LSMinimumSystemVersion    -string "$MIN_MACOS"    "$CONTENTS/Info.plist"
+# 검증
+if ! plutil -lint "$CONTENTS/Info.plist" >/dev/null 2>&1; then
+    echo "❌ Info.plist 검증 실패"
+    plutil -lint "$CONTENTS/Info.plist"
+    exit 1
+fi
+echo "   Info.plist 생성 완료 (SupportFiles/Info.plist 기반, plutil 치환)"
 
 # AppIcon.icns 복사
 ICNS_SRC="$SCRIPT_DIR/SupportFiles/Assets.xcassets/AppIcon.icns"

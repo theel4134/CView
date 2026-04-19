@@ -59,7 +59,7 @@ struct SettingsSection<Content: View>: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
+            .background(DesignTokens.Glass.thin, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
                     .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)

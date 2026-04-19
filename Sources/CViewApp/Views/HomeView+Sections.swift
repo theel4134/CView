@@ -36,12 +36,18 @@ extension HomeView {
             }
             
             // Charts Row
-            HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
-                LatencyComparisonChart(history: viewModel.latencyHistory)
-                    .frame(maxWidth: .infinity)
-                
-                ServerChannelStatsView(channelStats: viewModel.serverChannelStats)
-                    .frame(maxWidth: .infinity)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
+                    LatencyComparisonChart(history: viewModel.latencyHistory)
+                        .frame(maxWidth: .infinity)
+
+                    ServerChannelStatsView(channelStats: viewModel.serverChannelStats)
+                        .frame(maxWidth: .infinity)
+                }
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+                    LatencyComparisonChart(history: viewModel.latencyHistory)
+                    ServerChannelStatsView(channelStats: viewModel.serverChannelStats)
+                }
             }
         }
     }
@@ -121,11 +127,9 @@ extension HomeView {
                     spacing: DesignTokens.Spacing.sm
                 ) {
                     ForEach(viewModel.recentLiveFollowing) { channel in
-                        MiniChannelCard(channel: channel)
-                            .onHover { hovering in
-                                if hovering { triggerPrefetch(channelId: channel.channelId) }
-                            }
-                            .customCursor(.pointingHand)
+                        MiniChannelCard(channel: channel, onHoverChange: { hovering in
+                            if hovering { triggerPrefetch(channelId: channel.channelId) }
+                        })
                             .onTapGesture {
                                 router.navigate(to: .live(channelId: channel.channelId))
                             }
@@ -196,11 +200,9 @@ extension HomeView {
                     spacing: DesignTokens.Spacing.sm
                 ) {
                     ForEach(viewModel.topChannels) { channel in
-                        MiniChannelCard(channel: channel)
-                            .onHover { hovering in
-                                if hovering { triggerPrefetch(channelId: channel.channelId) }
-                            }
-                            .customCursor(.pointingHand)
+                        MiniChannelCard(channel: channel, onHoverChange: { hovering in
+                            if hovering { triggerPrefetch(channelId: channel.channelId) }
+                        })
                             .onTapGesture {
                                 router.navigate(to: .live(channelId: channel.channelId))
                             }
@@ -251,12 +253,7 @@ extension HomeView {
 
     var skeletonStatCards: some View {
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
-                GridItem(.flexible(), spacing: DesignTokens.Spacing.sm)
-            ],
+            columns: [GridItem(.adaptive(minimum: 180, maximum: 360), spacing: DesignTokens.Spacing.sm)],
             spacing: DesignTokens.Spacing.sm
         ) {
             ForEach(0..<4, id: \.self) { _ in

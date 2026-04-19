@@ -56,6 +56,10 @@ struct MergedChatView: View {
     /// replay mode 진입 debounce — 배치 flush에 의한 일시적 geometry 변경을 걸러냄
     @State private var replayDebounceTask: Task<Void, Never>?
 
+    // MARK: - P0-2: 통합 모드 채팅 입력
+    /// 메시지를 보낼 대상 채널 ID (nil → 선택된 세션 / 첫 번째 세션)
+    @State private var targetChannelId: String? = nil
+
     private var isScrollSuppressed: Bool { scrollSuppressUntil > Date() }
 
     /// 채널별 색상 팔레트
@@ -77,6 +81,18 @@ struct MergedChatView: View {
             hash = hash &* 33 &+ UInt64(byte)
         }
         return channelColors[Int(hash % UInt64(channelColors.count))]
+    }
+
+    /// 연결 상태를 푸터에 짧게 표시 — 재연결 시 attempt 횟수까지 노출 (P1-4)
+    private func connectionShortLabel(_ state: ChatConnectionState) -> String {
+        switch state {
+        case .connected: return "연결됨"
+        case .connecting: return "연결 중"
+        case .reconnecting(let attempt) where attempt > 0: return "재연결 \(attempt)회"
+        case .reconnecting: return "재연결 중"
+        case .disconnected: return "끊김"
+        case .failed: return "실패"
+        }
     }
 
     // MARK: - Computed Triggers
@@ -106,6 +122,7 @@ struct MergedChatView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
         GeometryReader { geo in
         ScrollViewReader { proxy in
             ScrollView {
@@ -173,6 +190,11 @@ struct MergedChatView: View {
             // MARK: 이벤트 기반 트리거 — 메시지 변경 시 증분 merge
             .onChange(of: messageChangeSignal) { _, _ in
                 mergeNewMessages()
+                // [Auto-scroll Recovery 2026-04-18] geometry oscillation 으로 replay mode 가
+                // 잘못 진입되어 읽힌 메시지 수(unreadCount)이 0 인 경우 다시 자동 스크롤 재개.
+                if isReplayMode, unreadCount == 0 {
+                    exitReplayMode()
+                }
                 if isAutoScrollEnabled, !isReplayMode {
                     stickyScroll(proxy: proxy)
                 }
@@ -211,6 +233,94 @@ struct MergedChatView: View {
             }
         } // ScrollViewReader
         } // GeometryReader
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        // P0-2: 통합 모드 채팅 입력 푸터 — 채널 타겟 피커 + 컴팩트 입력
+        if !sessionManager.sessions.isEmpty, let target = effectiveTargetSession {
+            mergedInputFooter(target: target)
+        }
+        } // VStack
+    }
+
+    // MARK: - Merged Input Footer (P0-2)
+
+    /// 현재 메시지 전송 대상 세션 해결
+    /// 우선순위: targetChannelId → selectedSession → 첫 번째 세션
+    private var effectiveTargetSession: MultiChatSessionManager.ChatSession? {
+        if let id = targetChannelId,
+           let s = sessionManager.sessions.first(where: { $0.id == id }) {
+            return s
+        }
+        if let sel = sessionManager.selectedSession { return sel }
+        return sessionManager.sessions.first
+    }
+
+    private func mergedInputFooter(target: MultiChatSessionManager.ChatSession) -> some View {
+        VStack(spacing: 0) {
+            // 송신 채널 선택 바
+            HStack(spacing: 6) {
+                Image(systemName: "paperplane")
+                    .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+
+                Menu {
+                    ForEach(sessionManager.sessions) { session in
+                        Button {
+                            targetChannelId = session.id
+                        } label: {
+                            HStack {
+                                Text(session.channelName)
+                                if session.id == target.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Self.channelColor(for: target.id))
+                            .frame(width: 6, height: 6)
+                        Text(target.channelName)
+                            .font(DesignTokens.Typography.custom(size: 10.5, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.textPrimary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(DesignTokens.Typography.custom(size: 8, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("메시지를 보낼 채널")
+
+                Spacer()
+
+                // 연결 상태 표시 — 재연결 attempt까지 함께 노출
+                ChatConnectionStatusBadge(state: target.chatViewModel.connectionState, compact: false)
+                Text(connectionShortLabel(target.chatViewModel.connectionState))
+                    .font(DesignTokens.Typography.custom(size: 9.5, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, 4)
+            .background(DesignTokens.Colors.surfaceBase.opacity(0.7))
+
+            // 컴팩트 입력 bar
+            ChatInputView(
+                viewModel: target.chatViewModel,
+                compact: true,
+                compactChannelHint: target.channelName
+            )
+            .id(target.id) // 채널 전환 시 입력 상태 리셋
+        }
+        .background(DesignTokens.Colors.surfaceBase)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(DesignTokens.Glass.dividerColor)
+                .frame(height: 0.5)
+        }
     }
 
     // MARK: - Merged Message Row
@@ -218,14 +328,31 @@ struct MergedChatView: View {
     private func mergedMessageRow(_ item: MergedMessageItem) -> some View {
         MergedChatRowContainer {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
-                // 채널 라벨
-                Text(item.channelName)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundStyle(item.channelColor)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(item.channelColor.opacity(0.12), in: Capsule())
-                    .padding(.trailing, 6)
+                // 채널 칩 — 색상 도트 + 라벨 + 얇은 테두리
+                // · 도트: 색상 식별성을 폰트 크기와 분리해 시각 우선순위 제공
+                // · stroke 0.5pt: 저대비 배경에서도 경계 유지
+                // · 긴 채널명은 14자 내외에서 단일 라인 잘림 처리 → 메시지 영역 잠식 방지
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(item.channelColor)
+                        .frame(width: 5, height: 5)
+
+                    Text(item.channelName)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(item.channelColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(maxWidth: 110, alignment: .leading)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(item.channelColor.opacity(0.14), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .strokeBorder(item.channelColor.opacity(0.35), lineWidth: 0.5)
+                }
+                .padding(.trailing, 6)
 
                 // 메시지 — EquatableChatMessageRow 재사용 (사용자 설정 + chatVM 전달)
                 EquatableChatMessageRow(
@@ -406,14 +533,16 @@ struct MergedChatView: View {
 
     // MARK: - Scroll Helpers
 
-    /// 새 메시지 자동 스크롤 — `.defaultScrollAnchor(.bottom)`이 콘텐츠 증가 시 하단을 자동 유지하므로
-    /// 수동 `scrollTo`는 생략(중복 호출 시 ScrollView 내부 anchor와 충돌하여 위아래 흔들림 발생).
-    /// 시간 윈도 suppression만 갱신하여 geometry oscillation이 replay mode를 잘못 트리거하는 것 방지.
+    /// 새 메시지 자동 스크롤 — macOS SwiftUI `defaultScrollAnchor(.bottom)` 는
+    /// contentSize/containerSize 변동 후 앵커 손실이 종종 발생하므로
+    /// 명시적 `proxy.scrollTo(bottomAnchorID)` 로 하단 고정을 보장한다.
+    /// `scrollSuppressUntil` 은 geometry oscillation 으로 인한 replay mode 오진입 차단용.
     private func stickyScroll(proxy: ScrollViewProxy) {
         guard !mergedMessages.isEmpty else { return }
         replayDebounceTask?.cancel()
         replayDebounceTask = nil
         scrollSuppressUntil = max(scrollSuppressUntil, Date().addingTimeInterval(0.08))
+        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
     }
 
     /// 사용자 요청 시 최하단 스크롤 — 부드러운 애니메이션으로 이동

@@ -251,7 +251,9 @@ public actor MultiLiveBandwidthCoordinator {
                 sessionId: stream.sessionId,
                 maxAllowedBitrate: allocated,
                 cappedMaxHeight: cappedHeight,
-                emergencyDowngrade: isEmergency,
+                // [선택 세션 보호] 긴급 상황이어도 선택 세션은 강등하지 않음
+                // (비선택 세션만 강등하여 1080p60/8Mbps 체감을 보호)
+                emergencyDowngrade: isEmergency && !stream.isSelected,
                 bufferPhase: phase
             ))
         }
@@ -301,7 +303,15 @@ public actor MultiLiveBandwidthCoordinator {
 
     /// 패인 크기 기반 최대 해상도 높이 결정 — downscale 모드
     /// (패인보다 작은 최고 해상도를 선택, 불필요한 고해상도 방지)
+    ///
+    /// [Quality 2026-04-18] 선택 세션은 항상 0(무제한) 반환 — 사용자 포커스 패널은
+    ///   풀스크린 전환/창 확대 가능성을 고려하여 1080p 변종을 항상 허용해야 한다.
+    ///   기존 코드는 `isSelected` 파라미터를 받아만 두고 사용하지 않아, 4 그리드(960x540 추정)
+    ///   상황에서 선택 세션도 720p로 캡되는 회귀가 있었다.
     private func capLevelByPaneSize(paneWidth: Int, paneHeight: Int, isSelected: Bool) -> Int {
+        // 선택 세션: 캡 적용 없음 (체감 화질 우선)
+        if isSelected { return 0 }
+
         // 표준 해상도 구간
         let resolutionTiers: [(width: Int, height: Int)] = [
             (640, 360),    // 360p

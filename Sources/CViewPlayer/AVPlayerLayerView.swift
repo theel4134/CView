@@ -7,6 +7,16 @@ import AppKit
 import CoreVideo
 import QuartzCore
 
+// MARK: - GPU Render Tier (멀티라이브 compositor 스케일 제어)
+
+/// AVPlayerLayer 의 compositor 렌더 계층.
+/// `SessionTier` 와 의미가 동일하나 CViewPlayer 모듈 내부에서 순환 의존 없이 사용하도록 분리.
+public enum AVGPURenderTier: Int, Sendable {
+    case active  = 0
+    case visible = 1
+    case hidden  = 2
+}
+
 // MARK: - Video Rendering View
 
 /// AVPlayerLayer를 소유하는 경량 NSView.
@@ -84,6 +94,43 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         playerLayer.player = player
     }
 
+    /// 현재 적용된 GPU 렌더 계층 (기본 full = Retina 원본)
+    private var gpuRenderTier: AVGPURenderTier = .active
+
+    /// 멀티라이브 GPU 렌더 계층에 따라 `contentsScale` 과 `isHidden` 을 조정한다.
+    /// AVPlayerLayer 의 `contentsScale` 은 비디오 프레임 합성 시 출력 샘플 밀도에 영향을 주며,
+    /// 낮출수록 GPU 합성 픽셀 수가 줄어든다. (디코딩 해상도와는 독립)
+    ///
+    /// - `.active`  : 풀 백킹 스케일 (Retina 원본)
+    /// - `.visible` : 백킹 × 0.75 (약 44% 픽셀 감소)
+    /// - `.hidden`  : 레이어 숨김 (합성 패스 생략)
+    func setGPURenderTier(_ tier: AVGPURenderTier) {
+        gpuRenderTier = tier
+        applyGPURenderTier()
+    }
+
+    private func applyGPURenderTier() {
+        let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let targetScale: CGFloat
+        let shouldHide: Bool
+        switch gpuRenderTier {
+        case .active:
+            targetScale = backing
+            shouldHide = false
+        case .visible:
+            targetScale = max(1.0, backing * 0.75)
+            shouldHide = false
+        case .hidden:
+            targetScale = backing
+            shouldHide = true
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.isHidden = shouldHide
+        playerLayer.contentsScale = targetScale
+        CATransaction.commit()
+    }
+
     /// 선명한 화면(픽셀 샤프 스케일링) 토글.
     /// - true: magnificationFilter/minificationFilter = .nearest → 픽셀 경계 유지 (에지 선명, 계단감 가능)
     /// - false: 기본 .linear / .trilinear (부드러운 보간)
@@ -97,24 +144,14 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        // 윈도우 이동/스크린 변경 시 contentsScale 자동 업데이트
-        if let scale = window?.backingScaleFactor {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            playerLayer.contentsScale = scale
-            CATransaction.commit()
-        }
+        // 윈도우 이동/스크린 변경 시 tier 기반 contentsScale 재적용
+        applyGPURenderTier()
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        // Retina ↔ 일반 디스플레이 전환 시 즉시 contentsScale 갱신
-        if let scale = window?.backingScaleFactor {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            playerLayer.contentsScale = scale
-            CATransaction.commit()
-        }
+        // Retina ↔ 일반 디스플레이 전환 시 tier 기반 contentsScale 재적용
+        applyGPURenderTier()
     }
 
     override func layout() {

@@ -67,7 +67,11 @@ public actor WebSocketService {
     private var session: URLSession?
     private var pingTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
-    
+
+    /// [M-1/M-3] 백그라운드 모드: ping 주기를 2× 연장하여 멀티채팅(최대 8세션) 전력 소모 감소.
+    /// 포그라운드 세션 1개 + 백그라운드 7개 시나리오에서 7세션의 ping 트래픽을 절반으로.
+    private var _isBackgroundMode: Bool = false
+
     private var _state: State = .disconnected
     public var state: State { _state }
     
@@ -127,6 +131,8 @@ public actor WebSocketService {
         sessionConfig.timeoutIntervalForResource = WSDefaults.resourceTimeout
         sessionConfig.httpShouldSetCookies = true
         sessionConfig.httpCookieAcceptPolicy = .always
+        // [Tune] 채팅은 사용자가 직접 보는 콘텐츠 → responsiveData 우선순위로 OS 스케줄링 가속
+        sessionConfig.networkServiceType = .responsiveData
         sessionConfig.httpAdditionalHeaders = [
             "Connection": "keep-alive",
             "Keep-Alive": WSDefaults.keepAliveHeader
@@ -137,7 +143,11 @@ public actor WebSocketService {
                 await self?.handleServerClose(closeCode: closeCode)
             }
         }
-        session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
+        // [Tune] delegate 큐를 유틸리티 QoS 전용 OperationQueue로 격리 — 메인 큐와 경합 방지
+        let wsQueue = OperationQueue()
+        wsQueue.maxConcurrentOperationCount = 1
+        wsQueue.qualityOfService = .userInitiated
+        session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: wsQueue)
         
         var request = URLRequest(url: configuration.url)
         request.setValue(CommonHeaders.chzzkOrigin, forHTTPHeaderField: "Origin")
@@ -254,7 +264,12 @@ public actor WebSocketService {
     
     private func startPingTimer() {
         pingTask?.cancel()
-        let pingInterval = configuration.pingInterval
+        // [M-1] PowerAware + 백그라운드 세션 추가 2× 연장 (멀티채팅 전력 절약)
+        // AC foreground: pingInterval (예: 20s) / AC background: 40s
+        // Battery foreground: 30s / Battery background: 60s
+        let base = configuration.pingInterval
+        let scaled = PowerAwareInterval.scaled(base)
+        let pingInterval = _isBackgroundMode ? scaled * 2.0 : scaled
         pingTask = Task {
             let timer = AsyncTimerSequence(interval: pingInterval)
             for await _ in timer {
@@ -275,6 +290,17 @@ public actor WebSocketService {
                     }
                 }
             }
+        }
+    }
+
+    /// [M-3] 백그라운드 모드 전환 — ping 타이머 주기 재조정.
+    /// MultiChat에서 비활성 세션은 이 API를 호출해 ping/QoS를 감쇄한다.
+    public func setBackgroundMode(_ enabled: Bool) {
+        guard _isBackgroundMode != enabled else { return }
+        _isBackgroundMode = enabled
+        // 연결 중일 때만 ping 타이머 재시작 (disconnected면 다음 connect 시 반영)
+        if _state == .connected {
+            startPingTimer()
         }
     }
     
@@ -307,7 +333,8 @@ public actor WebSocketService {
             }
             
             // 10초 타임아웃: completionHandler가 호출되지 않는 경우 대비
-            let task = Task {
+            // [M-4] .background 우선순위 — 8세션 동시 ping 시 P-core 점유 방지
+            let task = Task(priority: .background) {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
                 resumeOnce(URLError(.timedOut))
             }

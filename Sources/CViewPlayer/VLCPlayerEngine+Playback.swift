@@ -71,12 +71,15 @@ extension VLCPlayerEngine {
         // [Opt-A1/A2] VLC 내부 타이밍 이벤트 빈도 감소 — 멀티라이브 CPU 절감
         // minimalTimePeriod: VLC 내부 타이머 최소 주기 (µs). 기본 500,000(0.5s)
         // timeChangeUpdateInterval: delegate 시간 변경 콜백 간격 (초). 기본 1.0s
-        if profile == .multiLive {
-            player.minimalTimePeriod = 1_000_000  // 1초 — 타이밍 이벤트 50% 감소
-            if !isSelectedSession {
-                player.timeChangeUpdateInterval = 5.0  // 비선택: 5초 간격 (80% 감소)
+        if profile.isMultiLiveFamily {
+            if profile == .multiLiveHQ || isSelectedSession {
+                // 선택 HQ: 표준 타이밍 유지 (레이턴시/PDT 동기화 정확도 보장)
+                player.minimalTimePeriod = 500_000
+                player.timeChangeUpdateInterval = 1.0
             } else {
-                player.timeChangeUpdateInterval = 2.0  // 선택: 2초 간격
+                // 비선택 멀티라이브: CPU 절감 우선
+                player.minimalTimePeriod = 1_000_000
+                player.timeChangeUpdateInterval = 5.0
             }
         }
         player.play()
@@ -190,6 +193,13 @@ extension VLCPlayerEngine {
                     return
                 }
                 Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 35초 타임아웃 — 에러 전환 (state=\(finalState.rawValue) decoded=\(finalDecoded))")
+                // [No-Proxy] 프록시 제거 환경에서 VLC 가 chzzk CDN 응답을 못 다룰 수 있으므로
+                // 상위 콜백이 등록돼 있으면 AVPlayer 로 자동 전환을 요청하고 종료.
+                if let fallback = await MainActor.run(body: { self.onEngineFallbackRequested }) {
+                    Log.player.warning("[FIX14] [\(pid, privacy: .public)] → AVPlayer 엔진 폴백 요청")
+                    fallback("VLC 35초 타임아웃")
+                    return
+                }
                 await MainActor.run { self._setPhase(.error(.networkTimeout)) }
             }
         }
@@ -207,8 +217,27 @@ extension VLCPlayerEngine {
         media.addOption(":file-caching=0")
         media.addOption(":disc-caching=0")
         media.addOption(":cr-average=\(profile.crAverage)")
-        // 디코더 스레드: forceMax면 CPU 코어를 최대한 활용 (최대 4)
-        let decoderThreads = forceMax ? min(ProcessInfo.processInfo.processorCount, 4) : profile.decoderThreads
+        // 디코더 스레드 결정:
+        //   - forceMax(싱글 스트림 화질 잠금): 활성 코어 수 기반 최대 6 (P+E 코어 적극 활용)
+        //   - 일반: profile.decoderThreads
+        // SystemLoadMonitor로 thermal/lowPower 시 동적 throttle (warm→2/3, hot→1/3)
+        let baseThreads: Int
+        if forceMax {
+            // [Opt-V-B] 멀티라이브 계열은 N개 엔진이 동시 디코딩 — 싱글 캡(6)을 그대로 쓰면
+            // 4세션 × 6스레드 = 24 스레드로 P/E 코어 포화. 프로파일 의도(decoderThreads=1)
+            // 와 화질 잠금 사이에서 per-engine 상한을 낮게 유지한다.
+            if profile.isMultiLiveFamily {
+                baseThreads = (profile == .multiLiveHQ)
+                    ? min(SystemLoadMonitor.shared.activeProcessorCount, 3) // 선택 HQ
+                    : 2                                                    // 비선택
+            } else {
+                // 싱글 스트림: Apple Silicon P+E 적극 활용 (H.264/HEVC sweet spot=6)
+                baseThreads = min(SystemLoadMonitor.shared.activeProcessorCount, 6)
+            }
+        } else {
+            baseThreads = profile.decoderThreads
+        }
+        let decoderThreads = SystemLoadMonitor.shared.currentMode.adjustedDecoderThreads(base: baseThreads)
         media.addOption(":avcodec-threads=\(decoderThreads)")
         // [Quality] avcodec-fast: 싱글 스트림에서는 비활성 (디블로킹 완전 적용으로 원본 화질 유지)
         if profile.avcodecFast && !forceMax {
@@ -236,6 +265,7 @@ extension VLCPlayerEngine {
         if forceMax {
             media.addOption(":adaptive-logic=highest")
         } else if profile == .multiLive && !isSelectedSession {
+            // 비선택 멀티라이브만 predictive — HQ/선택 세션은 위 분기에서 highest 유지
             media.addOption(":adaptive-logic=predictive")
         } else {
             media.addOption(":adaptive-logic=highest")
@@ -248,11 +278,22 @@ extension VLCPlayerEngine {
         media.addOption(":avcodec-hw=videotoolbox")
         media.addOption(":http-referrer=\(CommonHeaders.chzzkReferer)")
         media.addOption(":http-user-agent=\(CommonHeaders.safariUserAgent)")
+
+        // [Stream Proxy Mode] .directVLCAdaptive — 잘못된 Content-Type 을 무시하고
+        // adaptive(HLS) 데모서를 강제 지정. 로컬 프록시 없이 chzzk CDN 직접 재생 시도.
+        if streamProxyMode == .directVLCAdaptive {
+            media.addOption(":demux=adaptive,hls")
+            media.addOption(":adaptive-use-access")
+            // ffmpeg/avformat 옵션도 강제 (videotoolbox 디코더 진입 보장)
+            media.addOption(":no-avcodec-hurry-up")
+            media.addOption(":avformat-format=hls")
+        }
         if profile.dropLateFrames { media.addOption(":drop-late-frames=1") }
         // [Quality Lock] skip-frames/hurry-up/skiploopfilter/skip-idct/B-frame skip은
         // forceMax일 때 모두 비활성 — 원본 품질 유지 (GPU/CPU 사용량 증가 감수)
         if profile.skipFrames && !forceMax { media.addOption(":skip-frames=1") }
         if profile.hurryUp && !forceMax { media.addOption(":avcodec-hurry-up=1") }
+        // prefetch-buffer-size: 선택 HQ는 저지연 표준값, 비선택 멀티라이브는 상향
         if profile == .multiLive {
             media.addOption(":prefetch-buffer-size=786432")
         } else {
@@ -265,7 +306,7 @@ extension VLCPlayerEngine {
             media.addOption(":avcodec-skip-idct=4")
         }
         if profile == .multiLive && !isSelectedSession && !forceMax {
-            media.addOption(":avcodec-skip-frame=1")  // B-frames skip
+            media.addOption(":avcodec-skip-frame=1")  // B-frames skip (비선택 멀티라이브 전용)
         }
     }
 }

@@ -204,6 +204,10 @@ public actor ChatModerationService {
     // MARK: - Message Processing
     
     /// Process messages through all filters and blocks
+    /// · 후원(`.donation`)·구독(`.subscription`)·공지(`.notice`)·시스템(`.systemMessage`)은
+    ///   처릤 웹 동작과 동일하게 사용자 키워드/정규식 필터를 우회한다. 대형 도네이션이
+    ///   컨텐츠 키워드에 걸려 채팅창에서 누락되는 현상을 방지.
+    /// · 차단 사용자·뮤트는 그대로 적용 (위반 행위는 후원이라도 차단 유지).
     public func filterMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
         messages.filter { message in
             // Check blocked users
@@ -211,7 +215,15 @@ public actor ChatModerationService {
             
             // Check muted users
             guard !isMuted(message.userId ?? "") else { return false }
-            
+
+            // 후원·구독·공지·시스템 메시지는 콘텐츠 필터 예외 — 항상 전달
+            switch message.type {
+            case .donation, .subscription, .notice, .systemMessage:
+                return true
+            default:
+                break
+            }
+
             // Check content filters
             for filter in filters {
                 if filter.shouldFilter(message) { return false }

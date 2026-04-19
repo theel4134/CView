@@ -169,13 +169,14 @@ public actor MetricsWebSocketClient {
         webSocketTask = nil
         
         var attempt = 0
-        let maxAttempts = MetricsNetDefaults.maxReconnectAttempts
-        while !isManuallyDisconnected && attempt < maxAttempts {
+        // [Opt-N-5] 재연결 무한 재시도 (30s cap). 이전에는 5회 후 metrics 영구 중단 → 장시간 운영 시 UX 저하.
+        // maxBackoffDelay(30s)로 충분히 완만하며, isManuallyDisconnected/Task cancellation으로 안전하게 종료됨.
+        while !isManuallyDisconnected {
             attempt += 1
             state = .reconnecting(attempt: attempt)
-            // 지수 백오프: 2, 4, 8, 16, 30, 30... 초
+            // 지수 백오프: 2, 4, 8, 16, 30, 30... 초 (cap=30s)
             let delay = min(pow(2.0, Double(attempt)), MetricsNetDefaults.maxBackoffDelay)
-            Log.network.info("WebSocket 재연결 시도 \(attempt)/\(maxAttempts) — \(String(format: "%.0f", delay))초 후")
+            Log.network.info("WebSocket 재연결 시도 #\(attempt) — \(String(format: "%.0f", delay))초 후")
             do {
                 try await Task.sleep(for: .seconds(delay))
             } catch {
@@ -216,6 +217,7 @@ public actor MetricsWebSocketClient {
             }
         }
         
+        // 여기 도달 = isManuallyDisconnected == true (정상 종료)
         state = .disconnected
     }
 }

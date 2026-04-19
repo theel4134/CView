@@ -140,8 +140,12 @@ public actor MetricsAPIClient {
         _ endpoint: MetricsEndpoint,
         as type: T.Type
     ) async throws -> T {
-        // 캐시 확인
-        let cacheKey = "metrics:" + endpoint.path + (endpoint.queryItems?.description ?? "")
+        // [Opt-N-3] 캐시 키 결정적 직렬화 — queryItems.description은 순서 비결정적이어서 cache miss 유발
+        let queryString = endpoint.queryItems?
+            .sorted { $0.name < $1.name }
+            .map { "\($0.name)=\($0.value ?? "")" }
+            .joined(separator: "&") ?? ""
+        let cacheKey = "metrics:" + endpoint.path + "?" + queryString
         if case .returnCacheElseLoad(let ttl) = endpoint.cachePolicy {
             if let cached: T = await cache.get(key: cacheKey, ttl: ttl) {
                 return cached

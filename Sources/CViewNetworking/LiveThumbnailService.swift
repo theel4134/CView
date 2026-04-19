@@ -33,6 +33,9 @@ public actor LiveThumbnailService {
     private var metricsURLCache: [String: CachedThumbURL] = [:]
     private static let metricsURLTTL: TimeInterval = 45        // 라이브 썸네일 주기와 동일
     private static let metricsURLNegativeTTL: TimeInterval = 30 // 실패/없음은 더 짧게
+    /// [Opt-N-4] metricsURLCache 딕셔너리 비대화 방지 — 200+ 채널 장시간 운영 시 만료 엔트리 자동 정리
+    private static let metricsURLCacheMaxEntries = 500
+    private var metricsURLPurgeTask: Task<Void, Never>?
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -40,6 +43,40 @@ public actor LiveThumbnailService {
         config.waitsForConnectivity = false
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         session = URLSession(configuration: config)
+        // [Opt-N-4] 주기적 만료 엔트리 정리 (5분 간격, 배터리 모드 시 자동 연장)
+        Task { [weak self] in
+            await self?.startURLCachePurgeTimer()
+        }
+    }
+
+    deinit {
+        metricsURLPurgeTask?.cancel()
+    }
+
+    /// [Opt-N-4] metricsURLCache 주기 정리
+    private func startURLCachePurgeTimer() {
+        metricsURLPurgeTask?.cancel()
+        metricsURLPurgeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let interval = PowerAwareInterval.scaled(300) // 5분 (배터리: 7.5분)
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard let self, !Task.isCancelled else { break }
+                await self.purgeExpiredURLCache()
+            }
+        }
+    }
+
+    private func purgeExpiredURLCache() {
+        let now = Date()
+        metricsURLCache = metricsURLCache.filter { $0.value.expiry > now }
+        // 상한 초과 시 만료 임박 순으로 축소
+        if metricsURLCache.count > Self.metricsURLCacheMaxEntries {
+            let sorted = metricsURLCache.sorted { $0.value.expiry < $1.value.expiry }
+            let toRemove = metricsURLCache.count - Self.metricsURLCacheMaxEntries
+            for (key, _) in sorted.prefix(toRemove) {
+                metricsURLCache.removeValue(forKey: key)
+            }
+        }
     }
 
     // MARK: - Public API
@@ -62,8 +99,9 @@ public actor LiveThumbnailService {
     /// 디코딩된 NSImage 반환 — 렌더 패스에서 Data→NSImage 변환 제거
     public func thumbnailImage(channelId: String, fallbackUrl: URL?) async -> NSImage? {
         // 1. 메트릭 서버 경로
+        // [Fix N-4] PowerAware: 사용자가 즉시 보는 썸네일 — AC P-core / Battery utility
         if let data = await fetchFromMetrics(channelId: channelId) {
-            return await Task.detached(priority: .utility) {
+            return await Task.detached(priority: PowerAwareTaskPriority.userVisible) {
                 NSImage(data: data)
             }.value
         }

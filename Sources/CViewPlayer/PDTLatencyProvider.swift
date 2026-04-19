@@ -28,11 +28,13 @@ public actor PDTLatencyProvider {
     private let parser = HLSManifestParser()
     private let logger = Logger(subsystem: "com.cview", category: "PDTLatency")
     // 전용 폴링 세션 — ephemeral(쿠키 격리) + 캐시 비활성화(라이브 플레이리스트)
+    // [패킷 압축] PDT 폴링(4초 주기)은 반복적 매니페스트 다운로드이므로 gzip 압축 효과 큼
     private nonisolated let hlsSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 5
+        config.httpAdditionalHeaders = ["Accept-Encoding": ProxyDefaults.manifestAcceptEncoding]
         return URLSession(configuration: config)
     }()
     

@@ -37,7 +37,7 @@ extension AppState {
         playerViewModel = PlayerViewModel(engineType: settingsStore.player.preferredEngine)
 
         // 멀티라이브 매니저 API 클라이언트 + 사용자 정보 주입
-        multiLiveManager.configure(apiClient: apiClient, settingsStore: settingsStore, userUid: userChannelId, userNickname: userNickname, metricsForwarder: nil)
+        multiLiveManager.configure(apiClient: apiClient, settingsStore: settingsStore, userUid: userChannelId, userNickname: userNickname, metricsForwarder: nil, processLauncher: multiLiveLauncher)
 
         // 재생 상태 변경 시 App Nap 방지 관리 콜백 연결
         playerViewModel?.onPlaybackStateChanged = { [weak self] in
@@ -104,7 +104,8 @@ extension AppState {
     /// DataStore 및 SettingsStore 초기화 (별도 Task에서 호출)
     func initializeDataStore() async {
         do {
-            let container = try await Task.detached(priority: .userInitiated) {
+            // [Power-Aware] AC: .userInitiated (P-core, 앞당겨 초기화 빠르게), Battery: .utility (E-core, 배터리 보호)
+            let container = try await Task.detached(priority: PowerAwareTaskPriority.userVisible) {
                 try CViewPersistence.DataStore.createContainer()
             }.value
             let store = CViewPersistence.DataStore(modelContainer: container)
@@ -115,6 +116,20 @@ extension AppState {
             // 디스크에서 로드된 설정으로 PlayerViewModel 엔진 타입 동기화
             // initialize() 시점에는 settingsStore가 기본값이므로 여기서 반드시 갱신해야 함
             playerViewModel?.preferredEngineType = settingsStore.player.preferredEngine
+
+            // [Persistence 2026-04-18] 저장된 볼륨/음소거 복원 + 사용자 변경 시 영구 저장 콜백 연결
+            playerViewModel?.volume = settingsStore.player.volumeLevel
+            playerViewModel?.isMuted = settingsStore.player.startMuted
+            playerViewModel?.onVolumeChanged = { [weak self] newVolume in
+                guard let self else { return }
+                self.settingsStore.player.volumeLevel = newVolume
+                self.settingsStore.scheduleDebouncedSave()
+            }
+            playerViewModel?.onMuteChanged = { [weak self] muted in
+                guard let self else { return }
+                self.settingsStore.player.startMuted = muted
+                self.settingsStore.scheduleDebouncedSave()
+            }
 
             // HomeViewModel에 캐시 저장소 연결 (didSet → loadFromCache() 자동 호출)
             homeViewModel?.dataStore = store
@@ -141,6 +156,10 @@ extension AppState {
 
         isLoggedIn = await authManager.isAuthenticated
         logger.info("Auth initialized, logged in: \(self.isLoggedIn)")
+
+        // [2026-04-19] 자식 프로세스 대응: 쿠키 복원 완료 시점을 소비자(채팅 시작 경로 등)가 대기할 수 있도록 플래그 노출.
+        // 로그인 여부와 무관하게 "auth 초기화가 끝났다"는 의미이므로 guard 이전에 세팅.
+        isAuthInitialized = true
 
         guard isLoggedIn else { return }
 
@@ -183,7 +202,8 @@ extension AppState {
 
         // 모든 이모티콘 이미지를 디스크/메모리 캐시에 미리 다운로드
         let urls = emoMap.values.compactMap { URL(string: $0) }
-        Task.detached(priority: .background) {
+        // [Fix 32] PowerAware: 프리페치는 항상 .background
+        Task.detached(priority: PowerAwareTaskPriority.prefetch) {
             await ImageCacheService.shared.prefetch(urls)
         }
     }

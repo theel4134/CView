@@ -13,7 +13,10 @@ struct HomeView: View {
     
     @Bindable var viewModel: HomeViewModel
     @Environment(AppRouter.self) var router
-    @Environment(AppState.self) private var appState
+    @Environment(AppState.self) var appState
+
+    /// 자동 업데이트 시트 표시 여부
+    @State var showUpdateSheet = false
     
     /// 캐시 시각 기준 인사말 (뷰 갱신 시에만 재계산, Date() 직접 호출 방지)
     var greeting: String {
@@ -78,9 +81,32 @@ struct HomeView: View {
         }
         .onAppear {
             viewModel.startAutoRefresh()
+            // 앱 실행 후 한 번 백그라운드로 업데이트 확인 (24h 간격)
+            scheduleSilentUpdateCheck()
         }
         .onDisappear {
             viewModel.stopAutoRefresh()
+        }
+        .sheet(isPresented: $showUpdateSheet) {
+            UpdateSheetView(service: appState.updateService)
+        }
+    }
+
+    // MARK: - Silent Update Check
+
+    /// 최근 24시간 내 확인한 적 없으면 조용히 업데이트 조회 (실패해도 UI 표시 안 함)
+    func scheduleSilentUpdateCheck() {
+        let service = appState.updateService
+        if let last = service.lastCheckedAt, Date().timeIntervalSince(last) < 24 * 60 * 60 {
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3s 지연
+            await service.checkForUpdates(silent: true)
+            // 새 버전이 발견되면 자동으로 시트 열기
+            if case .updateAvailable = service.status {
+                showUpdateSheet = true
+            }
         }
     }
 
@@ -96,12 +122,19 @@ struct HomeView: View {
     // MARK: - 3. Charts Section
 
     var chartsSection: some View {
-        HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
-            ViewerTrendChart(history: viewModel.viewerHistory)
-                .frame(maxWidth: .infinity)
+        // 좁은 폭에서는 세로, 넓은 폭에서는 가로 2열
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
+                ViewerTrendChart(history: viewModel.viewerHistory)
+                    .frame(maxWidth: .infinity)
 
-            CategoryBarChart(categories: viewModel.topCategories)
-                .frame(maxWidth: .infinity)
+                CategoryBarChart(categories: viewModel.topCategories)
+                    .frame(maxWidth: .infinity)
+            }
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+                ViewerTrendChart(history: viewModel.viewerHistory)
+                CategoryBarChart(categories: viewModel.topCategories)
+            }
         }
     }
 
@@ -132,4 +165,13 @@ struct HomeView: View {
         }
         return "\(num)"
     }
+
+    /// 캐시가 아직 없을 때 헤더에 표시할 오늘 날짜 라벨 (정적 1회 캡처 — body 평가 시 Date() 재생성 방지)
+    static let todayLabel: String = {
+        let fmt = DateFormatter()
+        fmt.setLocalizedDateFormatFromTemplate("yyyy M d EEEE")
+        return fmt.string(from: Date())
+    }()
+
+    var todayLabel: String { HomeView.todayLabel }
 }

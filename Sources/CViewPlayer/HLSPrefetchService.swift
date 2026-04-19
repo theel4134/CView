@@ -36,11 +36,13 @@ public actor HLSPrefetchService {
     private let hlsParser = HLSManifestParser()
     private let logger = AppLogger.player
     // 전용 HLS 세션 — ephemeral(쿠키 격리) + 캐시 비활성화
+    // [패킷 압축] 프리페치 매니페스트도 gzip 적용 — 멀티라이브 초기 진입 시 4KB → 600B
     private nonisolated let hlsSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 5
+        config.httpAdditionalHeaders = ["Accept-Encoding": ProxyDefaults.manifestAcceptEncoding]
         return URLSession(configuration: config)
     }()
 

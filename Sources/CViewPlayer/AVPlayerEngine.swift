@@ -69,6 +69,16 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         // 선명한 화면(픽셀 샤프 스케일링) 상태 — 새 NSView/PiP 생성 시 재적용용
         var sharpPixelScalingEnabled: Bool = false
 
+        // [Multi-live] 활성/비활성 세션 여부 — 버퍼 정책 이원화
+        // true: 선택 세션(멀티라이브 포그라운드) — 빠른 복구 우선, 차이 버퍼 1개으로 축소
+        // false: 비선택 세션(멀티라이브 백그라운드) — 안정성 우선, 차이 버퍼 많은 쪽 제거
+        // 기본값 true: 싱글 스트림이거나 멀티라이브 선택 세션에 해당.
+        var isSelectedMultiLiveSession: Bool = true
+
+        // 선택된 멀티라이브 세션 warm-up 중 플래그 — warm-up 동안은 안정성 우선 후
+        // 2단계에 1080p60/8Mbps 잠금으로 전환한다. 기본값 false (warm-up 아님).
+        var isWarmingUpForHQ: Bool = false
+
         // 메트릭 스냅샷 (AccessLog + Catchup 공유)
         var indicatedBitrate: Double = 0
         var droppedFrames: Int = 0
@@ -120,6 +130,28 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         set {
             stateLock.withLock { $0.lockedPeakBitRate = max(0, newValue) }
             applyQualityPreferencesToCurrentItem()
+        }
+    }
+
+    /// 멀티라이브에서 현재 선택된 세션인지 여부.
+    /// - `true`: 버퍼 짧게(선택 전방 버퍼 상한 적용), 빠른 복구 중심
+    /// - `false`: 버퍼 길게(안정성 우선), `automaticallyPreservesTimeOffsetFromLive`도 느슨하게 유지
+    public var isSelectedMultiLiveSession: Bool {
+        get { stateLock.withLock { $0.isSelectedMultiLiveSession } }
+        set {
+            stateLock.withLock { $0.isSelectedMultiLiveSession = newValue }
+            applyMultiLiveBufferPreferenceToCurrentItem()
+        }
+    }
+
+    /// warm-up 단계 플래그 — `MultiLiveManager` 등 상위 조정자가 선택 직후 true로 두었다가
+    /// 짧은 warm-up 이후 false로 복구한다. warm-up 중에는 상대적으로 단단한 버퍼를 유지하도록
+    /// `balanced` 수준의 버퍼를 써서 첫 프레임 지연을 줄인다.
+    public var isWarmingUpForHQ: Bool {
+        get { stateLock.withLock { $0.isWarmingUpForHQ } }
+        set {
+            stateLock.withLock { $0.isWarmingUpForHQ = newValue }
+            applyMultiLiveBufferPreferenceToCurrentItem()
         }
     }
 
@@ -194,6 +226,16 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     // 공유 네트워크 모니터 구독 토큰
     private var networkSubscriptionId: UUID?
 
+    // chzzk CDN Content-Type 교정용 인-프로세스 인터셉터 (LocalStreamProxy 대체)
+    private let httpInterceptor = AVPlayerHTTPInterceptor()
+    private let interceptorQueue = DispatchQueue(label: "com.cview.avengine.interceptor")
+
+    /// 스트림 프록시 / 인터셉트 모드. StreamCoordinator 가 재생 시작 직전 주입.
+    /// - .avInterceptor   : ResourceLoaderDelegate 사용 (cviewhttps 스킴)
+    /// - .avAssetDownload : AVAssetDownloadURLSession 으로 자산 로드 시도
+    /// - 그 외            : 일반 AVURLAsset 직접 재생 (URL 은 StreamCoordinator 가 적절히 변환)
+    public var streamProxyMode: StreamProxyMode = .localProxy
+
     // 재연결 폭주 보호 기준
     internal let maxReconnectsInWindow = 3
     internal let reconnectWindowSeconds: TimeInterval = 300 // 5분
@@ -228,6 +270,18 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         CATransaction.commit()
     }
 
+    /// 멀티라이브 GPU 렌더 계층 업데이트 — compositor contentsScale / 레이어 가시성 조정.
+    /// 디코딩 해상도/화질 단계와는 독립 (quality-lock 모드에서도 안전).
+    public func setGPURenderTier(_ tier: SessionTier) {
+        let avTier: AVGPURenderTier
+        switch tier {
+        case .active:  avTier = .active
+        case .visible: avTier = .visible
+        case .hidden:  avTier = .hidden
+        }
+        renderView.setGPURenderTier(avTier)
+    }
+
     /// 현재 선명한 화면(픽셀 샤프 스케일링) 활성 상태.
     public var sharpPixelScalingEnabled: Bool {
         stateLock.withLock { $0.sharpPixelScalingEnabled }
@@ -247,8 +301,10 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     public func play(url: URL) async throws {
         // 1) 이전 재생 자원 정리
         tasks.cancel(AVPlayerTaskBag.kStallWatchdog)
+        tasks.cancel(AVPlayerTaskBag.kStallRecovery)
         tasks.cancel(AVPlayerTaskBag.kLiveCatchup)
         tasks.cancel(AVPlayerTaskBag.kMetricsCollector)
+        tasks.cancel(AVPlayerTaskBag.kHQRecovery)
         observers.removeItemScoped()
 
         // 2) 상태 초기화
@@ -287,9 +343,16 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         attachItemObservers(item)
 
         // 5) 플레이어에 장착 및 재생 시작
+        // 라이브는 첫 프레임 이후 seek-to-live-edge 가 즉시 이어지므로
+        // playImmediately(atRate:) 로 초기 재생을 강제해 "첫 화면만 멈춰 보이는" 현상을 줄인다.
         player.replaceCurrentItem(with: item)
-        player.rate = stateLock.withLock { $0.rate }
-        player.play()
+        let desiredRate = max(0.01, stateLock.withLock { $0.rate })
+        player.rate = desiredRate
+        if isLive {
+            player.playImmediately(atRate: desiredRate)
+        } else {
+            player.play()
+        }
 
         // 6) 라이브 전용 루프 기동 (스톨 워치독은 readyToPlay 시점에 시작)
         if isLive {
@@ -468,7 +531,30 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             AVURLAssetPreferPreciseDurationAndTimingKey: false,
             "AVURLAssetAllowsCellularAccessKey": true,
         ]
-        let asset = AVURLAsset(url: url, options: assetOptions)
+
+        // [Stream Proxy Mode] 모드별 자산 생성 분기.
+        //   - .avInterceptor   : URL 을 cviewhttps 스킴으로 치환하고 ResourceLoaderDelegate 부착
+        //   - .avAssetDownload : AVAssetDownloadURLSession 으로 자산 로드 시도 (라이브 보장 X, 실험적)
+        //   - 나머지            : 일반 AVURLAsset (URL 은 StreamCoordinator 측에서 이미 변환됨)
+        let asset: AVURLAsset
+        switch streamProxyMode {
+        case .avInterceptor:
+            let useIntercept = AVPlayerHTTPInterceptor.needsInterception(for: url)
+            let assetURL = useIntercept ? AVPlayerHTTPInterceptor.interceptedURL(from: url) : url
+            asset = AVURLAsset(url: assetURL, options: assetOptions)
+            if useIntercept {
+                asset.resourceLoader.setDelegate(httpInterceptor, queue: interceptorQueue)
+            }
+
+        case .avAssetDownload:
+            // AVAssetDownloadURLSession 은 백그라운드 세션이 필요하나 라이브 HLS 재생에는 부적합.
+            // 옵션 노출만 유지하고 일반 AVURLAsset 으로 폴백 (실험적 — 향후 다운로드 작업 wrapping 가능).
+            asset = AVURLAsset(url: url, options: assetOptions)
+            logger.warning("AVPlayerEngine: avAssetDownload 모드 — 라이브에서는 AVURLAsset 폴백")
+
+        case .localProxy, .urlProtocolHook, .directVLCAdaptive, .none:
+            asset = AVURLAsset(url: url, options: assetOptions)
+        }
         let item = AVPlayerItem(asset: asset)
 
         // 화질 잠금/기본 선호도 스냅샷을 단일 락 진입으로 획득
@@ -489,12 +575,27 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         // 라이브 저지연 설정
         if isLive {
             player.automaticallyWaitsToMinimizeStalling = false
-            item.automaticallyPreservesTimeOffsetFromLive = true
-            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
 
             adjustCatchupConfigForNetwork()
             let cfg = catchupConfig
-            item.preferredForwardBufferDuration = cfg.preferredForwardBuffer
+            // [Multi-live 이원화] 선택된 세션은 짧은 전방 버퍼로 빠른 복구를,
+            // 비선택 세션은 네트워크 변동 흡수용 긴 버퍼를 유지한다.
+            let (isSelectedMulti, warmingUp) = stateLock.withLock { s in
+                (s.isSelectedMultiLiveSession, s.isWarmingUpForHQ)
+            }
+            // [Multi-live 튜닝] 라이브 엣지 자동 추종 / 일시정지 중 네트워크 사용 —
+            // 선택된 세션만 활성화. 비선택 세션은 AVPlayer 내부의 라이브 엣지 재추적
+            // 및 pause-간 preloading 을 억제해 N×I/O 경쟁과 CPU 낭비를 줄인다.
+            item.automaticallyPreservesTimeOffsetFromLive = isSelectedMulti
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = isSelectedMulti
+            let selectedBuffer = max(1.0, min(cfg.preferredForwardBuffer, 1.5))
+            let nonSelectedBuffer = max(cfg.preferredForwardBuffer, 3.5)
+            let warmUpBuffer = max(cfg.preferredForwardBuffer, 2.5)
+            let liveBuffer: Double = {
+                if !isSelectedMulti { return nonSelectedBuffer }
+                return warmingUp ? warmUpBuffer : selectedBuffer
+            }()
+            item.preferredForwardBufferDuration = liveBuffer
             item.configuredTimeOffsetFromLive = CMTime(
                 seconds: cfg.targetLatency,
                 preferredTimescale: 1000
@@ -551,13 +652,40 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
 
             // 라이브: 캐치업 설정 재조정 + 현재 아이템 버퍼 업데이트
             self.adjustCatchupConfigForNetwork()
-            let buffer = self.catchupConfig.preferredForwardBuffer
             Task { @MainActor [weak self] in
-                guard let self, let item = self.player.currentItem else { return }
-                item.preferredForwardBufferDuration = buffer
+                guard let self else { return }
+                self.applyMultiLiveBufferPreferenceToCurrentItem()
             }
             // 네트워크 전환 순간의 일시 정지를 스톨로 오인하지 않도록 타임스탬프 갱신
             self.stateLock.withLock { $0.lastProgressTime = Date() }
+        }
+    }
+
+    /// 멀티라이브 선택/비선택 상태에 맞춰 현재 AVPlayerItem의 `preferredForwardBufferDuration`을 갱신.
+    /// `catchupConfig.preferredForwardBuffer`를 기준선으로 잡고,
+    /// - 선택 세션          : 최대 1.5s (빠른 복구)
+    /// - warm-up 진행 중    : 2.5s 내외 (첫 프레임 안정성)
+    /// - 비선택 세션        : 3.5s 이상 (버퍼 안정성)
+    ///
+    /// [Multi-live 튜닝] 버퍼 외에도 라이브 엣지 추종/paused 네트워크 사용 플래그를 함께 갱신한다.
+    /// 선택 세션만 true, 비선택 세션은 false 로 두어 N 개 엔진 간 I/O 경쟁을 완화한다.
+    public func applyMultiLiveBufferPreferenceToCurrentItem() {
+        let isLive = stateLock.withLock { $0.isLiveStream }
+        guard isLive else { return }
+        let (isSelectedMulti, warmingUp) = stateLock.withLock { s in
+            (s.isSelectedMultiLiveSession, s.isWarmingUpForHQ)
+        }
+        let cfg = catchupConfig
+        let liveBuffer: Double = {
+            if !isSelectedMulti { return max(cfg.preferredForwardBuffer, 3.5) }
+            if warmingUp         { return max(cfg.preferredForwardBuffer, 2.5) }
+            return max(1.0, min(cfg.preferredForwardBuffer, 1.5))
+        }()
+        Task { @MainActor [weak self] in
+            guard let self, let item = self.player.currentItem else { return }
+            item.preferredForwardBufferDuration = liveBuffer
+            item.automaticallyPreservesTimeOffsetFromLive = isSelectedMulti
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = isSelectedMulti
         }
     }
 }
