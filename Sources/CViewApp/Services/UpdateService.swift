@@ -96,7 +96,7 @@ final class UpdateService {
     // MARK: - Configuration
 
     /// GitHub 저장소 (owner/repo)
-    static let repository = "theel4134/CView_v2"
+    static let repository = "theel4134/CView"
 
     private var latestReleaseURL: URL {
         // 캐시버스터: URLSession.shared 가 완전히 캐시를 우회하지 못하는 경우를 대비해

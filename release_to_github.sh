@@ -9,7 +9,7 @@
 #
 # 사전 조건:
 #   - gh CLI 로그인 완료 (`gh auth login`)
-#   - git remote 가 GitHub 저장소를 가리킴 (theel4134/CView_v2)
+#   - git remote 가 GitHub 저장소를 가리킴 (theel4134/CView)
 #   - main 브랜치 커밋/푸시 완료 (태그 생성 가능 상태)
 #
 # Usage:
@@ -23,7 +23,7 @@ SCRIPT_DIR="${0:A:h}"
 cd "$SCRIPT_DIR"
 
 # ── 설정 ──────────────────────────────────────────────────────────────
-REPO_SLUG="theel4134/CView_v2"   # UpdateService.repository 와 일치해야 함
+REPO_SLUG="theel4134/CView"   # UpdateService.repository 와 일치해야 함
 APP_NAME="CView"
 INFO_PLIST="$SCRIPT_DIR/SupportFiles/Info.plist"
 
