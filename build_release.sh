@@ -42,7 +42,15 @@ FRAMEWORKS="$CONTENTS/Frameworks"
 echo "━━━ [1/5] Release 빌드 시작... ━━━"
 # -j: CPU 코어 수만큼 병렬 빌드, --disable-automatic-resolution: 매번 패키지 resolve 방지
 JOBS=$(sysctl -n hw.performancecores 2>/dev/null || sysctl -n hw.ncpu)
-swift build -c release -j "$JOBS" --disable-automatic-resolution 2>&1 | tail -5
+# [Fix] `swift build | tail -5` 는 tail 이 먼저 종료되면 SIGPIPE 로 swift build 가 141 로 죽고
+# `set -euo pipefail` 과 맞물려 스크립트 전체가 실패한다. 로그는 파일로 받고 tail 은 별도로 호출.
+SWIFT_BUILD_LOG="$(mktemp -t cview_swift_build).log"
+if ! swift build -c release -j "$JOBS" --disable-automatic-resolution >"$SWIFT_BUILD_LOG" 2>&1; then
+    echo "❌ Swift 빌드 실패 (마지막 30줄):"
+    tail -30 "$SWIFT_BUILD_LOG"
+    exit 1
+fi
+tail -5 "$SWIFT_BUILD_LOG"
 echo "✅ 빌드 완료"
 
 # 빌드 산출물 경로

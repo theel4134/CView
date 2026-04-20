@@ -36,12 +36,13 @@ public final class MultiLiveProcessLauncher {
     }
 
     deinit {
-        // [Bug-fix] IPC 옵저버 해제 — NotificationCenter.removeObserver 는 nonisolated 로 호출 가능.
-        // DistributedNotificationCenter 의 addObserver(forName:) 은 `NSObjectProtocol` 를 반환하므로
-        // 해당 토큰을 바로 removeObserver 에 넘기면 안전하게 해제된다.
-        let center = DistributedNotificationCenter.default()
-        for obs in ipcObservers {
-            center.removeObserver(obs)
+        // [Bug-fix] IPC 옵저버 해제 — Swift 6 에서 main-actor isolated stored property 는
+        // nonisolated deinit 에서 직접 접근 불가 → MainActor.assumeIsolated 로 감싼다.
+        MainActor.assumeIsolated {
+            let center = DistributedNotificationCenter.default()
+            for obs in ipcObservers {
+                center.removeObserver(obs)
+            }
         }
     }
 

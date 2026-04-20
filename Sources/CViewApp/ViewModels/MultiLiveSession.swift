@@ -99,13 +99,16 @@ final class MultiLiveSession: Identifiable {
 
     // [Bug-fix] deinit 안전장치 — 멀티라이브 탭 삭제/재생성 중 stop() 호출이 누락되어도
     // 남아있는 Task 들을 취소하여 메모리 고착과 불필요한 폴링/백그라운드
-    // 연산을 방지한다. Task.cancel() 은 nonisolated 이므로 deinit 에서 호출 안전.
+    // 연산을 방지한다. Swift 6 에서 main-actor isolated stored property 는
+    // nonisolated deinit 에서 바로 접근 불가 → MainActor.assumeIsolated 로 감싼다.
     deinit {
-        startTask?.cancel()
-        pollTask?.cancel()
-        refreshTask?.cancel()
-        offlineRetryTask?.cancel()
-        chatConnectionTask?.cancel()
+        MainActor.assumeIsolated {
+            startTask?.cancel()
+            pollTask?.cancel()
+            refreshTask?.cancel()
+            offlineRetryTask?.cancel()
+            chatConnectionTask?.cancel()
+        }
     }
 
     /// MultiLiveManager용 convenience init — liveInfo/apiClient/사용자 정보 포함
