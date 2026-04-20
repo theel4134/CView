@@ -36,10 +36,13 @@ public final class MultiLiveProcessLauncher {
     }
 
     deinit {
-        // 주의: deinit 은 nonisolated 이므로 MainActor 도달이 불가.
-        // ipcObservers 는 프로세스 화이프타임 동안 유지되므로 안전하게 제거하기 위해
-        // MainActor.assumeIsolated 혹은 nonisolated unsafe 필드로 처리.
-        // launcher 는 AppState 라이프쿠을 따르므로 일반적으론 deinit 호출되지 않음.
+        // [Bug-fix] IPC 옵저버 해제 — NotificationCenter.removeObserver 는 nonisolated 로 호출 가능.
+        // DistributedNotificationCenter 의 addObserver(forName:) 은 `NSObjectProtocol` 를 반환하므로
+        // 해당 토큰을 바로 removeObserver 에 넘기면 안전하게 해제된다.
+        let center = DistributedNotificationCenter.default()
+        for obs in ipcObservers {
+            center.removeObserver(obs)
+        }
     }
 
     // MARK: - Public API

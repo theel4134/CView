@@ -134,9 +134,9 @@ public final class VODPlayerViewModel {
         engine.seek(to: time)
         
         // Reset seeking flag after a delay
-        Task {
+        Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
-            isSeeking = false
+            await MainActor.run { self?.isSeeking = false }
         }
     }
     

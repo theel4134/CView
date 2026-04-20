@@ -126,11 +126,16 @@ macOS 15.0 이상 지원.
 
 ### 설치
 1. \`$ZIP_NAME\` 다운로드
-2. 압축 해제 후 \`CView.app\` 을 \`/Applications\` 로 이동
-3. 최초 실행 시 macOS 경고가 뜨면 우클릭 → 열기
+2. 압축 해제 후 \`CView.app\` 을 \`/Applications\` 으로 이동
+3. **최초 실행 시 Gatekeeper 경고("악성 코드 확인 불가") 다이얼로그가 뜨면**:
+   - 방법 A (권장): 터미널에 붙여넣기
+     \`\`\`
+     xattr -cr /Applications/CView.app && open /Applications/CView.app
+     \`\`\`
+   - 방법 B: Finder에서 \`CView.app\` 우클릭 → "열기" → 확인 다이얼로그 "열기"
 
 ### 자동 업데이트
-앱 내 자동 업데이트 버튼에서 이후 버전 감지·설치가 가능합니다.
+앱 내 자동 업데이트 버튼에서 이후 버전 감지·설치가 가능합니다 (자동 경로는 Gatekeeper 우회 의료 불필요).
 EOF
 )
 

@@ -97,6 +97,17 @@ final class MultiLiveSession: Identifiable {
         self.chatViewModel = ChatViewModel()
     }
 
+    // [Bug-fix] deinit 안전장치 — 멀티라이브 탭 삭제/재생성 중 stop() 호출이 누락되어도
+    // 남아있는 Task 들을 취소하여 메모리 고착과 불필요한 폴링/백그라운드
+    // 연산을 방지한다. Task.cancel() 은 nonisolated 이므로 deinit 에서 호출 안전.
+    deinit {
+        startTask?.cancel()
+        pollTask?.cancel()
+        refreshTask?.cancel()
+        offlineRetryTask?.cancel()
+        chatConnectionTask?.cancel()
+    }
+
     /// MultiLiveManager용 convenience init — liveInfo/apiClient/사용자 정보 포함
     convenience init(
         channelId: String,
@@ -386,40 +397,36 @@ final class MultiLiveSession: Identifiable {
             }
 
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
+            // [Bug-fix] 콜백당 2개 Task → 1개로 통합 (상단 start() 경로와 동일 패턴 적용).
+            // 기존 fire-and-forget Task 는 weak self 가 없어 세션 해제 후에도 계속 실행되어 리소스 낭비.
             let _forwarder2 = metricsForwarder ?? appState.metricsForwarder
             let sessionChannelId2 = channelId
             playerViewModel.setVLCMetricsCallback { [weak self] metrics in
-                Task {
-                    await _forwarder2?.updateVLCMetrics(metrics, forChannel: sessionChannelId2)
-                }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                    await _forwarder2?.updateVLCMetrics(metrics, forChannel: sessionChannelId2)
                 }
             }
 
             // AVPlayer 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             playerViewModel.setAVPlayerMetricsCallback { [weak self] metrics in
-                Task {
-                    await _forwarder2?.updateAVPlayerMetrics(metrics, forChannel: sessionChannelId2)
-                }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestAVMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                    await _forwarder2?.updateAVPlayerMetrics(metrics, forChannel: sessionChannelId2)
                 }
             }
 
             // HLS.js 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             playerViewModel.setHLSJSMetricsCallback { [weak self] metrics in
-                Task {
-                    await _forwarder2?.updateHLSJSMetrics(metrics, forChannel: sessionChannelId2)
-                }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.latestHLSJSMetrics = metrics
                     self.latestProxyStats = await self.playerViewModel.proxyNetworkStats()
+                    await _forwarder2?.updateHLSJSMetrics(metrics, forChannel: sessionChannelId2)
                 }
             }
 
@@ -605,10 +612,13 @@ final class MultiLiveSession: Identifiable {
                                 Task { await self.playerViewModel.stopStream() }
                                 // 오프라인 감지 → 2분 후 자동 재시도
                                 self.offlineRetryTask?.cancel()
-                                self.offlineRetryTask = Task { [weak self] in
-                                    guard let self else { return }
+                                // [Bug-fix] apiClient/appState 를 weak 캐프처하여 세션 해제 시
+                                // 120s 대기하던 Task 가 이들을 강하게 잡아두지 않도록 함.
+                                self.offlineRetryTask = Task { [weak self, weak apiClient, weak appState] in
                                     try? await Task.sleep(for: .seconds(120))
-                                    guard !Task.isCancelled, self.isOffline else { return }
+                                    guard !Task.isCancelled,
+                                          let self, self.isOffline,
+                                          let apiClient, let appState else { return }
                                     await self.retry(using: apiClient, appState: appState)
                                 }
                             }

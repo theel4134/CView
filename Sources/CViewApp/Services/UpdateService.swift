@@ -73,6 +73,18 @@ struct GitHubRelease: Codable, Equatable, Sendable {
         assets.first(where: { $0.name.lowercased().hasSuffix(".zip") })
             ?? assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") })
     }
+
+    /// asset 이름(`CView-2.0.0-65.zip`)에서 빌드 번호를 추출.
+    /// release_to_github.sh 가 `${APP_NAME}-${VERSION}-${BUILD_NUMBER}.zip` 으로 명명하므로,
+    /// 동일 버전 안에서도 빌드 단위 업데이트 감지가 가능하다.
+    var buildNumber: Int? {
+        guard let asset = preferredAsset else { return nil }
+        // 예: "CView-2.0.0-65.zip" → "65"
+        let stem = (asset.name as NSString).deletingPathExtension
+        guard let dashIndex = stem.lastIndex(of: "-") else { return nil }
+        let tail = stem[stem.index(after: dashIndex)...]
+        return Int(tail)
+    }
 }
 
 // MARK: - Update Service
@@ -87,7 +99,10 @@ final class UpdateService {
     static let repository = "theel4134/CView_v2"
 
     private var latestReleaseURL: URL {
-        URL(string: "https://api.github.com/repos/\(Self.repository)/releases/latest")!
+        // 캐시버스터: URLSession.shared 가 완전히 캐시를 우회하지 못하는 경우를 대비해
+        // 요청 URL 에 매번 달라지는 타임스탬프를 첨부.
+        let ts = Int(Date().timeIntervalSince1970)
+        return URL(string: "https://api.github.com/repos/\(Self.repository)/releases/latest?_ts=\(ts)")!
     }
 
     // MARK: - State (Observable)
@@ -111,6 +126,13 @@ final class UpdateService {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     }
 
+    /// 현재 앱 빌드 번호 (`CFBundleVersion`, 예: "65")
+    var currentBuild: Int {
+        guard let s = Bundle.main.infoDictionary?["CFBundleVersion"] as? String,
+              let n = Int(s) else { return 0 }
+        return n
+    }
+
     /// 업데이트 확인
     func checkForUpdates(silent: Bool = false) async {
         if status.isBusy { return }
@@ -120,6 +142,11 @@ final class UpdateService {
             var request = URLRequest(url: latestReleaseURL)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             request.setValue("CView/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+            // [Fix] URLSession.shared 기본 디스크 캐시 우회 — GitHub 가 붙이는
+            // Cache-Control: public, max-age=60 때문에 방금 게시된 릴리스가 잠시 동안 보이지 않는 문제를 방지.
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+            request.setValue("no-cache", forHTTPHeaderField: "Pragma")
             request.timeoutInterval = 10
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -144,12 +171,27 @@ final class UpdateService {
             lastCheckedAt = Date()
             latestRelease = release
 
-            if Self.compareVersions(release.versionString, currentVersion) == .orderedDescending {
+            // 버전(semver) + 빌드 번호를 함께 비교하여 동일 버전 내 빌드 업데이트도 감지.
+            let verCmp = Self.compareVersions(release.versionString, currentVersion)
+            let latestBuild = release.buildNumber
+            let isNewer: Bool = {
+                switch verCmp {
+                case .orderedDescending: return true
+                case .orderedAscending:  return false
+                case .orderedSame:
+                    // 버전 동일 → 빌드 번호로 비교. asset 명에 번호가 없으면 최신으로 간주.
+                    if let lb = latestBuild { return lb > self.currentBuild }
+                    return false
+                }
+            }()
+
+            if isNewer {
                 status = .updateAvailable(release)
-                logger.info("Update available: \(release.versionString) (current: \(self.currentVersion))")
+                let latestLabel = latestBuild.map { "\(release.versionString) (build \($0))" } ?? release.versionString
+                logger.info("Update available: \(latestLabel) (current: \(self.currentVersion) build \(self.currentBuild))")
             } else {
                 status = .upToDate
-                logger.info("App is up to date (\(self.currentVersion))")
+                logger.info("App is up to date (\(self.currentVersion) build \(self.currentBuild))")
             }
         } catch {
             logger.error("Update check failed: \(error.localizedDescription)")
@@ -185,8 +227,10 @@ final class UpdateService {
             // 3) 추출 → 새 .app 경로 확보
             let newAppURL = try await extractApp(from: downloadedFile, assetName: asset.name)
 
-            // 4) quarantine 제거 + ad-hoc 재서명
-            _ = try? await runProcess("/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", newAppURL.path])
+            // 4) xattr 일괄 제거 (quarantine + provenance 등) + ad-hoc 재서명
+            // macOS 15+ Gatekeeper 는 com.apple.quarantine 가 없어도 com.apple.provenance 나
+            // 기타 ls-attrs 를 이유로 차단할 수 있으므로 -cr 로 전체 제거.
+            _ = try? await runProcess("/usr/bin/xattr", args: ["-cr", newAppURL.path])
             _ = try? await runProcess("/usr/bin/codesign", args: ["--force", "--deep", "--sign", "-", newAppURL.path])
 
             status = .readyToInstall(newAppURL)
@@ -347,8 +391,8 @@ final class UpdateService {
         # 성공 시 백업 삭제 (비차단 — 실패해도 무방)
         rm -rf "$BACKUP" &
 
-        # 3) quarantine 제거 (LaunchServices 재실행 방지)
-        xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+        # 3) xattr 일괄 제거 (Gatekeeper 차단 방지 — macOS 15+ 의 com.apple.provenance 포함)
+        xattr -cr "$TARGET" 2>/dev/null || true
 
         # 4) LaunchServices 재등록 (Info.plist 변경 반영)
         /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f "$TARGET" 2>/dev/null || true

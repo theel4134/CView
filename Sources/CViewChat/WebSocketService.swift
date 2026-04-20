@@ -232,12 +232,15 @@ public actor WebSocketService {
     
     private func startReceiving() {
         receiveTask?.cancel()
-        receiveTask = Task {
+        receiveTask = Task { [weak self] in
+            // Task { } 는 감싸는 actor 의 isolation 을 상속하므로
+            // self 의 stored property 에 동기 접근 가능. [weak self] 로 retain cycle 방지.
             while !Task.isCancelled {
+                guard let self else { break }
                 do {
                     guard let ws = self.webSocket else { break }
                     let message = try await ws.receive()
-                    
+
                     let wsMessage: WebSocketMessage
                     switch message {
                     case .string(let text):
@@ -247,9 +250,9 @@ public actor WebSocketService {
                     @unknown default:
                         continue
                     }
-                    
+
                     self.messageContinuation?.yield(wsMessage)
-                    
+
                 } catch {
                     if !Task.isCancelled {
                         self.logger.warning("WS receive error: \(error.localizedDescription, privacy: .public)")
@@ -258,7 +261,7 @@ public actor WebSocketService {
                     break
                 }
             }
-            self.logger.info("WS receive loop ended")
+            self?.logger.info("WS receive loop ended")
         }
     }
     

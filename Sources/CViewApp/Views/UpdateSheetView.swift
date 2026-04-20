@@ -38,7 +38,7 @@ struct UpdateSheetView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(titleText)
                     .font(.system(size: 18, weight: .semibold))
-                Text("현재 버전 \(service.currentVersion)")
+                Text("현재 버전 \(service.currentVersion) (build \(service.currentBuild))")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -72,7 +72,11 @@ struct UpdateSheetView: View {
         case .idle: return "CView 업데이트"
         case .checking: return "업데이트 확인 중…"
         case .upToDate: return "최신 버전을 사용 중입니다"
-        case .updateAvailable(let r): return "새 버전 \(r.versionString) 사용 가능"
+        case .updateAvailable(let r):
+            if let b = r.buildNumber {
+                return "새 버전 \(r.versionString) (build \(b)) 사용 가능"
+            }
+            return "새 버전 \(r.versionString) 사용 가능"
         case .downloading: return "다운로드 중…"
         case .readyToInstall, .installing: return "설치 중…"
         case .error: return "업데이트 오류"

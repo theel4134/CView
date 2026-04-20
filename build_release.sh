@@ -11,8 +11,12 @@ set -euo pipefail
 APP_NAME="CView"
 BUNDLE_ID="com.cview.CView2"
 EXECUTABLE="CViewApp"
-VERSION="2.0.0"
 MIN_MACOS="15.0"
+
+# [Single Source of Truth] 버전은 SupportFiles/Info.plist 에서 읽어온다.
+# release_to_github.sh 와 동일 소스를 사용하여 두 스크립트의 버전 불일치를 방지.
+INFO_PLIST_VERSION_SRC="${0:A:h}/SupportFiles/Info.plist"
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST_VERSION_SRC")
 
 # ── 빌드 번호 자동 증가 ──────────────────────────────────────────────
 BUILD_NUMBER_FILE="${0:A:h}/.build_number"
@@ -120,7 +124,9 @@ echo -n "APPL????" > "$CONTENTS/PkgInfo"
 
 # ── 5. 코드 서명 ──────────────────────────────────────────────────────
 echo "━━━ [5/5] 코드 서명... ━━━"
-
+# [Gatekeeper] 서명 전 모든 확장 속성 제거 (SPM 빌드 산출물에 명시적으로 않은 xattr 이 묻어버리면
+# macOS 15+ Gatekeeper 가 "악성 코드가 없음을 확인할 수 없습니다" 다이얼로그를 띄움).
+xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 # VLCKit 먼저 서명 (앱과 동일한 ad-hoc + hardened runtime — macOS 26 필수)
 if [[ -d "$FRAMEWORKS/VLCKit.framework" ]]; then
     codesign --force --sign - --timestamp=none --generate-entitlement-der --options runtime "$FRAMEWORKS/VLCKit.framework"

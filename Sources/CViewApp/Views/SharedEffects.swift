@@ -12,6 +12,13 @@ import CViewCore
 // 20+ 동시 인스턴스에서 프레임별 레이아웃 연산 제거 → GPU 가속 shimmer sweep
 struct ShimmerModifier: ViewModifier {
     private static let duration: Double = 1.8
+    // [GPU 누적 부하 수정] 60fps → 30fps 로 제한.
+    // shimmer 는 skeleton 표시용 시각 효과이므로 30fps 로 충분하며,
+    // 한 화면에 20+ 인스턴스가 동시 실행될 때 GPU 드로우 호출이 절반으로 감소.
+    private static let frameInterval: Double = 1.0 / 30.0
+
+    // 비가시 상태 시 TimelineView 정지 — 백그라운드/스크롤 아웃 상태에서 60fps 누적 방지
+    @State private var isVisible: Bool = true
 
     // easeInOut 커브: 양 끝에서 감속, 중앙에서 가속
     @inline(__always)
@@ -24,7 +31,7 @@ struct ShimmerModifier: ViewModifier {
             .overlay {
                 // motionSafe: 접근성 모션 감소 시 shimmer 비활성화
                 if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                    TimelineView(.animation) { timeline in
+                    TimelineView(.animation(minimumInterval: Self.frameInterval, paused: !isVisible)) { timeline in
                         Canvas { context, size in
                             let elapsed = timeline.date.timeIntervalSinceReferenceDate
                             let t = elapsed.truncatingRemainder(dividingBy: Self.duration) / Self.duration
@@ -50,6 +57,8 @@ struct ShimmerModifier: ViewModifier {
                         }
                     }
                     .allowsHitTesting(false)
+                    .onAppear { isVisible = true }
+                    .onDisappear { isVisible = false }
                 }
             }
             .clipped()

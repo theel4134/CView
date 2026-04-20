@@ -440,6 +440,9 @@ public actor ABRController {
             : 0
 
         if sftm > 1.0 + switchUpThreshold {
+            // [Bug-fix] 빈 배열 가드 — availableLevels.isEmpty 이면 count-1 = -1 로
+            // nextLevel 이 음수가 되어 이후 분기에서 예기치 않은 동작 유발 가능.
+            guard !availableLevels.isEmpty else { return .maintain }
             // 레벨 업 후보 찾기
             let nextLevel = min(currentLevelIndex + 1, availableLevels.count - 1)
             if nextLevel > currentLevelIndex {

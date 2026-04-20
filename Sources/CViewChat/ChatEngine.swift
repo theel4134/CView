@@ -367,12 +367,13 @@ public actor ChatEngine {
             emitEvent(.userPenalized(userId: userId, duration: duration))
             
         case .ping:
-            Task {
-                let pong = parser.buildPong()
+            Task { [weak self] in
+                guard let self else { return }
+                let pong = self.parser.buildPong()
                 do {
-                    try await webSocket?.send(pong)
+                    try await self.webSocket?.send(pong)
                 } catch {
-                    logger.warning("Pong send failed: \(error.localizedDescription, privacy: .public)")
+                    self.logger.warning("Pong send failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
             

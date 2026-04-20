@@ -179,10 +179,14 @@ extension HomeView {
 
     private func tooltipForUpdateStatus(_ status: UpdateStatus) -> String {
         switch status {
-        case .idle: return "업데이트 확인 (현재 \(appState.updateService.currentVersion))"
+        case .idle: return "업데이트 확인 (현재 \(appState.updateService.currentVersion) build \(appState.updateService.currentBuild))"
         case .checking: return "업데이트 확인 중…"
-        case .upToDate: return "최신 버전입니다 (\(appState.updateService.currentVersion))"
-        case .updateAvailable(let r): return "새 버전 \(r.versionString) 사용 가능"
+        case .upToDate: return "최신 버전입니다 (\(appState.updateService.currentVersion) build \(appState.updateService.currentBuild))"
+        case .updateAvailable(let r):
+            if let b = r.buildNumber {
+                return "새 버전 \(r.versionString) (build \(b)) 사용 가능"
+            }
+            return "새 버전 \(r.versionString) 사용 가능"
         case .downloading(let p): return "다운로드 \(Int(p * 100))%"
         case .readyToInstall, .installing: return "설치 중…"
         case .error(let msg): return "오류: \(msg)"
@@ -317,7 +321,8 @@ extension HomeView {
 
     func topRankCard(rank: Int, channel: LiveChannelItem) -> some View {
         let rankColors: [Color] = [.yellow, Color(red: 0.75, green: 0.75, blue: 0.78), DesignTokens.Colors.accentOrange]
-        let rankColor = rank <= 3 ? rankColors[rank - 1] : DesignTokens.Colors.textTertiary
+        // [Bug-fix] rank 범위 보호 — rank <= 0 이면 rankColors[rank - 1] 에서 out-of-bounds 크래시.
+        let rankColor = (1...3).contains(rank) ? rankColors[rank - 1] : DesignTokens.Colors.textTertiary
         let rankEmoji = rank == 1 ? "🥇" : rank == 2 ? "🥈" : "🥉"
 
         return VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
