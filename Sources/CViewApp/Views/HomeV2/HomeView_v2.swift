@@ -127,103 +127,117 @@ struct HomeView_v2: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
-                // 1. Command Bar
-                HStack(spacing: DesignTokens.Spacing.xs) {
-                    HomeCommandBar(
-                        greeting: greeting,
-                        isRefreshing: refreshing,
-                        monitorEnabled: monitorEnabled,
-                        onToggleMonitor: { monitorEnabled.toggle() },
-                        onRefresh: { triggerRefresh() }
-                    )
-                    HomeLayoutMenu()
-                }
-                .homeSectionAppear(index: 0)
-
-                // 2. Cookie login (필요 시 상단 노출)
-                if appState.isLoggedIn && viewModel.needsCookieLogin {
-                    cookieLoginBannerInline
-                        .homeSectionAppear(index: 1)
-                }
-
-                // 2-1. 활성 멀티라이브 세션 strip
-                if prefShowActiveMulti {
-                    HomeActiveMultiLiveStrip(liveLookup: cachedLiveLookup)
-                        .homeSectionAppear(index: 1)
-                }
-
-                // 3. Hero
-                if prefShowHero, let hero = cachedRecommendations.first {
-                    HomeHeroLiveCard(item: hero)
-                        .homeSectionAppear(index: 2)
-                }
-
-                // 4. Personal Live (인라인 재구현)
-                if prefShowPersonalLive, appState.isLoggedIn {
-                    personalLiveSection
-                        .homeSectionAppear(index: 3)
-                }
-
-                // 5/6. Continue Watching + Favorites
-                if prefShowContinue {
-                    HStack(alignment: .top, spacing: DesignTokens.Spacing.xl) {
-                        HomeContinueWatchingStrip(
-                            title: "이어보기",
-                            icon: "clock.arrow.circlepath",
-                            items: recentItems,
-                            liveLookup: cachedLiveLookup
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        HomeContinueWatchingStrip(
-                            title: "즐겨찾기",
-                            icon: "star.fill",
-                            items: favoriteItems,
-                            liveLookup: cachedLiveLookup
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .homeSectionAppear(index: 4)
-                }
-
-                // 7. Discover (rule-based recommendations)
-                if prefShowDiscover, cachedRecommendations.count > 1 {
-                    discoverSection
-                        .homeSectionAppear(index: 5)
-                }
-
-                // 8. Top Channels (인라인 재구현)
-                if prefShowTop {
-                    topChannelsInlineSection
-                        .homeSectionAppear(index: 6)
-                }
-
-                // 9. Compact Insights
-                if prefShowInsights {
-                    HomeInsightsCompactStrip(
-                        totalLive: viewModel.totalLiveChannelCount,
-                        totalViewers: viewModel.totalViewers,
-                        categoryCount: viewModel.categoryCount,
-                        followingLive: viewModel.followingLiveCount
-                    )
-                    .homeSectionAppear(index: 7)
-                }
+        // [hit-test fix 2026-04-24]
+        // 이전엔 CommandBar 를 ScrollView 안 첫 행에 두었더니 모든 5개 버튼이
+        // 클릭 액션 클로저까지 도달조차 못함 (NSLog 미출력으로 확인).
+        // 원인 추정:
+        //   (1) macOS 에서 .refreshable 이 ScrollView 상단에 invisible refresh
+        //       control 을 배치 → 첫 행 hit-test 를 흡수.
+        //   (2) AnimatedGradientText 의 .repeatForever 애니메이션이 매 프레임
+        //       transaction 을 발생시켜 클릭 transaction 이 묻힐 가능성.
+        // 해결: CommandBar 를 ScrollView 밖 sticky header 로 분리.
+        VStack(spacing: 0) {
+            // ── Sticky Command Bar (ScrollView 외부 — 항상 클릭 가능) ──
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                HomeCommandBar(
+                    greeting: greeting,
+                    isRefreshing: refreshing,
+                    monitorEnabled: monitorEnabled,
+                    onToggleMonitor: { monitorEnabled.toggle() },
+                    onRefresh: { triggerRefresh() }
+                )
+                HomeLayoutMenu()
             }
-            .padding(DesignTokens.Spacing.xl)
-            // [hit-test fix] MainContentView 의 detail 이 .ignoresSafeArea(.container, edges: .top)
-            // 으로 macOS 타이틀바(트래픽라이트, ~28pt) 영역까지 확장된다.
-            // 타이틀바 영역은 윈도우 드래그를 위해 클릭이 흡수되므로,
-            // CommandBar 가 그 아래에 위치하도록 추가 top padding 을 부여한다.
-            .padding(.top, 32)
-        }
+            .padding(.horizontal, DesignTokens.Spacing.xl)
+            .padding(.top, DesignTokens.Spacing.xl + 32)   // 타이틀바(28) 보정 포함
+            .padding(.bottom, DesignTokens.Spacing.sm)
+            .background(.bar)   // 스크롤 시에도 명확히 구분되도록 머티리얼 배경
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                    // 2. Cookie login (필요 시 상단 노출)
+                    if appState.isLoggedIn && viewModel.needsCookieLogin {
+                        cookieLoginBannerInline
+                            .homeSectionAppear(index: 1)
+                    }
+
+                    // 2-1. 활성 멀티라이브 세션 strip
+                    if prefShowActiveMulti {
+                        HomeActiveMultiLiveStrip(liveLookup: cachedLiveLookup)
+                            .homeSectionAppear(index: 1)
+                    }
+
+                    // 3. Hero
+                    if prefShowHero, let hero = cachedRecommendations.first {
+                        HomeHeroLiveCard(item: hero)
+                            .homeSectionAppear(index: 2)
+                    }
+
+                    // 4. Personal Live (인라인 재구현)
+                    if prefShowPersonalLive, appState.isLoggedIn {
+                        personalLiveSection
+                            .homeSectionAppear(index: 3)
+                    }
+
+                    // 5/6. Continue Watching + Favorites
+                    if prefShowContinue {
+                        HStack(alignment: .top, spacing: DesignTokens.Spacing.xl) {
+                            HomeContinueWatchingStrip(
+                                title: "이어보기",
+                                icon: "clock.arrow.circlepath",
+                                items: recentItems,
+                                liveLookup: cachedLiveLookup
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            HomeContinueWatchingStrip(
+                                title: "즐겨찾기",
+                                icon: "star.fill",
+                                items: favoriteItems,
+                                liveLookup: cachedLiveLookup
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .homeSectionAppear(index: 4)
+                    }
+
+                    // 7. Discover (rule-based recommendations)
+                    if prefShowDiscover, cachedRecommendations.count > 1 {
+                        discoverSection
+                            .homeSectionAppear(index: 5)
+                    }
+
+                    // 8. Top Channels (인라인 재구현)
+                    if prefShowTop {
+                        topChannelsInlineSection
+                            .homeSectionAppear(index: 6)
+                    }
+
+                    // 9. Compact Insights
+                    if prefShowInsights {
+                        HomeInsightsCompactStrip(
+                            totalLive: viewModel.totalLiveChannelCount,
+                            totalViewers: viewModel.totalViewers,
+                            categoryCount: viewModel.categoryCount,
+                            followingLive: viewModel.followingLiveCount
+                        )
+                        .homeSectionAppear(index: 7)
+                    }
+                }
+                .padding(.horizontal, DesignTokens.Spacing.xl)
+                .padding(.bottom, DesignTokens.Spacing.xl)
+            }
+            .refreshable {
+                await viewModel.refresh()
+                await reloadStore()
+                recomputeCachesIfNeeded()
+            }
+        }   // outer VStack (sticky header + ScrollView)
         .contentBackground()
         .overlay(alignment: .topTrailing) {
             if monitorEnabled {
                 HomeMonitorPanel(viewModel: viewModel)
-                    // CommandBar(아이콘 버튼 row) 아래로 내려서 상단 버튼 클릭을 막지 않도록 한다.
-                    // 타이틀바(28) + xl(24) + CommandBar 높이(~40) ≈ 92pt 아래에 배치.
+                    // sticky CommandBar 아래에 위치하도록 (CommandBar height 약 92pt + 여유)
                     .padding(.top, 100)
                     .padding(.trailing, DesignTokens.Spacing.md)
                     .transition(.asymmetric(
@@ -233,11 +247,6 @@ struct HomeView_v2: View {
             }
         }
         .animation(DesignTokens.Animation.fast, value: monitorEnabled)
-        .refreshable {
-            await viewModel.refresh()
-            await reloadStore()
-            recomputeCachesIfNeeded()
-        }
         .onAppear {
             viewModel.startAutoRefresh()
             scheduleStoreReload()

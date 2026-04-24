@@ -72,9 +72,14 @@ struct HomeCommandBar: View {
 
             Spacer()
 
-            // Search entry (전역 ⌘K Command Palette 토글과 동일 동작)
+            // Search entry (전역 ⌘K Command Palette 열기 — 토글 X, 항상 open)
             Button {
-                appState.showCommandPalette.toggle()
+                // [hit-test 진단 2026-04-24]
+                // ⌘K 메뉴는 동작하지만 검색 버튼은 동작 안 한다는 보고.
+                // toggle() 이 어떤 이유로 두 번 불려 false 로 돌아가는 가능성을 차단하기 위해
+                // 명시적으로 = true 로 설정. (검색 진입 버튼이라 닫기 의미가 없음)
+                NSLog("[HomeCommandBar] search tapped → open palette")
+                appState.showCommandPalette = true
             } label: {
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     Image(systemName: "magnifyingglass")
