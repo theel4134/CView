@@ -243,9 +243,12 @@ struct HomeHeroLiveCard: View {
             .frame(maxWidth: .infinity)
             .frame(height: 320)
             .scaleEffect(hovered ? 1.012 : 1.0, anchor: .center)
+            // [Perf 2026-04-24] shadow radius 는 Gaussian blur 커널이라 값이 바뀌면
+            // 매 프레임 재계산. 대형 카드(320pt)에서 14↔24 진행은 비용이 큼 → 14 고정,
+            // color/y 만 hover 에 따라 보간.
             .shadow(
                 color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .black.opacity(0.18),
-                radius: hovered ? 24 : 14,
+                radius: 14,
                 y: hovered ? 10 : 6
             )
             .animation(DesignTokens.Animation.smooth, value: hovered)
@@ -329,7 +332,13 @@ struct HomeRecommendedCard: View {
                 ZStack(alignment: .topLeading) {
                     LiveThumbnailView(
                         channelId: item.channel.channelId,
-                        thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? "")
+                        thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? ""),
+                        // [Perf 2026-04-24] 홈 추천 그리드는 한 화면에 6-12개 카드가 동시에
+                        // 떠 있어 .liveLoop 사용 시 N개의 45s 타이머가 누적되며 fade-in 동시
+                        // 발생. .once 로 전환 — 첫 fetch 후 정지 (사용자가 새로고침 버튼을 누르면
+                        // viewModel.refresh() 가 데이터를 갱신하고 카드 자체가 재마운트되며
+                        // 다시 1회 fetch 됨).
+                        refreshPolicy: .once
                     )
                     .aspectRatio(16/9, contentMode: .fit)
                     .frame(maxWidth: .infinity)
@@ -413,9 +422,10 @@ struct HomeRecommendedCard: View {
             }
             .scaleEffect(hovered ? 1.022 : 1.0, anchor: .center)
             .offset(y: hovered ? -2 : 0)
+            // [Perf 2026-04-24] radius 고정 (Gaussian blur 재계산 방지). 색/y 만 보간.
             .shadow(
                 color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.20) : .black.opacity(0.07),
-                radius: hovered ? 12 : 5,
+                radius: 8,
                 y: hovered ? 6 : 2
             )
         }

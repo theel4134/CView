@@ -31,6 +31,9 @@ struct HomeView_v2: View {
     @State private var recentItems: [ChannelListData] = []
     @State private var favoriteItems: [ChannelListData] = []
     @State private var loadStoreTask: Task<Void, Never>?
+    /// [Perf 2026-04-24] 홈 마운트 직후 저장소 reload + recompute + prefetch 를
+    /// MenuTransitionGate 해제 이후로 지연시키기 위한 부트 태스크.
+    @State private var bootTask: Task<Void, Never>?
     @State private var refreshing: Bool = false
 
     /// 간이 성능 모니터 패널 표시 여부 (CommandBar 의 ⌥M 버튼으로 토글, AppStorage 영속)
@@ -261,13 +264,33 @@ struct HomeView_v2: View {
         }
         .animation(DesignTokens.Animation.fast, value: monitorEnabled)
         .onAppear {
+            // [Perf 2026-04-24] 메뉴 전환 직후 첫 프레임과 겹치는 작업을 억제.
+            //   onAppear 에서 이전엔 startAutoRefresh / scheduleStoreReload /
+            //   recomputeCachesIfNeeded 를 동시 실행 → NavigationSplitView detail mount,
+            //   HomeSectionAppear 애니메이션, 추천 점수 계산, prefetch launch 가
+            //   같은 run loop 에 몽려 첫 stutter 의 주원인.
+            //   아래로 분리:
+            //     - startAutoRefresh: 즉시 시작해도 첫 task wakeup 은 시간 후이므로
+            //       UI 에 영향 없음.
+            //     - reloadStore + recompute + prefetch: 380ms 지연 → MenuTransitionGate(350ms)
+            //       해제 + 첫 프레임 렌더 완료 후에 실행.
             viewModel.startAutoRefresh()
-            scheduleStoreReload()
-            recomputeCachesIfNeeded()
+            bootTask?.cancel()
+            bootTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(380))
+                guard !Task.isCancelled else { return }
+                await reloadStore()
+                // reloadStore 가 끝에서 recomputeCachesIfNeeded 를 호출하므로
+                // 추가 호출 불필요.
+            }
         }
         .onDisappear {
             viewModel.stopAutoRefresh()
             loadStoreTask?.cancel()
+            bootTask?.cancel()
+            // [Perf 2026-04-24] 홈을 떠날 때 진행 중이던 prefetch 도 실효성 없으므로
+            // 제거 — 다음 메뉴의 main actor 를 점유하지 않도록.
+            HomeThumbnailPrefetcher.cancel()
         }
         // [Perf 2026-04-24] 6개 onChange → 단일 signature onChange 통합.
         // viewModel.lightRefresh() 가 liveChannels/followingChannels/allStatChannels 를

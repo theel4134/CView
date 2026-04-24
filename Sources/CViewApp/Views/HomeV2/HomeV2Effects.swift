@@ -34,14 +34,14 @@ struct HomeSectionAppear: ViewModifier {
             .offset(y: visible ? 0 : (reduceMotion ? 0 : 8))
             .onAppear {
                 guard !visible else { return }
-                if reduceMotion {
+                // [Perf 2026-04-24] 메뉴 전환 중에는 explicit animation 도 생략.
+                //   루트 transaction gate 는 implicit 만 막고 withAnimation 은 우회한다.
+                //   메뉴 클릭 직후 7개 섹션 stagger 가 detail mount 비용과 겹쳐 첫
+                //   프레임 드롭의 주범이었음 → 전환 중이면 즉시 표시.
+                if reduceMotion || MenuTransitionGate.isTransitioning {
                     visible = true
                 } else {
-                    // [Perf 2026-04-24] spring(response: 0.5, damping: 0.88) → easeOut(0.22).
-                    // 이전 spring 은 dampingFraction 0.88 이라 안정 후에도 4-5프레임 잔진동이
-                    // GPU 를 점유—홈 첫 진입에 7개 섹션 stagger가 동시 활성되면
-                    // 프레임 드롭의 주원인. easeOut 은 곡선이 단조명령 하나라
-                    // 광당 GPU 비용 대폭 감소.
+                    // easeOut 단조 곡선 (이전 spring 대비 잔진동 0).
                     withAnimation(.easeOut(duration: 0.22).delay(delay)) {
                         visible = true
                     }

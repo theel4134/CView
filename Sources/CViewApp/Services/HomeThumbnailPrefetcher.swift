@@ -46,6 +46,16 @@ enum HomeThumbnailPrefetcher {
     /// 너무 크면 의미 없는 트래픽 + 로컬 디스크 부담 → "사용자가 곧 볼" 범위로 제한.
     private static let maxChannels = 60
 
+    /// [Perf 2026-04-24] 가장 최근 prefetch 작업 핸들. 새 호출이 오면 이전을 취소해
+    /// 짧은 시간 내 중복 호출(예: refresh 직후 recompute 가 또 호출) 의 부하를 막는다.
+    private static var currentTask: Task<Void, Never>?
+
+    /// [Perf 2026-04-24] 외부에서 강제 취소 (홈을 벗어날 때).
+    static func cancel() {
+        currentTask?.cancel()
+        currentTask = nil
+    }
+
     /// 라이브 채널 묶음에 대해 라이브 썸네일 + 채널 아바타를 비동기 워밍.
     ///
     /// - Parameters:
@@ -76,7 +86,12 @@ enum HomeThumbnailPrefetcher {
             }
             : []
 
-        Task.detached(priority: .utility) {
+        // [Perf 2026-04-24] 이전 prefetch 취소 + 160ms 디바운스. 짧은 시간 안에
+        // 여러 번(refresh + recompute + onAppear) 호출되어도 최종 1회만 실행.
+        currentTask?.cancel()
+        currentTask = Task.detached(priority: .utility) {
+            try? await Task.sleep(for: .milliseconds(160))
+            guard !Task.isCancelled else { return }
             await runPrefetch(avatarURLs: avatarURLs, liveThumbs: liveThumbItems)
         }
     }
@@ -96,7 +111,11 @@ enum HomeThumbnailPrefetcher {
             }
 
         guard !urls.isEmpty else { return }
+        // [Perf 2026-04-24] persisted prefetch 는 더 가볍지만 동일 디바운스 적용.
+        // (currentTask 와는 별개의 Task — 라이브 prefetch 와는 종류가 다르므로 cancel 하지 않음.)
         Task.detached(priority: .utility) {
+            try? await Task.sleep(for: .milliseconds(160))
+            guard !Task.isCancelled else { return }
             await runPrefetch(avatarURLs: urls, liveThumbs: [])
         }
     }

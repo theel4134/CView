@@ -530,7 +530,13 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
-        .animation(DesignTokens.Animation.indicator, value: router.selectedSidebarItem)
+        // [Perf 2026-04-24] 메뉴 전환 중에는 sidebar selection 애니메이션도 생략.
+        //   matchedGeometryEffect("sidebar_sel") + indicator easing 이 detail mount
+        //   비용과 동시에 돌면 첫 프레임 드롭의 한 축이었음.
+        .animation(
+            MenuTransitionGate.isTransitioning ? nil : DesignTokens.Animation.indicator,
+            value: router.selectedSidebarItem
+        )
     }
 
     // MARK: - Icon Styling
