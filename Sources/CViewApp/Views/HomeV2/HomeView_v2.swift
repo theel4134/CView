@@ -116,7 +116,7 @@ struct HomeView_v2: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
                 // 1. Command Bar
                 HomeCommandBar(
                     greeting: greeting,
@@ -198,6 +198,7 @@ struct HomeView_v2: View {
                     ))
             }
         }
+        .animation(DesignTokens.Animation.fast, value: monitorEnabled)
         .refreshable {
             await viewModel.refresh()
             await reloadStore()
@@ -219,8 +220,6 @@ struct HomeView_v2: View {
         .onChange(of: recentItems.count) { _, _ in recomputeCachesIfNeeded() }
         .onChange(of: favoriteItems.count) { _, _ in recomputeCachesIfNeeded() }
         .onChange(of: appState.multiLiveManager.sessions.count) { _, _ in recomputeCachesIfNeeded() }
-        .animation(DesignTokens.Animation.smooth, value: cachedRecommendations.count)
-        .animation(DesignTokens.Animation.fast, value: monitorEnabled)
     }
 
     // MARK: - Discover Section

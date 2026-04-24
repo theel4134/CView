@@ -16,6 +16,7 @@
 // 따라서 LiveStream 미진입 상태에서도 추가 백그라운드 작업 없이 동작.
 
 import SwiftUI
+import QuartzCore
 import CViewCore
 import CViewMonitoring
 
@@ -28,6 +29,8 @@ struct HomeMonitorPanel: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var collapsed: Bool = false
     @State private var lastUpdated: Date = .init()
+    @State private var fps: Double = 0
+    @State private var gpuInfo: PerformanceMonitor.GPUDeviceInfo?
 
     private let pollInterval: TimeInterval = 1.0
 
@@ -54,8 +57,17 @@ struct HomeMonitorPanel: View {
         }
         .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
         .animation(DesignTokens.Animation.fast, value: collapsed)
-        .onAppear { startPolling() }
+        .onAppear {
+            if gpuInfo == nil { gpuInfo = PerformanceMonitor.gpuDeviceInfo() }
+            startPolling()
+        }
         .onDisappear { stopPolling() }
+        .background {
+            // 프레임 카운터 (모니터 표시 시에만 활성)
+            FPSMeasureView(fps: $fps)
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+        }
     }
 
     // MARK: - Header
@@ -88,6 +100,12 @@ struct HomeMonitorPanel: View {
     private var metricsGrid: some View {
         VStack(spacing: 4) {
             metricRow(
+                icon: "speedometer",
+                label: "FPS",
+                value: fps > 0 ? String(format: "%.0f", fps) : "—",
+                tint: fpsTint
+            )
+            metricRow(
                 icon: "cpu",
                 label: "CPU",
                 value: snapshot.map { String(format: "%.1f%%", $0.cpuPercent) } ?? "—",
@@ -111,7 +129,39 @@ struct HomeMonitorPanel: View {
                 value: snapshot.map { "\($0.threadCount)" } ?? "—",
                 tint: DesignTokens.Colors.textSecondary
             )
+            if let gpu = gpuInfo {
+                gpuDeviceRow(gpu)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func gpuDeviceRow(_ gpu: PerformanceMonitor.GPUDeviceInfo) -> some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Image(systemName: "cpu.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                .frame(width: 14)
+            Text(gpu.name)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            Text(gpu.supportsMetal3 ? "Metal 3" : "Metal 2")
+                .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                .foregroundStyle(gpu.supportsMetal3 ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .overlay {
+                    Capsule()
+                        .strokeBorder(
+                            (gpu.supportsMetal3 ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary).opacity(0.55),
+                            lineWidth: 0.6
+                        )
+                }
+        }
+        .help("GPU: \(gpu.name) · 권장 워킹셋 \(Int(gpu.recommendedMaxWorkingSetMB)) MB · Apple9: \(gpu.supportsAppleFamily9 ? "Yes" : "No") · Raytracing: \(gpu.supportsRaytracing ? "Yes" : "No")")
     }
 
     @ViewBuilder
@@ -211,6 +261,15 @@ struct HomeMonitorPanel: View {
         }
     }
 
+    private var fpsTint: Color {
+        switch fps {
+        case 0: return DesignTokens.Colors.textSecondary
+        case ..<45: return DesignTokens.Colors.live
+        case 45..<58: return DesignTokens.Colors.warning
+        default: return DesignTokens.Colors.chzzkGreen
+        }
+    }
+
     // MARK: - Polling
 
     private func startPolling() {
@@ -235,5 +294,35 @@ struct HomeMonitorPanel: View {
     private func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
+    }
+}
+
+// MARK: - FPS Measure (TimelineView frame counter)
+
+/// 모니터 패널이 화면에 떠 있을 때만 활성화되는 경량 FPS 측정 뷰.
+/// TimelineView(.animation) 가 매 프레임 ctx 를 갱신하므로 그 카운트로 1초당 frame 수를 산출.
+/// drawingGroup 으로 GPU 합성에 위임 (Metal 백엔드).
+private struct FPSMeasureView: View {
+    @Binding var fps: Double
+    @State private var frames: Int = 0
+    @State private var sampleStart: CFTimeInterval = CACurrentMediaTime()
+    @State private var lastTick: Date = .init()
+
+    var body: some View {
+        TimelineView(.animation) { ctx in
+            Color.clear
+                .onChange(of: ctx.date) { _, newDate in
+                    guard newDate != lastTick else { return }
+                    lastTick = newDate
+                    let now = CACurrentMediaTime()
+                    frames &+= 1
+                    let elapsed = now - sampleStart
+                    if elapsed >= 0.5 {
+                        fps = Double(frames) / elapsed
+                        frames = 0
+                        sampleStart = now
+                    }
+                }
+        }
     }
 }

@@ -3,6 +3,7 @@
 
 import Foundation
 import IOKit
+import Metal
 import CViewCore
 
 // MARK: - Performance Monitor
@@ -437,6 +438,39 @@ public actor PerformanceMonitor {
             gpuMemoryMB: gpu.memMB,
             threadCount: threads,
             timestamp: Date()
+        )
+    }
+
+    // MARK: - GPU Device Info (Metal 3 / Apple Silicon family)
+
+    public struct GPUDeviceInfo: Sendable {
+        public let name: String                  // 예: "Apple M3 Pro"
+        public let supportsMetal3: Bool          // .metal3 family
+        public let supportsAppleFamily9: Bool    // Apple Silicon GPU family 9 (M3+)
+        public let supportsRaytracing: Bool
+        public let recommendedMaxWorkingSetMB: Double
+        public let isLowPower: Bool
+        public let hasUnifiedMemory: Bool
+    }
+
+    /// Metal 디바이스 정보 1회성 조회 (캐싱 권장 — 변경 없음).
+    public nonisolated static func gpuDeviceInfo() -> GPUDeviceInfo? {
+        guard let device = MTLCreateSystemDefaultDevice() else { return nil }
+        let supportsMetal3 = device.supportsFamily(.metal3)
+        let supportsApple9: Bool = {
+            if #available(macOS 14.0, *) {
+                return device.supportsFamily(.apple9)
+            }
+            return false
+        }()
+        return GPUDeviceInfo(
+            name: device.name,
+            supportsMetal3: supportsMetal3,
+            supportsAppleFamily9: supportsApple9,
+            supportsRaytracing: device.supportsRaytracing,
+            recommendedMaxWorkingSetMB: Double(device.recommendedMaxWorkingSetSize) / 1_048_576.0,
+            isLowPower: device.isLowPower,
+            hasUnifiedMemory: device.hasUnifiedMemory
         )
     }
     
