@@ -19,12 +19,23 @@ struct HomeV2SectionHeader: View {
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.xs) {
-            Image(systemName: icon)
-                .font(DesignTokens.Typography.captionSemibold)
-                .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.15))
+                    .frame(width: 22, height: 22)
+                Image(systemName: icon)
+                    .font(DesignTokens.Typography.captionSemibold)
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+            }
             Text(title)
                 .font(DesignTokens.Typography.headline)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [DesignTokens.Colors.textPrimary, DesignTokens.Colors.textPrimary.opacity(0.85)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
             if let subtitle {
                 Text("·  \(subtitle)")
                     .font(DesignTokens.Typography.footnote)
@@ -50,9 +61,10 @@ struct HomeCommandBar: View {
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.md) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(greeting)
-                    .font(DesignTokens.Typography.titleSemibold)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                AnimatedGradientText(
+                    text: greeting,
+                    font: DesignTokens.Typography.titleSemibold
+                )
                 Text("오늘의 라이브를 한눈에 둘러보세요")
                     .font(DesignTokens.Typography.footnote)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
@@ -148,6 +160,7 @@ struct HomeHeroLiveCard: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     let item: HomeRecommendationEngine.ScoredChannel
+    @State private var hovered = false
 
     var body: some View {
         Button {
@@ -212,10 +225,18 @@ struct HomeHeroLiveCard: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 320)
-            .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+            .scaleEffect(hovered ? 1.012 : 1.0, anchor: .center)
+            .shadow(
+                color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .black.opacity(0.18),
+                radius: hovered ? 24 : 14,
+                y: hovered ? 10 : 6
+            )
+            .animation(DesignTokens.Animation.smooth, value: hovered)
         }
         .buttonStyle(.plain)
+        .homeAccentPulse(color: DesignTokens.Colors.chzzkGreen, cornerRadius: DesignTokens.Radius.lg)
         .onHover { hovering in
+            hovered = hovering
             if hovering {
                 if let svc = appState.hlsPrefetchService {
                     Task { await svc.prefetch(channelId: item.channel.channelId) }
@@ -227,14 +248,22 @@ struct HomeHeroLiveCard: View {
 
     private var liveBadge: some View {
         HStack(spacing: 4) {
-            Circle().fill(.white).frame(width: 5, height: 5)
+            LivePulseDot(size: 5, color: .white)
             Text("LIVE")
                 .font(DesignTokens.Typography.custom(size: 10, weight: .black))
         }
         .foregroundStyle(.white)
         .padding(.horizontal, DesignTokens.Spacing.xs)
         .padding(.vertical, 3)
-        .background(DesignTokens.Colors.live, in: Capsule())
+        .background(
+            LinearGradient(
+                colors: [DesignTokens.Colors.live, DesignTokens.Colors.live.opacity(0.82)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: Capsule()
+        )
+        .shadow(color: DesignTokens.Colors.live.opacity(0.45), radius: 6, y: 2)
     }
 
     private var viewerBadge: some View {
@@ -283,10 +312,25 @@ struct HomeRecommendedCard: View {
                     .aspectRatio(16/9, contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .clipped()
+                    .scaleEffect(hovered ? 1.04 : 1.0, anchor: .center)
                     .clipShape(UnevenRoundedRectangle(
                         topLeadingRadius: DesignTokens.Radius.sm,
                         topTrailingRadius: DesignTokens.Radius.sm
                     ))
+                    .animation(DesignTokens.Animation.smooth, value: hovered)
+
+                    // 호버 시 그라디언트 오버레이
+                    LinearGradient(
+                        colors: [DesignTokens.Colors.chzzkGreen.opacity(hovered ? 0.18 : 0), .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(UnevenRoundedRectangle(
+                        topLeadingRadius: DesignTokens.Radius.sm,
+                        topTrailingRadius: DesignTokens.Radius.sm
+                    ))
+                    .allowsHitTesting(false)
+                    .animation(DesignTokens.Animation.smooth, value: hovered)
 
                     if let reason = item.reasons.first {
                         Text(reason)
@@ -325,11 +369,17 @@ struct HomeRecommendedCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .strokeBorder(
-                        hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.4) : DesignTokens.Glass.borderColor,
-                        lineWidth: hovered ? 1.0 : 0.5
+                        hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.55) : DesignTokens.Glass.borderColor,
+                        lineWidth: hovered ? 1.2 : 0.5
                     )
             }
-            .shadow(color: .black.opacity(0.07), radius: 5, y: 2)
+            .scaleEffect(hovered ? 1.022 : 1.0, anchor: .center)
+            .offset(y: hovered ? -2 : 0)
+            .shadow(
+                color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.20) : .black.opacity(0.07),
+                radius: hovered ? 12 : 5,
+                y: hovered ? 6 : 2
+            )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -397,10 +447,8 @@ struct HomeContinueWatchingStrip: View {
                         )
                     }
                     if live != nil {
-                        Circle()
-                            .fill(DesignTokens.Colors.live)
-                            .frame(width: 8, height: 8)
-                            .overlay { Circle().strokeBorder(.white, lineWidth: 1) }
+                        LivePulseDot(size: 8)
+                            .padding(2)
                     }
                 }
                 VStack(alignment: .leading, spacing: 1) {
@@ -425,12 +473,14 @@ struct HomeContinueWatchingStrip: View {
             .padding(.vertical, DesignTokens.Spacing.xs)
             .frame(width: 220)
             .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-            }
         }
         .buttonStyle(.plain)
+        .homeHoverLift(
+            lift: 1,
+            scale: 1.018,
+            accent: live != nil ? DesignTokens.Colors.live : DesignTokens.Colors.chzzkGreen,
+            cornerRadius: DesignTokens.Radius.sm
+        )
         .customCursor(.pointingHand)
     }
 
@@ -503,28 +553,60 @@ struct HomeInsightsCompactStrip: View {
 
     @ViewBuilder
     private func stat(_ title: String, _ value: String, icon: String, accent: Color? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(accent ?? DesignTokens.Colors.chzzkGreen)
-                Text(title)
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-            Text(value)
-                .font(DesignTokens.Typography.headlineBold)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .contentTransition(.numericText())
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        InsightsStatCard(title: title, value: value, icon: icon, accent: accent ?? DesignTokens.Colors.chzzkGreen)
     }
 
     private func formatLarge(_ n: Int) -> String {
         if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000.0) }
         if n >= 1_000  { return String(format: "%.1f천", Double(n) / 1_000.0) }
         return "\(n)"
+    }
+}
+
+// MARK: - Insights Stat Card (호버 틴트 + 넘버 트랜지션)
+
+private struct InsightsStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let accent: Color
+    @State private var hovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(accent)
+                    .scaleEffect(hovered ? 1.15 : 1.0)
+                Text(title)
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+            }
+            Text(value)
+                .font(DesignTokens.Typography.headlineBold)
+                .foregroundStyle(
+                    hovered
+                        ? AnyShapeStyle(LinearGradient(colors: [accent, accent.opacity(0.75)], startPoint: .leading, endPoint: .trailing))
+                        : AnyShapeStyle(DesignTokens.Colors.textPrimary)
+                )
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DesignTokens.Spacing.sm)
+        .background(
+            (hovered ? accent.opacity(0.10) : DesignTokens.Colors.surfaceBase),
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .strokeBorder(
+                    hovered ? accent.opacity(0.45) : Color.clear,
+                    lineWidth: hovered ? 1.0 : 0
+                )
+        }
+        .scaleEffect(hovered ? 1.025 : 1.0, anchor: .center)
+        .onHover { hovered = $0 }
+        .animation(DesignTokens.Animation.smooth, value: hovered)
     }
 }

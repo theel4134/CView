@@ -125,20 +125,24 @@ struct HomeView_v2: View {
                     onToggleMonitor: { monitorEnabled.toggle() },
                     onRefresh: { triggerRefresh() }
                 )
+                .homeSectionAppear(index: 0)
 
                 // 2. Cookie login (필요 시 상단 노출)
                 if appState.isLoggedIn && viewModel.needsCookieLogin {
                     cookieLoginBannerInline
+                        .homeSectionAppear(index: 1)
                 }
 
                 // 3. Hero
                 if let hero = cachedRecommendations.first {
                     HomeHeroLiveCard(item: hero)
+                        .homeSectionAppear(index: 2)
                 }
 
                 // 4. Personal Live (인라인 재구현)
                 if appState.isLoggedIn {
                     personalLiveSection
+                        .homeSectionAppear(index: 3)
                 }
 
                 // 5/6. Continue Watching + Favorites
@@ -159,14 +163,17 @@ struct HomeView_v2: View {
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .homeSectionAppear(index: 4)
 
                 // 7. Discover (rule-based recommendations)
                 if cachedRecommendations.count > 1 {
                     discoverSection
+                        .homeSectionAppear(index: 5)
                 }
 
                 // 8. Top Channels (인라인 재구현)
                 topChannelsInlineSection
+                    .homeSectionAppear(index: 6)
 
                 // 9. Compact Insights
                 HomeInsightsCompactStrip(
@@ -175,6 +182,7 @@ struct HomeView_v2: View {
                     categoryCount: viewModel.categoryCount,
                     followingLive: viewModel.followingLiveCount
                 )
+                .homeSectionAppear(index: 7)
             }
             .padding(DesignTokens.Spacing.xl)
         }

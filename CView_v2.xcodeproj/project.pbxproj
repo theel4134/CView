@@ -13,6 +13,7 @@
 		23302727FE83731000625271 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29DFCF37AFC447A104B9AC1A /* ChatViewModel.swift */; };
 		5B952B8DF0B37E3B6234205C /* WidgetCommon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 898F750DC9DD2957FA0BF33A /* WidgetCommon.swift */; };
 		5DD2BCCAA933D7EF198B1AA0 /* NowWatchingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A99A6CE4FD3E9ACBDA71025 /* NowWatchingWidget.swift */; };
+		64F42BE19BA1F44629D7615C /* HomeV2Effects.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */; };
 		652234EBC703CD2A11234E8B /* CViewCore in Frameworks */ = {isa = PBXBuildFile; productRef = BFDF8366F7572E3215BCB286 /* CViewCore */; };
 		7FCF127FAEDD144242C41B93 /* CViewPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = DF7DCF350F526B445EF794DA /* CViewPlayer */; };
 		850BFB1A05E64A31270044D6 /* CViewChat in Frameworks */ = {isa = PBXBuildFile; productRef = 4F4BA833254E60BA32D6F082 /* CViewChat */; };
@@ -282,6 +283,7 @@
 		CC11223344556677CCDD0008 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StatisticsView.swift; sourceTree = SOURCE_ROOT; };
 		CC11223344556677CCDD0009 /* ErrorRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ErrorRecoveryView.swift; sourceTree = SOURCE_ROOT; };
 		CC44556677889900CCDD0060 /* LiveThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/Components/LiveThumbnailView.swift; sourceTree = SOURCE_ROOT; };
+		CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Effects.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Effects.swift; sourceTree = SOURCE_ROOT; };
 		CC99887766554433CCDD0090 /* ChatAutocompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatAutocompleteView.swift; sourceTree = SOURCE_ROOT; };
 		CD59E0EB71DC1D5B631D2753 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SettingsView.swift; sourceTree = SOURCE_ROOT; };
 		D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeView_v2.swift; path = Sources/CViewApp/Views/HomeV2/HomeView_v2.swift; sourceTree = SOURCE_ROOT; };
@@ -580,6 +582,7 @@
 				731DE311037F0BF2A7D8889B /* HomeV2Components.swift */,
 				D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */,
 				5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */,
+				CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -985,6 +988,7 @@
 				863203EE11F375A60C649C79 /* HomeV2Components.swift in Sources */,
 				181653DAF0FD0A95B8C6EA5E /* HomeView_v2.swift in Sources */,
 				A5A18BAD6416A63196D65D4D /* HomeMonitorPanel.swift in Sources */,
+				64F42BE19BA1F44629D7615C /* HomeV2Effects.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
