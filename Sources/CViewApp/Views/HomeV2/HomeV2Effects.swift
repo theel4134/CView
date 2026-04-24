@@ -113,9 +113,12 @@ struct HomeAccentPulse: ViewModifier {
                         .drawingGroup()  // GPU 합성으로 위임 (Metal)
                 }
             }
+            // [Perf 2026-04-24] shadow radius 애니메이션 제거 — radius 가 변하면 GPU 가
+            // 매 프레임 가우시안 블러를 재계산 (전형적 stutter 원인). 고정 radius 로 위임,
+            // 펄스는 stroke 의 opacity/lineWidth 만 바뀌므로 합성 비용 ≈ 0.
             .shadow(
-                color: enabled ? color.opacity(0.10 + 0.10 * phase) : .clear,
-                radius: enabled ? 10 + 4 * phase : 0,
+                color: enabled ? color.opacity(0.16) : .clear,
+                radius: enabled ? 12 : 0,
                 y: 3
             )
             .onAppear {
@@ -154,7 +157,9 @@ struct LivePulseDot: View {
             Circle()
                 .fill(color)
                 .frame(width: size, height: size)
-                .shadow(color: color.opacity(0.6), radius: pulsing ? 4 : 1)
+                // [Perf 2026-04-24] shadow radius 애니메이션 → 고정.
+                // pulsing 의 opacity/scale 만으로 충분히 "숨쉬는" 표현 가능.
+                .shadow(color: color.opacity(0.55), radius: 2.5)
         }
         .frame(width: size * 2.5, height: size * 2.5)
         .drawingGroup()  // 단일 Metal 텍스처로 합성 — 화면 내 N개 인스턴스 비용 ↓
@@ -195,10 +200,14 @@ struct AnimatedGradientText: View {
                         endPoint: UnitPoint(x: phase + 0.7, y: 1)
                     ))
             )
+            // [Perf 2026-04-24] drawingGroup — 그라디언트 phase 변경을 단일 Metal 레이어 안에서
+            // 처리. 주변 HStack/Text 레이아웃 invalidation 없이 GPU 만 사용.
+            .drawingGroup(opaque: false)
             .onAppear {
                 guard !reduceMotion else { return }
                 phase = 0
-                withAnimation(.easeInOut(duration: 5.2).repeatForever(autoreverses: true)) {
+                // [Perf] duration 5.2 → 7.0 — 사이클을 길게 하여 단위시간당 합성 frame 수 감소
+                withAnimation(.easeInOut(duration: 7.0).repeatForever(autoreverses: true)) {
                     phase = 1
                 }
             }
