@@ -217,7 +217,10 @@ struct HomeView_v2: View {
         .overlay(alignment: .topTrailing) {
             if monitorEnabled {
                 HomeMonitorPanel(viewModel: viewModel)
-                    .padding(.top, DesignTokens.Spacing.md)
+                    // CommandBar(아이콘 버튼 row) 아래로 내려서 상단 버튼 클릭을 막지 않도록 한다.
+                    // (이전: .padding(.top, .md) 만 두어 우상단 검색바/멀티라이브/모니터/새로고침/편집 버튼들과
+                    //  hit-test 가 겹쳐서 버튼이 "눌러도 반응 없음" 상태로 보였음)
+                    .padding(.top, 64)
                     .padding(.trailing, DesignTokens.Spacing.md)
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity),
