@@ -224,7 +224,10 @@ extension ChatViewModel {
             guard seenMessageIDs.insert(item.id).inserted else { return false }
             seenMessageIDQueue.append(item.id)
             // 본인 메시지 에코백 필터: sendMessage()에서 로컬 추가한 메시지와 동일한 서버 에코 제거
-            let echoKey = "\(item.userId)_\(item.content.hashValue)"
+            // [Echo Dedup 키 통일 2026-04-24]
+            //   sendMessage 측 키 포맷("userId_content")과 정확히 일치해야 매칭됨.
+            //   이전: 수신 측만 content.hashValue 를 사용해 키가 영구 불일치 → 본인 메시지 2회 표시 회귀.
+            let echoKey = "\(item.userId)_\(item.content)"
             if let expiry = recentSentEchoKeys[echoKey], now < expiry {
                 recentSentEchoKeys.removeValue(forKey: echoKey)
                 return false
