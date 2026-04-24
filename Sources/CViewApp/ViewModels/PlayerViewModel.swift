@@ -41,6 +41,19 @@ public final class PlayerViewModel {
     public var latestMetrics: VLCLiveMetrics?
     public var showNetworkMetrics: Bool = false
 
+    // MARK: - 정밀 동기화 (P2 / 2026-04-25) — VLC + WebLatencyClient 부착 시에만 갱신
+    /// LowLatencyController.WebSyncPhase 의 사람-읽기 표현 (예: "tracking", "hold(stale)")
+    public var webSyncPhaseLabel: String = "-"
+    /// EWMA 평활된 web↔app drift (ms). 양수 = 앱이 웹보다 뒤쳐짐.
+    public var webSyncDriftMs: Double?
+    /// 가장 최근 PDT 비교 샘플의 web/app 절대 레이턴시 (ms)
+    public var webSyncWebLatencyMs: Double?
+    public var webSyncAppLatencyMs: Double?
+    /// 가장 오래된 쪽 sample age (ms) — 5_000 초과 시 hold 진입 기준
+    public var webSyncSampleAgeMs: Int64?
+    /// PDT 양쪽 가용 + 신선 여부
+    public var webSyncIsPrecisionEligible: Bool = false
+
     // MARK: - 녹화 상태
 
     public var isRecording: Bool = false
@@ -71,6 +84,8 @@ public final class PlayerViewModel {
     // [P1 / 2026-04-25] PDT 정밀 동기화 — VLC 세션에서만 사용.
     // `attachWebLatencyClient(metricsClient:channelId:)` 로 연결, `stopStream()` 에서 자동 해제.
     private var webLatencyClient: WebLatencyClient?
+    /// 정밀 동기화 모니터링 폴링 태스크 — UI(@Observable) 상태 갱신용.
+    private var webSyncMonitorTask: Task<Void, Never>?
     public var isMultiLive: Bool = false
     var eventTask: Task<Void, Never>?
     private var controlHideTask: Task<Void, Never>?
@@ -863,10 +878,42 @@ public final class PlayerViewModel {
                 hasPdt: snap.webHasPdt && snap.appHasPdt
             )
         }
+
+        // [P2 / 2026-04-25] 모니터링 폴링 — 1.5s 주기로 web sync 상태를 UI 에 반영.
+        // sync loop(actor 내부)와 분리해 @Observable 전파만 담당.
+        webSyncMonitorTask?.cancel()
+        webSyncMonitorTask = Task { [weak self, weak client, weak controller] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard !Task.isCancelled else { break }
+                let snap = await client?.latestSample()
+                let phase = await controller?.webPhase
+                let smoothed = await controller?.smoothedDriftMs
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if let phase {
+                        self.webSyncPhaseLabel = Self.describe(phase)
+                    } else {
+                        self.webSyncPhaseLabel = "-"
+                    }
+                    self.webSyncDriftMs = smoothed ?? snap?.driftMs
+                    self.webSyncWebLatencyMs = snap?.webLatencyMs
+                    self.webSyncAppLatencyMs = snap?.appLatencyMs
+                    self.webSyncIsPrecisionEligible = snap?.isPrecisionEligible ?? false
+                    if let w = snap?.webAgeMs, let a = snap?.appAgeMs {
+                        self.webSyncSampleAgeMs = max(w, a)
+                    } else {
+                        self.webSyncSampleAgeMs = snap?.webAgeMs ?? snap?.appAgeMs
+                    }
+                }
+            }
+        }
     }
 
     /// PDT 정밀 동기화 클라이언트 해제. `stopStream()` 에서 자동 호출됨.
     public func detachWebLatencyClient() async {
+        webSyncMonitorTask?.cancel()
+        webSyncMonitorTask = nil
         if let coord = streamCoordinator,
            let controller = await coord.lowLatencyController {
             await controller.setDriftSampleProvider(nil)
@@ -875,5 +922,24 @@ public final class PlayerViewModel {
             await client.setChannel(nil)
         }
         webLatencyClient = nil
+        // UI 상태 초기화
+        webSyncPhaseLabel = "-"
+        webSyncDriftMs = nil
+        webSyncWebLatencyMs = nil
+        webSyncAppLatencyMs = nil
+        webSyncSampleAgeMs = nil
+        webSyncIsPrecisionEligible = false
+    }
+
+    /// WebSyncPhase → 짧은 문자열 라벨 (UI 표시용).
+    private static func describe(_ phase: LowLatencyController.WebSyncPhase) -> String {
+        switch phase {
+        case .idle: return "idle"
+        case .acquiring: return "acquiring"
+        case .snap: return "snap"
+        case .tracking: return "tracking"
+        case .hold(let reason): return "hold(\(reason))"
+        case .reacquire(let reason): return "reacquire(\(reason))"
+        }
     }
 }

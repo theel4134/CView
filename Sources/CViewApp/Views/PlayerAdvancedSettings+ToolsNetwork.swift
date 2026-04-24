@@ -239,6 +239,12 @@ struct SinglePlayerNetworkTabView: View {
                 }
             }
 
+            // ── 정밀 동기화 (PDT) — VLC + WebLatencyClient 연결 시에만 ──
+            if let vm = playerVM, vm.webSyncPhaseLabel != "-" {
+                Divider()
+                webSyncSection(vm)
+            }
+
             if let store = settingsStore {
                 Divider()
 
@@ -424,5 +430,88 @@ struct SinglePlayerNetworkTabView: View {
         if mbps >= 1.0 { return String(format: "%.1f Mbps", mbps) }
         let kbps = Double(bytes) * 8.0 / 1_000.0
         return String(format: "%.0f kbps", kbps)
+    }
+
+    // MARK: - Web Sync (PDT) Section
+
+    @ViewBuilder
+    private func webSyncSection(_ vm: PlayerViewModel) -> some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+            sectionHeader("정밀 동기화 (PDT)", icon: "waveform.badge.magnifyingglass",
+                          color: webSyncPhaseColor(vm.webSyncPhaseLabel))
+
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Circle()
+                    .fill(webSyncPhaseColor(vm.webSyncPhaseLabel))
+                    .frame(width: 10, height: 10)
+                Text(vm.webSyncPhaseLabel)
+                    .font(DesignTokens.Typography.custom(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(webSyncPhaseColor(vm.webSyncPhaseLabel))
+                Spacer()
+                if vm.webSyncIsPrecisionEligible {
+                    Text("PDT")
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.green)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.green.opacity(0.12)))
+                } else {
+                    Text("PDT 없음")
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignTokens.Spacing.xs) {
+                metricCard(
+                    "Drift (web↔app)",
+                    formatDriftMs(vm.webSyncDriftMs),
+                    icon: "arrow.left.and.right",
+                    alert: (vm.webSyncDriftMs.map { abs($0) > 1500 }) ?? false
+                )
+                metricCard(
+                    "Sample age",
+                    formatAgeMs(vm.webSyncSampleAgeMs),
+                    icon: "clock.arrow.circlepath",
+                    alert: (vm.webSyncSampleAgeMs.map { $0 > 5_000 }) ?? false
+                )
+                metricCard(
+                    "Web latency",
+                    formatLatencyMs(vm.webSyncWebLatencyMs),
+                    icon: "globe"
+                )
+                metricCard(
+                    "App latency",
+                    formatLatencyMs(vm.webSyncAppLatencyMs),
+                    icon: "play.rectangle"
+                )
+            }
+        }
+    }
+
+    private func webSyncPhaseColor(_ label: String) -> Color {
+        if label.hasPrefix("hold") { return .orange }
+        if label.hasPrefix("snap") || label.hasPrefix("reacquire") { return .red }
+        if label == "tracking" { return .green }
+        if label == "acquiring" { return .yellow }
+        return DesignTokens.Colors.textTertiary
+    }
+
+    private func formatDriftMs(_ ms: Double?) -> String {
+        guard let ms else { return "-" }
+        let sign = ms >= 0 ? "+" : "-"
+        return String(format: "%@%.0f ms", sign, abs(ms))
+    }
+
+    private func formatLatencyMs(_ ms: Double?) -> String {
+        guard let ms else { return "-" }
+        if ms >= 1_000 { return String(format: "%.2f s", ms / 1_000) }
+        return String(format: "%.0f ms", ms)
+    }
+
+    private func formatAgeMs(_ ms: Int64?) -> String {
+        guard let ms else { return "-" }
+        if ms >= 1_000 { return String(format: "%.1f s", Double(ms) / 1_000.0) }
+        return "\(ms) ms"
     }
 }
