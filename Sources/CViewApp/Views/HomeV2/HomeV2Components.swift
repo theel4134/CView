@@ -98,8 +98,7 @@ struct HomeCommandBar: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
-                }
-            }
+                }                .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))            }
             .buttonStyle(.plain)
             .help("검색 (⌘K)")
 
@@ -160,6 +159,7 @@ struct HomeCommandBar: View {
                         : DesignTokens.Animation.smooth,
                     value: spinning
                 )
+                .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         }
         .buttonStyle(.plain)
         .help(help)

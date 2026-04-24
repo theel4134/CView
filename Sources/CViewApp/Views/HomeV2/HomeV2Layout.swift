@@ -87,6 +87,7 @@ struct HomeLayoutMenu: View {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 }
+                .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
