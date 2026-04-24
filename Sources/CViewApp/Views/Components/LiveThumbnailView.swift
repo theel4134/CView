@@ -30,6 +30,8 @@ public struct LiveThumbnailView: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
+                    .interpolation(.high) // [HiDPI] Retina 다운스케일 선명도 (Lanczos 계열)
+                    .antialiased(true)    // [HiDPI] 비정수 backing 비율(1.5x/2.5x)에서 가장자리 부드럽게
                     .aspectRatio(contentMode: .fill)
                     .transition(.opacity)
             } else {

@@ -15,14 +15,27 @@ import CViewNetworking
 /// - URL 변경 시 이전 이미지 유지하여 빈 프레임 방지
 public struct CachedAsyncImage<Placeholder: View>: View {
     let url: URL?
+    let interpolation: Image.Interpolation
+    let antialiased: Bool
     let placeholder: () -> Placeholder
 
     @State private var image: NSImage?
     /// 캐시 히트 여부 — true이면 애니메이션 없이 즉시 표시
     @State private var isCacheHit: Bool = false
 
-    public init(url: URL?, @ViewBuilder placeholder: @escaping () -> Placeholder) {
+    /// - Parameters:
+    ///   - interpolation: Retina 다운스케일 품질. 기본 `.high` (Lanczos 계열) — 카드/썸네일 선명도 우선.
+    ///     수십~수백 개 동시 표시되는 매우 작은 아이콘은 호출자가 `.medium`/`.low`로 다운그레이드 가능.
+    ///   - antialiased: 비정수 backing 비율(예: 1.5x, 2.5x)에서 가장자리 계단감 완화. 기본 true.
+    public init(
+        url: URL?,
+        interpolation: Image.Interpolation = .high,
+        antialiased: Bool = true,
+        @ViewBuilder placeholder: @escaping () -> Placeholder
+    ) {
         self.url = url
+        self.interpolation = interpolation
+        self.antialiased = antialiased
         self.placeholder = placeholder
     }
 
@@ -31,7 +44,8 @@ public struct CachedAsyncImage<Placeholder: View>: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
-                    .interpolation(.medium) // [GPU 최적화] 기본 bicubic → bilinear — 작은 아이콘에 충분
+                    .interpolation(interpolation) // [HiDPI] Retina 다운스케일 선명도 — 기본 .high
+                    .antialiased(antialiased)
                     .aspectRatio(contentMode: .fill)
                     .transition(isCacheHit ? .identity : .opacity)
             } else {
@@ -61,8 +75,16 @@ public struct CachedAsyncImage<Placeholder: View>: View {
 // MARK: - Convenience Init (String URL)
 
 extension CachedAsyncImage where Placeholder == Color {
-    public init(urlString: String?) {
-        self.init(url: urlString.flatMap { URL(string: $0) }) {
+    public init(
+        urlString: String?,
+        interpolation: Image.Interpolation = .high,
+        antialiased: Bool = true
+    ) {
+        self.init(
+            url: urlString.flatMap { URL(string: $0) },
+            interpolation: interpolation,
+            antialiased: antialiased
+        ) {
             Color.gray.opacity(0.2)
         }
     }
