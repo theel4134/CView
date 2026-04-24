@@ -80,6 +80,15 @@ struct MainContentView: View {
         .sheet(item: $router.presentedSheet) { sheet in
             sheetContent(for: sheet)
         }
+        // [Frame drop fix 2026-04-24] 메뉴 전환 직후 350ms 동안 글로벌 spring transaction 차단.
+        // 신규 detail 루트 뷰 마운트 시 수십 개 암묵적 상태 변화에 spring(0.28) 이 일괄
+        // 적용되며 첫 프레임 드롭이 발생했음 — MenuTransitionGate 가 차단을 처리한다.
+        .onChange(of: router.selectedSidebarItem) { _, _ in
+            MenuTransitionGate.notifyMenuChange()
+        }
+        .onChange(of: router.path) { _, _ in
+            MenuTransitionGate.notifyMenuChange()
+        }
     }
 
     // MARK: - Detail View

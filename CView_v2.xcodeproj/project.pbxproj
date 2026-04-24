@@ -117,6 +117,7 @@
 		EE11223344556677AABB0018 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0018 /* NotificationService.swift */; };
 		EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */; };
 		EE11223344556677AABB0101 /* LiveWindowResizeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */; };
+		EE11223344556677AABB0102 /* MenuTransitionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0102 /* MenuTransitionGate.swift */; };
 		EE11223344556677AABB0019 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* ChatPanelView.swift */; };
@@ -314,6 +315,7 @@
 		EE11223344556677CCDD0018 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/NotificationService.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/HomeThumbnailPrefetcher.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/LiveWindowResizeMonitor.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0102 /* MenuTransitionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MenuTransitionGate.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0019 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0020 /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerControlsView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0021 /* ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatPanelView.swift; sourceTree = SOURCE_ROOT; };
@@ -663,6 +665,7 @@
 				EE11223344556677CCDD0018 /* NotificationService.swift */,
 				EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */,
 				EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */,
+				EE11223344556677CCDD0102 /* MenuTransitionGate.swift */,
 				EE11223344556677CCDD0022 /* UpdateService.swift */,
 				FF11223344556677CCDD0032 /* MultiChatSessionManager.swift */,
 			);
@@ -900,6 +903,7 @@
 				EE11223344556677AABB0018 /* NotificationService.swift in Sources */,
 				EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */,
 				EE11223344556677AABB0101 /* LiveWindowResizeMonitor.swift in Sources */,
+				EE11223344556677AABB0102 /* MenuTransitionGate.swift in Sources */,
 				EE11223344556677AABB0022 /* UpdateService.swift in Sources */,
 				EE11223344556677AABB0023 /* UpdateSheetView.swift in Sources */,
 				EE11223344556677AABB0019 /* MenuBarView.swift in Sources */,

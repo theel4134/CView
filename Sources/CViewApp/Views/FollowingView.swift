@@ -214,7 +214,12 @@ struct FollowingView: View {
             DesignTokens.Colors.background
                 .ignoresSafeArea()
 
-            // 배경 — 단색 기반 미니멀 그라디언트 (drawingGroup으로 단일 GPU 텍스처 렌더)
+            // 배경 — 단색 기반 미니멀 그라디언트.
+            // [HiDPI/perf 2026-04-24] drawingGroup() 제거: SwiftUI 가 정적 LinearGradient
+            // 를 이미 단일 CAGradientLayer 로 합성하며, drawingGroup 은 backingScale
+            // 비율로 매 layout 패스마다 오프스크린 비트맵을 생성해 메뉴 진입 시
+            // 첫 프레임 GPU 업로드 비용을 유발했음. Retina/비정수 backing 에서도
+            // 네이티브 그라디언트가 더 선명함.
             LinearGradient(
                 stops: [
                     .init(color: DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.02 : 0.03), location: 0),
@@ -223,7 +228,6 @@ struct FollowingView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .drawingGroup()
             .ignoresSafeArea()
 
             if !appState.isLoggedIn {
@@ -698,8 +702,8 @@ struct FollowingView: View {
             )
             .frame(height: 1)
             .padding(.horizontal, DesignTokens.Spacing.xxl)
-            // [GPU] 정적 그라디언트 — 단일 Metal 텍스처로 캐시
-            .drawingGroup()
+            // [HiDPI/perf 2026-04-24] 1pt 높이 디바이더에 drawingGroup 은 비용 대비
+            // 효과 0 (오프스크린 비트맵 생성 비용 > Metal 직접 렌더). 제거.
             .transition(.opacity)
     }
 

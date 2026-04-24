@@ -22,6 +22,8 @@ struct AboutPanelView: View {
             // 앱 아이콘
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
+                .interpolation(.high) // [HiDPI] Retina 다운스케일 — 1024 → 96pt 선명도
+                .antialiased(true)
                 .frame(width: 96, height: 96)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
