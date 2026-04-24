@@ -126,6 +126,17 @@ struct HomeView_v2: View {
         )
         cachedRecommendations = HomeRecommendationEngine.score(inputs, limit: 12)
 
+        // [ColdStart 2026-04-25] 점수 결과를 디스크에 영속 → 다음 부트의 첫 프레임에
+        // Hero/Discover 가 placeholder 없이 즉시 그려진다. fire-and-forget.
+        if let ds = appState.dataStore {
+            let snapshot = cachedRecommendations
+            // Task(@MainActor 상속) → snapshot/ds 모두 MainActor-isolated 로 안전.
+            // 실제 인코딩은 store actor 내부에서 수행되므로 메인 스레드 점유 시간은 미미.
+            Task {
+                await HomeRecommendationCache.save(snapshot, store: ds)
+            }
+        }
+
         // 홈 카드 썸네일/아바타 사전 워밍 — 카드가 화면에 등장하기 전에 캐시 채움.
         // ImageCacheService 의 4-동시 게이트로 트래픽 제한, .utility 우선순위로 UI 비방해.
         // (recomputeCachesIfNeeded 는 데이터 변동 시에만 호출되므로 호출 빈도 자연 제한)
@@ -275,6 +286,18 @@ struct HomeView_v2: View {
             //     - reloadStore + recompute + prefetch: 380ms 지연 → MenuTransitionGate(350ms)
             //       해제 + 첫 프레임 렌더 완료 후에 실행.
             viewModel.startAutoRefresh()
+            // [ColdStart 2026-04-25] 380ms 지연된 reloadStore 가 끝나기 전에
+            // 디스크 캐시(cache.scoredRecommendations)를 즉시 hydrate → 첫 프레임에
+            // Hero/Discover 가 placeholder 없이 그려진다. recompute 가 끝나면 자연스럽게
+            // 덮어쓴다(stale-while-revalidate).
+            if cachedRecommendations.isEmpty, let ds = appState.dataStore {
+                Task { @MainActor in
+                    if let cached = await HomeRecommendationCache.load(store: ds),
+                       cachedRecommendations.isEmpty {
+                        cachedRecommendations = cached
+                    }
+                }
+            }
             bootTask?.cancel()
             bootTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(380))

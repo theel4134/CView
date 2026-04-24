@@ -118,6 +118,7 @@
 		EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */; };
 		EE11223344556677AABB0101 /* LiveWindowResizeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */; };
 		EE11223344556677AABB0102 /* MenuTransitionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0102 /* MenuTransitionGate.swift */; };
+		EE11223344556677AABB0103 /* HomeRecommendationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */; };
 		EE11223344556677AABB0019 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* ChatPanelView.swift */; };
@@ -324,6 +325,7 @@
 		EE11223344556677CCDD0099 /* ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatOverlayView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0150 /* ChatResizeHandle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatResizeHandle.swift; sourceTree = SOURCE_ROOT; };
 		EF161D8919053B290B75B5EB /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/HomeViewModel.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeRecommendationCache.swift; path = Sources/CViewApp/ViewModels/HomeRecommendationCache.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0030 /* MultiChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiChatView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0031 /* ChatUserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatUserProfileSheet.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0032 /* MultiChatSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MultiChatSessionManager.swift; sourceTree = SOURCE_ROOT; };
@@ -645,6 +647,7 @@
 				FF11223344556677CCDD0049 /* ChatViewModel+Autocomplete.swift */,
 				FF33445566778899CD010001 /* ChatViewModel+Processing.swift */,
 				EF161D8919053B290B75B5EB /* HomeViewModel.swift */,
+				EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */,
 				65E3862D7E778FCBA02E0FBB /* PlayerViewModel.swift */,
 				FF11223344556677CCDD0055 /* PlayerViewModel+VLCAdvanced.swift */,
 				FF11223344556677CCDD0056 /* PlayerViewModel+EventHandling.swift */,
@@ -866,6 +869,7 @@
 				FF11223344556677AABB0049 /* ChatViewModel+Autocomplete.swift in Sources */,
 				FF33445566778899AB010001 /* ChatViewModel+Processing.swift in Sources */,
 				1FFA8590CFC902B7376F16A8 /* HomeViewModel.swift in Sources */,
+				EE11223344556677AABB0103 /* HomeRecommendationCache.swift in Sources */,
 				8E3298E000AF57284B57F035 /* PlayerViewModel.swift in Sources */,
 				FF11223344556677AABB0055 /* PlayerViewModel+VLCAdvanced.swift in Sources */,
 				FF11223344556677AABB0056 /* PlayerViewModel+EventHandling.swift in Sources */,
