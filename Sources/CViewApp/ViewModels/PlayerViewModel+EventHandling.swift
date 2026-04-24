@@ -199,11 +199,29 @@ extension PlayerViewModel {
     // MARK: - VLC → AVPlayer 자동 폴백 (No-Proxy 모드)
 
     /// VLC 가 chzzk CDN 응답을 처리하지 못해 FIX14 35초 타임아웃이 발생했을 때 호출.
-    /// preferredEngineType 을 AVPlayer 로 전환하고, 외부에 재시작을 요청한다.
-    /// (단일 라이브: View 가 startStream 재호출 / 멀티라이브: MultiLiveManager.switchEngine)
+    /// 단일 라이브 한정: preferredEngineType 을 AVPlayer 로 전환하고, 외부에 재시작을 요청한다.
+    ///
+    /// [Multi-live 보호 2026-04-24]
+    /// 멀티라이브 컨텍스트(`isMultiLive == true`)에서는 자동 엔진 전환을 비활성화한다.
+    ///   - 한 셀의 엔진이 갑자기 바뀌면 다른 셀과 코덱/오디오/HUD 동작이 어긋나고
+    ///     화면이 강하게 깜빡여 사용자 경험이 악화된다.
+    ///   - `preferredEngineType` 영구화는 사용자가 명시한 엔진 선호와 정면충돌
+    ///     (다음에 같은 채널을 재추가해도 AVPlayer 로 시작됨).
+    ///   - 일시적 버퍼링/지연을 "엔진 결함"으로 단정하기 어렵다 — 네트워크 변동이 더 흔함.
+    ///
+    /// 멀티라이브에서는 `.error` 로 보정하여 `MultiLivePlayerPane` 의 "재시도" 오버레이가
+    /// 노출되도록 한다. 사용자가 직접 재시도하면 동일 VLC 엔진으로 새로 시작.
     @MainActor
     func _handleVLCFallback(reason: String) async {
         guard preferredEngineType == .vlc else { return }
+
+        if isMultiLive {
+            logger.warning("PlayerViewModel: 멀티라이브 — VLC → AVPlayer 자동 폴백 차단. reason=\(reason)")
+            errorMessage = "스트림 연결이 지연되고 있습니다. 다시 시도해 주세요."
+            streamPhase = .error("연결 지연")
+            return
+        }
+
         logger.warning("PlayerViewModel: VLC → AVPlayer 폴백 트리거 — \(reason)")
 
         // 화면에 에러를 띄우지 않도록 정리 (전환 직후 오버레이 방지)
@@ -211,7 +229,7 @@ extension PlayerViewModel {
         // 전환 의사를 영구화 — 재시작 시 AVPlayer 로 생성되도록
         preferredEngineType = .avPlayer
 
-        // 외부 컨테이너(LiveStreamView / MultiLiveManager) 가 실제 재시작을 담당
+        // 외부 컨테이너(LiveStreamView) 가 실제 재시작을 담당
         if let cb = onEngineFallbackRequested {
             cb(reason)
         } else {

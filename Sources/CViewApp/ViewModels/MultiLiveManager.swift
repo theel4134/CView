@@ -276,12 +276,15 @@ public final class MultiLiveManager {
             session.metricsForwarder = metricsForwarder
             sessions.append(session)
 
-            // [No-Proxy] VLC 폴백 — 세션의 playerVM 이 AVPlayer 전환을 요청하면
-            // MultiLiveManager 가 enginePool 을 통해 엔진 교체 + 재시작.
-            session.playerViewModel.onEngineFallbackRequested = { @Sendable [weak self, weak session] _ in
+            // [Multi-live 보호 2026-04-24] VLC 자동 → AVPlayer 폴백 비활성.
+            //   PlayerViewModel._handleVLCFallback 가 isMultiLive 가드로
+            //   `cb(reason)` 호출 자체를 차단하지만, 직접 호출 경로 대비 안전망으로
+            //   이 콜백도 엔진 전환을 수행하지 않도록 logging-only 로 둔다.
+            //   사용자는 MultiLivePlayerPane 의 "재시도" 버튼으로 동일 VLC 재시작.
+            session.playerViewModel.onEngineFallbackRequested = { @Sendable [weak self, weak session] reason in
                 Task { @MainActor [weak self, weak session] in
                     guard let self, let session else { return }
-                    await self.switchEngine(session: session, to: .avPlayer)
+                    self.logger.warning("MultiLive: VLC 폴백 요청 무시(자동 엔진 전환 비활성) [\(session.channelName)] reason=\(reason)")
                 }
             }
 
