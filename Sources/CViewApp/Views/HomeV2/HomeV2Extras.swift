@@ -186,8 +186,7 @@ struct HomeActiveMultiLiveStrip: View {
         if !sessions.isEmpty {
             HStack(spacing: 10) {
                 liveBadge
-                avatarStack
-                marqueeNames
+                marqueeChips
                 Spacer(minLength: 4)
                 viewAllButton
             }
@@ -232,71 +231,18 @@ struct HomeActiveMultiLiveStrip: View {
         .fixedSize()
     }
 
-    /// 겹치는 원형 아바타 스택 (최대 5개, 추가는 +N 캡슐로)
-    private var avatarStack: some View {
-        let visible = Array(sessions.prefix(5))
-        let overflow = max(0, sessions.count - visible.count)
-        return HStack(spacing: -8) {
-            ForEach(Array(visible.enumerated()), id: \.element.id) { idx, session in
-                avatarCircle(channelId: session.channelId)
-                    .zIndex(Double(visible.count - idx))   // 앞쪽이 위로
-            }
-            if overflow > 0 {
-                Text("+\(overflow)")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .frame(width: 22, height: 22)
-                    .background(
-                        Circle().fill(DesignTokens.Colors.surfaceElevated)
-                    )
-                    .overlay(
-                        Circle().strokeBorder(DesignTokens.Colors.surfaceBase, lineWidth: 1.5)
-                    )
-                    .zIndex(0)
-            }
-        }
-        .fixedSize()
-    }
-
-    @ViewBuilder
-    private func avatarCircle(channelId: String) -> some View {
-        let live = liveLookup[channelId]
-        let imageURL = URL(string: live?.channelImageUrl ?? "")
-        let name = live?.channelName ?? channelId
-        Button {
-            router.navigate(to: .live(channelId: channelId))
-        } label: {
-            CachedAsyncImage(url: imageURL) {
-                Circle().fill(DesignTokens.Colors.surfaceBase)
-            }
-            .frame(width: 22, height: 22)
-            .clipShape(Circle())
-            .overlay(
-                // 외곽 링 — 배경과 분리되어 stack 깊이 표현
-                Circle().strokeBorder(DesignTokens.Colors.surfaceBase, lineWidth: 1.5)
-            )
-            .overlay(
-                // 활성 indicator (chzzk green hairline)
-                Circle().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.85), lineWidth: 1)
-                    .padding(-1)
-            )
-            .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help("\(name) 으로 이동")
-    }
-
-    /// 채널명 marquee (단순 텍스트 chip · spacing 작음)
-    private var marqueeNames: some View {
+    /// 채널 chip marquee — 아바타 + 이름이 한 묶음으로 흐름
+    /// (이전: 아바타 스택과 이름 marquee 가 분리되어 "따로 노는" 문제 수정)
+    private var marqueeChips: some View {
         MarqueeRow(
             items: sessions.map(\.channelId),
-            speed: 24,
-            spacing: 14,
+            speed: 26,
+            spacing: 10,
             paused: reduceMotion || hovering
         ) { channelId in
-            nameChip(channelId: channelId)
+            channelChip(channelId: channelId)
         }
-        .frame(maxWidth: 360, maxHeight: 22)
+        .frame(maxWidth: 420, maxHeight: 26)
         .mask(
             // 양 가장자리 fade — 끊김 없는 streaming 느낌
             LinearGradient(
@@ -311,17 +257,25 @@ struct HomeActiveMultiLiveStrip: View {
         )
     }
 
+    /// 단일 chip: 아바타(22pt) + 이름. 클릭 시 해당 채널로 이동.
     @ViewBuilder
-    private func nameChip(channelId: String) -> some View {
+    private func channelChip(channelId: String) -> some View {
         let live = liveLookup[channelId]
         let name = live?.channelName ?? channelId
+        let imageURL = URL(string: live?.channelImageUrl ?? "")
         Button {
             router.navigate(to: .live(channelId: channelId))
         } label: {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(DesignTokens.Colors.chzzkGreen)
-                    .frame(width: 4, height: 4)
+            HStack(spacing: 6) {
+                CachedAsyncImage(url: imageURL) {
+                    Circle().fill(DesignTokens.Colors.surfaceBase)
+                }
+                .frame(width: 20, height: 20)
+                .clipShape(Circle())
+                .overlay(
+                    // 활성 indicator (chzzk green hairline)
+                    Circle().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.85), lineWidth: 1)
+                )
                 Text(name)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
