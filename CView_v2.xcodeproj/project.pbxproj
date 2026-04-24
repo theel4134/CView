@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		13E7C8A62D6F68491D492166 /* SelectChannelIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6442646753920D19041BC479 /* SelectChannelIntent.swift */; };
 		181653DAF0FD0A95B8C6EA5E /* HomeView_v2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */; };
+		18A71DB566A7C6A727A5AFC3 /* HomeV2Extras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */; };
 		1FFA8590CFC902B7376F16A8 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF161D8919053B290B75B5EB /* HomeViewModel.swift */; };
 		23302727FE83731000625271 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29DFCF37AFC447A104B9AC1A /* ChatViewModel.swift */; };
 		5B952B8DF0B37E3B6234205C /* WidgetCommon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 898F750DC9DD2957FA0BF33A /* WidgetCommon.swift */; };
@@ -219,6 +220,7 @@
 		731DE311037F0BF2A7D8889B /* HomeV2Components.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Components.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Components.swift; sourceTree = SOURCE_ROOT; };
 		751A509963E594B1C4B5A76B /* WidgetSnapshotLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotLoader.swift; sourceTree = "<group>"; };
 		898F750DC9DD2957FA0BF33A /* WidgetCommon.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetCommon.swift; sourceTree = "<group>"; };
+		8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Extras.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Extras.swift; sourceTree = SOURCE_ROOT; };
 		90F19FB24A3D4E0CECCBB391 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SupportFiles/Info.plist; sourceTree = SOURCE_ROOT; };
 		A0D493301D019016720BFD8E /* CViewWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CViewWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60001AA110001 /* SettingsSharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SettingsSharedComponents.swift; sourceTree = SOURCE_ROOT; };
@@ -583,6 +585,7 @@
 				D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */,
 				5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */,
 				CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */,
+				8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -989,6 +992,7 @@
 				181653DAF0FD0A95B8C6EA5E /* HomeView_v2.swift in Sources */,
 				A5A18BAD6416A63196D65D4D /* HomeMonitorPanel.swift in Sources */,
 				64F42BE19BA1F44629D7615C /* HomeV2Effects.swift in Sources */,
+				18A71DB566A7C6A727A5AFC3 /* HomeV2Extras.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

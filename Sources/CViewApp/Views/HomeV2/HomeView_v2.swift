@@ -36,12 +36,15 @@ struct HomeView_v2: View {
     /// 간이 성능 모니터 패널 표시 여부 (CommandBar 의 ⌥M 버튼으로 토글, AppStorage 영속)
     @AppStorage("home.monitor.enabled") private var monitorEnabled: Bool = false
 
-    /// 캐시된 추천 결과 — 입력 시그니처가 바뀔 때만 재계산 (매 렌더 O(N log N) 회피)
+    /// 캐시된 추천 결과 — 입력 시그니처가 바뀌는 때며 재계산 (매 렌더 O(N log N) 회피)
     @State private var cachedRecommendations: [HomeRecommendationEngine.ScoredChannel] = []
     /// channelId → LiveChannelItem 맵 캐시 (이어보기 라이브 표시용)
     @State private var cachedLiveLookup: [String: LiveChannelItem] = [:]
     /// 추천/룩업 캐시 무효화용 시그니처 (정렬 입력의 카운트/해시)
     @State private var cacheSignature: Int = 0
+
+    /// 탐색/인기 섹션 카테고리 필터 (nil = 전체)
+    @State private var selectedCategory: String? = nil
 
     // MARK: - Derived
 
@@ -132,6 +135,10 @@ struct HomeView_v2: View {
                     cookieLoginBannerInline
                         .homeSectionAppear(index: 1)
                 }
+
+                // 2-1. 활성 멀티라이브 세션 strip
+                HomeActiveMultiLiveStrip(liveLookup: cachedLiveLookup)
+                    .homeSectionAppear(index: 1)
 
                 // 3. Hero
                 if let hero = cachedRecommendations.first {
@@ -232,15 +239,47 @@ struct HomeView_v2: View {
                 title: "당신을 위한 추천",
                 subtitle: "팔로잉 / 즐겨찾기 / 최근 시청 기반"
             )
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: DesignTokens.Spacing.sm)],
-                spacing: DesignTokens.Spacing.sm
-            ) {
-                ForEach(Array(cachedRecommendations.dropFirst().prefix(11))) { item in
-                    HomeRecommendedCard(item: item)
+
+            // 카테고리 칩
+            HomeCategoryChips(
+                channels: viewModel.allStatChannels.isEmpty ? viewModel.liveChannels : viewModel.allStatChannels,
+                selected: $selectedCategory
+            )
+
+            let filtered = filteredRecommendations
+            if filtered.isEmpty {
+                HStack {
+                    Spacer()
+                    Text(selectedCategory.map { "'\($0)' 카테고리에 추천이 없어요" } ?? "추천이 없어요")
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Spacer()
+                }
+                .padding(.vertical, DesignTokens.Spacing.lg)
+                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: DesignTokens.Spacing.sm)],
+                    spacing: DesignTokens.Spacing.sm
+                ) {
+                    ForEach(filtered) { item in
+                        HomeRecommendedCard(item: item)
+                            .liveCardActions(
+                                channelId: item.channel.channelId,
+                                channelName: item.channel.channelName,
+                                isLive: true
+                            )
+                    }
                 }
             }
         }
+    }
+
+    /// Hero 는 그대로 두고 (🎯 🚫 카테고리 필터 적용 안 함), 나머지는 선택 카테고리로 필터
+    private var filteredRecommendations: [HomeRecommendationEngine.ScoredChannel] {
+        let tail = Array(cachedRecommendations.dropFirst())
+        guard let cat = selectedCategory else { return Array(tail.prefix(11)) }
+        return tail.filter { $0.channel.categoryName == cat }.prefix(11).map { $0 }
     }
 
     // MARK: - Cookie Login Banner (compact inline 버전)
@@ -315,6 +354,11 @@ struct HomeView_v2: View {
                         .onTapGesture {
                             router.navigate(to: .live(channelId: channel.channelId))
                         }
+                        .liveCardActions(
+                            channelId: channel.channelId,
+                            channelName: channel.channelName,
+                            isLive: true
+                        )
                     }
                 }
             }
@@ -347,16 +391,27 @@ struct HomeView_v2: View {
                 columns: [GridItem(.adaptive(minimum: 220, maximum: 340), spacing: DesignTokens.Spacing.sm)],
                 spacing: DesignTokens.Spacing.sm
             ) {
-                ForEach(viewModel.topChannels) { channel in
+                ForEach(filteredTopChannels) { channel in
                     MiniChannelCard(channel: channel, onHoverChange: { hovering in
                         if hovering { triggerPrefetch(channel.channelId) }
                     })
                     .onTapGesture {
                         router.navigate(to: .live(channelId: channel.channelId))
                     }
+                    .liveCardActions(
+                        channelId: channel.channelId,
+                        channelName: channel.channelName,
+                        isLive: true
+                    )
                 }
             }
         }
+    }
+
+    /// 선택 카테고리가 있으면 인기 채널도 필터
+    private var filteredTopChannels: [LiveChannelItem] {
+        guard let cat = selectedCategory else { return viewModel.topChannels }
+        return viewModel.topChannels.filter { $0.categoryName == cat }
     }
 
     // MARK: - Refresh
