@@ -6,6 +6,8 @@ import Foundation
 import SwiftUI
 import CViewCore
 import CViewPlayer
+import CViewMonitoring
+import CViewNetworking
 
 // MARK: - Player ViewModel
 
@@ -65,6 +67,10 @@ public final class PlayerViewModel {
     var streamCoordinator: StreamCoordinator?
     public private(set) var playerEngine: (any PlayerEngineProtocol)?
     private var isPreallocated: Bool
+
+    // [P1 / 2026-04-25] PDT 정밀 동기화 — VLC 세션에서만 사용.
+    // `attachWebLatencyClient(metricsClient:channelId:)` 로 연결, `stopStream()` 에서 자동 해제.
+    private var webLatencyClient: WebLatencyClient?
     public var isMultiLive: Bool = false
     var eventTask: Task<Void, Never>?
     private var controlHideTask: Task<Void, Never>?
@@ -683,6 +689,9 @@ public final class PlayerViewModel {
         // [Fix 25C] 녹화 타이머 방어적 정리 — isRecording 상태 불일치 시에도 누수 방지
         recordingTimerTask?.cancel(); recordingTimerTask = nil
 
+        // [P1 / 2026-04-25] PDT 정밀 동기화 클라이언트 해제 (VLC 세션 한정).
+        await detachWebLatencyClient()
+
         // VLC 콜백 정리 — 엔진 재사용(풀 반납) 시 이전 세션의 dangling callback 방지
         if let vlc = playerEngine as? VLCPlayerEngine {
             vlc.onStateChange = nil
@@ -822,5 +831,49 @@ public final class PlayerViewModel {
 
     public func refreshDrawable() {
         (playerEngine as? VLCPlayerEngine)?.refreshDrawable()
+    }
+
+    // MARK: - Web Sync (P1 / 2026-04-25)
+
+    /// VLC 세션 한정. PDT 비교 폴링 클라이언트를 만들어 LowLatencyController 의
+    /// drift 입력으로 연결한다. AVPlayer/HLS.js 세션은 호출자가 가드해야 한다
+    /// (현재는 `LiveStreamView+Logic.swift` 가 `currentEngineType == .vlc` 체크).
+    public func attachWebLatencyClient(metricsClient: MetricsAPIClient, channelId: String) async {
+        // 기존 인스턴스가 있으면 채널만 갱신
+        if let client = webLatencyClient {
+            await client.setChannel(channelId)
+        } else {
+            let client = WebLatencyClient(apiClient: metricsClient)
+            webLatencyClient = client
+            await client.setChannel(channelId)
+        }
+        guard let client = webLatencyClient,
+              let coord = streamCoordinator,
+              let controller = await coord.lowLatencyController else { return }
+
+        // LowLatencyController.driftSampleProvider 콜백 — sync loop tick 마다 호출.
+        await controller.setDriftSampleProvider { [weak client] in
+            guard let client else { return nil }
+            guard let snap = await client.latestSample() else { return nil }
+            // PDT drift 미존재 시 nil — fallback (기존 latencyProvider 경로) 사용.
+            guard let drift = snap.driftMs else { return nil }
+            return LowLatencyController.DriftSample(
+                driftMs: drift,
+                isFresh: snap.isPrecisionEligible,
+                hasPdt: snap.webHasPdt && snap.appHasPdt
+            )
+        }
+    }
+
+    /// PDT 정밀 동기화 클라이언트 해제. `stopStream()` 에서 자동 호출됨.
+    public func detachWebLatencyClient() async {
+        if let coord = streamCoordinator,
+           let controller = await coord.lowLatencyController {
+            await controller.setDriftSampleProvider(nil)
+        }
+        if let client = webLatencyClient {
+            await client.setChannel(nil)
+        }
+        webLatencyClient = nil
     }
 }

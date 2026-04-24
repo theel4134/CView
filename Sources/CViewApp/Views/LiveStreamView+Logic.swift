@@ -217,6 +217,14 @@ extension LiveStreamView {
                 }
             }
 
+            // [P1 / 2026-04-25] VLC 세션 한정 — PDT 정밀 동기화 클라이언트 부착.
+            // AVPlayer/HLS.js 는 자체 catchup 로직을 사용하므로 제외.
+            if let _playerVM, _playerVM.currentEngineType == .vlc,
+               let _metricsClient = appState.metricsClient {
+                let _channelIdForPDT = channelId
+                Task { await _playerVM.attachWebLatencyClient(metricsClient: _metricsClient, channelId: _channelIdForPDT) }
+            }
+
             Task { await recordWatch(channelName: _channelName, thumbnailURL: liveInfo.liveImageURL?.absoluteString, categoryName: liveInfo.liveCategoryValue) }
 
             // ─── 채팅 준비: 백그라운드에서 병렬 로드 (영상과 동시 진행) ───

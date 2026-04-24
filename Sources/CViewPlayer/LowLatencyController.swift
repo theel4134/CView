@@ -114,7 +114,42 @@ public actor LowLatencyController {
         public let pidOutput: Double
         public let timestamp: Date
     }
-    
+
+    // MARK: - Web Sync Phase (P1 / 2026-04-25)
+
+    /// 웹↔앱 정밀 동기화 권장 상태(docs §5 원안). 기존 `SyncState` 는
+    /// rate 방향(catch/slow) 관점에서 유지하고, `WebSyncPhase` 는
+    /// PDT drift 매개 제어 주기·정책(hysteresis) 의 관점으로 별도 운용.
+    ///
+    /// 전이:
+    /// - `idle` → `acquiring` (첫 샘플 수신)
+    /// - `acquiring` (|drift| ≤ 500ms 일정 회수) → `tracking`
+    /// - `tracking` (|drift| > 1500ms) → `acquiring`
+    /// - `tracking|acquiring` (|drift| > 2500ms) → `snap` → seek → `reacquire`
+    /// - 샘플 stale → `hold` (rate=1.0, seek 금지)
+    public enum WebSyncPhase: Sendable, Equatable {
+        case idle
+        case acquiring
+        case snap
+        case tracking
+        case hold(reason: String)
+        case reacquire(reason: String)
+    }
+
+    /// PDT 정밀 샘플 — 서버 출력(웹 vs 앱 driftMs)을 설명하는 값타입.
+    /// `WebLatencyClient` 가 수집한 `PDTComparisonSnapshot` 을 제어 루프에
+    /// 주입하기 위한 축소 표현.
+    public struct DriftSample: Sendable, Equatable {
+        public let driftMs: Double
+        public let isFresh: Bool
+        public let hasPdt: Bool
+        public init(driftMs: Double, isFresh: Bool, hasPdt: Bool) {
+            self.driftMs = driftMs
+            self.isFresh = isFresh
+            self.hasPdt = hasPdt
+        }
+    }
+
     // MARK: - Properties
     
     // [Fix 보정모드] 런타임 설정 변경 지원 — 콜백/sync 루프 유지한 채 config만 교체
@@ -136,6 +171,33 @@ public actor LowLatencyController {
     // 스파이크를 제거하기 위해 [0.5..15]s 범위로 클램프한다.
     private var _lastProcessInstant: ContinuousClock.Instant?
     private let _pidClock = ContinuousClock()
+
+    // [P1 / 2026-04-25] 웹 동기화 phase 상태 — docs §5.2 권장 상태기.
+    // PDT drift 주입(`processDriftSample`)이 있을 때만 사용. 주입 없으면
+    // 기존 경로(`processLatency`) 만 동작하고 phase 는 `.idle` 으로 유지.
+    private var _webPhase: WebSyncPhase = .idle
+    private var _ewmaDriftMs: Double?
+    private var _consecutiveExcellent: Int = 0
+    private var _lastSeekAt: Date = .distantPast
+    private let _seekCooldown: TimeInterval = 8.0  // seek 후 8초간 추가 seek 금지
+
+    /// phase 별 sync 주기 — docs §6.1의 1s/2s/5–10s 권장을 power-aware 로 확장.
+    /// 기존 5s 고정값보다 acquiring 에서 빠르게 잡고, hold 에서 아끼는 구조.
+    private var currentSyncInterval: TimeInterval {
+        let base: TimeInterval
+        switch _webPhase {
+        case .acquiring, .snap: base = 1.5
+        case .tracking:         base = 3.0
+        case .reacquire:        base = 2.0
+        case .hold:             base = 7.0
+        case .idle:             base = 5.0
+        }
+        return PowerAwareInterval.scaled(base)
+    }
+
+    // PDT drift 제공자 — sync loop 가 매 tick 호출.
+    // nil 반환 또는 provider 미설정 시 기존 latencyProvider 경로로 fallback.
+    private var driftSampleProvider: (@Sendable () async -> DriftSample?)?
     
     // M1 fix: 버퍼링 중 rate 조정 일시 중지
     private var _isPausedForBuffering: Bool = false
@@ -193,6 +255,21 @@ public actor LowLatencyController {
     
     public var syncState: SyncState { _state }
     public var currentRate: Double { _currentRate }
+
+    // MARK: - Web Sync Public Accessors (P1)
+
+    public var webPhase: WebSyncPhase { _webPhase }
+    public var smoothedDriftMs: Double? { _ewmaDriftMs }
+
+    /// PDT drift 제공자 설정. nil 로 설정하면 기존 latency-only 경로로 되돌린다.
+    public func setDriftSampleProvider(_ provider: (@Sendable () async -> DriftSample?)?) {
+        self.driftSampleProvider = provider
+        if provider == nil {
+            _webPhase = .idle
+            _ewmaDriftMs = nil
+            _consecutiveExcellent = 0
+        }
+    }
     
     // MARK: - Initialization
     
@@ -311,16 +388,21 @@ public actor LowLatencyController {
         syncTask = Task { [weak self] in
             guard let self else { return }
             
-            // 5.0s: PID 제어 주기를 낮춰 CPU 절약 + 버퍼 안정화. 
-            // VLC 내부 버퍼가 안정될 충분한 시간 확보.
-            // [Fix P-7] PowerAware: Battery 모드에서 7.5초로 연장 (1.5×) — PID 보정은
-            // 추세성이라 정밀도 영향 미미, idle wake-up 33% 감소.
-            let interval = PowerAwareInterval.scaled(5.0 as TimeInterval)
-            let timer = AsyncTimerSequence(interval: interval)
-            for await _ in timer {
+            // [P1 / 2026-04-25] phase 별 동적 sync 주기 — AsyncTimerSequence 의 고정
+            // 주기 한계를 벗어나기 위해 매 tick `currentSyncInterval` 을 다시 읽고
+            // Task.sleep 으로 재무장한다. PDT drift 주입이 있을 때 acquiring(1.5s)
+            // /tracking(3s)/hold(7s) 로 자동 변동, 미주입 시 기존 5s 동작 유지.
+            while !Task.isCancelled {
+                let intervalSec = await self.currentSyncInterval
+                let nanos = UInt64(max(0.5, intervalSec) * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanos)
                 guard !Task.isCancelled else { break }
-                
-                if let latency = await latencyProvider() {
+
+                // 1순위: PDT drift 샘플 주입(WebLatencyClient). nil → 기존 경로.
+                if let provider = await self.driftSampleProvider,
+                   let sample = await provider() {
+                    await self.processDriftSample(sample)
+                } else if let latency = await latencyProvider() {
                     await self.processLatency(latency)
                 }
             }
@@ -340,6 +422,10 @@ public actor LowLatencyController {
         _latencyHistory.removeAll()
         // [P0 / 2026-04-25] dt 초기화 — 재시작 시 첫 샘플은 deltaTime=0으로 계산되어 PID kick 방지.
         _lastProcessInstant = nil
+        // [P1 / 2026-04-25] phase 상태 리셋
+        _webPhase = .idle
+        _ewmaDriftMs = nil
+        _consecutiveExcellent = 0
     }
     
     /// Process a single latency measurement
@@ -458,7 +544,161 @@ public actor LowLatencyController {
             }
         }
     }
-    
+
+    // MARK: - Drift Sample Path (P1 / 2026-04-25)
+
+    /// PDT 기반 web↔app drift 샘플 처리 (정밀 모드).
+    /// docs §5.3 ~ §5.4 권장 hysteresis + phase 전이 적용.
+    ///
+    /// 밴드(절대 drift, ms 단위):
+    /// - ≤ 200ms              → tracking lock, rate=1.0
+    /// - 200 < d ≤ 500ms      → tracking, micro-rate (0.985..1.015)
+    /// - 500 < d ≤ 1500ms     → tracking, normal-rate (0.97..1.03)
+    /// - 1500 < d ≤ 2500ms    → acquiring, wide-rate (0.97..1.06)
+    /// - > 2500ms             → snap → seek (쿨다운 8s)
+    ///
+    /// stale 샘플(`isFresh=false`) → hold, rate=1.0 (seek 금지).
+    public func processDriftSample(_ sample: DriftSample) {
+        guard !_isPausedForBuffering else { return }
+
+        // Stale guard — PDT 데이터 신선하지 않으면 1.0 으로 hold.
+        guard sample.isFresh && sample.hasPdt else {
+            if _webPhase != .idle, case .hold = _webPhase {} else {
+                _webPhase = .hold(reason: sample.isFresh ? "no_pdt" : "stale")
+                logger.info("WebSync phase=hold (\(sample.isFresh ? "no_pdt" : "stale"))")
+            }
+            if abs(_currentRate - 1.0) > 0.005 {
+                _currentRate = 1.0
+                onRateChange?(1.0)
+            }
+            _consecutiveExcellent = 0
+            return
+        }
+
+        // EWMA 평활 (phase 별 alpha)
+        let alpha = driftSmoothingAlpha
+        let smoothed: Double
+        if let prev = _ewmaDriftMs {
+            smoothed = alpha * sample.driftMs + (1 - alpha) * prev
+        } else {
+            smoothed = sample.driftMs
+        }
+        _ewmaDriftMs = smoothed
+
+        let absDrift = abs(smoothed)
+
+        // [Fix 20-C] 진동 제한 자동 해제 (120초 경과)
+        if let _ = _oscillationMaxRate, Date() > _oscillationResetTime {
+            _oscillationMaxRate = nil
+            _recentBufferingTimestamps.removeAll()
+            logger.info("LowLatency: 진동 제한 해제 — 가속 범위 정상 복원")
+        }
+
+        // 밴드 5: snap → seek (대드리프트). _seekCooldown 동안은 acquiring 으로만.
+        if absDrift > 2500 {
+            let now = Date()
+            if now.timeIntervalSince(_lastSeekAt) > _seekCooldown {
+                _lastSeekAt = now
+                let prevPhase = _webPhase
+                _webPhase = .snap
+                _state = .seekRequired
+                onSeekRequired?(config.targetLatency)
+                enterPostSeekGrace()
+                _webPhase = .reacquire(reason: "snap")
+                _consecutiveExcellent = 0
+                if abs(_currentRate - 1.0) > 0.005 {
+                    _currentRate = 1.0
+                    onRateChange?(1.0)
+                }
+                logger.warning("WebSync snap: drift=\(Int(smoothed))ms → seek (prev=\(String(describing: prevPhase)))")
+                return
+            } else {
+                // 쿨다운 중 — wide-rate 로 따라잡기
+                _webPhase = .acquiring
+            }
+        } else if absDrift > 1500 {
+            _webPhase = .acquiring
+            _consecutiveExcellent = 0
+        } else if absDrift <= 200 {
+            _consecutiveExcellent += 1
+            // tracking 진입: acquiring 에서 연속 3회 excellent 시
+            switch _webPhase {
+            case .tracking, .hold: _webPhase = .tracking
+            default:
+                if _consecutiveExcellent >= 3 { _webPhase = .tracking }
+                else { _webPhase = .acquiring }
+            }
+        } else {
+            // 200 < d ≤ 1500
+            switch _webPhase {
+            case .tracking: break  // 유지
+            default: _webPhase = .acquiring
+            }
+            _consecutiveExcellent = 0
+        }
+
+        // 측정 콜백 — 외부 모니터링용 (drift 를 latency 단위로 변환: target + drift)
+        let virtualLatency = config.targetLatency + smoothed / 1000.0
+        onLatencyMeasured?(virtualLatency, virtualLatency, config.targetLatency)
+
+        // Rate 계산 — 밴드별 hysteresis. drift > 0: 앱이 웹보다 뒤쳐짐 → 가속.
+        var newRate: Double = 1.0
+        let sign: Double = smoothed >= 0 ? 1.0 : -1.0
+
+        if absDrift <= 200 {
+            newRate = 1.0
+            _state = .synced
+        } else if absDrift <= 500 {
+            // micro-rate: 0.985 .. 1.015 (선형 매핑 200→0.0, 500→1.0)
+            let t = (absDrift - 200) / 300.0  // 0..1
+            let delta = 0.015 * t
+            newRate = 1.0 + sign * delta
+            _state = sign > 0 ? .catchingUp : .slowingDown
+        } else if absDrift <= 1500 {
+            // normal-rate: 1.015 .. 1.03 (500→0.015, 1500→0.03)
+            let t = (absDrift - 500) / 1000.0
+            let delta = 0.015 + 0.015 * t
+            newRate = 1.0 + sign * delta
+            _state = sign > 0 ? .catchingUp : .slowingDown
+        } else {
+            // wide-rate (acquiring): 1.03 .. 1.06 (1500→0.03, 2500→0.06)
+            let t = (absDrift - 1500) / 1000.0
+            let delta = 0.03 + 0.03 * t
+            newRate = 1.0 + sign * delta
+            _state = sign > 0 ? .catchingUp : .slowingDown
+        }
+
+        // 버퍼 댐핑 — 가속 방향에서만 적용 (감속은 그대로 허용)
+        if newRate > 1.0 {
+            let bh = bufferHealthProvider?() ?? 1.0
+            let damping: Double
+            if bh < 0.3 { damping = 0.0 }
+            else if bh < 0.6 { damping = 0.5 }
+            else { damping = 1.0 }
+            let delta = (newRate - 1.0) * damping
+            newRate = 1.0 + delta
+            // 통합 가속 상한
+            newRate = min(newRate, effectiveMaxRate)
+        } else if newRate < 1.0 {
+            newRate = max(newRate, config.minPlaybackRate)
+        }
+
+        if abs(newRate - _currentRate) > 0.005 {
+            _currentRate = newRate
+            onRateChange?(newRate)
+            logger.debug("WebSync drift=\(Int(smoothed))ms phase=\(String(describing: self._webPhase)) rate=\(String(format: "%.3f", newRate))")
+        }
+    }
+
+    /// phase 별 EWMA alpha — acquiring 빠른 추종, tracking 안정.
+    private var driftSmoothingAlpha: Double {
+        switch _webPhase {
+        case .acquiring, .snap, .reacquire: return 0.5
+        case .tracking, .hold: return 0.2
+        case .idle: return 0.3
+        }
+    }
+
     /// Get current latency snapshot for monitoring
     public func snapshot(currentLatency: TimeInterval) -> LatencySnapshot {
         return LatencySnapshot(
