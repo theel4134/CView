@@ -299,6 +299,11 @@ struct HomeRecommendedCard: View {
     let item: HomeRecommendationEngine.ScoredChannel
     @State private var hovered = false
 
+    /// 이미 멀티라이브 세션에 포함된 채널인지 (시각 안내용)
+    private var isAlreadyWatching: Bool {
+        appState.multiLiveManager.sessions.contains { $0.channelId == item.channel.channelId }
+    }
+
     var body: some View {
         Button {
             router.navigate(to: .live(channelId: item.channel.channelId))
@@ -340,6 +345,22 @@ struct HomeRecommendedCard: View {
                             .padding(.vertical, 2)
                             .background(.black.opacity(0.55), in: Capsule())
                             .padding(DesignTokens.Spacing.xs)
+                    }
+
+                    // 이미 멀티라이브 세션에 포함된 채널이면 "시청 중" 뱃지 (우상단)
+                    if isAlreadyWatching {
+                        HStack(spacing: 3) {
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 9, weight: .bold))
+                            Text("시청 중")
+                                .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(DesignTokens.Colors.chzzkGreen.opacity(0.85), in: Capsule())
+                        .padding(DesignTokens.Spacing.xs)
+                        .frame(maxWidth: .infinity, alignment: .topTrailing)
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {

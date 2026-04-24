@@ -108,6 +108,11 @@ struct LiveCardActionMenu: ViewModifier {
                 } label: {
                     Label("멀티라이브에 추가", systemImage: "square.grid.2x2.fill")
                 }
+                Button {
+                    router.navigate(to: .chatOnly(channelId: channelId))
+                } label: {
+                    Label("채팅만 열기", systemImage: "text.bubble")
+                }
                 Divider()
             }
             Button {
