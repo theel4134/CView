@@ -270,6 +270,8 @@ public final class PlayerViewModel {
             case .ultraLow:    ms = 1_000
             case .lowLatency:  ms = 2_000
             case .multiLive:   ms = 3_000
+            // [P2-3 / 2026-04-25] mirror = hls.js 기본(liveSyncDurationCount=3 × ~2s segment ≈ 6s)
+            case .mirror:      ms = 6_000
             }
             return LatencyTargets(syncTargetMs: ms, engineCacheMs: ms, toleranceMs: 500)
         }

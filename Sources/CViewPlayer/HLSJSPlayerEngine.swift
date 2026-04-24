@@ -18,19 +18,24 @@ public enum HLSJSStreamingProfile: Sendable {
     case ultraLow       // 최저 지연 (타겟 ~1초)
     case lowLatency     // 저지연 기본값 (타겟 ~2초)
     case multiLive      // 멀티라이브 (메모리 절약, 타겟 ~3초)
+    /// [P2-3 / 2026-04-25] hls.js 기본값 그대로 사용 — 웹 임베디드 플레이어와
+    /// 동일한 버퍼/지연 상한으로 재생. PDT 관찰/비교/디버그 용도.
+    /// liveSyncDurationCount=3, liveMaxLatencyDurationCount=10, lowLatencyMode=false.
+    case mirror
 
     var profileKey: String {
         switch self {
         case .ultraLow: return "ultraLow"
         case .lowLatency: return "lowLatency"
         case .multiLive: return "multiLive"
+        case .mirror: return "mirror"
         }
     }
 
     /// 멀티라이브 그리드 최대 해상도 (height)
     func maxHeight(isSelected: Bool) -> Int {
         switch self {
-        case .ultraLow, .lowLatency: return 1080
+        case .ultraLow, .lowLatency, .mirror: return 1080
         case .multiLive: return isSelected ? 1080 : 720
         }
     }

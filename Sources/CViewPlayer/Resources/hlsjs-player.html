@@ -64,6 +64,21 @@ const PROFILES = {
         maxMaxBufferLength: 10,
         maxBufferSize: 15 * 1024 * 1024,
         maxBufferHole: 1.5,
+    },
+    // [P2-3 / 2026-04-25] mirror — hls.js 기본값과 동일한 버퍼/지연으로
+    // 웹 임베디드 플레이어 동작을 그대로 재현. PDT 관찰/비교/디버그 전용.
+    // hls.js defaults: liveSyncDurationCount=3, liveMaxLatencyDurationCount=10,
+    // maxBufferLength=30, lowLatencyMode=false.
+    mirror: {
+        lowLatencyMode: false,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        liveSyncOnStallIncrementCount: 1,
+        liveBackBufferLength: 10,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1024 * 1024,
+        maxBufferHole: 0.5,
     }
 };
 
