@@ -17,6 +17,9 @@ struct MainContentView: View {
     @Environment(AppState.self) private var appState
     @State private var showSplash = true
 
+    /// 신규 홈 V2 토글 (P1+P2+P3 정보구조 개편). Settings 또는 ⌘⇧H 로 변경 가능.
+    @AppStorage("home.useV2") private var useHomeV2: Bool = true
+
     var body: some View {
         @Bindable var router = router
 
@@ -86,7 +89,11 @@ struct MainContentView: View {
         switch router.selectedSidebarItem {
         case .home:
             if let vm = appState.homeViewModel {
-                HomeView(viewModel: vm)
+                if useHomeV2 {
+                    HomeView_v2(viewModel: vm)
+                } else {
+                    HomeView(viewModel: vm)
+                }
             } else {
                 ProgressView()
             }
@@ -133,7 +140,11 @@ struct MainContentView: View {
         switch route {
         case .home:
             if let vm = appState.homeViewModel {
-                HomeView(viewModel: vm)
+                if useHomeV2 {
+                    HomeView_v2(viewModel: vm)
+                } else {
+                    HomeView(viewModel: vm)
+                }
             } else {
                 ProgressView()
             }
