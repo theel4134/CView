@@ -194,6 +194,7 @@ struct HomeActiveMultiLiveStrip: View {
             .padding(.vertical, 6)
             .background(barBackground)
             .overlay(barBorder)
+            .shadow(DesignTokens.Shadow.control)
             .scaleEffect(hovering ? 1.005 : 1.0)
             .animation(.easeOut(duration: 0.18), value: hovering)
             .onHover { hovering = $0 }

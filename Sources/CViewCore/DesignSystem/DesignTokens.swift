@@ -379,22 +379,28 @@ public enum DesignTokens {
             return ShadowStyle(color: color, radius: lightRadius, x: 0, y: y)
         }
 
-        /// 작은 그림자 — 배지, 작은 요소 (라이트: 강화)
-        public static let sm = adaptiveShadow(darkOpacity: 0.14, lightOpacity: 0.10, darkRadius: 4, lightRadius: 5, y: 1.5)
-        /// 중간 그림자 — 카드, 패널 (라이트: 강화)
-        public static let md = adaptiveShadow(darkOpacity: 0.18, lightOpacity: 0.12, darkRadius: 10, lightRadius: 12, y: 4)
-        /// 큰 그림자 — 모달, 팝오버 (라이트: 강화)
-        public static let lg = adaptiveShadow(darkOpacity: 0.26, lightOpacity: 0.18, darkRadius: 20, lightRadius: 24, y: 8)
+        /// 작은 그림자 — 배지, 작은 요소 (라이트: 강화 — 가독성)
+        public static let sm = adaptiveShadow(darkOpacity: 0.14, lightOpacity: 0.14, darkRadius: 4, lightRadius: 6, y: 1.5)
+        /// 중간 그림자 — 카드, 패널 (라이트: 강화 — 가독성)
+        public static let md = adaptiveShadow(darkOpacity: 0.18, lightOpacity: 0.16, darkRadius: 10, lightRadius: 14, y: 5)
+        /// 큰 그림자 — 모달, 팝오버 (라이트: 강화 — 가독성)
+        public static let lg = adaptiveShadow(darkOpacity: 0.26, lightOpacity: 0.24, darkRadius: 20, lightRadius: 28, y: 10)
         /// 액센트 글로우 — 브랜드 하이라이트
         public static let glow = ShadowStyle(color: Colors.chzzkGreen.opacity(0.30), radius: 16, x: 0, y: 0)
-        /// 호버 카드 — 부유 효과 (라이트: 부드러운 elevation)
-        public static let cardHover = adaptiveShadow(darkOpacity: 0.32, lightOpacity: 0.20, darkRadius: 22, lightRadius: 26, y: 10)
+        /// 호버 카드 — 부유 효과 (라이트: 강화 elevation)
+        public static let cardHover = adaptiveShadow(darkOpacity: 0.32, lightOpacity: 0.26, darkRadius: 22, lightRadius: 28, y: 12)
         /// Glass 그림자 — 유리 패널 하단 (라이트: 강화)
-        public static let glass = adaptiveShadow(darkOpacity: 0.16, lightOpacity: 0.10, darkRadius: 24, lightRadius: 28, y: 6)
+        public static let glass = adaptiveShadow(darkOpacity: 0.16, lightOpacity: 0.14, darkRadius: 24, lightRadius: 30, y: 8)
         /// 사이드바 행 선택 — 미세 elevation
-        public static let rowSelected = adaptiveShadow(darkOpacity: 0.10, lightOpacity: 0.08, darkRadius: 6, lightRadius: 8, y: 2)
-        /// 카드 기본 — 라이트 모드에서 플로팅 느낌 (다크: 없음)
-        public static let card = adaptiveShadow(darkOpacity: 0.0, lightOpacity: 0.08, darkRadius: 0, lightRadius: 10, y: 3)
+        public static let rowSelected = adaptiveShadow(darkOpacity: 0.10, lightOpacity: 0.10, darkRadius: 6, lightRadius: 10, y: 2)
+        /// 카드 기본 — 라이트 모드에서 플로팅 느낌 (다크: 미세)
+        public static let card = adaptiveShadow(darkOpacity: 0.04, lightOpacity: 0.12, darkRadius: 4, lightRadius: 12, y: 4)
+        /// 컨트롤 바 / Pill — 작은 인터랙티브 요소 (라이트: 분리감)
+        /// 새 토큰 — 상단 도구막대, 액션 칩, Live Now Bar 등 가벼운 floating 요소용
+        public static let control = adaptiveShadow(darkOpacity: 0.10, lightOpacity: 0.14, darkRadius: 6, lightRadius: 10, y: 3)
+        /// 어두운 미디어 위 텍스트 — 영상/썸네일 위 라벨 가독성 (양 모드 동일)
+        /// 캡션·시간·채널명 등 미디어 오버레이 텍스트에 적용
+        public static let textOnMedia = ShadowStyle(color: .black.opacity(0.55), radius: 2, x: 0, y: 1)
     }
 
     // MARK: - Animation (Spring-first, Metal 3 GPU 가속)
