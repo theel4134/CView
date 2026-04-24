@@ -81,13 +81,24 @@ struct CViewApplication: App {
                         .windowFrameAutosave("cview.main")
                 }
             }
-                // 60fps: 트랜잭션 기본값 — 모든 암묵적 애니메이션에 spring 적용
+                // 60fps: 트랜잭션 기본값 — 모든 암묵적 애니메이션에 spring 적용.
+                // 단, 다음 경우엔 주입을 건너뛰어 드래그/리사이즈 시 프레임 드롭 방지:
+                //   1) SwiftUI 가 명시적으로 disablesAnimations = true 를 설정한 경우
+                //      (레이아웃 패스, 시스템 강제 동기 갱신 등)
+                //   2) 어떤 NSWindow 든 라이브 리사이즈 중인 경우
+                //      → 모든 레이아웃 변동을 spring 으로 보간하면 매 프레임 추가 비용
+                //         발생 → 사용자 체감 stutter. 리사이즈 중엔 즉시 반영이 정답.
                 .transaction { t in
-                    if t.animation == nil {
+                    if t.animation == nil
+                        && t.disablesAnimations == false
+                        && LiveWindowResizeMonitor.isAnyWindowLiveResizing == false {
                         t.animation = DesignTokens.Animation.contentTransition
                     }
                 }
                 .onAppear {
+                    // 라이브 리사이즈 모니터 설치 — 글로벌 .transaction 게이팅용
+                    LiveWindowResizeMonitor.install()
+
                     // 테마 설정에 따라 NSApp.appearance 반영
                     applyAppTheme(appState.settingsStore.appearance.theme)
 
