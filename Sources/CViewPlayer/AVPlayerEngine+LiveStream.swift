@@ -70,8 +70,16 @@ extension AVPlayerEngine {
 
     /// 네트워크 인터페이스에 따라 catchupConfig 조정.
     /// 호출자: play() 진입 시 + NetworkMonitor 구독 콜백.
+    ///
+    /// [P2-2 / 2026-04-25] `catchupConfigLocked == true` 인 경우 외부에서
+    /// catchupConfig 를 점유 중(예: PDT 정밀 동기화) 으로 간주하고 즉시 반환한다.
+    /// 이로써 webSync 등 명시 프리셋이 네트워크 전환에 의해 덮어써지는 회귀를 방지.
     internal func adjustCatchupConfigForNetwork() {
-        let type = stateLock.withLock { $0.networkType }
+        let (type, locked) = stateLock.withLock { ($0.networkType, $0.catchupConfigLocked) }
+        if locked {
+            logger.debug("AVPlayerEngine: adjustCatchupConfigForNetwork skipped (catchupConfigLocked=true)")
+            return
+        }
         let cfg: AVLiveCatchupConfig = {
             switch type {
             case .wiredEthernet:

@@ -53,6 +53,11 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         var catchupConfig: AVLiveCatchupConfig = .balanced
         var networkType: AVPlayerNetworkMonitor.InterfaceType = .other
 
+        // [P2-2 / 2026-04-25] 외부에서 catchupConfig 를 명시적으로 고정 중인지 여부.
+        // 예: 정밀 동기화 / webSync 프리셋 활성 시 PlayerViewModel 이 setter 로 true 설정.
+        // true 일 때 `adjustCatchupConfigForNetwork()` 는 no-op — 외부 의도 보존.
+        var catchupConfigLocked: Bool = false
+
         // 녹화
         var isRecording: Bool = false
         var recordingURL: URL? = nil
@@ -102,6 +107,16 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
     public var catchupConfig: AVLiveCatchupConfig {
         get { stateLock.withLock { $0.catchupConfig } }
         set { stateLock.withLock { $0.catchupConfig = newValue } }
+    }
+
+    /// [P2-2 / 2026-04-25] 외부 동기화 컨트롤러(예: WebLatencyClient/PDT) 가
+    /// catchupConfig 를 점유 중일 때 `true` 로 설정한다.
+    /// `true` 일 동안에는 네트워크 변동에 따른 자동 catchupConfig 재조정
+    /// (`adjustCatchupConfigForNetwork()`) 이 비활성화되어 외부에서 지정한
+    /// 목표 지연/버퍼 값이 보존된다. 기본값 `false`.
+    public var catchupConfigLocked: Bool {
+        get { stateLock.withLock { $0.catchupConfigLocked } }
+        set { stateLock.withLock { $0.catchupConfigLocked = newValue } }
     }
 
     /// 멀티라이브 비활성(음소거) 세션 CPU 절감 모드.
