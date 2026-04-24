@@ -269,13 +269,14 @@ struct HomeView_v2: View {
             viewModel.stopAutoRefresh()
             loadStoreTask?.cancel()
         }
-        // 캐시 무효화 트리거 — 데이터 변동 시에만 재계산
-        .onChange(of: viewModel.allStatChannels.count) { _, _ in recomputeCachesIfNeeded() }
-        .onChange(of: viewModel.liveChannels.count) { _, _ in recomputeCachesIfNeeded() }
-        .onChange(of: viewModel.followingChannels.count) { _, _ in recomputeCachesIfNeeded() }
-        .onChange(of: recentItems.count) { _, _ in recomputeCachesIfNeeded() }
-        .onChange(of: favoriteItems.count) { _, _ in recomputeCachesIfNeeded() }
-        .onChange(of: appState.multiLiveManager.sessions.count) { _, _ in recomputeCachesIfNeeded() }
+        // [Perf 2026-04-24] 6개 onChange → 단일 signature onChange 통합.
+        // viewModel.lightRefresh() 가 liveChannels/followingChannels/allStatChannels 를
+        // 같은 프레임에 갱신하면 이전엔 6개 콜백이 동시 발화 → currentSignature
+                // 의 7회 hash combine 을 6번 재계산했음. SwiftUI 의 의존성 추적도 6배 단일
+        // signature 값 변화에만 반응하도록 하여 메인 프레임 콜백을 1회로 감소.
+        .onChange(of: currentSignature) { _, _ in
+            recomputeCachesIfNeeded()
+        }
     }
 
     // MARK: - Discover Section

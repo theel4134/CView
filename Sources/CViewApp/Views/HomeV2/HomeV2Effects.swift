@@ -25,18 +25,24 @@ struct HomeSectionAppear: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible: Bool = false
 
-    private var delay: Double { min(0.04 * Double(index), 0.32) }
+    // [Perf 2026-04-24] stagger 0.04 → 0.03 (7 섹션 누적 0.28 → 0.21s)
+    private var delay: Double { min(0.03 * Double(index), 0.24) }
 
     func body(content: Content) -> some View {
         content
             .opacity(visible ? 1 : 0)
-            .offset(y: visible ? 0 : (reduceMotion ? 0 : 10))
+            .offset(y: visible ? 0 : (reduceMotion ? 0 : 8))
             .onAppear {
                 guard !visible else { return }
                 if reduceMotion {
                     visible = true
                 } else {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.88).delay(delay)) {
+                    // [Perf 2026-04-24] spring(response: 0.5, damping: 0.88) → easeOut(0.22).
+                    // 이전 spring 은 dampingFraction 0.88 이라 안정 후에도 4-5프레임 잔진동이
+                    // GPU 를 점유—홈 첫 진입에 7개 섹션 stagger가 동시 활성되면
+                    // 프레임 드롭의 주원인. easeOut 은 곡선이 단조명령 하나라
+                    // 광당 GPU 비용 대폭 감소.
+                    withAnimation(.easeOut(duration: 0.22).delay(delay)) {
                         visible = true
                     }
                 }
