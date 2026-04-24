@@ -42,6 +42,8 @@ extension AppState {
         // 재생 상태 변경 시 App Nap 방지 관리 콜백 연결
         playerViewModel?.onPlaybackStateChanged = { [weak self] in
             self?.updatePlaybackActivity()
+            // [Widget 2026-04-24] 시청 시작/종료/페이즈 변경 시 위젯 스냅샷 갱신
+            self?.scheduleWidgetSnapshotUpdate()
         }
 
         // 2. UI 사용 가능 상태로 즉시 전환 (ProgressView 해제)
@@ -99,6 +101,9 @@ extension AppState {
 
         // 9. 앱 활성/비활성 생명주기 옵저버 등록
         setupLifecycleObservers()
+
+        // 10. [Widget 2026-04-24] 위젯 스냅샷 백스톱 (5분 주기) 시작
+        startWidgetSnapshotMaintenance()
     }
 
     /// DataStore 및 SettingsStore 초기화 (별도 Task에서 호출)
@@ -172,6 +177,9 @@ extension AppState {
         await followingLoad
 
         startBackgroundUpdates()
+
+        // [Widget 2026-04-24] 로그인 + 팔로잉 로드 완료 시점에 위젯 스냅샷 즉시 갱신
+        scheduleWidgetSnapshotUpdate()
     }
 
     // MARK: - Basic Emoticon Preloading

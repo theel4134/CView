@@ -32,6 +32,9 @@ extension AppState {
             await loadUserProfile(apiClient: apiClient)
             startBackgroundUpdates()
         }
+
+        // [Widget 2026-04-24] 로그인 상태 변화 → 위젯 즉시 갱신
+        scheduleWidgetSnapshotUpdate()
     }
 
     /// OAuth 로그인 성공 처리 (OAuthLoginWebView에서 호출)
@@ -51,6 +54,9 @@ extension AppState {
             }
             startBackgroundUpdates()
         }
+
+        // [Widget 2026-04-24] OAuth 로그인 후 위젯 즉시 갱신
+        scheduleWidgetSnapshotUpdate()
     }
 
     /// AuthManager 접근
@@ -70,6 +76,9 @@ extension AppState {
         followingViewState.chatSessionManager.updateUserInfo(uid: nil, nickname: nil)
         backgroundUpdateService.stop()
         logger.info("Logged out")
+
+        // [Widget 2026-04-24] 로그아웃 → 위젯 비로그인 상태로 즉시 갱신
+        scheduleWidgetSnapshotUpdate()
     }
 
     // MARK: - User Profile

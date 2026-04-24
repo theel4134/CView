@@ -124,6 +124,10 @@ struct CViewApplication: App {
                 .onChange(of: appState.settingsStore.appearance.theme) { _, newTheme in
                     applyAppTheme(newTheme)
                 }
+                // [Widget 2026-04-24] 위젯/외부 cview:// URL Scheme 처리
+                .onOpenURL { url in
+                    DeepLinkRouter.handle(url: url, router: router, appState: appState)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 720)

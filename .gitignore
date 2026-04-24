@@ -10,17 +10,16 @@ xcuserdata/
 .build/
 .swiftpm/
 Package.resolved
-
 # OS
 .DS_Store
 *.swp
 *~
-
 # Release
 Release/
-
 # Python
 __pycache__/
 *.pyc
 default.profraw
 server-dev/mirror/
+# Xcode pbxproj backups
+*.pbxproj.bak
