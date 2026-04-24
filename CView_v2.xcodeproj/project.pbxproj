@@ -115,6 +115,7 @@
 		EC2A5455CDC2A049885E941D /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396CDE2664A7DC5449A29E2E /* AppRouter.swift */; };
 		EE11223344556677AABB0017 /* BackgroundUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0017 /* BackgroundUpdateService.swift */; };
 		EE11223344556677AABB0018 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0018 /* NotificationService.swift */; };
+		EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */; };
 		EE11223344556677AABB0019 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* ChatPanelView.swift */; };
@@ -310,6 +311,7 @@
 		EC74E418620E4937A8DF3434 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EE11223344556677CCDD0017 /* BackgroundUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/BackgroundUpdateService.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0018 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/NotificationService.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/HomeThumbnailPrefetcher.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0019 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0020 /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerControlsView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0021 /* ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatPanelView.swift; sourceTree = SOURCE_ROOT; };
@@ -657,6 +659,7 @@
 			children = (
 				EE11223344556677CCDD0017 /* BackgroundUpdateService.swift */,
 				EE11223344556677CCDD0018 /* NotificationService.swift */,
+				EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */,
 				EE11223344556677CCDD0022 /* UpdateService.swift */,
 				FF11223344556677CCDD0032 /* MultiChatSessionManager.swift */,
 			);
@@ -892,6 +895,7 @@
 				AA22334455667788AABB0041 /* ChatOnlyView.swift in Sources */,
 				EE11223344556677AABB0017 /* BackgroundUpdateService.swift in Sources */,
 				EE11223344556677AABB0018 /* NotificationService.swift in Sources */,
+				EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */,
 				EE11223344556677AABB0022 /* UpdateService.swift in Sources */,
 				EE11223344556677AABB0023 /* UpdateSheetView.swift in Sources */,
 				EE11223344556677AABB0019 /* MenuBarView.swift in Sources */,

@@ -122,6 +122,19 @@ struct HomeView_v2: View {
             alreadyWatchingChannelIds: Set(appState.multiLiveManager.sessions.map(\.channelId))
         )
         cachedRecommendations = HomeRecommendationEngine.score(inputs, limit: 12)
+
+        // 홈 카드 썸네일/아바타 사전 워밍 — 카드가 화면에 등장하기 전에 캐시 채움.
+        // ImageCacheService 의 4-동시 게이트로 트래픽 제한, .utility 우선순위로 UI 비방해.
+        // (recomputeCachesIfNeeded 는 데이터 변동 시에만 호출되므로 호출 빈도 자연 제한)
+        var warming: [LiveChannelItem] = []
+        warming.reserveCapacity(viewModel.recentLiveFollowing.count
+            + viewModel.topChannels.count
+            + cachedRecommendations.count)
+        warming.append(contentsOf: cachedRecommendations.map(\.channel))
+        warming.append(contentsOf: viewModel.recentLiveFollowing)
+        warming.append(contentsOf: viewModel.topChannels)
+        HomeThumbnailPrefetcher.prefetchLive(channels: warming)
+        HomeThumbnailPrefetcher.prefetchPersisted(items: recentItems + favoriteItems)
     }
 
     // MARK: - Body
