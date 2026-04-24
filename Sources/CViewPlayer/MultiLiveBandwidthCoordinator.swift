@@ -21,6 +21,10 @@ public struct StreamBandwidthState: Sendable {
     public var lastSegmentDuration: TimeInterval = 4.0
     /// [Fix 20 Phase3] 현재 재생 배율 — 대역폭 소비 추정에 반영
     public var playbackRate: Double = 1.0
+    /// [P1-3 2026-04-24] bufferLength 신뢰도 (0~1).
+    /// VLC duration-currentTime으로 정확 계산되면 1.0, fallback (bufferHealth*10) 추정이면 0.4.
+    /// computeAdvice 에서 낮은 신뢰도 일 때 보수적 결정에 활용.
+    public var bufferConfidence: Double = 1.0
 
     public init(sessionId: UUID) {
         self.sessionId = sessionId
@@ -170,10 +174,17 @@ public actor MultiLiveBandwidthCoordinator {
 
     /// 스트림 대역폭 샘플 보고 (세그먼트 다운로드 완료 시)
     public func reportBandwidthSample(sessionId: UUID, bitrate: Double, bufferLength: TimeInterval, fetchDuration: TimeInterval, segmentDuration: TimeInterval) {
+        reportBandwidthSample(sessionId: sessionId, bitrate: bitrate, bufferLength: bufferLength, fetchDuration: fetchDuration, segmentDuration: segmentDuration, bufferConfidence: 1.0)
+    }
+
+    /// [P1-3 2026-04-24] bufferConfidence 까지 반영하는 확장 시그니처.
+    /// MultiLiveManager.collectMetricsSnapshot() 에서 VLC duration-currentTime 사용 여부에 따라 주입.
+    public func reportBandwidthSample(sessionId: UUID, bitrate: Double, bufferLength: TimeInterval, fetchDuration: TimeInterval, segmentDuration: TimeInterval, bufferConfidence: Double) {
         streamStates[sessionId]?.currentBitrate = bitrate
         streamStates[sessionId]?.bufferLength = bufferLength
         streamStates[sessionId]?.lastFetchDuration = fetchDuration
         streamStates[sessionId]?.lastSegmentDuration = segmentDuration
+        streamStates[sessionId]?.bufferConfidence = max(0.0, min(1.0, bufferConfidence))
 
         // [Fix 20 Phase3] 집계 대역폭에 playbackRate 반영:
         // 가속 중인 스트림은 단위 시간당 더 많은 세그먼트를 소비

@@ -714,12 +714,16 @@ public final class MultiLiveManager {
                     // 코디네이터에 배치 리포트 (actor 격리 내에서 순차 처리)
                     let coordinator = self.bandwidthCoordinator
                     for m in metricsSnapshot {
+                        // [P1-1 2026-04-24] 실측 fetchDuration / segmentDuration 우선, 없으면 기존 fallback
+                        let fetchDur = m.measuredFetchDuration > 0 ? m.measuredFetchDuration : 0.5
+                        let segDur = m.measuredSegmentDuration > 0 ? m.measuredSegmentDuration : 4.0
                         await coordinator.reportBandwidthSample(
                             sessionId: m.sessionId,
                             bitrate: m.bitrateBps,
                             bufferLength: m.bufferLength,
-                            fetchDuration: 0.5,
-                            segmentDuration: 4.0
+                            fetchDuration: fetchDur,
+                            segmentDuration: segDur,
+                            bufferConfidence: m.bufferConfidence
                         )
                         if m.playbackRate > 0 {
                             await coordinator.updatePlaybackRate(sessionId: m.sessionId, rate: m.playbackRate)
@@ -878,6 +882,12 @@ public final class MultiLiveManager {
         let bitrateBps: Double
         let bufferLength: TimeInterval
         let playbackRate: Double
+        /// [P1-3 2026-04-24] bufferLength 신뢰도 (1.0 = VLC duration-currentTime 정확값, 0.4 = bufferHealth*10 fallback)
+        let bufferConfidence: Double
+        /// [P1-1 2026-04-24] LocalStreamProxy 가 측정한 최근 평균 segment fetch 소요(초). 0 이면 미측정 → coordinator 가 fallback.
+        let measuredFetchDuration: TimeInterval
+        /// [P1-1 2026-04-24] 측정된 segment 길이(초). 0 이면 미측정 → coordinator 가 fallback.
+        let measuredSegmentDuration: TimeInterval
     }
     
     /// [Fix 24B] MainActor에서 메트릭 값만 캡처 → 코디네이터 보고는 밖에서 배치 처리
@@ -885,33 +895,47 @@ public final class MultiLiveManager {
         var snapshots: [MetricSnapshot] = []
         for session in sessions {
             let sessionId = session.id
+            // [P1-1] 세션별 LocalStreamProxy 통계 — 실측 fetchDuration 출처
+            let proxyStats = session.playerViewModel.proxyNetworkStats()
+            let measuredFetch = (proxyStats?.segmentSampleCount ?? 0) > 0 ? (proxyStats?.avgSegmentFetchDuration ?? 0) : 0
+
             if let metrics = session.latestMetrics {
                 let bitrateBps = metrics.inputBitrateKbps * 1000.0
                 let estimatedBufferSecs: TimeInterval
+                let confidence: Double
                 if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine,
                    vlc.isPlaying {
                     let d = vlc.duration
                     let c = vlc.currentTime
                     if d > 0, c > 0, (d - c) > 0, (d - c) < 60 {
                         estimatedBufferSecs = d - c
+                        confidence = 1.0
                     } else {
                         estimatedBufferSecs = metrics.bufferHealth * 10.0
+                        confidence = 0.4
                     }
                 } else {
                     estimatedBufferSecs = metrics.bufferHealth * 10.0
+                    confidence = 0.4
                 }
                 snapshots.append(MetricSnapshot(
                     sessionId: sessionId,
                     bitrateBps: bitrateBps,
                     bufferLength: estimatedBufferSecs,
-                    playbackRate: Double(metrics.playbackRate)
+                    playbackRate: Double(metrics.playbackRate),
+                    bufferConfidence: confidence,
+                    measuredFetchDuration: measuredFetch,
+                    measuredSegmentDuration: 0  // VLC 직접 노출 X — coordinator 기본값 4.0 사용
                 ))
             } else if let avMetrics = session.latestAVMetrics {
                 snapshots.append(MetricSnapshot(
                     sessionId: sessionId,
                     bitrateBps: avMetrics.indicatedBitrate,
                     bufferLength: avMetrics.bufferHealth * 10.0,
-                    playbackRate: 0
+                    playbackRate: 0,
+                    bufferConfidence: 0.4,
+                    measuredFetchDuration: measuredFetch,
+                    measuredSegmentDuration: 0
                 ))
             }
         }

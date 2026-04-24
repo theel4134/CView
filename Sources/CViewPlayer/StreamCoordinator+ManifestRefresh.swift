@@ -22,11 +22,19 @@ extension StreamCoordinator {
         } else {
             refreshInterval = 20  // 기본 20초
         }
-        
+        // [P1-5 2026-04-24] session별 stagger — 채널마다 결정적 오프셋을 부여하여
+        //   다중 멀티라이브 세션이 동일 시점에 매니페스트를 fetch 하지 않도록 분산.
+        let channelHash = UInt(bitPattern: self.config.channelId.hashValue)
+        let staggerSlots = max(1, UInt(refreshInterval) * 250)  // 0..(refreshInterval*250)ms
+        let staggerMs = Int(channelHash % staggerSlots)
+
         _manifestRefreshTask = Task { [weak self] in
-            // 초기 대기 (최초 재생 직후에는 굳이 갱신 필요 없음)
+            // 초기 대기 (최초 재생 직후에는 굳이 갱신 필요 없음) + stagger
             do { try await Task.sleep(for: .seconds(refreshInterval)) } catch { return }
-            
+            if staggerMs > 0 {
+                do { try await Task.sleep(for: .milliseconds(staggerMs)) } catch { return }
+            }
+
             while !Task.isCancelled {
                 guard let self else { break }
                 await self.refreshMasterManifest()

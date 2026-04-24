@@ -84,6 +84,23 @@ public final class LocalStreamProxy: @unchecked Sendable {
     let _responseTimes = Mutex<[Double]>([])
     let _responseTimeWindowSize = 20
 
+    /// [P1-1 2026-04-24] 세그먼트 fetch 메트릭 슬라이딩 윈도우 (최근 12개)
+    /// - element: (fetchDuration: TS/CMAF 등 chunk 다운로드 전체 소요(초), ttfb: 첫 바이트 도착까지(초))
+    let _segmentFetchSamples = Mutex<[(Double, Double)]>([])
+    let _segmentFetchWindowSize = 12
+
+    /// 세그먼트 fetch 샘플 1건 기록 — SegmentStreamHandler 등 streaming 경로에서 호출
+    func recordSegmentFetchSample(fetchDuration: Double, ttfb: Double) {
+        guard fetchDuration.isFinite, fetchDuration > 0 else { return }
+        let safeTTFB = (ttfb.isFinite && ttfb >= 0) ? ttfb : 0
+        _segmentFetchSamples.withLock { samples in
+            samples.append((fetchDuration, safeTTFB))
+            if samples.count > _segmentFetchWindowSize {
+                samples.removeFirst(samples.count - _segmentFetchWindowSize)
+            }
+        }
+    }
+
     /// 네트워크 통계 스냅샷 생성
     public func networkStats() -> ProxyNetworkStats {
         let counters = _netCounters.withLock { $0 }
@@ -94,6 +111,13 @@ public final class LocalStreamProxy: @unchecked Sendable {
         }
         let active = _activeConnections.withLock { $0.count }
         let c403 = _consecutive403Count.withLock { $0 }
+        let (segAvgFetch, segAvgTTFB, segCount) = _segmentFetchSamples.withLock { samples -> (Double, Double, Int) in
+            guard !samples.isEmpty else { return (0, 0, 0) }
+            let n = Double(samples.count)
+            let sumFetch = samples.reduce(0.0) { $0 + $1.0 }
+            let sumTTFB = samples.reduce(0.0) { $0 + $1.1 }
+            return (sumFetch / n, sumTTFB / n, samples.count)
+        }
 
         return ProxyNetworkStats(
             totalRequests: counters.totalRequests,
@@ -105,7 +129,10 @@ public final class LocalStreamProxy: @unchecked Sendable {
             activeConnections: active,
             consecutive403Count: c403,
             avgResponseTime: avg,
-            maxResponseTime: max_
+            maxResponseTime: max_,
+            avgSegmentFetchDuration: segAvgFetch,
+            avgSegmentTTFB: segAvgTTFB,
+            segmentSampleCount: segCount
         )
     }
 
@@ -113,6 +140,7 @@ public final class LocalStreamProxy: @unchecked Sendable {
     public func resetNetworkStats() {
         _netCounters.withLock { $0 = _NetworkCounters() }
         _responseTimes.withLock { $0.removeAll() }
+        _segmentFetchSamples.withLock { $0.removeAll() }
     }
 
     // MARK: - M3U8 Response Cache

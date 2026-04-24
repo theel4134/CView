@@ -508,9 +508,13 @@ public final class PlayerViewModel {
         // [Quality Lock] 레이턴시 동기화(lowLatencyMode/catchupRate>1.0) 활성 시
         // forceHighestQuality 가 꺼져 있어도 1080p60/8Mbps 화질 잠금을 자동 강제.
         // — sync 가속 중 ABR 강등으로 화질이 떨어지는 회귀 차단.
+        // [P0-2 2026-04-24] 멀티라이브에서는 sync 활성만으로 forceMax 자동 잠금하지 않는다.
+        //   이유: 모든 세션을 1080p로 묶으면 대역폭 코디네이터/비선택 절약 정책이 무력화되어
+        //   디코딩/프록시/GPU 병목으로 잦은 버퍼링이 발생함. 사용자가 명시적으로
+        //   forceHighestQuality 를 켠 경우에만 잠금. 단일 라이브는 기존 거동 유지.
         let userForceMax = playerSettings?.forceHighestQuality ?? true
         let syncActive = (playerSettings?.lowLatencyMode ?? true) || ((playerSettings?.catchupRate ?? 1.0) > 1.0)
-        let requestedForceMax = userForceMax || syncActive
+        let requestedForceMax = isMultiLive ? userForceMax : (userForceMax || syncActive)
         // [Quality 2026-04-18] 멀티라이브 + AVPlayer 조합도 forceMax 허용.
         //   이전에는 1080p variant URL 고정이 ABR 우회로 첫 프레임 정지 회귀를 유발한다는
         //   우려로 차단했으나, AVPlayerEngine 의 isQualityLocked(8Mbps/1080p ceiling) +

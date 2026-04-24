@@ -390,14 +390,12 @@ final class MultiLiveSession: Identifiable {
             playerViewModel.applySharpPixelScaling(ps.sharpPixelScaling)
             playerViewModel.applyMultiLiveConstraints(paneCount: paneCount)
 
-            // [Quality Lock 2026-04-18] 최고 화질 유지 모드: 비선택 세션도 즉시 multiLiveHQ tier 로
-            // 승격하여 1080p 변종을 선택하도록 한다. (기본은 .multiLive=480p 로 시작)
-            if ps.forceHighestQuality, let vlc = playerViewModel.playerEngine as? VLCPlayerEngine {
-                vlc.updateSessionTier(.active)
-            }
-            if ps.forceHighestQuality, let av = playerViewModel.playerEngine as? AVPlayerEngine {
-                av.isSelectedMultiLiveSession = true
-            }
+            // [P0-4 2026-04-24] forceHighestQuality 시에도 비선택 세션의 일괄 .active 승격 제거.
+            //   기존 동작: 모든 세션이 시작과 동시에 multiLiveHQ tier 로 올라가 1080p 변종 선택 →
+            //   대역폭 코디네이터/비선택 절약 정책이 무력화되어 디코딩/프록시/GPU 병목 발생.
+            //   변경 동작: 첫 세션은 MultiLiveManager 가 selectedSessionId 지정 시 .active 로 승격,
+            //   비선택 세션은 .multiLive 프로파일(480p 시작) 그대로 두어 선택 시점에만 HQ 승격.
+            //   AVPlayer 도 동일 원칙: 선택된 세션만 isSelectedMultiLiveSession=true.
 
             // VLC 메트릭 콜백 — 로컬 표시 + MetricsForwarder 전송 (멀티라이브: 모든 세션 전송)
             // [Bug-fix] 콜백당 2개 Task → 1개로 통합 (상단 start() 경로와 동일 패턴 적용).

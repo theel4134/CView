@@ -173,12 +173,14 @@ public enum VLCStreamingProfile: Sendable {
     // lowLatency 500ms: 2초 세그먼트 25% 커버리지, prefetch 병용
     // multiLive 1000→1500ms: 1초 세그먼트 커버 + 0.5초 지터 마진
     //   (2000ms는 4스트림에서 VLC 버퍼 경합 유발, 1000ms는 지터 흡수 부족)
+    // [P0-3 2026-04-24] multiLiveHQ 800→1200ms: 멀티라이브 burst 환경에서 선택 세션도
+    //   800ms는 CDN 지터 흡수 부족으로 buffering 발생. 1200ms로 1차 안정화 검증.
     var networkCaching: Int {
         switch self {
         case .ultraLow: return 300
         case .lowLatency: return 500
         case .multiLive: return 1500     // 1000→1500ms: 지터 흡수 마진 확보
-        case .multiLiveHQ: return 800    // 선택 HQ: 지터 흡수는 유지하되 저지연 쪽으로 이동
+        case .multiLiveHQ: return 1200   // 800→1200ms: 선택 세션 지터 흡수 강화
         }
     }
     public var liveCaching: Int {
@@ -186,7 +188,7 @@ public enum VLCStreamingProfile: Sendable {
         case .ultraLow: return 300
         case .lowLatency: return 500
         case .multiLive: return 1500     // network-caching과 동일
-        case .multiLiveHQ: return 800
+        case .multiLiveHQ: return 1200   // network-caching과 동일
         }
     }
     var manifestRefreshInterval: Int {

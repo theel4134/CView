@@ -45,6 +45,17 @@ public struct ProxyNetworkStats: Sendable {
     /// 최근 CDN 최대 응답 시간 (초)
     public let maxResponseTime: Double
 
+    // MARK: - 세그먼트 전용 메트릭 (P1-1)
+
+    /// 최근 세그먼트 평균 fetch 소요 시간 (초) — TS/CMAF 등 chunk 응답 전체 다운로드 시간
+    public let avgSegmentFetchDuration: Double
+
+    /// 최근 세그먼트 평균 TTFB (초) — 첫 바이트 도착까지의 latency
+    public let avgSegmentTTFB: Double
+
+    /// 최근 세그먼트 통계에 포함된 샘플 수
+    public let segmentSampleCount: Int
+
     // MARK: - 스냅샷 시각
 
     public let timestamp: Date
@@ -82,6 +93,9 @@ public struct ProxyNetworkStats: Sendable {
         consecutive403Count: Int = 0,
         avgResponseTime: Double = 0,
         maxResponseTime: Double = 0,
+        avgSegmentFetchDuration: Double = 0,
+        avgSegmentTTFB: Double = 0,
+        segmentSampleCount: Int = 0,
         timestamp: Date = Date()
     ) {
         self.totalRequests = totalRequests
@@ -94,6 +108,9 @@ public struct ProxyNetworkStats: Sendable {
         self.consecutive403Count = consecutive403Count
         self.avgResponseTime = avgResponseTime
         self.maxResponseTime = maxResponseTime
+        self.avgSegmentFetchDuration = avgSegmentFetchDuration
+        self.avgSegmentTTFB = avgSegmentTTFB
+        self.segmentSampleCount = segmentSampleCount
         self.timestamp = timestamp
     }
 }

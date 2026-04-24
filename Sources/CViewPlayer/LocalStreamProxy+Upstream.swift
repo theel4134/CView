@@ -151,6 +151,15 @@ extension LocalStreamProxy {
                 return
             }
         }
+
+        // [P0-5 2026-04-24] 미디어 세그먼트는 chunk-streaming 경로로 분리.
+        //   기존: 세그먼트 전체를 메모리에 모은 뒤 한 번에 sendResponse → 첫 바이트 지연 + 4채널 burst.
+        //   변경: URLSessionDataDelegate 로 chunk 즉시 forward → VLC demux 입력 평활화.
+        //   M3U8 은 URL rewrite/캐싱 필요로 기존 경로 유지.
+        if !isLikelyM3U8 {
+            proxyToUpstreamStreaming(targetURL: targetURL, connection: connection, requestNum: requestNum)
+            return
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
