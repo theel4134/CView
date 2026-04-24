@@ -221,26 +221,49 @@ public final class PlayerViewModel {
         }
     }
 
-    /// 현재 엔진의 목표 레이턴시를 밀리초 단위로 반환.
-    /// 서버 하트비트의 targetLatency 필드와 동기화 제어에 사용한다.
-    public func currentTargetLatencyMs() -> Double? {
+    /// 현재 엔진의 목표 레이턴시 묶음.
+    ///
+    /// [P0 / 2026-04-25] sync target / engine cache / tolerance 를 명시적으로 분리한다.
+    /// - VLC: syncTargetMs 는 LowLatencyController.webSync 와 일치(6_000ms),
+    ///        engineCacheMs 는 streamingProfile.liveCaching.
+    /// - AVPlayer: catchupConfig.targetLatency 를 sync 와 cache 모두에 사용(엔진 통합).
+    /// - HLS.js: 프로파일별 목표 — sync == cache.
+    public func currentLatencyTargets() -> LatencyTargets? {
         if let vlc = playerEngine as? VLCPlayerEngine {
-            return Double(vlc.streamingProfile.liveCaching)
+            // VLC: LowLatencyController.webSync target(6.0s) 과 일치.
+            // 이 값은 LowLatencyController.Configuration.webSync.targetLatency 와
+            // 변경 시 함께 동기화되어야 한다.
+            return LatencyTargets(
+                syncTargetMs: 6_000,
+                engineCacheMs: Double(vlc.streamingProfile.liveCaching),
+                toleranceMs: 500
+            )
         }
         if let av = playerEngine as? AVPlayerEngine {
-            return av.catchupConfig.targetLatency * 1000.0
+            let ms = av.catchupConfig.targetLatency * 1000.0
+            return LatencyTargets(syncTargetMs: ms, engineCacheMs: ms, toleranceMs: 500)
         }
         if let hlsjs = playerEngine as? HLSJSPlayerEngine {
+            let ms: Double
             switch hlsjs.streamingProfile {
-            case .ultraLow:
-                return 1_000
-            case .lowLatency:
-                return 2_000
-            case .multiLive:
-                return 3_000
+            case .ultraLow:    ms = 1_000
+            case .lowLatency:  ms = 2_000
+            case .multiLive:   ms = 3_000
             }
+            return LatencyTargets(syncTargetMs: ms, engineCacheMs: ms, toleranceMs: 500)
         }
         return nil
+    }
+
+    /// 현재 엔진의 목표 레이턴시(sync 기준값)를 밀리초로 반환.
+    ///
+    /// [P0 / 2026-04-25] 의미를 통일했다 — 항상 `currentLatencyTargets().syncTargetMs`
+    /// 와 동일한 값을 반환한다(이전: VLC 의 경우 liveCaching 을 반환했으나 서버
+    /// `/api/metrics` payload `targetLatency` 의미와 불일치). 호출 측 5곳 모두
+    /// "서버 동기화 비교 기준값" 의미로 사용 중이라 호환된다.
+    @available(*, deprecated, message: "Use currentLatencyTargets() to access syncTargetMs / engineCacheMs / toleranceMs explicitly.")
+    public func currentTargetLatencyMs() -> Double? {
+        currentLatencyTargets()?.syncTargetMs
     }
 
     /// 싱글 플레이어 네트워크 탭용 자체 메트릭 수집 활성화

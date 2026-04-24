@@ -194,7 +194,7 @@ extension LiveStreamView {
                     return await coord.lowLatencyController?.currentRate ?? 1.0
                 }
                 // 현재 엔진의 목표 레이턴시를 서버 동기화 기준값으로 전달
-                if let targetLatencyMs = _playerVM?.currentTargetLatencyMs() {
+                if let targetLatencyMs = _playerVM?.currentLatencyTargets()?.syncTargetMs {
                     await _forwarder?.setTargetLatency(targetLatencyMs)
                 }
                 // 레이턴시(ms) 콜백 — StreamCoordinator에서 직접 조회

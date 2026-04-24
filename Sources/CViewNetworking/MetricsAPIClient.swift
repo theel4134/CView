@@ -417,6 +417,15 @@ public actor MetricsAPIClient {
     public func cviewSyncStatus(channelId: String) async throws -> CViewSyncStatusResponse {
         try await request(.cviewSyncStatus(channelId: channelId), as: CViewSyncStatusResponse.self)
     }
+
+    /// PDT 기반 웹/앱 정밀 동기화 비교 (P0 / 2026-04-25)
+    ///
+    /// `cviewSyncStatus` 보다 정밀한 비교 — 웹/앱 모두 `EXT-X-PROGRAM-DATE-TIME`
+    /// 기반 latency 를 치지직 서버 시간으로 정규화해 driftMs 를 반환한다.
+    /// 정밀 제어 모드의 단일 진실 공급원으로 사용한다.
+    public func pdtComparison(channelId: String) async throws -> PDTComparisonResponse {
+        try await request(.pdtComparison(channelId: channelId), as: PDTComparisonResponse.self)
+    }
     
     /// CView 채팅 메시지 서버 중계
     public func cviewRelayChatMessage(_ payload: CViewChatRelayPayload) async throws -> CViewChatRelayResponse {

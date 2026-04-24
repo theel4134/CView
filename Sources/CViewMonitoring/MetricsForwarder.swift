@@ -79,6 +79,16 @@ public actor MetricsForwarder {
     /// 서버 동기화 추천에 따른 재생 속도 변경 콜백
     /// MetricsForwarder → 외부 PlayerEngine 연결용
     private var onSyncSpeedChange: (@Sendable (Float) -> Void)?
+
+    /// [P0 / 2026-04-25] 서버 추천 → playbackRate 직접 적용 여부.
+    ///
+    /// docs/chzzk-browser-sync-latency-research-swift6-2026-04-25.md §3.5/§9 P0:
+    /// 정밀 동기화 모드에서는 rate 소유권을 단일 컨트롤러(LowLatencyController /
+    /// 후속 WebSyncController)로 일원화한다. MetricsForwarder 는 관측·전송만
+    /// 담당하고 rate 보정은 비활성화하는 것이 기본 정책이다.
+    ///
+    /// 기본값 false — 정책 단일화. true 로 설정 시 기존(arbitrateServerSpeed) 동작.
+    public var rateControlEnabled: Bool = false
     
     /// [Fix 20] PID 활성 상태 확인 콜백 — PID가 능동 제어 중이면 서버 추천 무시
     private var isPIDActiveCallback: (@Sendable () async -> Bool)?
@@ -660,7 +670,11 @@ public actor MetricsForwarder {
                     syncData: response.syncData
                 )
                 if let arbitrated = await arbitrateServerSpeed(validatedSpeed) {
-                    onSyncSpeedChange?(Float(arbitrated))
+                    // [P0 / 2026-04-25] 정책 단일화 — rateControlEnabled 가 켜진
+                    // 경우에만 외부에 rate 변경을 전파. 기본값 off.
+                    if rateControlEnabled {
+                        onSyncSpeedChange?(Float(arbitrated))
+                    }
                 }
             }
             // 하트비트 응답에서도 적응형 폴링 간격 업데이트
@@ -953,7 +967,10 @@ public actor MetricsForwarder {
                 )
                 // [Fix 20 Phase3] Rate Arbiter — PID/서버 통합 속도 결정
                 if let arbitrated = await arbitrateServerSpeed(validatedSpeed) {
-                    onSyncSpeedChange?(Float(arbitrated))
+                    // [P0 / 2026-04-25] 정책 단일화 — rateControlEnabled gate.
+                    if rateControlEnabled {
+                        onSyncSpeedChange?(Float(arbitrated))
+                    }
                 }
 
                 updateAdaptiveSyncInterval(recommendation: rec, syncData: response.syncData)

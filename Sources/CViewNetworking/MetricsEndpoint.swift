@@ -46,7 +46,12 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
     case cviewChannelStats(channelId: String)
     case cviewChatRelay(CViewChatRelayPayload)
     case cviewSyncStatus(channelId: String)
-    
+
+    // MARK: - PDT-Based Precision Sync (P0 / 2026-04-25)
+    /// `/api/sync/pdt-comparison/{channelId}` — 웹/앱 PDT 레이턴시 정밀 비교.
+    /// 치지직 서버 시간 기준으로 정규화된 driftMs 를 반환한다.
+    case pdtComparison(channelId: String)
+
     // MARK: - Hybrid Sync
     case hybridHeartbeat(HybridHeartbeatPayload)
     
@@ -113,6 +118,8 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             "/api/cview/chat-relay"
         case .cviewSyncStatus(let id):
             "/api/cview/sync-status/\(id)"
+        case .pdtComparison(let id):
+            "/api/sync/pdt-comparison/\(id)"
         case .hybridHeartbeat:
             "/api/sync/hybrid-heartbeat"
         case .syncAuthCookies:
@@ -216,6 +223,9 @@ public enum MetricsEndpoint: EndpointProtocol, Sendable {
             .returnCacheElseLoad(ttl: 5)
         case .cviewSyncStatus:
             .returnCacheElseLoad(ttl: 3)
+        case .pdtComparison:
+            // 정밀 제어용 — 최신성이 제일 중요하므로 캐시 우회.
+            .reloadIgnoringCache
         default:
             .reloadIgnoringCache
         }

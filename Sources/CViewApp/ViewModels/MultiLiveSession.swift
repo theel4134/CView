@@ -248,7 +248,7 @@ final class MultiLiveSession: Identifiable {
                         return await coord.lowLatencyController?.currentRate ?? 1.0
                     }
                     // 현재 엔진의 목표 레이턴시를 서버 동기화 기준값으로 전달
-                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                    if let targetLatencyMs = _playerVM.currentLatencyTargets()?.syncTargetMs {
                         await _forwarder?.setTargetLatency(targetLatencyMs)
                     }
                     // 재생 위치(currentTime) 콜백 연결
@@ -276,7 +276,7 @@ final class MultiLiveSession: Identifiable {
                 Task {
                     await _forwarder?.registerMultiLiveChannel(channelId: channelId, channelName: channelName)
                     // 채널별 콜백 등록
-                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                    if let targetLatencyMs = _playerVM.currentLatencyTargets()?.syncTargetMs {
                         await _forwarder?.setTargetLatency(targetLatencyMs, forChannel: sessionChannelId)
                     }
                     await _forwarder?.setCurrentTimeCallback({ [weak _playerVM] in
@@ -453,7 +453,7 @@ final class MultiLiveSession: Identifiable {
                     await _forwarder2?.setCurrentTimeCallback { [weak _playerVM] in
                         await MainActor.run { _playerVM?.currentTime ?? 0 }
                     }
-                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                    if let targetLatencyMs = _playerVM.currentLatencyTargets()?.syncTargetMs {
                         await _forwarder2?.setTargetLatency(targetLatencyMs)
                     }
                 }
@@ -462,7 +462,7 @@ final class MultiLiveSession: Identifiable {
                 let _playerVM = playerViewModel
                 Task {
                     await _forwarder2?.registerMultiLiveChannel(channelId: channelId, channelName: channelName)
-                    if let targetLatencyMs = _playerVM.currentTargetLatencyMs() {
+                    if let targetLatencyMs = _playerVM.currentLatencyTargets()?.syncTargetMs {
                         await _forwarder2?.setTargetLatency(targetLatencyMs, forChannel: sessionChannelId2)
                     }
                     await _forwarder2?.setCurrentTimeCallback({ [weak _playerVM] in

@@ -128,6 +128,14 @@ public actor LowLatencyController {
     private var _currentRate: Double = 1.0
     private var _latencyHistory: [TimeInterval] = []
     private var syncTask: Task<Void, Never>?
+
+    // [P0 / 2026-04-25] PID dt 실측 — 기존 deltaTime=1.0 고정값은
+    // 실제 제어 주기(≈5s, PowerAware 7.5s)와 5–7.5배 차이나 PID
+    // 적분·미분 항이 완전히 잘못 계산되었다. ContinuousClock 기반으로
+    // 다음 샘플까지 경과 시간을 실측하고, 긴 pause 등으로 인한
+    // 스파이크를 제거하기 위해 [0.5..15]s 범위로 클램프한다.
+    private var _lastProcessInstant: ContinuousClock.Instant?
+    private let _pidClock = ContinuousClock()
     
     // M1 fix: 버퍼링 중 rate 조정 일시 중지
     private var _isPausedForBuffering: Bool = false
@@ -282,6 +290,9 @@ public actor LowLatencyController {
         _latencyHistory.removeAll()
         _isPausedForBuffering = true
         _currentRate = 1.0
+        // [P0 / 2026-04-25] grace 진입 — 다음 processLatency 의 dt 계산이
+        // pause 구간을 포함해 증폭하지 않도록 clock 참조점을 초기화.
+        _lastProcessInstant = nil
         onRateChange?(1.0)
         // seek 후에도 쿨다운 적용 — 재개 시 즉시 가속 방지
         let duration = _cooldownDuration
@@ -327,6 +338,8 @@ public actor LowLatencyController {
         // 재연결 시 이전 세션의 stale EWMA/히스토리가 PID를 오염하지 않도록 리셋
         latencyEWMA = EWMACalculator(alpha: 0.15)
         _latencyHistory.removeAll()
+        // [P0 / 2026-04-25] dt 초기화 — 재시작 시 첫 샘플은 deltaTime=0으로 계산되어 PID kick 방지.
+        _lastProcessInstant = nil
     }
     
     /// Process a single latency measurement
@@ -380,7 +393,21 @@ public actor LowLatencyController {
         
         // Calculate PID output
         let error = smoothedLatency - config.targetLatency
-        let pidOutput = pidController.update(error: error, deltaTime: 1.0)
+
+        // [P0 / 2026-04-25] 실측 dt — 고정값 1.0 대체. 첨 샘플은 fallback
+        // 5.0s(PowerAwareInterval.scaled 평균 주기)를 쓰고, 너무 짧거나(burst)
+        // 너무 긴 경우(pause/sleep) PID 적분·미분 증폭을 막도록 클램프.
+        let now = _pidClock.now
+        let measuredDt: TimeInterval
+        if let last = _lastProcessInstant {
+            let components = last.duration(to: now).components
+            measuredDt = TimeInterval(components.seconds) + TimeInterval(components.attoseconds) / 1e18
+        } else {
+            measuredDt = 5.0
+        }
+        _lastProcessInstant = now
+        let dt = max(0.5, min(15.0, measuredDt))
+        let pidOutput = pidController.update(error: error, deltaTime: dt)
         
         // Determine rate adjustment — 직접 PID 출력을 rate로 변환
         var newRate: Double

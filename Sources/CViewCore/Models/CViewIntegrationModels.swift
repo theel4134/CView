@@ -440,3 +440,103 @@ public struct CViewLatencyDetail: Codable, Sendable {
     public let appLast: Double?
     public let appSamples: Int?
 }
+
+// MARK: - Latency Targets (P0 / 2026-04-25)
+
+/// 플레이어가 외부(서버 metrics, 동기화 컨트롤러)로 노출하는 목표 레이턴시 묶음.
+///
+/// 이전 `currentTargetLatencyMs()` 는 의미가 두 가지로 혼용되었다:
+///   - "엔진 내부 캐시"(VLC `liveCaching`) 와
+///   - "서버 동기화 비교 기준값(sync target)" 을 동시에 의미.
+///
+/// P0 정밀 재구축에서 두 값을 명시적으로 분리한다.
+///
+/// - `syncTargetMs`: 서버 metrics payload `targetLatency` 와 LowLatencyController
+///                   PID 가 따라가는 최종 목표(예: VLC webSync = 6_000ms).
+/// - `engineCacheMs`: 엔진 디코더 buffer/cache 길이(VLC liveCaching, AVPlayer
+///                    targetLatency * 1000). 보통 `syncTargetMs` 보다 작다.
+/// - `toleranceMs`: 정상 운영으로 간주하는 ±오차. PID rate-only 영역 폭.
+public struct LatencyTargets: Sendable, Equatable {
+    public let syncTargetMs: Double
+    public let engineCacheMs: Double
+    public let toleranceMs: Double
+
+    public init(syncTargetMs: Double, engineCacheMs: Double, toleranceMs: Double) {
+        self.syncTargetMs = syncTargetMs
+        self.engineCacheMs = engineCacheMs
+        self.toleranceMs = toleranceMs
+    }
+}
+
+// MARK: - PDT Comparison (P0 / 2026-04-25)
+
+/// `GET /api/sync/pdt-comparison/{channelId}` 응답.
+///
+/// 서버는 웹/앱의 `EXT-X-PROGRAM-DATE-TIME` 기반 레이턴시를 치지직 서버 시간
+/// 기준으로 정규화해 비교한다(handle_pdt_comparison). 정밀 동기화 모드는
+/// `cviewSyncStatus` 보다 이 응답을 1순위 입력으로 사용한다.
+///
+/// 운영 정책 (docs/chzzk-browser-sync-latency-research-swift6-2026-04-25.md §8):
+/// - `metadata.webHasPdt && metadata.appHasPdt` → 정밀 제어 허용.
+/// - 둘 중 하나라도 false → seek 금지, rate 미세 보정만.
+/// - `webLastUpdated` / `appLastUpdated` 가 5초 이상 오래됨 → hold.
+public struct PDTComparisonResponse: Decodable, Sendable {
+    public let success: Bool
+    public let channelId: String?
+    public let comparison: Comparison?
+    public let sources: Sources?
+    public let metadata: Metadata?
+    public let trend: Trend?
+    public let timestamp: Int64?
+
+    public struct Comparison: Decodable, Sendable {
+        public let webLatencyMs: Double?
+        public let appLatencyMs: Double?
+        public let driftMs: Double?
+        public let syncQuality: Int?
+        /// "excellent" / "good" / "acceptable" / "moderate" / "poor" / "critical" / "unknown"
+        public let syncPrecision: String?
+    }
+
+    public struct Sources: Decodable, Sendable {
+        /// 웹 측 latency 산출 소스 (예: "vlc-pdt", "hls-latency", "server-fallback").
+        public let web: String?
+        public let app: String?
+    }
+
+    public struct Metadata: Decodable, Sendable {
+        public let chzzkTimeOffsetMs: Double?
+        public let chzzkServerTimeMs: Int64?
+        public let serverTimeMs: Int64?
+        public let webLastUpdated: Int64?
+        public let appLastUpdated: Int64?
+        public let webHasPdt: Bool?
+        public let appHasPdt: Bool?
+    }
+
+    public struct Trend: Decodable, Sendable {
+        public let samples: Int?
+        public let avgDriftMs: Double?
+        public let recentDrifts: [Double]?
+    }
+}
+
+extension PDTComparisonResponse {
+    /// 정밀 제어를 허용해도 되는 샘플인지 — webHasPdt && appHasPdt && 신선.
+    /// `staleThresholdMs` 기본 5_000 ms 는 문서 §4.3 기준.
+    public func isPrecisionEligible(now serverNowMs: Int64? = nil, staleThresholdMs: Int64 = 5_000) -> Bool {
+        guard success,
+              let meta = metadata,
+              meta.webHasPdt == true,
+              meta.appHasPdt == true,
+              let webTs = meta.webLastUpdated,
+              let appTs = meta.appLastUpdated else {
+            return false
+        }
+        let nowMs = serverNowMs ?? meta.serverTimeMs ?? Int64(Date().timeIntervalSince1970 * 1000)
+        let webAge = nowMs - webTs
+        let appAge = nowMs - appTs
+        return webAge <= staleThresholdMs && appAge <= staleThresholdMs && webAge >= 0 && appAge >= 0
+    }
+}
+
