@@ -64,8 +64,14 @@ struct MainContentView: View {
                     .navigationDestination(for: AppRoute.self) { route in
                         routeDestination(for: route)
                     }
+                    // [2026-04-22] detail 상단 safe area 무시 — NavigationStack이 기본
+                    // 상단 영역을 예약해 MLTabBar 위에 빈 공백이 보였음. ignoresSafeArea
+                    // 로 최상단까지 확장 → 탭바가 윈도우 top edge 에 붙음.
+                    // SidebarView 는 macOS 트래픽 라이트가 그 위에 그려지도록 safe area 유지.
+                    .ignoresSafeArea(.container, edges: .top)
             }
             .clipped()
+            .ignoresSafeArea(.container, edges: .top)
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(item: $router.presentedSheet) { sheet in

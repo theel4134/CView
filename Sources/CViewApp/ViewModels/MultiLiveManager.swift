@@ -61,6 +61,13 @@ public final class MultiLiveManager {
     /// 세션별 마지막 적용 해상도 캡(높이). 동일값 재적용 차단.
     private var _lastAppliedCapHeight: [UUID: Int] = [:]
 
+    /// [Quality 2026-04-24] 마지막으로 보고된 멀티라이브 stage(콘텐츠 영역) 크기.
+    ///   SwiftUI `onGeometryChange` → `reportStageSize(_:)` 로 갱신된다.
+    ///   `updateEstimatedPaneSizes()` 가 NSWindow/NSScreen 폴백보다 우선 사용한다.
+    private var lastReportedStageSize: CGSize?
+    /// 윈도우 리사이즈 디바운스용 토큰
+    private var paneResizeDebounceTask: Task<Void, Never>?
+
     /// 선택된 세션
     var selectedSession: MultiLiveSession? {
         sessions.first { $0.id == selectedSessionId }
@@ -611,6 +618,53 @@ public final class MultiLiveManager {
         sessions.contains { if case .playing = $0.loadState { return true } else { return false } }
     }
 
+    // MARK: - GPU 렌더 티어 일괄 제어 (Phase D — 윈도우 가림 시 자동 강등)
+
+    /// 메인 윈도우가 다른 앱에 의해 완전히 가려졌을 때 모든 세션의 비디오 레이어를 숨겨
+    /// Metal 합성 부하를 0에 가깝게 만든다. 디코딩/오디오는 영향 없음.
+    /// 윈도우가 다시 노출되면 `restoreGPURenderTiersFromSelection()` 으로 원복.
+    func suspendAllGPURenderTiers() {
+        for session in sessions {
+            if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+                vlc.setGPURenderTier(.hidden)
+            }
+            if let av = session.playerViewModel.playerEngine as? AVPlayerEngine {
+                av.setGPURenderTier(.hidden)
+            }
+        }
+    }
+
+    /// 윈도우 노출 복귀 시 선택 상태에 맞춰 `.active`/`.visible` 으로 복원.
+    func restoreGPURenderTiersFromSelection() {
+        let selected = selectedSessionId
+        for session in sessions {
+            let tier: SessionTier = (session.id == selected) ? .active : .visible
+            if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+                vlc.setGPURenderTier(tier)
+            }
+            if let av = session.playerViewModel.playerEngine as? AVPlayerEngine {
+                av.setGPURenderTier(tier)
+            }
+        }
+    }
+
+    /// [Phase F] Thermal 과열 시 비선택 세션의 GPU 렌더 티어를 `.hidden`으로 강등.
+    /// 선택 세션은 `.active` 유지하여 사용자 체감 화질 보호.
+    /// nominal/fair 복귀 시 `restoreGPURenderTiersFromSelection()`으로 원복.
+    func degradeGPURenderTiersForThermal() {
+        let selected = selectedSessionId
+        for session in sessions {
+            let isSelected = session.id == selected
+            let tier: SessionTier = isSelected ? .active : .hidden
+            if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+                vlc.setGPURenderTier(tier)
+            }
+            if let av = session.playerViewModel.playerEngine as? AVPlayerEngine {
+                av.setGPURenderTier(tier)
+            }
+        }
+    }
+
     // MARK: - 대역폭 코디네이터 관리
 
     /// 대역폭 코디네이터 설정 업데이트 (설정 변경 시 호출)
@@ -864,69 +918,29 @@ public final class MultiLiveManager {
         return snapshots
     }
 
-    private func feedMetricsToCoordinator() {
-        let coordinator = bandwidthCoordinator
-        for session in sessions {
-            let sessionId = session.id
-
-            // VLC 메트릭이 있으면 대역폭 + 버퍼 데이터 보고
-            if let metrics = session.latestMetrics {
-                let bitrateBps = metrics.inputBitrateKbps * 1000.0 // kbps → bps
-                // [Fix 22C] VLC 실제 버퍼 길이 사용 (duration - currentTime)
-                // 기존: bufferHealth × 10.0 추정 → 부정확한 10초 스케일
-                // 개선: 실제 VLC 파이프라인 버퍼 측정, 불가 시 기존 추정 폴백
-                let estimatedBufferSecs: TimeInterval
-                if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine,
-                   vlc.isPlaying {
-                    let d = vlc.duration
-                    let c = vlc.currentTime
-                    if d > 0, c > 0, (d - c) > 0, (d - c) < 60 {
-                        estimatedBufferSecs = d - c
-                    } else {
-                        estimatedBufferSecs = metrics.bufferHealth * 10.0
-                    }
-                } else {
-                    estimatedBufferSecs = metrics.bufferHealth * 10.0
-                }
-                // [Fix 20 Phase3] 재생 배율 전달 — 대역폭 계산에 가속 소비량 반영
-                let rate = Double(metrics.playbackRate)
-
-                Task {
-                    await coordinator.reportBandwidthSample(
-                        sessionId: sessionId,
-                        bitrate: bitrateBps,
-                        bufferLength: estimatedBufferSecs,
-                        fetchDuration: 0.5, // VLC 내부 페칭 — 근사값
-                        segmentDuration: 4.0 // 일반 HLS 세그먼트 길이
-                    )
-                    await coordinator.updatePlaybackRate(sessionId: sessionId, rate: rate)
-                }
-            } else if let avMetrics = session.latestAVMetrics {
-                // AVPlayer 메트릭
-                let bitrateBps = avMetrics.indicatedBitrate // bps 단위
-                let estimatedBufferSecs = avMetrics.bufferHealth * 10.0
-                Task {
-                    await coordinator.reportBandwidthSample(
-                        sessionId: sessionId,
-                        bitrate: bitrateBps,
-                        bufferLength: estimatedBufferSecs,
-                        fetchDuration: 0.5,
-                        segmentDuration: 4.0
-                    )
-                }
-            }
-        }
-    }
+    // [Cleanup 2026-04-24] feedMetricsToCoordinator() 제거 —
+    //   startBandwidthCoordination() 의 collectMetricsSnapshot() 방식으로 완전 대체됨.
+    //   52줄 dead code (호출자 0개) 제거.
 
     /// 세션 수 기반 추정 패인 크기를 코디네이터에 전달
     /// 그리드 2x2 → 각 패인은 화면의 약 50%×50%, 2x1 → 50%×100% 등
     private func updateEstimatedPaneSizes() {
+        // [Quality 2026-04-24] 명시적 stage 크기가 있으면 우선 사용 (윈도우 리사이즈 콜백 경로)
+        if let stage = lastReportedStageSize {
+            updatePaneSizes(stageWidth: Int(stage.width), stageHeight: Int(stage.height))
+            return
+        }
         let count = sessions.count
         guard count > 0 else { return }
 
-        // macOS 기본 디스플레이 크기 기반 추정 (앱 윈도우 크기보다 보수적)
-        let screenW = 1920 // 기본 추정
-        let screenH = 1080
+        // [Code Review 2026-04-24] 실제 스크린/윈도우 크기 사용 —
+        //   기존 1920×1080 하드코딩은 4K/Retina 디스플레이에서 대역폭 추정이 부정확했다.
+        //   폴백 순서: 메인 윈도우 크기 → 메인 스크린 크기 → 1920×1080.
+        let screenSize = NSApp.mainWindow?.frame.size
+            ?? NSScreen.main?.frame.size
+            ?? CGSize(width: 1920, height: 1080)
+        let screenW = Int(screenSize.width)
+        let screenH = Int(screenSize.height)
 
         let (paneW, paneH): (Int, Int)
         switch count {
@@ -945,6 +959,52 @@ public final class MultiLiveManager {
                     height: paneH
                 )
             }
+        }
+    }
+
+    /// [Quality 2026-04-24] 명시적 stage(콘텐츠 영역) 크기로 paneSize 갱신
+    ///   - stageWidth/Height: 멀티라이브 그리드가 점유하는 실제 픽셀 크기
+    ///   - 그리드 셀 분할(2x1, 2x2, 3xN) 기준으로 셀당 크기를 코디네이터에 전달한다.
+    func updatePaneSizes(stageWidth: Int, stageHeight: Int) {
+        let count = sessions.count
+        guard count > 0, stageWidth > 0, stageHeight > 0 else { return }
+
+        let (paneW, paneH): (Int, Int)
+        switch count {
+        case 1: (paneW, paneH) = (stageWidth, stageHeight)
+        case 2: (paneW, paneH) = (stageWidth / 2, stageHeight)
+        case 3, 4: (paneW, paneH) = (stageWidth / 2, stageHeight / 2)
+        default: (paneW, paneH) = (stageWidth / 3, stageHeight / 2)
+        }
+
+        let coordinator = bandwidthCoordinator
+        let snapshot = sessions.map(\.id)
+        Task {
+            for sid in snapshot {
+                await coordinator.updatePaneSize(
+                    sessionId: sid,
+                    width: paneW,
+                    height: paneH
+                )
+            }
+        }
+    }
+
+    /// [Quality 2026-04-24] SwiftUI `onGeometryChange` 콜백.
+    ///   윈도우 리사이즈/그리드 모드 전환 시 호출되며, 200ms 디바운스 후 paneSize 를 코디네이터에 전달한다.
+    func reportStageSize(_ size: CGSize) {
+        // 미세한 변화는 무시 (1픽셀 단위 변화로 ABR 재계산 트리거 방지)
+        if let last = lastReportedStageSize,
+           abs(last.width - size.width) < 8, abs(last.height - size.height) < 8 {
+            return
+        }
+        lastReportedStageSize = size
+
+        paneResizeDebounceTask?.cancel()
+        paneResizeDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.updatePaneSizes(stageWidth: Int(size.width), stageHeight: Int(size.height))
         }
     }
 

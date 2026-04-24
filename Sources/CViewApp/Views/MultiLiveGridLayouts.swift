@@ -6,7 +6,8 @@ import SwiftUI
 import CViewCore
 import CViewPlayer
 
-private let gridGap: CGFloat = 2
+// [Modern Curves 2026-04-21] 라운드 셀(16pt) 간 숨쉴 공간 — 2pt → 6pt
+private let gridGap: CGFloat = 6
 
 // MARK: - MLPresetGridLayout
 /// 프리셋 그리드: 세션 수에 따라 자동 배치 (2x1, 2x2 등)

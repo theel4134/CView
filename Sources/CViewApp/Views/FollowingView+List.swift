@@ -63,15 +63,27 @@ extension FollowingView {
                         .padding(.horizontal, DesignTokens.Spacing.md)
                         .padding(.vertical, DesignTokens.Spacing.sm)
                         .background {
-                            if isOverflowSelected {
-                                Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
-                            } else {
-                                Capsule().fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
-                            }
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(isOverflowSelected
+                                      ? DesignTokens.Colors.chzzkGreen.opacity(0.14)
+                                      : DesignTokens.Colors.surfaceElevated.opacity(0.5))
                         }
                         .overlay {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(
+                                    isOverflowSelected
+                                        ? DesignTokens.Colors.chzzkGreen.opacity(0.35)
+                                        : DesignTokens.Glass.borderColorLight.opacity(0.35),
+                                    lineWidth: isOverflowSelected ? 1 : 0.5
+                                )
+                        }
+                        .overlay(alignment: .bottom) {
                             if isOverflowSelected {
-                                Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                    .fill(DesignTokens.Colors.chzzkGreen)
+                                    .frame(height: 2)
+                                    .padding(.horizontal, 3)
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
                         }
                     }
@@ -91,37 +103,50 @@ extension FollowingView {
                 Text(label)
                     .font(DesignTokens.Typography.custom(size: layout.chipLabelSize + 1, weight: isSelected ? .bold : .medium))
                     .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+                    .lineLimit(1)
                 if count > 0 {
                     Text("\(count)")
                         .font(DesignTokens.Typography.custom(size: layout.chipCountSize + 1, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
                         .foregroundStyle(isSelected ? DesignTokens.Colors.chzzkGreen.opacity(0.8) : DesignTokens.Colors.textTertiary)
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
             .background {
-                if isSelected {
-                    Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
-                } else {
-                    Capsule().fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(DesignTokens.Colors.surfaceElevated.opacity(0.5))
+
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1)
+                            }
+                            .matchedGeometryEffect(id: "categoryChipPill", in: categoryPillNS)
+                    }
                 }
             }
-            .overlay {
-                Capsule().strokeBorder(
-                    isSelected
-                        ? DesignTokens.Colors.chzzkGreen.opacity(0.35)
-                        : DesignTokens.Colors.surfaceElevated.opacity(0.4),
-                    lineWidth: isSelected ? 1 : 0.5
-                )
+            .overlay(alignment: .bottom) {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        .fill(DesignTokens.Colors.chzzkGreen)
+                        .frame(height: 2)
+                        .padding(.horizontal, 3)
+                        .matchedGeometryEffect(id: "categoryChipBar", in: categoryPillNS)
+                }
             }
+            .fixedSize()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScaleButtonStyle(scale: 0.94))
     }
 
     // MARK: - Section Header
 
-    func sectionHeader(icon: String, title: String, count: Int, color: Color) -> some View {
-        HStack(spacing: DesignTokens.Spacing.sm) {
+    func sectionHeader(icon: String, title: String, count: Int, color: Color) -> some View {        HStack(spacing: DesignTokens.Spacing.sm) {
             // 좌측 accent bar
             RoundedRectangle(cornerRadius: DesignTokens.Radius.xs, style: .continuous)
                 .fill(color)
@@ -130,6 +155,7 @@ extension FollowingView {
             Image(systemName: icon)
                 .font(.system(size: layout.sectionIconSize + 2, weight: .bold))
                 .foregroundStyle(color)
+                .symbolEffect(.pulse, options: .speed(0.5), value: count)
 
             Text(title)
                 .font(DesignTokens.Typography.custom(size: 16, weight: .bold, design: .rounded))
@@ -143,6 +169,7 @@ extension FollowingView {
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.vertical, DesignTokens.Spacing.xs)
                 .background(color.opacity(0.75), in: Capsule())
+                .animation(DesignTokens.Animation.snappy, value: count)
 
             Spacer()
         }
@@ -281,16 +308,22 @@ extension FollowingView {
     }
 
     /// 실제 컨테이너 너비로 16:9 카드 높이 계산
+    /// - Note: infoArea 가 `minHeight: layout.cardInfoHeight + 4` 로 렌더되므로 +4 포함해야
+    ///         그리드 총 높이와 실제 렌더 높이가 일치함. (2026-04-23: 스크롤 시 하단 카드 잘림/정렬 깨짐 수정)
     func livecardHeight(for containerWidth: CGFloat) -> CGFloat {
         let totalSpacing = layout.gridSpacing * CGFloat(liveColumns - 1)
         let cardWidth = (containerWidth - totalSpacing) / CGFloat(liveColumns)
         let imageHeight = cardWidth * (9.0 / 16.0)
-        let infoHeight = layout.cardInfoHeight
+        let infoHeight = layout.cardInfoHeight + 4
         return imageHeight + infoHeight
     }
 
     func liveGridPage(_ page: Int) -> some View {
         let channels = liveChannelsForPage(page)
+        // [2026-04-23] 카드별 높이 편차로 LazyVGrid row 정렬이 깨지고 스크롤 시 점프/잘림이 발생하여
+        //              containerWidth 기반 결정적 높이를 각 셀에 직접 부여.
+        let containerWidth = followingContentWidth
+        let cellHeight = livecardHeight(for: containerWidth)
         return LazyVGrid(
             columns: Array(repeating: GridItem(.flexible(), spacing: layout.gridSpacing), count: liveColumns),
             spacing: layout.gridSpacing
@@ -306,6 +339,7 @@ extension FollowingView {
                     }
                 }, layout: layout)
                 .equatable()
+                .frame(height: cellHeight)  // [2026-04-23] 결정적 카드 높이
                 .onTapGesture {
                     router.navigate(to: .live(channelId: channel.channelId))
                 }
@@ -491,27 +525,42 @@ extension FollowingView {
                             )
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressScaleButtonStyle(scale: 0.88))
             .disabled(currentPage.wrappedValue == 0)
 
             if totalPages <= 7 {
                 HStack(spacing: 4) {
                     ForEach(0..<totalPages, id: \.self) { page in
-                        Capsule()
-                            .fill(page == currentPage.wrappedValue ? accentColor : DesignTokens.Colors.textTertiary.opacity(0.20))
-                            .frame(width: page == currentPage.wrappedValue ? layout.pageIndicatorWidth : 6, height: 6)
-                            .animation(DesignTokens.Animation.micro, value: currentPage.wrappedValue)
-                            .onTapGesture {
-                                withAnimation(DesignTokens.Animation.gridPageTransition) {
-                                    currentPage.wrappedValue = page
-                                }
+                        let isActive = page == currentPage.wrappedValue
+                        ZStack {
+                            Capsule()
+                                .fill(DesignTokens.Colors.textTertiary.opacity(0.20))
+                                .frame(width: 6, height: 6)
+
+                            if isActive {
+                                Capsule()
+                                    .fill(accentColor)
+                                    .frame(width: layout.pageIndicatorWidth, height: 6)
+                                    // [GPU] shadow 고정 — matchedGeometry 대상 뷰에 radius 애니메이션은 과부하
+                                    .shadow(color: accentColor.opacity(0.35), radius: 3)
+                                    .matchedGeometryEffect(id: "pageIndicatorActive", in: pageIndicatorNS)
                             }
+                        }
+                        .frame(width: isActive ? layout.pageIndicatorWidth : 6, height: 6)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(DesignTokens.Animation.gridPageTransition) {
+                                currentPage.wrappedValue = page
+                            }
+                        }
                     }
                 }
+                .animation(DesignTokens.Animation.gridPageTransition, value: currentPage.wrappedValue)
             } else {
                 Text("\(currentPage.wrappedValue + 1) / \(totalPages)")
                     .font(.system(size: layout.pageTextSize, weight: .medium, design: .rounded).monospacedDigit())
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .contentTransition(.numericText())
             }
 
             Button {
@@ -537,7 +586,7 @@ extension FollowingView {
                             )
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressScaleButtonStyle(scale: 0.88))
             .disabled(currentPage.wrappedValue == totalPages - 1)
 
             Spacer()
@@ -626,6 +675,7 @@ extension FollowingView {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: layout.emptyIconSize, weight: .ultraLight))
                 .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
+                .symbolEffect(.pulse.byLayer, options: .speed(0.7).repeat(.continuous))
 
             VStack(spacing: DesignTokens.Spacing.xs) {
                 Text("검색 결과가 없습니다")
@@ -694,7 +744,8 @@ extension FollowingView {
             .padding(.vertical, DesignTokens.Spacing.xxs)
             .background(DesignTokens.Colors.surfaceElevated.opacity(0.4), in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScaleButtonStyle(scale: 0.92))
+        .transition(.scale(scale: 0.8).combined(with: .opacity))
     }
 
     /// 위젯 카드 래퍼 (모던 미니멀 카드 — 경량 렌더링)
@@ -713,5 +764,7 @@ extension FollowingView {
                             )
                     }
             }
+            // 카드 입장 — 부드러운 페이드인
+            .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }

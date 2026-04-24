@@ -20,6 +20,8 @@ struct FollowingLiveAvatarItem: View, Equatable {
     var layout: ResponsiveFollowingLayout = .init(width: 900)
 
     @State private var isHovered = false
+    @State private var isPressed = false
+    @State private var appeared = false
 
     private var profileURL: URL? { URL(string: channel.channelImageUrl ?? "") }
 
@@ -30,11 +32,14 @@ struct FollowingLiveAvatarItem: View, Equatable {
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                // 라이브 링 — 정적 그라디언트 (회전 애니메이션 제거)
+                // 라이브 링 — [GPU] stroke lineWidth는 고정, 그라디언트 밝기만 변화
                 Circle()
                     .strokeBorder(
                         LinearGradient(
-                            colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.5)],
+                            colors: [
+                                DesignTokens.Colors.chzzkGreen,
+                                DesignTokens.Colors.chzzkGreen.opacity(isHovered ? 0.8 : 0.5)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -69,10 +74,17 @@ struct FollowingLiveAvatarItem: View, Equatable {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(.black.opacity(0.7)))
-                    .offset(y: 4)
+                    .offset(y: isHovered ? 2 : 4)
                 }
                 .frame(width: outerSize, height: outerSize)
             }
+            // [GPU] 링·프로필·배지 전체를 하나의 compositing 그룹으로 묶고 단일 scale 적용
+            .compositingGroup()
+            .scaleEffect(isPressed ? 0.94 : (isHovered ? 1.05 : 1.0))
+            .shadow(
+                color: DesignTokens.Colors.chzzkGreen.opacity(isHovered ? 0.28 : 0),
+                radius: 6  // 고정
+            )
 
             // 채널명
             Text(channel.channelName)
@@ -88,9 +100,21 @@ struct FollowingLiveAvatarItem: View, Equatable {
                 .lineLimit(1)
                 .frame(width: layout.liveAvatarItemWidth)
         }
-        .opacity(isHovered ? 0.85 : 1.0)
-        .animation(DesignTokens.Animation.fast, value: isHovered)
+        .opacity(appeared ? 1.0 : 0.0)
+        .offset(y: appeared ? 0 : 6)
+        .animation(DesignTokens.Animation.cardHover, value: isHovered)
+        .animation(DesignTokens.Animation.micro, value: isPressed)
+        .animation(DesignTokens.Animation.motionSafe(DesignTokens.Animation.cardAppear), value: appeared)
+        .onAppear {
+            let delay = min(Double(index) * 0.025, 0.3)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { appeared = true }
+        }
         .onHover { isHovered = $0 }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in if !isPressed { isPressed = true } }
+                .onEnded { _ in isPressed = false }
+        )
         .help("\(channel.liveTitle)\(channel.categoryName.map { "\n\($0)" } ?? "")")
         .contentShape(Circle())
         .customCursor(.pointingHand)
@@ -133,6 +157,8 @@ struct FollowingLiveCard: View, Equatable {
     var layout: ResponsiveFollowingLayout = .init(width: 900)
 
     @State private var isHovered = false
+    @State private var isPressed = false
+    @State private var appeared = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -142,7 +168,9 @@ struct FollowingLiveCard: View, Equatable {
                 .clipped()
 
             infoArea
+                .frame(height: layout.cardInfoHeight + 4)  // [2026-04-23] 결정적 높이 — minHeight → height
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)  // [2026-04-23] 셀 크기 채움
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
@@ -150,17 +178,32 @@ struct FollowingLiveCard: View, Equatable {
                     isHovered
                         ? DesignTokens.Colors.chzzkGreen.opacity(0.6)
                         : DesignTokens.Colors.surfaceElevated.opacity(0.3),
-                    lineWidth: isHovered ? 1.5 : 0.5
+                    lineWidth: 1  // [GPU] 고정 — 다중 엘리먼트가 동시 애니메이션 시 CAShapeLayer re-tessellation 발생 방지
                 )
         }
         .compositingGroup()
-        .shadow(color: .black.opacity(isHovered ? 0.14 : 0.08), radius: 8, y: 4)
-        .scaleEffect(isHovered ? 1.015 : 1.0)
+        // [GPU] shadow radius는 고정. color의 opacity만 변화 — 섹명 회피를 위해 일정한 10pt 유지
+        .shadow(color: .black.opacity(isHovered ? 0.18 : 0.08), radius: 10, y: 4)
+        .scaleEffect(isPressed ? 0.985 : (isHovered ? 1.02 : 1.0))
+        .offset(y: isHovered ? -1 : 0)
+        .opacity(appeared ? 1.0 : 0.0)
+        // [GPU] animation 모디파이어 통합 — transaction 단일 패스로 모든 상태변화 적용
         .animation(DesignTokens.Animation.cardHover, value: isHovered)
+        .animation(DesignTokens.Animation.micro, value: isPressed)
+        .animation(DesignTokens.Animation.motionSafe(DesignTokens.Animation.cardAppear), value: appeared)
+        .onAppear {
+            let delay = min(Double(index) * 0.025, 0.24)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { appeared = true }
+        }
         .onHover { hovering in
             isHovered = hovering
             if hovering { onPrefetch?(channel.channelId) }
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in if !isPressed { isPressed = true } }
+                .onEnded { _ in isPressed = false }
+        )
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous))
     }
 
@@ -189,6 +232,8 @@ struct FollowingLiveCard: View, Equatable {
             )
             .scaledToFill()
             .clipped()
+            // [GPU] 썸네일 확대 — 상위 .animation 이 제어 (이중 animation 제거)
+            .scaleEffect(isHovered ? 1.06 : 1.0)
 
             // 하단 그라디언트 베일
             VStack(spacing: 0) {
@@ -310,10 +355,15 @@ struct FollowingLiveCard: View, Equatable {
                 .background(
                     Capsule().fill(DesignTokens.Colors.accentBlue)
                 )
+                // [GPU] shadow는 opacity만 변화. radius 고정.
+                .shadow(color: DesignTokens.Colors.accentBlue.opacity(isHovered ? 0.45 : 0), radius: 8, y: 2)
             }
             .buttonStyle(.plain)
+            .scaleEffect(isHovered ? 1.0 : 0.85)
+            .opacity(isHovered ? 1.0 : 0.0)
         }
-        .transition(.opacity.animation(DesignTokens.Animation.fast))
+        .transition(.opacity.combined(with: .scale(scale: 1.02)))
+        .animation(DesignTokens.Animation.bouncy, value: isHovered)
     }
 
     // MARK: - Info Area (채널 정보 — 미니멀 하단 바)
@@ -350,7 +400,7 @@ struct FollowingLiveCard: View, Equatable {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .frame(maxWidth: .infinity, minHeight: layout.cardInfoHeight + 4, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)  // [2026-04-23] 외부에서 height 고정
         .background(DesignTokens.Colors.surfaceBase)
         .overlay(alignment: .top) {
             Rectangle()
@@ -372,6 +422,7 @@ struct FollowingOfflineRow: View, Equatable {
     var layout: ResponsiveFollowingLayout = .init(width: 900)
 
     @State private var isHovered = false
+    @State private var isPressed = false
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.md) {
@@ -388,7 +439,7 @@ struct FollowingOfflineRow: View, Equatable {
                 .frame(width: layout.offlineProfileSize, height: layout.offlineProfileSize)
                 .clipShape(Circle())
                 .opacity(isHovered ? 1.0 : 0.7)
-                .scaleEffect(isHovered ? 1.05 : 1.0)
+                .scaleEffect(isHovered ? 1.08 : 1.0)
                 .compositingGroup()
 
                 Circle()
@@ -418,29 +469,42 @@ struct FollowingOfflineRow: View, Equatable {
 
             Spacer()
 
-            if isHovered {
+            // 우측 상태/액션 — 크로스페이드 + 슬라이드 전환
+            ZStack(alignment: .trailing) {
+                Text("오프라인")
+                    .font(DesignTokens.Typography.custom(size: layout.offlineInfoFontSize, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
+                    .opacity(isHovered ? 0 : 1)
+                    .offset(x: isHovered ? 6 : 0)
+
                 HStack(spacing: 3) {
                     Text("채널 보기")
                         .font(DesignTokens.Typography.custom(size: layout.offlineInfoFontSize, weight: .medium))
                     Image(systemName: "chevron.right")
-                        .font(.system(size: layout.offlineInfoFontSize - 2, weight: .medium))
+                        .font(.system(size: layout.offlineInfoFontSize - 2, weight: .semibold))
+                        .offset(x: isHovered ? 0 : -4)
                 }
                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                .transition(.opacity)
-            } else {
-                Text("오프라인")
-                    .font(DesignTokens.Typography.custom(size: layout.offlineInfoFontSize, weight: .regular))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
+                .opacity(isHovered ? 1 : 0)
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, 8)
         .background {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
-                .fill(isHovered ? DesignTokens.Colors.surfaceElevated.opacity(0.4) : Color.clear)
+                .fill(isHovered ? DesignTokens.Colors.surfaceElevated.opacity(isPressed ? 0.6 : 0.4) : Color.clear)
         }
-        .animation(DesignTokens.Animation.micro, value: isHovered)
+        .offset(x: isHovered ? 2 : 0)
+        .scaleEffect(isPressed ? 0.985 : 1.0, anchor: .leading)
+        .animation(DesignTokens.Animation.snappy, value: isHovered)
+        .animation(DesignTokens.Animation.micro, value: isPressed)
         .onHover { isHovered = $0 }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in if !isPressed { isPressed = true } }
+                .onEnded { _ in isPressed = false }
+        )
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
         .customCursor(.pointingHand)
     }

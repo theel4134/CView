@@ -122,6 +122,7 @@
 		FF11223344556677AABB0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */; };
 		FF11223344556677AABB0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift */; };
 		FF11223344556677AABB0035 /* Sources/CViewApp/Views/MultiLiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0035 /* Sources/CViewApp/Views/MultiLiveView.swift */; };
+		FFAA00112233445566778801 /* Sources/CViewApp/Views/MSPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAA00112233445566778802 /* Sources/CViewApp/Views/MSPrimitives.swift */; };
 		FF11223344556677AABB0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */; };
 		FF11223344556677AABB0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */; };
 		FF11223344556677AABB0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */; };
@@ -263,6 +264,7 @@
 		FF11223344556677CCDD0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/MultiLiveSession.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/FollowingViewState.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0035 /* Sources/CViewApp/Views/MultiLiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveView.swift; sourceTree = SOURCE_ROOT; };
+		FFAA00112233445566778802 /* Sources/CViewApp/Views/MSPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MSPrimitives.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveTabBar.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLivePlayerPane.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveAddSheet.swift; sourceTree = SOURCE_ROOT; };
@@ -420,6 +422,7 @@
 				FF11223344556677CCDD0071 /* Sources/CViewApp/Views/ChatChannelPickerView.swift */,
 				FF11223344556677CCDD0031 /* Sources/CViewApp/Views/ChatUserProfileSheet.swift */,
 				FF11223344556677CCDD0035 /* Sources/CViewApp/Views/MultiLiveView.swift */,
+				FFAA00112233445566778802 /* Sources/CViewApp/Views/MSPrimitives.swift */,
 				FF11223344556677CCDD0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift */,
 				FF11223344556677CCDD0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift */,
 				FF11223344556677CCDD0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift */,
@@ -718,6 +721,7 @@
 				FF11223344556677AABB0034 /* Sources/CViewApp/ViewModels/MultiLiveSession.swift in Sources */,
 				FF11223344556677AABB0060 /* Sources/CViewApp/ViewModels/FollowingViewState.swift in Sources */,
 				FF11223344556677AABB0035 /* Sources/CViewApp/Views/MultiLiveView.swift in Sources */,
+				FFAA00112233445566778801 /* Sources/CViewApp/Views/MSPrimitives.swift in Sources */,
 				FF11223344556677AABB0036 /* Sources/CViewApp/Views/MultiLiveTabBar.swift in Sources */,
 				FF11223344556677AABB0037 /* Sources/CViewApp/Views/MultiLivePlayerPane.swift in Sources */,
 				FF11223344556677AABB0038 /* Sources/CViewApp/Views/MultiLiveAddSheet.swift in Sources */,

@@ -359,6 +359,29 @@ public final class PlayerViewModel {
         }
     }
 
+    // MARK: - Phase D — 윈도우 가림 시 GPU 합성 정지/복원
+
+    /// 메인 윈도우가 완전히 가려졌을 때 비디오 레이어를 `.hidden` 으로 강등.
+    /// 디코딩/오디오는 영향 없음 — Metal 합성 패스만 정지.
+    public func engine_setGPURenderTier_hidden() {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.setGPURenderTier(.hidden)
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            av.setGPURenderTier(.hidden)
+        }
+    }
+
+    /// 윈도우 노출 복귀 시 비디오 레이어를 `.active` 로 복원.
+    public func engine_setGPURenderTier_active() {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.setGPURenderTier(.active)
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            av.setGPURenderTier(.active)
+        }
+    }
+
     /// 선명한 화면(픽셀 샤프 스케일링) 설정 — VLC/AV 양쪽 엔진에 즉시 반영
     public func applySharpPixelScaling(_ enabled: Bool) {
         if let vlc = playerEngine as? VLCPlayerEngine {
@@ -495,7 +518,16 @@ public final class PlayerViewModel {
         //   전환 시에도 1080p 변종이 즉시 선택되도록 한다.
         let forceMax = requestedForceMax
         let proxyMode = playerSettings?.streamProxyMode ?? .localProxy
-        let config = StreamCoordinator.Configuration(channelId: channelId, enableLowLatency: !isMultiLive, enableABR: true, lowLatencyConfig: lowLatencyConfig, abrConfig: isMultiLive ? .multiLive : .default, forceHighestQuality: forceMax, streamProxyMode: proxyMode)
+        // [Code Review 2026-04-24] 장문 한 줄 → 파라미터별 줄바꿈으로 가독성 개선
+        let config = StreamCoordinator.Configuration(
+            channelId: channelId,
+            enableLowLatency: !isMultiLive,
+            enableABR: true,
+            lowLatencyConfig: lowLatencyConfig,
+            abrConfig: isMultiLive ? .multiLive : .default,
+            forceHighestQuality: forceMax,
+            streamProxyMode: proxyMode
+        )
         // [Fix 26B] 이전 coordinator를 ARC deinit에 의존하지 않고 명시적 정리
         // — LocalStreamProxy NWConnection CLOSE_WAIT 방지
         if let old = streamCoordinator {

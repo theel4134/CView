@@ -1,24 +1,26 @@
 {
     "configurations": [
         {
-            "type": "swift",
+            "type": "lldb",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:CView_v2}",
             "name": "Debug CViewApp",
             "target": "CViewApp",
             "configuration": "debug",
-            "preLaunchTask": "swift: Build Debug CViewApp"
+            "preLaunchTask": "swift: Build Debug CViewApp",
+            "program": "/Volumes/projectssd/work/build/SPM/debug/CViewApp"
         },
         {
-            "type": "swift",
+            "type": "lldb",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:CView_v2}",
             "name": "Release CViewApp",
             "target": "CViewApp",
             "configuration": "release",
-            "preLaunchTask": "swift: Build Release CViewApp"
+            "preLaunchTask": "swift: Build Release CViewApp",
+            "program": "/Volumes/projectssd/work/build/SPM/release/CViewApp"
         }
     ]
 }

@@ -95,8 +95,11 @@ public struct LiveBadge: View {
         // drawingGroup 제거 — opaque:false는 offscreen Metal pass 추가 비용 발생
             .shadow(color: DesignTokens.Colors.live.opacity(0.35), radius: 3, y: 2)
         .onAppear {
-            if DesignTokens.Animation.motionSafe(DesignTokens.Animation.pulse) != nil {
-                withAnimation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true)) {
+            // [Phase A] motionSafe 래핑 — Reduce Motion ON 시 정적 처리
+            if let anim = DesignTokens.Animation.motionSafe(
+                .easeInOut(duration: 5.0).repeatForever(autoreverses: true)
+            ) {
+                withAnimation(anim) {
                     isPulsing = true
                 }
             }

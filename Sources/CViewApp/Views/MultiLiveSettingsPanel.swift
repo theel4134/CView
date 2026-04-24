@@ -59,42 +59,14 @@ struct MLSettingsPanel: View {
         VStack(spacing: 0) {
             // ── 헤더 ──
             header
-            // ── 탭 바 ──
-            tabBar
             Divider()
-            // ── 탭 콘텐츠 ──
-            if let activeSession {
-                ScrollView {
-                    Group {
-                        switch selectedTab {
-                        case .audio:      MLAudioTab(session: activeSession, manager: manager)
-                        case .equalizer:  MLEqualizerTab(playerVM: playerVM)
-                        case .video:      MLVideoTab(playerVM: playerVM)
-                        case .playback:   MLPlaybackTab(session: activeSession, manager: manager)
-                        case .latency:    LatencySettingsCompact(settings: settingsStore) {
-                                              playerVM?.applyLatencySettings(settingsStore.player)
-                                          }
-                        case .network:    MLNetworkTab(session: activeSession, settingsStore: settingsStore)
-                        case .tools:      MLToolsTab(playerVM: playerVM)
-                        case .metrics:    MetricsForwardingStatusView()
-                        }
-                    }
-                    .padding(DesignTokens.Spacing.md)
-                }
-            } else {
-                Spacer()
-                VStack(spacing: DesignTokens.Spacing.sm) {
-                    Image(systemName: "rectangle.dashed")
-                        .font(.largeTitle)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    Text("활성 세션이 없습니다")
-                        .font(DesignTokens.Typography.captionMedium)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    Text("채널을 추가한 뒤 설정을 조정하세요")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                }
-                Spacer()
+                .overlay(DesignTokens.Glass.dividerColor)
+            // ── 본문: 좌측 세로 내비 + 우측 콘텐츠 카드 ──
+            HStack(spacing: 0) {
+                sideNav
+                Divider()
+                    .overlay(DesignTokens.Glass.dividerColor)
+                contentArea
             }
         }
         .frame(width: 380)
@@ -107,6 +79,75 @@ struct MLSettingsPanel: View {
                 endPoint: .trailing
             )
             .frame(width: 8)
+        }
+    }
+
+    // MARK: - Side Navigation (vertical)
+
+    /// 좌측 세로 내비게이션 — 아이콘 + 라벨을 세로 스택으로 배치하고
+    /// 활성 탭은 Chzzk 네온 그린 좌측 인디케이터 바 + 엷은 틴트로 강조.
+    /// 가로 탭 바(기존)는 탭 8개 기준 각 40pt로 축소되어 히트 영역/가독성이 악화되었음.
+    private var sideNav: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 2) {
+                ForEach(MLSettingsTab.allCases, id: \.self) { tab in
+                    MLSettingsSideNavButton(
+                        tab: tab,
+                        isSelected: selectedTab == tab
+                    ) {
+                        withAnimation(DesignTokens.Animation.fast) { selectedTab = tab }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, DesignTokens.Spacing.xs)
+            .padding(.horizontal, DesignTokens.Spacing.xxs)
+        }
+        .frame(width: 96)
+        .background(DesignTokens.Colors.surfaceBase.opacity(0.55))
+    }
+
+    // MARK: - Content Area
+
+    @ViewBuilder
+    private var contentArea: some View {
+        if let activeSession {
+            ScrollView {
+                Group {
+                    switch selectedTab {
+                    case .audio:      MLAudioTab(session: activeSession, manager: manager)
+                    case .equalizer:  MLEqualizerTab(playerVM: playerVM)
+                    case .video:      MLVideoTab(playerVM: playerVM)
+                    case .playback:   MLPlaybackTab(session: activeSession, manager: manager)
+                    case .latency:    LatencySettingsCompact(settings: settingsStore) {
+                                          playerVM?.applyLatencySettings(settingsStore.player)
+                                      }
+                    case .network:    MLNetworkTab(session: activeSession, settingsStore: settingsStore)
+                    case .tools:      MLToolsTab(playerVM: playerVM)
+                    case .metrics:    MetricsForwardingStatusView()
+                    }
+                }
+                .padding(DesignTokens.Spacing.md)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack {
+                Spacer()
+                VStack(spacing: DesignTokens.Spacing.sm) {
+                    Image(systemName: "rectangle.dashed")
+                        .font(.largeTitle)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text("활성 세션이 없습니다")
+                        .font(DesignTokens.Typography.captionMedium)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text("채널을 추가한 뒤 설정을 조정하세요")
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .multilineTextAlignment(.center)
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -146,22 +187,5 @@ struct MLSettingsPanel: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, DesignTokens.Spacing.md)
-    }
-
-    // MARK: - Tab Bar
-
-    private var tabBar: some View {
-        HStack(spacing: DesignTokens.Spacing.xxs) {
-            ForEach(MLSettingsTab.allCases, id: \.self) { tab in
-                MLSettingsTabButton(
-                    tab: tab,
-                    isSelected: selectedTab == tab
-                ) {
-                    withAnimation(DesignTokens.Animation.fast) { selectedTab = tab }
-                }
-            }
-        }
-        .padding(.horizontal, DesignTokens.Spacing.xs)
-        .padding(.bottom, DesignTokens.Spacing.xs)
     }
 }

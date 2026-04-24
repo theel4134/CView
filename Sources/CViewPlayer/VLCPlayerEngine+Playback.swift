@@ -71,15 +71,17 @@ extension VLCPlayerEngine {
         // [Opt-A1/A2] VLC 내부 타이밍 이벤트 빈도 감소 — 멀티라이브 CPU 절감
         // minimalTimePeriod: VLC 내부 타이머 최소 주기 (µs). 기본 500,000(0.5s)
         // timeChangeUpdateInterval: delegate 시간 변경 콜백 간격 (초). 기본 1.0s
+        // [Phase C] 시스템 부하(열 상태) 고조 시 비선택 세션은 추가 ×2 throttle
         if profile.isMultiLiveFamily {
             if profile == .multiLiveHQ || isSelectedSession {
                 // 선택 HQ: 표준 타이밍 유지 (레이턴시/PDT 동기화 정확도 보장)
                 player.minimalTimePeriod = 500_000
                 player.timeChangeUpdateInterval = 1.0
             } else {
-                // 비선택 멀티라이브: CPU 절감 우선
-                player.minimalTimePeriod = 1_000_000
-                player.timeChangeUpdateInterval = 5.0
+                // 비선택 멀티라이브: CPU 절감 우선 + thermal 고조 시 추가 throttle
+                let isHot = SystemLoadMonitor.shared.currentMode == .hot
+                player.minimalTimePeriod = isHot ? 2_000_000 : 1_000_000
+                player.timeChangeUpdateInterval = isHot ? 10.0 : 5.0
             }
         }
         player.play()
@@ -212,8 +214,16 @@ extension VLCPlayerEngine {
         // [Quality Lock] 항상 최고 화질 유지 모드 — 멀티라이브에서도 1080p 고정
         let forceMax = forceHighestQuality
 
-        media.addOption(":network-caching=\(profile.networkCaching)")
-        media.addOption(":live-caching=\(profile.liveCaching)")
+        // [Codec Tune 2026-04-23] 비선택 멀티라이브 + thermal .hot 일 때 캐싱 +500ms.
+        // 디코더 출력 jitter 흡수 마진을 늘려 frame-skip(=2)로 인한 일시적 픽 부하를
+        // 더 평탄화한다 (선택 세션은 영향 없음).
+        let isNonSelectedMulti = (profile == .multiLive && !isSelectedSession)
+        let hot = (SystemLoadMonitor.shared.currentMode == .hot)
+        let netCache = (isNonSelectedMulti && hot) ? max(profile.networkCaching, 2000) : profile.networkCaching
+        let liveCache = (isNonSelectedMulti && hot) ? max(profile.liveCaching, 2000) : profile.liveCaching
+
+        media.addOption(":network-caching=\(netCache)")
+        media.addOption(":live-caching=\(liveCache)")
         media.addOption(":file-caching=0")
         media.addOption(":disc-caching=0")
         media.addOption(":cr-average=\(profile.crAverage)")
@@ -306,7 +316,27 @@ extension VLCPlayerEngine {
             media.addOption(":avcodec-skip-idct=4")
         }
         if profile == .multiLive && !isSelectedSession && !forceMax {
-            media.addOption(":avcodec-skip-frame=1")  // B-frames skip (비선택 멀티라이브 전용)
+            // [Phase C] B/P 비참조 프레임 스킵 (=2 = AVDISCARD_NONREF) — 비선택 멀티라이브 전용
+            // 기존 =1 (B-frames만) → =2 (비참조 프레임 전체) 로 강화.
+            // 비선택 세션은 이미 0.75× 다운스케일 + 저지연 프로파일로 사용자 체감 영향 극소.
+            media.addOption(":avcodec-skip-frame=2")
+        }
+
+        // [Codec Tune 2026-04-23] 사용하지 않는 렌더 패스 일괄 비활성화.
+        // 모두 라이브 스트림 시청 시 호출되지 않는 부가 기능 — VLC 내부에서 핸들러 등록/이벤트 디스패치 비용을 제거한다.
+        // 화질·반응성에 무영향, 설정 변경 시 부작용 없음.
+        media.addOption(":no-osd")                    // OSD(볼륨/시간 오버레이) 렌더 패스 제거
+        media.addOption(":no-spu")                    // 자막 픽처 렌더 패스 제거 (라이브에 자막 없음)
+        media.addOption(":no-sub-autodetect-file")    // 디스크 자막 파일 스캔 스킵
+        media.addOption(":no-snapshot-preview")       // 스냅샷 프리뷰 합성 스킵
+        media.addOption(":no-video-title-show")       // 시작 시 파일명 오버레이 스킵
+        media.addOption(":no-stats")                  // VLC 내부 통계 누적 스킵 (자체 메트릭은 별도 경로)
+
+        // [Codec Tune 2026-04-23] 비선택 멀티라이브: 오디오 타임 스트레치 비활성화
+        // — LowLatencyController 의 rate 기반 catchup 은 선택 세션에만 적용되므로
+        //   비선택은 1.0× 고정. 타임 스트레치 처리 비용을 완전히 제거한다.
+        if isNonSelectedMulti {
+            media.addOption(":no-audio-time-stretch")
         }
     }
 }

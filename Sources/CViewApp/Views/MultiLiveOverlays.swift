@@ -64,98 +64,125 @@ struct MLControlOverlay: View {
 
     var body: some View {
         VStack {
+            // [2026-04-22] 상단 채널 타이틀 스트립 제거 — 탭 칩이 이미 아바타·채널명·
+            // LIVE 상태·시청자 수를 모두 표시하므로 영상 위 오버레이로 다시 그리면
+            // 겹침이 발생. 영상 위에는 하단 컨트롤 바만 hover 시 노출.
             Spacer()
             controlBar
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.bottom, DesignTokens.Spacing.md)
         }
     }
 
+    // 상단 — LIVE 점 + 채널명 + 시청자 (glassy pill)
+    @ViewBuilder
+    private var channelStrip: some View {
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                if case .playing = session.loadState {
+                    MSLiveDot(size: 6, color: DesignTokens.Colors.chzzkGreen)
+                }
+                Text(session.channelName.isEmpty ? session.channelId : session.channelName)
+                    .font(DesignTokens.Typography.captionSemibold)
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMedia)
+                    .lineLimit(1)
+            }
+            if session.viewerCount > 0 {
+                Text("·")
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
+                Text(session.formattedViewerCount)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm + 2)
+        .padding(.vertical, 6)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.black.opacity(0.55))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
+                )
+        )
+        .environment(\.colorScheme, .dark)
+    }
+
+    // 하단 — pill 컨트롤 바 (재생/볼륨/통계)
     private var controlBar: some View {
-        HStack(spacing: DesignTokens.Spacing.lg) {
-            controlButton(
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            MSIconButton(
                 icon: session.playerViewModel.streamPhase == .playing ? "pause.fill" : "play.fill",
-                size: 18
+                size: 36,
+                help: session.playerViewModel.streamPhase == .playing ? "일시정지" : "재생"
             ) {
                 Task { await session.playerViewModel.togglePlayPause() }
             }
 
-            Spacer()
+            MSIconButton(
+                icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                help: session.isMuted ? "음소거 해제" : "음소거"
+            ) {
+                session.setMuted(!session.isMuted)
+            }
 
-            // 볼륨 슬라이더
             if !session.isMuted {
                 HStack(spacing: DesignTokens.Spacing.xs) {
-                    Image(systemName: "speaker.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                     OverlayVolumeSlider(
                         value: Binding(
                             get: { Double(session.playerViewModel.volume) },
                             set: { session.playerViewModel.setVolume(Float($0)) }
                         ),
                         trackColor: DesignTokens.Colors.chzzkGreen,
-                        width: 100
+                        width: 88
                     )
-                    Image(systemName: "speaker.wave.3.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
                 }
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .frame(height: MSTokens.overlayIconSize)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(DesignTokens.Colors.controlOnDarkMedia.opacity(0.7))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
+                        )
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
             }
 
-            controlButton(
-                icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
-            ) {
-                session.setMuted(!session.isMuted)
-            }
+            Spacer(minLength: 0)
 
-            controlButton(
+            MSIconButton(
                 icon: session.showStats ? "chart.bar.fill" : "chart.bar",
-                tint: session.showStats ? DesignTokens.Colors.chzzkGreen : .white
+                isActive: session.showStats,
+                help: session.showStats ? "통계 숨기기" : "통계 표시"
             ) {
                 session.showStats.toggle()
             }
         }
-        .padding(.horizontal, DesignTokens.Spacing.xl)
-        .padding(.vertical, DesignTokens.Spacing.sm + 2)
-        .padding(.horizontal, DesignTokens.Spacing.xl)
-        .padding(.bottom, DesignTokens.Spacing.md)
-    }
-
-    private func controlButton(
-        icon: String,
-        size: CGFloat = 14,
-        tint: Color = .white,
-        action: @escaping () -> Void
-    ) -> some View {
-        MLOverlayControlButton(icon: icon, size: size, tint: tint, action: action)
-    }
-}
-
-/// MLControlOverlay용 개별 버튼 — 호버 효과 포함
-private struct MLOverlayControlButton: View {
-    let icon: String
-    var size: CGFloat = 14
-    var tint: Color = .white
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(isHovered ? DesignTokens.Colors.controlOnDarkMediaHover : Color.clear)
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xs)
+        .background(
+            // pill 바 배경 — 글래스 + 네온 하이라이트
+            Capsule(style: .continuous)
+                .fill(.black.opacity(0.55))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                 )
-                .contentShape(Circle())
-                .scaleEffect(isHovered ? 1.05 : 1.0)
-                .compositingGroup()
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
+                .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+        )
+        .environment(\.colorScheme, .dark)
+        .animation(DesignTokens.Animation.fast, value: session.isMuted)
     }
 }
+
+// [Deprecated] 기존 MLOverlayControlButton — MSIconButton으로 대체됨. 다른 곳 사용 없음.
 
 // MARK: - MLGridControlOverlay
 struct MLGridControlOverlay: View {
@@ -169,103 +196,117 @@ struct MLGridControlOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.35)
+            // 가벼운 베일 — 컨트롤 가독성 확보 (기존 0.35 → 그라데이션으로 덜 답답하게)
+            LinearGradient(
+                colors: [
+                    .black.opacity(0.55),
+                    .black.opacity(0.20),
+                    .black.opacity(0.55),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .allowsHitTesting(false)
 
-            VStack(spacing: DesignTokens.Spacing.md) {
-                Text(session.channelName.isEmpty ? session.channelId : session.channelName)
-                    .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-
-                gridButtons
-                volumeSlider
-
-                // 더블클릭 힌트
-                Text(isFocused ? "더블클릭: 그리드 복귀" : "더블클릭: 확대")
-                    .font(DesignTokens.Typography.micro)
-                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
+            VStack {
+                topStrip
+                Spacer(minLength: 0)
+                bottomBar
             }
+            .padding(DesignTokens.Spacing.sm)
         }
+        .environment(\.colorScheme, .dark)
     }
 
-    private var gridButtons: some View {
-        HStack(spacing: DesignTokens.Spacing.lg) {
-            gridActionButton(icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
-                onHideCancel()
-                manager.toggleSessionAudio(session)
-                onScheduleHide()
+    // 상단 — LIVE + 채널명 + 오디오 라우팅 상태
+    private var topStrip: some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            if case .playing = session.loadState {
+                MSLiveDot(size: 5, color: DesignTokens.Colors.chzzkGreen)
+            }
+            Text(session.channelName.isEmpty ? session.channelId : session.channelName)
+                .font(DesignTokens.Typography.captionSemibold)
+                .foregroundStyle(DesignTokens.Colors.textOnDarkMedia)
+                .lineLimit(1)
+                .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+            Spacer(minLength: 0)
+            if !session.isMuted {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.18))
+                    )
+            }
+        }
+        .padding(.horizontal, DesignTokens.Spacing.xs)
+    }
+
+    // 하단 — pill 컨트롤 바 (오디오 토글 · 포커스 · 닫기) + 선택적 볼륨 슬라이더
+    private var bottomBar: some View {
+        VStack(spacing: DesignTokens.Spacing.xs) {
+            if !session.isMuted {
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    Image(systemName: "speaker.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
+                    OverlayVolumeSlider(
+                        value: Binding(
+                            get: { Double(session.playerViewModel.volume) },
+                            set: { session.playerViewModel.setVolume(Float($0)) }
+                        ),
+                        trackColor: DesignTokens.Colors.chzzkGreen,
+                        width: 86
+                    )
+                    Image(systemName: "speaker.wave.3.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
+                }
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(.black.opacity(0.55))
+                        .overlay(Capsule().stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5))
+                )
             }
 
-            gridActionButton(
-                icon: isFocused ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
-            ) {
-                withAnimation(DesignTokens.Animation.indicator) {
-                    focusedSessionId = (focusedSessionId == session.id) ? nil : session.id
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                MSIconButton(
+                    icon: session.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                    size: 30,
+                    isActive: !session.isMuted,
+                    help: session.isMuted ? "이 채널로 오디오 전환" : "음소거"
+                ) {
+                    onHideCancel()
+                    manager.toggleSessionAudio(session)
+                    onScheduleHide()
+                }
+                MSIconButton(
+                    icon: isFocused ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                    size: 30,
+                    help: isFocused ? "그리드 복귀" : "확대"
+                ) {
+                    withAnimation(DesignTokens.Animation.indicator) {
+                        focusedSessionId = (focusedSessionId == session.id) ? nil : session.id
+                    }
+                }
+                Spacer(minLength: 0)
+                MSIconButton(icon: "xmark", size: 30, help: "채널 닫기") {
+                    Task { await manager.removeSession(session) }
                 }
             }
-
-            gridActionButton(icon: "xmark", opacity: 0.75) {
-                Task { await manager.removeSession(session) }
-            }
+            .padding(.horizontal, DesignTokens.Spacing.xs)
+            .padding(.vertical, 3)
+            .background(
+                Capsule().fill(.black.opacity(0.55))
+                    .overlay(Capsule().stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5))
+            )
         }
-    }
-
-    @ViewBuilder
-    private var volumeSlider: some View {
-        if !session.isMuted {
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                Image(systemName: "speaker.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
-                OverlayVolumeSlider(
-                    value: Binding(
-                        get: { Double(session.playerViewModel.volume) },
-                        set: { session.playerViewModel.setVolume(Float($0)) }
-                    ),
-                    trackColor: DesignTokens.Colors.chzzkGreen,
-                    width: 86
-                )
-                Image(systemName: "speaker.wave.3.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
-            }
-        }
-    }
-
-    private func gridActionButton(
-        icon: String,
-        opacity: CGFloat = 1.0,
-        action: @escaping () -> Void
-    ) -> some View {
-        MLGridActionButton(icon: icon, opacity: opacity, action: action)
     }
 }
 
-/// MLGridControlOverlay용 개별 액션 버튼 — 호버 효과 포함
-private struct MLGridActionButton: View {
-    let icon: String
-    var opacity: CGFloat = 1.0
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(DesignTokens.Colors.textOnDarkMedia.opacity(opacity))
-                .frame(width: 32, height: 32)
-                .background(
-                    Circle()
-                        .fill(isHovered ? DesignTokens.Colors.controlOnDarkMediaHover : DesignTokens.Colors.controlOnDarkMedia)
-                )
-                .scaleEffect(isHovered ? 1.1 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .animation(DesignTokens.Animation.fast, value: isHovered)
-    }
-}
+// [Deprecated] 기존 MLGridActionButton — MSIconButton으로 대체됨. 다른 곳 사용 없음.
 
 // MARK: - MLEmptyState
 struct MLEmptyState: View {

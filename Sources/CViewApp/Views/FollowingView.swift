@@ -90,6 +90,11 @@ struct FollowingView: View {
     @FocusState var isSearchFocused: Bool
     @State var skeletonAppeared = false
 
+    // 슬라이딩 필러 하이라이트용 네임스페이스 (matchedGeometryEffect)
+    @Namespace var filterPillNS
+    @Namespace var categoryPillNS
+    @Namespace var pageIndicatorNS
+
     var multiLiveManager: MultiLiveManager { appState.multiLiveManager }
 
     @State var chatAddError: String?
@@ -100,6 +105,8 @@ struct FollowingView: View {
     @GestureState var chatSwipeDragOffset: CGFloat = 0
     @State var livePageDragOffset: CGFloat = 0
     @State var offlinePageDragOffset: CGFloat = 0
+    /// 헤더 새로고침 버튼 스피너 각도 (loadingSpin 무한반복 버그 회피)
+    @State var refreshRotation: Double = 0
     // 반응형 그리드: 컨테이너 너비에 따라 열 수·페이지 크기 자동 조정
     @State var followingContentWidth: CGFloat = 800
 
@@ -256,8 +263,13 @@ struct FollowingView: View {
                 }
             } else {
                 mainContent
+                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
             }
         }
+        .animation(DesignTokens.Animation.smooth, value: appState.isLoggedIn)
+        .animation(DesignTokens.Animation.smooth, value: viewModel.needsCookieLogin)
+        .animation(DesignTokens.Animation.smooth, value: viewModel.followingChannels.isEmpty)
+        .animation(DesignTokens.Animation.smooth, value: viewModel.isLoadingFollowing)
         // 필터/정렬 관련 값 변경 시 1회만 recomputeFiltered() 호출되도록 통합
         .onChange(of: sortOrder) { _, _ in resetPaginationAndRecompute() }
         .onChange(of: filterLiveOnly) { _, _ in resetPaginationAndRecompute() }
@@ -360,26 +372,45 @@ struct FollowingView: View {
                             }
                             .allowsHitTesting(false)
                         }
-                        .transition(.move(edge: .leading))
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
 
                     // 구분선
                     Rectangle()
                         .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
                         .frame(width: 1)
+                        .transition(.opacity)
                 }
 
                 // 우측 컨텐츠 — 사이드 패널 또는 빈 상태
-                if hasSidePanel {
-                    sidePanelContent(windowWidth: totalWidth)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    followingListEmptyPanel
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ZStack {
+                    if hasSidePanel {
+                        sidePanelContent(windowWidth: totalWidth)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                    } else {
+                        followingListEmptyPanel
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .animation(DesignTokens.Animation.smooth, value: showFollowingList)
+        .animation(DesignTokens.Animation.smooth, value: hasSidePanel)
+        .animation(DesignTokens.Animation.smooth, value: effectiveShowMultiLive)
+        .animation(DesignTokens.Animation.smooth, value: showMultiChat)
         .transaction { t in
-            t.animation = DesignTokens.Animation.snappy
+            // reduceMotion 보호 — 시스템 선호도에 따라 애니메이션 요청을 무효화
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                t.animation = nil
+            }
         }
     }
 
@@ -415,13 +446,14 @@ struct FollowingView: View {
     /// 팔로잉 리스트 열기/닫기 토글 버튼 (재사용)
     var followingListToggleButton: some View {
         Button {
-            withAnimation(DesignTokens.Animation.snappy) {
+            withAnimation(DesignTokens.Animation.smooth) {
                 showFollowingList.toggle()
             }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: showFollowingList ? "sidebar.left" : "sidebar.left")
                     .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                    .symbolEffect(.bounce, value: showFollowingList)
                 Text("팔로잉")
                     .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
             }
@@ -434,8 +466,14 @@ struct FollowingView: View {
                         ? DesignTokens.Colors.chzzkGreen
                         : DesignTokens.Colors.textTertiary.opacity(0.5))
             )
+            // [GPU] shadow는 경량 고정 + opacity 변화에만 의존
+            .shadow(
+                color: showFollowingList ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .clear,
+                radius: 5, y: 1
+            )
+            .animation(DesignTokens.Animation.snappy, value: showFollowingList)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScaleButtonStyle(scale: 0.94))
         .help(showFollowingList ? "팔로잉 목록 닫기" : "팔로잉 목록 열기")
     }
 
@@ -627,7 +665,7 @@ struct FollowingView: View {
         .onKeyPress(.leftArrow) {
             guard !isSearchFocused else { return .ignored }
             if livePageIndex > 0 {
-                withAnimation(DesignTokens.Animation.smooth) { livePageIndex -= 1 }
+                withAnimation(DesignTokens.Animation.gridPageTransition) { livePageIndex -= 1 }
                 return .handled
             }
             return .ignored
@@ -635,7 +673,7 @@ struct FollowingView: View {
         .onKeyPress(.rightArrow) {
             guard !isSearchFocused else { return .ignored }
             if livePageIndex < totalLivePages - 1 {
-                withAnimation(DesignTokens.Animation.smooth) { livePageIndex += 1 }
+                withAnimation(DesignTokens.Animation.gridPageTransition) { livePageIndex += 1 }
                 return .handled
             }
             return .ignored
@@ -660,6 +698,9 @@ struct FollowingView: View {
             )
             .frame(height: 1)
             .padding(.horizontal, DesignTokens.Spacing.xxl)
+            // [GPU] 정적 그라디언트 — 단일 Metal 텍스처로 캐시
+            .drawingGroup()
+            .transition(.opacity)
     }
 
     // MARK: - Resize Debounce (리사이즈 디바운스)

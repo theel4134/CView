@@ -139,11 +139,20 @@ struct ChatMessageRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                         .overlay {
                             if let tier = tierStyle {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .strokeBorder(tier.color, lineWidth: tier.glow ? 1.5 : 1)
+                                // [Chat GPU 정밀 튜닝 2026-04-23] glow 배지는 이중 stroke 로 교체 —
+                                // 외국 테두리를 항상 밝게 유지하고 내부 1px 튴을 추가해 glow 느낌을
+                                // shadow blur 없이 구현. 메시지 N개 × 뫓지 3개 → N×3 가우시안 blur 제거.
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .strokeBorder(tier.color, lineWidth: tier.glow ? 1.5 : 1)
+                                    if tier.glow {
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .inset(by: 1.5)
+                                            .strokeBorder(tier.color.opacity(0.45), lineWidth: 0.5)
+                                    }
+                                }
                             }
                         }
-                        .shadow(color: tierStyle?.glow == true ? tierStyle!.color.opacity(0.6) : .clear, radius: tierStyle?.glow == true ? 3 : 0)
                         .padding(.trailing, 2)
                         .help(badge.altText ?? badge.badgeId ?? "뱃지")
                     }
@@ -191,30 +200,42 @@ struct ChatMessageRow: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 3)
+        .padding(.horizontal, MSTokens.chatRowHPad)
+        .padding(.vertical, MSTokens.chatRowVPad)
+        .overlay(alignment: .leading) {
+            // [Redesign 2026-04-21] 좌측 accent 바 — 멘션/역할 강조용 (치지직 네이티브 느낌)
+            // [Chat GPU 정밀 튜닝 2026-04-23] 멘션 바 shadow blur 제거.
+            //   채팅이 쓰이는 N개 멘션 메시지 각각이 Gaussian blur 패스를 일으키던 원인.
+            //   3px 밝은 주황 막대는 자체로 충분히 눈에 띄므로 시각 손실 없음.
+            if isMentioned {
+                Rectangle()
+                    .fill(DesignTokens.Colors.accentOrange)
+                    .frame(width: 3)
+            } else if config.highlightRoles && message.userRole.isSpecial {
+                Rectangle()
+                    .fill(roleIconColor)
+                    .frame(width: 2)
+            } else if isHovered {
+                Rectangle()
+                    .fill(DesignTokens.Colors.chzzkGreen.opacity(0.55))
+                    .frame(width: 2)
+                    .transition(.opacity)
+            }
+        }
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                 .fill(
                     isMentioned
-                        ? DesignTokens.Colors.accentOrange.opacity(0.10)
-                        : (roleHighlightColor ?? (isHovered ? Color.primary.opacity(0.04) : .clear))
+                        ? DesignTokens.Colors.accentOrange.opacity(0.14)
+                        : (roleHighlightColor ?? (isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.05) : .clear))
                 )
-        )
-        .overlay(
-            isMentioned
-                ? RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                    .strokeBorder(DesignTokens.Colors.accentOrange.opacity(0.35), lineWidth: 1)
-                : nil
-        )
-        .overlay(
-            !isMentioned && config.highlightRoles && message.userRole.isSpecial
-                ? RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                    .strokeBorder(roleIconColor.opacity(0.25), lineWidth: 0.5)
-                : nil
         )
         .contentShape(Rectangle())
         .onHover { hovering in isHovered = hovering }
+        // [Chat GPU 정밀 튜닝 2026-04-23] 호버 애니메이션 제거.
+        //   .animation(_, value: isHovered) 는 isHovered 변경 시 행 전체(background/overlay/accent)
+        //   에 Core Animation 트랜잭션을 생성해 GPU compositing pass 추가 발생. 호버는
+        //   즉각 피드백이 더 자연스러우므로 애니 없이 색상만 바꿔지게 한다.
         .customCursor(.pointingHand)
         .popover(isPresented: $showProfile) {
             ChatUserProfileSheet(message: message, chatVM: chatVM)

@@ -5,6 +5,7 @@ import AppKit
 import CViewCore
 import CViewNetworking
 import CViewPersistence
+import CViewPlayer
 
 // MARK: - Session Expiry
 
@@ -84,6 +85,29 @@ extension AppState {
             }
         }
 
+        // [Phase E] Low Power Mode 변경 — 비선택 세션 contentsScale 즉시 재적용 (0.75↔0.625)
+        lowPowerModeObserver = nc.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.playerViewModel?.engine_setGPURenderTier_active()
+                self.multiLiveManager.restoreGPURenderTiersFromSelection()
+            }
+        }
+
+        // [Phase F] Thermal State 변경 — serious/critical 시 비선택 세션 GPU 렌더 티어 자동 강등
+        // ProcessInfo.thermalStateDidChangeNotification은 OS가 자동 발화 — 비용 0
+        thermalStateObserver = nc.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleThermalStateChanged()
+            }
+        }
+
         // 앱 종료 시 멀티라이브 세션 상태 제거 — 재시작 시 빈 메인 화면으로 시작
         terminateObserver = nc.addObserver(
             forName: NSApplication.willTerminateNotification,
@@ -120,11 +144,14 @@ extension AppState {
     }
 
     /// 모든 NotificationCenter observer 해제
+    /// [Code Review 2026-04-24] 개별 올범이터를 배열로 나열하는 방식은 새 올범이터 추가 시 누락 위험 →
+        ///   등록 시점에 lifecycleObservers 배열에 누적하는 패턴으로 일원화 권장 (추후 리팩터링 대상).
     private func removeAllObservers() {
         let nc = NotificationCenter.default
         [appActiveObserver, appResignObserver, sessionExpiryObserver,
          deminiaturizeObserver, terminateObserver, streamProxyModeObserver,
-         powerSourceObserver, windowOcclusionObserver].compactMap { $0 }.forEach {
+         powerSourceObserver, windowOcclusionObserver,
+         lowPowerModeObserver, thermalStateObserver].compactMap { $0 }.forEach {
             nc.removeObserver($0)
         }
         appActiveObserver = nil
@@ -135,6 +162,8 @@ extension AppState {
         streamProxyModeObserver = nil
         powerSourceObserver = nil
         windowOcclusionObserver = nil
+        lowPowerModeObserver = nil
+        thermalStateObserver = nil
     }
 
     /// 스트림 보정 모드 변경 시 활성 멀티라이브 세션을 모두 재시작
@@ -150,8 +179,17 @@ extension AppState {
         }
         guard !targets.isEmpty else { return }
         logger.info("Restarting \(targets.count) multi-live session(s) for new StreamProxyMode")
-        for session in targets {
-            await session.refreshStream(using: api, appState: self)
+        // [Code Review 2026-04-24] 순차 재시작 → TaskGroup 병렬화 —
+        //   각 refreshStream 은 네트워크 요청(2~5초)을 포함하므로
+        //   N세션 × 5초 = 최대 N×5초 순차 대기 문제 해소.
+        //   refreshStream 은 세션 개별 stop+start 로 세션 간 공유 자원 없음 → 병렬 안전.
+        await withTaskGroup(of: Void.self) { group in
+            for session in targets {
+                group.addTask { [weak self] in
+                    guard let self else { return }
+                    await session.refreshStream(using: api, appState: self)
+                }
+            }
         }
     }
 
@@ -293,14 +331,31 @@ extension AppState {
         reassertPlaybackQuality(reason: "window-restored")
     }
 
-    /// [백그라운드 1080p 유지] 창 가림 상태 변경 — CView 메인 창이 다른 창에 가려지거나
-    /// 다시 보일 때 모든 활성 엔진의 화질 ceiling을 재확인한다.
-    /// macOS 는 가려진 창에 대해 렌더링/디코딩을 스로틀링하는데, 이 때 ABR 이 저화질에
-    /// 고정되는 현상을 즉시 복구하기 위함.
+    /// [백그라운드 1080p 유지 + Phase D GPU 절감] 창 가림 상태 변경 핸들러.
+    ///   1) ABR ceiling 재확인 (가림 해제 시 저화질 고착 방지)
+    ///   2) **새로 추가**: 모든 윈도우가 완전히 가려졌을 때 비디오 레이어를 `.hidden`
+    ///      티어로 강등하여 Metal 합성 부하를 0에 가깝게 만든다. 디코딩/오디오는 유지.
+    ///      가림이 해제되면 선택 상태에 맞춰 `.active`/`.visible` 로 복원.
     func handleWindowOcclusionChanged() {
         // 활성 스트림이 없으면 스킵 (불필요한 nudge 방지)
         guard isAnyStreamPlaying() else { return }
-        reassertPlaybackQuality(reason: "window-occlusion-changed")
+
+        // 모든 NSApp 윈도우가 비가시(완전 가림 / 다른 Space)인지 판정.
+        // `NSWindow.occlusionState.contains(.visible)` 가 true 이면 일부라도 보이는 것.
+        let anyVisible = NSApp.windows.contains { win in
+            win.isVisible && !win.isMiniaturized && win.occlusionState.contains(.visible)
+        }
+
+        if anyVisible {
+            // 다시 보임 — 비디오 레이어 복원 + ABR ceiling 재확인
+            playerViewModel?.engine_setGPURenderTier_active()
+            multiLiveManager.restoreGPURenderTiersFromSelection()
+            reassertPlaybackQuality(reason: "window-occlusion-changed")
+        } else {
+            // 완전 가림 — 모든 비디오 레이어 hidden (Metal 합성 정지)
+            playerViewModel?.engine_setGPURenderTier_hidden()
+            multiLiveManager.suspendAllGPURenderTiers()
+        }
     }
 
     /// 메인 플레이어 + 활성 멀티라이브 세션의 화질 ceiling을 즉시 재확인.
@@ -317,6 +372,63 @@ extension AppState {
             session.playerViewModel.reassertHighestQuality(reason: reason)
         }
     }
+
+    // MARK: - Thermal State GPU Auto-Degradation (Phase F)
+
+    /// [Phase F] 시스템 열 상태 변경 핸들러 — serious/critical 시 GPU 렌더 티어 자동 강등.
+    ///
+    /// 정책:
+    ///   - nominal/fair: 정상 → 선택 상태 기반 티어 복원
+    ///   - serious: 비선택 세션 contentsScale 추가 축소 — 디코딩 유지
+    ///   - critical: 비선택 세션 레이어 완전 숨김 (.hidden) — Metal 합성 0
+    ///
+    /// `SystemLoadMonitor.shared.currentMode`와 연동하여 디코더 스레드도 함께 조정.
+    func handleThermalStateChanged() {
+        let state = ProcessInfo.processInfo.thermalState
+        let stateLabel: String
+        switch state {
+        case .nominal:  stateLabel = "nominal"
+        case .fair:     stateLabel = "fair"
+        case .serious:  stateLabel = "serious"
+        case .critical: stateLabel = "critical"
+        @unknown default: stateLabel = "unknown"
+        }
+
+        logger.info("🌡️ Thermal state changed: \(stateLabel)")
+
+        switch state {
+        case .nominal, .fair:
+            // 정상 — 선택 상태 기반 티어 복원
+            playerViewModel?.engine_setGPURenderTier_active()
+            multiLiveManager.restoreGPURenderTiersFromSelection()
+
+        case .serious:
+            // 과열 경고 — 메인 플레이어는 유지, 비선택 멀티라이브 세션은
+            // contentsScale 추가 축소로 GPU 부하 감소
+            playerViewModel?.engine_setGPURenderTier_active()
+            multiLiveManager.degradeGPURenderTiersForThermal()
+            logger.warning("🌡️ Thermal serious — 비선택 세션 GPU 렌더 티어 추가 강등")
+
+        case .critical:
+            // 심각 과열 — 비선택 세션 레이어 완전 숨김
+            playerViewModel?.engine_setGPURenderTier_active()
+            multiLiveManager.suspendAllGPURenderTiers()
+            // 선택 세션만 복원
+            if let selectedId = multiLiveManager.selectedSessionId,
+               let session = multiLiveManager.sessions.first(where: { $0.id == selectedId }) {
+                if let vlc = session.playerViewModel.playerEngine as? VLCPlayerEngine {
+                    vlc.setGPURenderTier(.active)
+                }
+                if let av = session.playerViewModel.playerEngine as? AVPlayerEngine {
+                    av.setGPURenderTier(.active)
+                }
+            }
+            logger.warning("🌡️ Thermal critical — 비선택 세션 GPU 렌더 완전 정지")
+
+        @unknown default:
+            break
+        }
+    }
 }
 
 // MARK: - Background Updates
@@ -326,6 +438,10 @@ extension AppState {
     /// 백그라운드 업데이트 시작
     func startBackgroundUpdates() {
         guard let apiClient else { return }
+        guard settingsStore.general.autoRefreshEnabled else {
+            backgroundUpdateService.stop()
+            return
+        }
         let interval = settingsStore.general.autoRefreshInterval
         backgroundUpdateService.start(
             apiClient: apiClient,
@@ -359,6 +475,19 @@ extension AppState {
             if !filteredTitle.isEmpty {
                 NotificationService.shared.notifyTitleChange(filteredTitle)
             }
+        }
+    }
+
+    /// 자동 새로고침 설정(`autoRefreshEnabled` / `autoRefreshInterval`) 변경 시 호출
+    /// - 켜짐: 현재 설정의 간격으로 서비스 재시작 (기존 Task 취소)
+    /// - 꺼짐: 서비스 중지
+    func syncAutoRefreshState() {
+        startBackgroundUpdates()
+        // HomeViewModel 쪽 인플레이스 자동 갱신은 toggle과 별개(홈 화면 전용 90s 간격) — 설정으로 끌 수 있도록 처리
+        if !settingsStore.general.autoRefreshEnabled {
+            homeViewModel?.stopAutoRefresh()
+        } else {
+            homeViewModel?.startAutoRefresh()
         }
     }
 }

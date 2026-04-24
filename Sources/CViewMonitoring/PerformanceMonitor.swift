@@ -27,6 +27,7 @@ public actor PerformanceMonitor {
         public let resolution: String?           // 영상 해상도 (예: "1920x1080")
         public let inputBitrateKbps: Double      // 입력 비트레이트 (kbps)
         public let networkSpeedBytesPerSec: Int  // 실시간 네트워크 수신 속도 (bytes/sec)
+        public let thermalState: String          // 시스템 열 상태 (nominal/fair/serious/critical)
         public let timestamp: Date
         
         public init(
@@ -43,6 +44,7 @@ public actor PerformanceMonitor {
             resolution: String? = nil,
             inputBitrateKbps: Double = 0,
             networkSpeedBytesPerSec: Int = 0,
+            thermalState: String = "nominal",
             timestamp: Date = Date()
         ) {
             self.fps = fps
@@ -58,6 +60,7 @@ public actor PerformanceMonitor {
             self.resolution = resolution
             self.inputBitrateKbps = inputBitrateKbps
             self.networkSpeedBytesPerSec = networkSpeedBytesPerSec
+            self.thermalState = thermalState
             self.timestamp = timestamp
         }
     }
@@ -236,6 +239,17 @@ public actor PerformanceMonitor {
         
         let gpu = _cachedGPU
         let memUsage = currentMemoryUsage()
+        // Thermal state 조회 — ProcessInfo 프로퍼티 참조만으로 비용 0
+        let thermal: String = {
+            switch ProcessInfo.processInfo.thermalState {
+            case .nominal:  return "nominal"
+            case .fair:     return "fair"
+            case .serious:  return "serious"
+            case .critical: return "critical"
+            @unknown default: return "unknown"
+            }
+        }()
+        
         let metrics = Metrics(
             fps: _currentFPS,
             droppedFrames: _droppedFrames,
@@ -250,6 +264,7 @@ public actor PerformanceMonitor {
             resolution: _resolution,
             inputBitrateKbps: _inputBitrateKbps,
             networkSpeedBytesPerSec: _networkSpeedBytesPerSec,
+            thermalState: thermal,
             timestamp: Date()
         )
         
@@ -438,5 +453,48 @@ public actor PerformanceMonitor {
     /// Peak memory usage
     public func peakMemoryMB() -> Double {
         metricsHistory.max(by: { $0.memoryUsageMB < $1.memoryUsageMB })?.memoryUsageMB ?? 0
+    }
+
+    // MARK: - GPU History API
+
+    /// GPU 사용률 시계열 데이터 — 최근 N초간의 (timestamp, gpuUsage, gpuRenderer, gpuMemMB) 반환.
+    /// 대시보드/차트 시각화에 사용.
+    public struct GPUHistoryPoint: Sendable {
+        public let timestamp: Date
+        public let usagePercent: Double
+        public let rendererPercent: Double
+        public let memoryUsedMB: Double
+        public let thermalState: String
+    }
+
+    /// 최근 N초간의 GPU 히스토리 반환 (기본 300초 = 5분)
+    public func recentGPUHistory(seconds: Int = 300) -> [GPUHistoryPoint] {
+        let cutoff = Date().addingTimeInterval(-Double(seconds))
+        return metricsHistory
+            .filter { $0.timestamp > cutoff }
+            .map { GPUHistoryPoint(
+                timestamp: $0.timestamp,
+                usagePercent: $0.gpuUsagePercent,
+                rendererPercent: $0.gpuRendererPercent,
+                memoryUsedMB: $0.gpuMemoryUsedMB,
+                thermalState: $0.thermalState
+            )}
+    }
+
+    /// 최근 N초간의 피크 GPU 사용률 (Device Utilization %)
+    public func peakGPUUsage(seconds: Int = 60) -> Double {
+        let cutoff = Date().addingTimeInterval(-Double(seconds))
+        return metricsHistory
+            .filter { $0.timestamp > cutoff }
+            .max(by: { $0.gpuUsagePercent < $1.gpuUsagePercent })?
+            .gpuUsagePercent ?? 0
+    }
+
+    /// 최근 N초간의 평균 GPU 사용률
+    public func averageGPUUsage(seconds: Int = 60) -> Double {
+        let cutoff = Date().addingTimeInterval(-Double(seconds))
+        let recent = metricsHistory.filter { $0.timestamp > cutoff }
+        guard !recent.isEmpty else { return 0 }
+        return recent.reduce(0) { $0 + $1.gpuUsagePercent } / Double(recent.count)
     }
 }

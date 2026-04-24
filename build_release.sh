@@ -31,6 +31,11 @@ echo "📦 버전: ${VERSION} (${BUILD_NUMBER})"
 SCRIPT_DIR="${0:A:h}"
 cd "$SCRIPT_DIR"
 
+# ── SPM scratch 경로: Xcode DerivedData와 동일 루트(/Volumes/projectssd/work/build) 하위 SPM/ ──
+# 로컬 디스크의 .build 대신 외장 SSD를 사용 (VS Code swift.buildPath 와 동일 경로)
+SPM_SCRATCH_PATH="/Volumes/projectssd/work/build/SPM"
+mkdir -p "$SPM_SCRATCH_PATH"
+
 RELEASE_DIR="$SCRIPT_DIR/Release"
 APP_BUNDLE="$RELEASE_DIR/${APP_NAME}.app"
 CONTENTS="$APP_BUNDLE/Contents"
@@ -45,7 +50,7 @@ JOBS=$(sysctl -n hw.performancecores 2>/dev/null || sysctl -n hw.ncpu)
 # [Fix] `swift build | tail -5` 는 tail 이 먼저 종료되면 SIGPIPE 로 swift build 가 141 로 죽고
 # `set -euo pipefail` 과 맞물려 스크립트 전체가 실패한다. 로그는 파일로 받고 tail 은 별도로 호출.
 SWIFT_BUILD_LOG="$(mktemp -t cview_swift_build).log"
-if ! swift build -c release -j "$JOBS" --disable-automatic-resolution >"$SWIFT_BUILD_LOG" 2>&1; then
+if ! swift build -c release -j "$JOBS" --scratch-path "$SPM_SCRATCH_PATH" --disable-automatic-resolution >"$SWIFT_BUILD_LOG" 2>&1; then
     echo "❌ Swift 빌드 실패 (마지막 30줄):"
     tail -30 "$SWIFT_BUILD_LOG"
     exit 1
@@ -54,7 +59,7 @@ tail -5 "$SWIFT_BUILD_LOG"
 echo "✅ 빌드 완료"
 
 # 빌드 산출물 경로
-BUILD_BIN="$(swift build -c release --show-bin-path)"
+BUILD_BIN="$(swift build -c release --scratch-path "$SPM_SCRATCH_PATH" --show-bin-path)"
 echo "   빌드 경로: $BUILD_BIN"
 
 # ── 2. .app 번들 구조 생성 ────────────────────────────────────────────

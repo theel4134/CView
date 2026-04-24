@@ -1,4 +1,11 @@
 {
-  "lldb.library": "/Applications/Xcode-beta.app/Contents/SharedFrameworks/LLDB.framework/Versions/A/LLDB",
-  "terminal.integrated.textBlinking": true
+  "terminal.integrated.textBlinking": true,
+  // ── Swift(SPM) 빌드 산출물을 외장 SSD로 리다이렉트 ──
+  // Xcode DerivedData: /Volumes/projectssd/work/build
+  // SPM scratch:       /Volumes/projectssd/work/build/SPM
+  "swift.buildPath": "/Volumes/projectssd/work/build/SPM",
+  "swift.buildArguments": [
+    "--scratch-path",
+    "/Volumes/projectssd/work/build/SPM"
+  ]
 }

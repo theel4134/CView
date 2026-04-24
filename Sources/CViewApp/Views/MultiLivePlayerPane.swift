@@ -156,7 +156,7 @@ struct MLGridLayout: View {
                let focused = sessions.first(where: { $0.id == focusedId }) {
                 // ── 포커스 모드: 메인 셀 + 하단 썸네일 스트립 ──
                 let others = sessions.filter { $0.id != focusedId }
-                VStack(spacing: 2) {
+                VStack(spacing: 6) {
                     MLGridCell(
                         session: focused,
                         manager: manager,
@@ -165,7 +165,7 @@ struct MLGridLayout: View {
                         isFocused: true
                     )
                     if !others.isEmpty {
-                        HStack(spacing: 1) {
+                        HStack(spacing: 6) {
                             ForEach(others) { session in
                                 MLGridCell(
                                     session: session,
@@ -214,6 +214,8 @@ struct MLGridLayout: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // [Modern Curves 2026-04-21] 라운드 그리드 셀 외곽 패딩 — 창 자체 역사다가에 잘리지 않도록
+        .padding(6)
         // [Resize 최적화] 정수 픽셀 스냅 + 변경 가드 → 리사이즈 시 N개 셀 frame 재계산 폭주 차단
         .onGeometryChange(for: CGSize.self) { proxy in
             CGSize(
@@ -223,6 +225,9 @@ struct MLGridLayout: View {
         } action: { newSize in
             guard newSize != containerSize else { return }
             containerSize = newSize
+            // [Quality 2026-04-24] 그리드 컨테이너 크기 변화를 BW 코디네이터에 전달.
+            //   manager 내부에서 200ms 디바운스 후 paneSize 갱신 → ABR 캡 재산출.
+            manager.reportStageSize(newSize)
         }
         .transaction { $0.animation = nil }
         // [60fps 최적화] .animation() 제거 — 호출부에서 withAnimation 사용 중이므로
@@ -309,9 +314,21 @@ struct MLGridCell: View {
                     .help("누적 시청자 수")
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(DesignTokens.Colors.surfaceBase)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            // [Modern Curves 2026-04-21] 헤더 상단만 라운드 (하단은 비디오와 붙음) + 이중 레이어 배경
+            .background(
+                DesignTokens.Colors.surfaceBase
+                    .clipShape(
+                        .rect(
+                            topLeadingRadius: DesignTokens.Radius.lg,
+                            bottomLeadingRadius: 0,
+                            bottomTrailingRadius: 0,
+                            topTrailingRadius: DesignTokens.Radius.lg,
+                            style: .continuous
+                        )
+                    )
+            )
             .contentShape(Rectangle())
             .onHover { hovering in
                 withAnimation(DesignTokens.Animation.fast) { isHeaderHovered = hovering }
@@ -338,16 +355,6 @@ struct MLGridCell: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
                 .clipped()
-                // 오디오 활성 셀 테두리 강조
-                .overlay {
-                    RoundedRectangle(cornerRadius: 0)
-                        .stroke(
-                            isAudioActive
-                                ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
-                                : Color.clear,
-                            lineWidth: 1.5
-                        )
-                }
 
             // 버퍼링 인디케이터
             // [GPU 최적화] Material → Color.black.opacity — 일시적 스피너 배경에 blur 불필요
@@ -464,20 +471,43 @@ struct MLGridCell: View {
         // [리사이즈 최적화] 그리드 셀에 전파되는 implicit 애니메이션 차단
         .transaction { $0.animation = nil }
         } // VStack
-        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        // [Modern Curves 2026-04-21] 곡선 디자인 — 16pt continuous + 오디오 활성 곡선 테두리
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous))
+        .overlay {
+            // 오디오 활성 셀 곡선 테두리 (셀 전체 outline)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
+                .strokeBorder(
+                    isAudioActive
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.55)
+                        : DesignTokens.Glass.borderColor.opacity(0.5),
+                    lineWidth: isAudioActive ? 1.5 : 0.5
+                )
+                .allowsHitTesting(false)
+                .animation(DesignTokens.Animation.fast, value: isAudioActive)
+        }
         .overlay {
             // 드롭 타겟 하이라이트
             if isDropTargeted {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                     .strokeBorder(DesignTokens.Colors.chzzkGreen, lineWidth: 2)
                     .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                             .fill(DesignTokens.Colors.chzzkGreen.opacity(0.08))
                     )
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
         }
+        // [Depth] 오디오 활성 시 부드러운 그린 글로우
+        // [GPU 정밀 튜닝 2026-04-23] LowPower 모드에서는 Gaussian shadow radius 를 절반 이하로 축소.
+        // 셀 크기(보통 1080p) × radius 10 = 매 리사이즈/리레이아웃마다 큰 영역 blur 재계산 → 절감.
+        .shadow(
+            color: isAudioActive ? DesignTokens.Colors.chzzkGreen.opacity(0.22) : .clear,
+            radius: isAudioActive
+                ? (ProcessInfo.processInfo.isLowPowerModeEnabled ? 4 : 10)
+                : 0,
+            x: 0, y: 0
+        )
         .onDrop(
             of: [UTType.text],
             delegate: MLGridCellDropDelegate(
@@ -609,14 +639,20 @@ struct MLSessionInfoBar: View {
                 .help("누적 시청자 수")
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(DesignTokens.Colors.surfaceBase)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(DesignTokens.Glass.dividerColor.opacity(0.2))
-                .frame(height: 0.5)
-        }
+        // [Modern Curves 2026-04-21] 세션 정보 바 — 부유 카드 스타일 (inner pill + outer margin)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
+                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
+                        .strokeBorder(DesignTokens.Glass.borderColor.opacity(0.45), lineWidth: 0.5)
+                )
+        )
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.top, DesignTokens.Spacing.xs)
+        .padding(.bottom, DesignTokens.Spacing.xxs)
     }
 }
 
@@ -646,10 +682,11 @@ private struct MLStreamEndedOverlay: View {
             Color.black
 
             // 풀모드: 썸네일 desaturated 블러 배경
+            // [GPU 최적화] blur radius 30 → 18 (커널 절반 축소, 시각 차이 미미)
             if !compact, let url = session.thumbnailURL {
                 AsyncImage(url: url) { img in
                     img.resizable().aspectRatio(contentMode: .fill)
-                        .blur(radius: 30)
+                        .blur(radius: 18)
                         .saturation(0)
                         .opacity(0.15)
                 } placeholder: { Color.clear }
@@ -669,21 +706,25 @@ private struct MLStreamEndedOverlay: View {
             )
 
             // ── 스캔라인 효과 (CRT 신호 끊김 연출) ──
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.03), location: 0.3),
-                    .init(color: .white.opacity(0.06), location: 0.5),
-                    .init(color: .white.opacity(0.03), location: 0.7),
-                    .init(color: .clear, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 60)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .offset(y: scanOffset)
-            .allowsHitTesting(false)
+            // [GPU 최적화] compact(그리드) 모드에서는 스캔라인 비활성화 — 4세션 종료 시
+            // 무한 LinearGradient 애니메이션 4× 누적 방지 (시각적 의미 풀모드 한정)
+            if !compact {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .white.opacity(0.03), location: 0.3),
+                        .init(color: .white.opacity(0.06), location: 0.5),
+                        .init(color: .white.opacity(0.03), location: 0.7),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 60)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .offset(y: scanOffset)
+                .allowsHitTesting(false)
+            }
 
             // ── 콘텐츠 ──
             VStack(spacing: compact ? DesignTokens.Spacing.md : DesignTokens.Spacing.xl) {
@@ -711,12 +752,20 @@ private struct MLStreamEndedOverlay: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
             guard containerHeight == 0 else { return }
             containerHeight = h
-            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+            // [GPU 최적화] compact 모드는 스캔라인 자체를 그리지 않으므로 애니메이션 스킵.
+            // [Phase A] motionSafe 래핑 — Reduce Motion ON 시 정적 처리.
+            guard !compact,
+                  let anim = DesignTokens.Animation.motionSafe(
+                    .linear(duration: 5).repeatForever(autoreverses: false)
+                  ) else { return }
+            withAnimation(anim) {
                 scanOffset = h + 60
             }
         }
         .onAppear {
-            ringPulse = true
+            // [GPU 정밀 튜닝 2026-04-23] compact 모드는 ringAnim=nil 이므로
+            // ringPulse 토글이 불필요한 SwiftUI state 변경만 유발 — 풀모드에서만 트리거.
+            if !compact { ringPulse = true }
             withAnimation(.easeOut(duration: 0.5)) { contentVisible = true }
         }
     }
@@ -725,9 +774,19 @@ private struct MLStreamEndedOverlay: View {
     @ViewBuilder
     private var iconWithRings: some View {
         let size: CGFloat = compact ? 48 : 80
+        // [GPU 최적화] 동심원 펄스 개수: 풀모드 3 / compact 2 — compact 시 33% 부하 감소
+        // [Phase A] Reduce Motion ON 시 무한 애니메이션 정지 (motionSafe 래핑)
+        // [GPU 정밀 튜닝 2026-04-23] compact 모드(그리드 4셀 동시) 에서는 무한 펄스 자체를 비활성.
+        // 풀모드(단일 표시) 한정으로만 펄스 — 4세션 동시 종료 시 GPU 누적 차단.
+        let ringCount = compact ? 2 : 3
+        let ringAnim: Animation? = compact
+            ? nil
+            : DesignTokens.Animation.motionSafe(
+                .easeOut(duration: 3).repeatForever(autoreverses: false)
+              )
         ZStack {
-            // 동심원 펄스 (3개, 시간차)
-            ForEach(0..<3, id: \.self) { i in
+            // 동심원 펄스 (시간차)
+            ForEach(0..<ringCount, id: \.self) { i in
                 Circle()
                     .strokeBorder(
                         ringPulse ? Color.clear : DesignTokens.Colors.borderOnDarkMedia,
@@ -738,9 +797,7 @@ private struct MLStreamEndedOverlay: View {
                         height: ringPulse ? size * 2.5 : size
                     )
                     .animation(
-                        .easeOut(duration: 3)
-                        .repeatForever(autoreverses: false)
-                        .delay(Double(i) * 1.0),
+                        ringAnim?.delay(Double(i) * 1.0),
                         value: ringPulse
                     )
             }

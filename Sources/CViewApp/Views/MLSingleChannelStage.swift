@@ -24,40 +24,12 @@ struct MLSingleChannelStage: View {
             MLPlayerPane(session: session, manager: manager, appState: appState, isActive: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // ── 헤더 오버레이 ──
-            if isHeaderVisible {
-                headerOverlay
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
+            // [2026-04-22] 헤더 오버레이 제거 — 탭 칩이 이미 채널 프로필·채널명·LIVE 상태·
+            // 라이브 제목·시청자 수를 모두 표시하므로 영상 위 헤더가 중복 겹침의 원인.
+            // 자동 페이드 hover 로직도 불필요해 상태/타이머도 제거.
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
-        .contentShape(Rectangle())
-        .onContinuousHover { phase in
-            switch phase {
-            case .active:
-                showHeader()
-            case .ended:
-                scheduleHide(after: 1.5)
-            }
-        }
-        .onTapGesture {
-            showHeader()
-            scheduleHide(after: 2.5)
-        }
-        .onAppear {
-            showHeader()
-            scheduleHide(after: 2.5)
-        }
-        .onDisappear {
-            hideTask?.cancel()
-            hideTask = nil
-        }
-        // 세션 변경 시 헤더 다시 표시
-        .onChange(of: session.id) { _, _ in
-            showHeader()
-            scheduleHide(after: 2.5)
-        }
     }
 
     // MARK: - Header

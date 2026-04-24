@@ -220,24 +220,25 @@ struct SLSessionInfoBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // 오디오 활성/뮤트 표시
-            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            // [중복 제거 2026-04-21] 채널명은 SLTabBar.channelChip 이 전담하므로 이 바에서는
+            // 라이브 제목 · 시청자수 · 업타임 · 엔진 배지 같은 "보조 정보"만 표시한다.
+            // 음소거 상태는 여전히 유용한 신호라 작은 스피커 아이콘으로만 유지.
+            Image(systemName: isMuted ? "speaker.slash.fill" : "dot.radiowaves.left.and.right")
                 .font(DesignTokens.Typography.micro)
                 .foregroundStyle(isMuted ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen)
-
-            Text(channelName.isEmpty ? "재생 준비 중" : channelName)
-                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .lineLimit(1)
+                .help(isMuted ? "음소거됨" : "재생 중")
 
             if !liveTitle.isEmpty {
-                Text("·")
-                    .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text(liveTitle)
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .lineLimit(1)
+                    .help(liveTitle)
+            } else if channelName.isEmpty {
+                // 재생이 아직 시작되지 않은 초기 상태에서는 placeholder 만 간결히 표시
+                Text("재생 준비 중")
+                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
 
             Spacer()

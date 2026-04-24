@@ -9,6 +9,7 @@ public struct GeneralSettings: Codable, Sendable, Equatable {
     public var showInMenuBar: Bool
     public var notificationsEnabled: Bool
     public var autoRefreshInterval: TimeInterval
+    public var autoRefreshEnabled: Bool
     public var alwaysOnTop: Bool
     public var restoreWindowOnLaunch: Bool
 
@@ -17,6 +18,7 @@ public struct GeneralSettings: Codable, Sendable, Equatable {
         showInMenuBar: Bool = true,
         notificationsEnabled: Bool = true,
         autoRefreshInterval: TimeInterval = 60,
+        autoRefreshEnabled: Bool = true,
         alwaysOnTop: Bool = false,
         restoreWindowOnLaunch: Bool = true
     ) {
@@ -24,8 +26,27 @@ public struct GeneralSettings: Codable, Sendable, Equatable {
         self.showInMenuBar = showInMenuBar
         self.notificationsEnabled = notificationsEnabled
         self.autoRefreshInterval = autoRefreshInterval
+        self.autoRefreshEnabled = autoRefreshEnabled
         self.alwaysOnTop = alwaysOnTop
         self.restoreWindowOnLaunch = restoreWindowOnLaunch
+    }
+
+    // Codable: 구 버전 저장본에 autoRefreshEnabled가 없어도 true 기본값으로 디코딩
+    private enum CodingKeys: String, CodingKey {
+        case launchAtLogin, showInMenuBar, notificationsEnabled
+        case autoRefreshInterval, autoRefreshEnabled
+        case alwaysOnTop, restoreWindowOnLaunch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        self.showInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .showInMenuBar) ?? true
+        self.notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
+        self.autoRefreshInterval = try c.decodeIfPresent(TimeInterval.self, forKey: .autoRefreshInterval) ?? 60
+        self.autoRefreshEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoRefreshEnabled) ?? true
+        self.alwaysOnTop = try c.decodeIfPresent(Bool.self, forKey: .alwaysOnTop) ?? false
+        self.restoreWindowOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .restoreWindowOnLaunch) ?? true
     }
 
     public static let `default` = GeneralSettings()

@@ -242,7 +242,9 @@ extension ChatViewModel {
         guard !unique.isEmpty else { return }
         pendingMessages.append(contentsOf: unique)
         recentMessageTimestamps.append(contentsOf: unique.map { _ in Date() })
-        messageCount += unique.count
+        // [Burst GPU 정밀 튜닝 2026-04-23] messageCount 증가는 commitMessages() 에서 수행 —
+        //   원래 여기에서 WS 수신 즉시 bump 하면 다중 채팅 그리드 헤더(×N 파널)/사이드바가
+            //   버스트 시 초에 N×M회 재렌더링 되어 GPU 스파이크 유발. flush 시점(30fps drip) 으로 이동.
         scheduleBatchFlush()
     }
 
@@ -250,12 +252,29 @@ extension ChatViewModel {
     /// 치지직 웹 채팅과 동일한 30fps 드립:
     /// - 포그라운드: 33ms 간격으로 적응형 drip (큐 길이에 따라 1~8개)
     /// - 백그라운드: 3초 간격으로 일괄 flush (CPU 절약)
+    /// - [Burst GPU 정밀 튜닝 2026-04-23] 큐 적체 시 flush 간격을 동적으로 늘려 SwiftUI 갱신 빈도 감쇄:
+    ///     queue ≤ 30 : base (33ms)
+    ///     queue ≤ 60 : base × 2 (66ms)
+    ///     queue >  60 : base × 3 (100ms)
+    ///   기존 flushCount 적응형(1~8개)과 결합해 "드물게 더 많이" flush 하는 형태로
+    ///   초당 SwiftUI invalidation 횟수를 다중 채팅 그리드(N 패널)에서 N×30 → N×10 로 감쇄.
     func scheduleBatchFlush() {
         guard batchFlushTask == nil else { return }
         guard !pendingMessages.isEmpty else { return }
         let baseInterval = isBackgroundMode ? backgroundFlushIntervalNs : batchFlushIntervalNs
+        // 버스트 적체 multiplier — 백그라운드 모드는 이미 3초 주기이므로 적용 불필요
+        let burstMultiplier: UInt64
+        if isBackgroundMode {
+            burstMultiplier = 1
+        } else {
+            switch pendingMessages.count {
+            case ...30: burstMultiplier = 1
+            case ...60: burstMultiplier = 2
+            default:    burstMultiplier = 3
+            }
+        }
         // [Perf] thermal pressure 시 flush 간격을 늘려 SwiftUI 업데이트/CPU 부하 자동 감쇄
-        let interval = SystemLoadMonitor.shared.currentMode.adjustedChatFlushIntervalNs(base: baseInterval)
+        let interval = SystemLoadMonitor.shared.currentMode.adjustedChatFlushIntervalNs(base: baseInterval) * burstMultiplier
         // [Perf] 백그라운드 세션은 .utility QoS → E-core로 자연 라우팅 (P-core를 비디오 디코딩에 양보)
         let priority: TaskPriority = isBackgroundMode ? .utility : .userInitiated
         batchFlushTask = Task(priority: priority) { [weak self] in
@@ -329,6 +348,10 @@ extension ChatViewModel {
             unreadCount += msgs.count
         }
         updateIncrementalStats(with: msgs)
+        // [Burst GPU 정밀 튜닝 2026-04-23] messageCount 는 여기서만 bump —
+        //   WS 수신 증가율이 아닌 visible flush drip rate(≤ 30Hz, 버스트시 10Hz) 에
+        //   맞춰져 다중 채팅 헤더/그리드 셰 재렌더링 회수 대폭 감소.
+        messageCount += msgs.count
         messages.append(contentsOf: msgs)
     }
 

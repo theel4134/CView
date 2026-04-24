@@ -22,41 +22,63 @@ struct ChatResizeHandle: View {
     @State private var dragStartWidth: CGFloat = 0
 
     var body: some View {
-        Rectangle()
-            .fill(handleColor)
-            .frame(width: isDragging || isHovering ? 4 : 1)
-            .padding(.horizontal, 3)
-            .contentShape(Rectangle().inset(by: -4))
-            .customCursor(.resizeLeftRight)
-            .onHover { isHovering = $0 }
-            .gesture(
-                DragGesture(minimumDistance: 2)
-                    .onChanged { value in
-                        if !isDragging {
-                            isDragging = true
-                            dragStartWidth = currentWidth
-                        }
-                        // 왼쪽으로 드래그(음수) → 채팅 넓히기, 오른쪽(양수) → 좁히기
-                        let newWidth = dragStartWidth - value.translation.width
-                        onWidthChange(newWidth)
+        ZStack {
+            // 시각적 라인: 평상시 1px hairline → hover/drag 시 네온 그린으로 확장
+            Rectangle()
+                .fill(handleColor)
+                .frame(width: handleWidth)
+                .animation(DesignTokens.Animation.fast, value: isHovering)
+                .animation(DesignTokens.Animation.fast, value: isDragging)
+
+            // Grip 표식: hover/drag 시 중앙에 작은 Chzzk 그린 원 3개
+            if isHovering || isDragging {
+                VStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Circle()
+                            .fill(DesignTokens.Colors.chzzkGreen)
+                            .frame(width: 2, height: 2)
                     }
-                    .onEnded { _ in
-                        isDragging = false
-                        onDragEnd?()
+                }
+                .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.6), radius: 3)
+                .transition(.opacity)
+            }
+        }
+        // 넓은 히트 존 (보이는 라인보다 훨씬 넓게 — 커서 그랩 안정성)
+        .frame(width: MSTokens.splitHandleHitSize)
+        .contentShape(Rectangle())
+        .customCursor(.resizeLeftRight)
+        .onHover { isHovering = $0 }
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    if !isDragging {
+                        isDragging = true
+                        dragStartWidth = currentWidth
                     }
-            )
-            .transaction { $0.animation = nil }
-            .animation(DesignTokens.Animation.fast, value: isHovering)
-            .animation(DesignTokens.Animation.fast, value: isDragging)
+                    let newWidth = dragStartWidth - value.translation.width
+                    onWidthChange(newWidth)
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    onDragEnd?()
+                }
+        )
+        .transaction { $0.animation = nil }
+    }
+
+    private var handleWidth: CGFloat {
+        if isDragging { return MSTokens.splitHandleHoverThickness }
+        if isHovering { return MSTokens.splitHandleHoverThickness - 2 }
+        return MSTokens.splitHandleThickness
     }
 
     private var handleColor: Color {
         if isDragging {
-            return DesignTokens.Colors.chzzkGreen.opacity(0.5)
+            return DesignTokens.Colors.chzzkGreen
         } else if isHovering {
-            return DesignTokens.Colors.chzzkGreen.opacity(0.25)
+            return DesignTokens.Colors.chzzkGreen.opacity(0.55)
         } else {
-            return DesignTokens.Colors.borderOnDarkMedia
+            return DesignTokens.Glass.borderColor
         }
     }
 }

@@ -326,33 +326,18 @@ struct MergedChatView: View {
     // MARK: - Merged Message Row
 
     private func mergedMessageRow(_ item: MergedMessageItem) -> some View {
-        MergedChatRowContainer {
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                // 채널 칩 — 색상 도트 + 라벨 + 얇은 테두리
-                // · 도트: 색상 식별성을 폰트 크기와 분리해 시각 우선순위 제공
-                // · stroke 0.5pt: 저대비 배경에서도 경계 유지
-                // · 긴 채널명은 14자 내외에서 단일 라인 잘림 처리 → 메시지 영역 잠식 방지
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(item.channelColor)
-                        .frame(width: 5, height: 5)
-
-                    Text(item.channelName)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(item.channelColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(maxWidth: 110, alignment: .leading)
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(item.channelColor.opacity(0.14), in: Capsule())
-                .overlay {
-                    Capsule()
-                        .strokeBorder(item.channelColor.opacity(0.35), lineWidth: 0.5)
-                }
-                .padding(.trailing, 6)
+        MergedChatRowContainer(channelColor: item.channelColor) {
+            VStack(alignment: .leading, spacing: 1) {
+                // 채널 라벨 — 작은 텍스트 단독, 색상으로만 식별.
+                // 기존 capsule+stroke 조합은 메시지 영역을 잠식하고 행당 수직 공간을
+                // 과도하게 차지하여 가독성이 떨어졌음. 좌측 accent 바(3pt)가 채널
+                // 경계를 시각적으로 잡아주고, 라벨은 메타정보로 축소.
+                Text(item.channelName)
+                    .font(DesignTokens.Typography.custom(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(item.channelColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.leading, MSTokens.chatRowHPad)
 
                 // 메시지 — EquatableChatMessageRow 재사용 (사용자 설정 + chatVM 전달)
                 EquatableChatMessageRow(
@@ -362,8 +347,7 @@ struct MergedChatView: View {
                 )
                 .equatable()
             }
-            .padding(.leading, 4)
-            .padding(.vertical, 2) // 치지직 웹 라인 여백 반영
+            .padding(.vertical, MSTokens.chatRowVPad - 1)
         }
     }
 
@@ -657,10 +641,12 @@ struct MergedChatView: View {
 
 // MARK: - MergedChatRowContainer
 /// 치지직 웹 채팅 UX 반영:
-/// · hover 시 배경 살짝 강조(가독성 향상)
+/// · 좌측 3pt accent 바로 채널 식별 (색상 팔레트 8종)
+/// · hover 시 배경 살짝 강조 + accent 바 밝아짐
 /// 스크롤 jitter 방지를 위해 opacity/위치 관련 등장 애니메이션은 의도적으로 제외.
 /// (LazyVStack + .defaultScrollAnchor(.bottom) 조합과 충돌하여 새 메시지 삽입 시 흔들림 유발)
 private struct MergedChatRowContainer<Content: View>: View {
+    let channelColor: Color
     @ViewBuilder let content: () -> Content
     @State private var isHovering = false
 
@@ -669,9 +655,14 @@ private struct MergedChatRowContainer<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 isHovering
-                    ? DesignTokens.Colors.textPrimary.opacity(0.04)
+                    ? DesignTokens.Colors.chzzkGreen.opacity(0.05)
                     : Color.clear
             )
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(channelColor.opacity(isHovering ? 1.0 : 0.75))
+                    .frame(width: 3)
+            }
             .contentShape(Rectangle())
             .onHover { hovering in
                 isHovering = hovering

@@ -113,33 +113,44 @@ struct MultiChatView: View {
     }
 
     private var gridToolbar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignTokens.Spacing.sm) {
             layoutModePicker
 
             Spacer()
 
             Text("\(sessionManager.sessions.count)개 채널")
                 .font(DesignTokens.Typography.caption)
+                .monospacedDigit()
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
 
-            Button { showAddChannel = true } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-            }
-            .buttonStyle(.plain)
-
-            Button { Task { await sessionManager.reconnectAll() } } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-            }
-            .buttonStyle(.plain)
+            MSChipButton(
+                icon: "arrow.clockwise",
+                title: "재접속",
+                style: .ghost,
+                action: { Task { await sessionManager.reconnectAll() } }
+            )
             .disabled(sessionManager.sessions.isEmpty)
+            .opacity(sessionManager.sessions.isEmpty ? 0.4 : 1.0)
+            .help("전체 채널 재접속")
+
+            MSChipButton(
+                icon: "plus",
+                title: "채널 추가",
+                style: .accent,
+                isActive: true,
+                action: { showAddChannel = true }
+            )
         }
-        .padding(.horizontal, DesignTokens.Spacing.sm)
-        .padding(.vertical, DesignTokens.Spacing.xs)
-        .background(DesignTokens.Colors.surfaceOverlay)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.xs + 1)
+        .background(DesignTokens.Colors.surfaceBase)
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [.clear, DesignTokens.Glass.dividerColor.opacity(0.3), .clear],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(height: 0.5)
+        }
     }
 
     private var gridContent: some View {
@@ -172,7 +183,7 @@ struct MultiChatView: View {
                 let topRow = Array(sessions.prefix(topCount))
                 let bottomRow = Array(sessions.dropFirst(topCount))
                 VStack(spacing: 0) {
-                    HStack(spacing: 1) {
+                    HStack(spacing: 6) {
                         ForEach(topRow) { session in
                             gridCell(session: session, width: geo.size.width / CGFloat(topRow.count), height: topH)
                         }
@@ -186,7 +197,7 @@ struct MultiChatView: View {
                         onRatioChange: { sessionManager.gridVerticalRatio = $0; sessionManager.persistGridRatio() }
                     )
 
-                    HStack(spacing: 1) {
+                    HStack(spacing: 6) {
                         ForEach(bottomRow) { session in
                             gridCell(session: session, width: geo.size.width / CGFloat(max(1, bottomRow.count)), height: botH)
                         }
@@ -194,17 +205,31 @@ struct MultiChatView: View {
                 }
             }
         }
+        // [Modern Curves 2026-04-21] 라운드 셀 외곽 패딩
+        .padding(6)
     }
 
     private func gridCell(session: MultiChatSessionManager.ChatSession, width: CGFloat, height: CGFloat) -> some View {
         VStack(spacing: 0) {
+            let isSelectedCell = sessionManager.selectedChannelId == session.id
             // 채널 헤더
             HStack(spacing: 6) {
+                // 선택된 셀: 채널 컬러 액센트 바
+                if isSelectedCell {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(chatAvatarColor(for: session.id))
+                        .frame(width: 3, height: 14)
+                }
+
                 ChatConnectionStatusBadge(state: session.chatViewModel.connectionState, compact: true)
 
                 Text(session.channelName)
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .font(DesignTokens.Typography.custom(size: 11, weight: isSelectedCell ? .bold : .semibold))
+                    .foregroundStyle(
+                        isSelectedCell
+                            ? DesignTokens.Colors.textPrimary
+                            : DesignTokens.Colors.textSecondary
+                    )
                     .lineLimit(1)
 
                 Spacer()
@@ -222,9 +247,26 @@ struct MultiChatView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(DesignTokens.Colors.surfaceBase)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            // 헤더 배경: 선택 시 채널 컬러 미세 틴트 추가
+            .background(
+                ZStack {
+                    DesignTokens.Colors.surfaceElevated.opacity(0.85)
+                    if isSelectedCell {
+                        chatAvatarColor(for: session.id).opacity(0.12)
+                    }
+                }
+                .clipShape(
+                    .rect(
+                        topLeadingRadius: DesignTokens.Radius.lg,
+                        bottomLeadingRadius: 0,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: DesignTokens.Radius.lg,
+                        style: .continuous
+                    )
+                )
+            )
 
             Divider().opacity(DesignTokens.Opacity.divider)
 
@@ -238,15 +280,21 @@ struct MultiChatView: View {
         }
         .frame(width: width, height: height)
         .background(DesignTokens.Colors.surfaceBase)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        // [Modern Curves 2026-04-21] 멀티채팅 그리드 셀 — 8pt → 16pt continuous + 선택 글로우
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                 .strokeBorder(
                     sessionManager.selectedChannelId == session.id
-                        ? DesignTokens.Colors.chzzkGreen.opacity(0.6)
-                        : DesignTokens.Glass.borderColor,
-                    lineWidth: sessionManager.selectedChannelId == session.id ? 1.0 : DesignTokens.Border.thin
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.75)
+                        : DesignTokens.Glass.borderColor.opacity(0.55),
+                    lineWidth: sessionManager.selectedChannelId == session.id ? 1.5 : DesignTokens.Border.thin
                 )
+        )
+        .shadow(
+            color: sessionManager.selectedChannelId == session.id
+                ? DesignTokens.Colors.chzzkGreen.opacity(0.30) : .clear,
+            radius: 10, y: 2
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -271,56 +319,50 @@ struct MultiChatView: View {
     }
 
     private var mergedToolbar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignTokens.Spacing.sm) {
             layoutModePicker
 
             Spacer()
 
             Text("\(sessionManager.sessions.count)개 채널 통합")
                 .font(DesignTokens.Typography.caption)
+                .monospacedDigit()
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
 
-            Button { showAddChannel = true } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-            }
-            .buttonStyle(.plain)
+            MSChipButton(
+                icon: "plus",
+                title: "채널 추가",
+                style: .accent,
+                isActive: true,
+                action: { showAddChannel = true }
+            )
         }
-        .padding(.horizontal, DesignTokens.Spacing.sm)
-        .padding(.vertical, DesignTokens.Spacing.xs)
-        .background(DesignTokens.Colors.surfaceOverlay)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.xs + 1)
+        .background(DesignTokens.Colors.surfaceBase)
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [.clear, DesignTokens.Glass.dividerColor.opacity(0.3), .clear],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(height: 0.5)
+        }
     }
 
     // MARK: - Layout Mode Picker
 
     private var layoutModePicker: some View {
-        HStack(spacing: 2) {
-            ForEach(MultiChatLayoutMode.allCases, id: \.self) { mode in
-                Button {
-                    withAnimation(DesignTokens.Animation.snappy) {
-                        layoutMode = mode
-                    }
-                } label: {
-                    Image(systemName: mode.icon)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(layoutMode == mode
-                            ? DesignTokens.Colors.chzzkGreen
-                            : DesignTokens.Colors.textTertiary)
-                        .frame(width: 26, height: 22)
-                        .background(
-                            layoutMode == mode
-                                ? DesignTokens.Colors.chzzkGreen.opacity(0.12)
-                                : Color.clear,
-                            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
-                        )
+        MSSegmentedSwitcher(
+            items: MultiChatLayoutMode.allCases.map { mode in
+                .init(id: mode, icon: mode.icon, title: nil, help: mode.label)
+            },
+            selection: Binding(
+                get: { layoutMode },
+                set: { newMode in
+                    withAnimation(DesignTokens.Animation.snappy) { layoutMode = newMode }
                 }
-                .buttonStyle(.plain)
-                .help(mode.label)
-            }
-        }
-        .padding(2)
-        .background(DesignTokens.Colors.surfaceElevated.opacity(0.6), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            )
+        )
     }
 
     // MARK: - Channel Sidebar
@@ -370,43 +412,49 @@ struct MultiChatView: View {
                     ForEach(sessionManager.sessions) { session in
                         let isConnected = session.chatViewModel.connectionState.isConnected
                         let isCurrentlySelected = sessionManager.selectedChannelId == session.id
-                        HStack(spacing: 8) {
-                            // Avatar circle with initial + status dot
+                        HStack(spacing: 10) {
+                            // [Refined Classic 2026-04-22] 28pt 아바타 — specular 제거, 깨끗한 gradient.
                             ZStack(alignment: .bottomTrailing) {
-                                ZStack {
-                                    Circle()
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [
-                                                    chatAvatarColor(for: session.id),
-                                                    chatAvatarColor(for: session.id).opacity(0.65),
-                                                ],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                chatAvatarColor(for: session.id),
+                                                chatAvatarColor(for: session.id).opacity(0.55),
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
                                         )
-                                        .frame(width: 26, height: 26)
-                                    Text(String(session.channelName.prefix(1)).uppercased())
-                                        .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
-                                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                                        .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
-                                }
-                                // Connection status dot
-                                ZStack {
-                                    Circle()
-                                        .fill(DesignTokens.Colors.surfaceBase)
-                                        .frame(width: 10, height: 10)
-                                    Circle()
-                                        .fill(isConnected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.error)
-                                        .frame(width: 7, height: 7)
-                                        .shadow(
-                                            color: isConnected
-                                                ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
-                                                : DesignTokens.Colors.error.opacity(0.4),
-                                            radius: 2
+                                    )
+                                    .frame(width: 28, height: 28)
+                                    .overlay(
+                                        Text(String(session.channelName.prefix(1)).uppercased())
+                                            .font(DesignTokens.Typography.custom(size: 12, weight: .bold))
+                                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                                            .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                                    )
+                                    .overlay(
+                                        Circle().stroke(
+                                            isConnected
+                                                ? DesignTokens.Colors.chzzkGreen.opacity(0.75)
+                                                : Color.white.opacity(0.08),
+                                            lineWidth: isConnected ? 1.5 : 0.5
                                         )
-                                }
-                                .offset(x: 3, y: 3)
+                                    )
+
+                                Circle()
+                                    .fill(isConnected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.error)
+                                    .frame(width: 9, height: 9)
+                                    .overlay(
+                                        Circle().stroke(DesignTokens.Colors.surfaceBase, lineWidth: 1.6)
+                                    )
+                                    .shadow(
+                                        color: isConnected
+                                            ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
+                                            : DesignTokens.Colors.error.opacity(0.4),
+                                        radius: 2
+                                    )
+                                    .offset(x: 1, y: 1)
                             }
 
                             VStack(alignment: .leading, spacing: 2) {
@@ -549,11 +597,11 @@ struct MultiChatView: View {
 
     private func chatAvatarColor(for channelId: String) -> Color {
         let palette: [Color] = [
-            DesignTokens.Colors.accentBlue.opacity(0.8),
-            DesignTokens.Colors.accentPurple.opacity(0.75),
-            DesignTokens.Colors.accentPink.opacity(0.75),
-            DesignTokens.Colors.accentOrange.opacity(0.75),
-            DesignTokens.Colors.chzzkGreen.opacity(0.65),
+            DesignTokens.Colors.accentBlue,
+            DesignTokens.Colors.accentPurple,
+            DesignTokens.Colors.accentPink,
+            DesignTokens.Colors.accentOrange,
+            DesignTokens.Colors.chzzkGreen,
         ]
         return palette[abs(channelId.hashValue) % palette.count]
     }

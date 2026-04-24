@@ -46,6 +46,7 @@ struct PerformanceOverlayView: View {
             MetricLine(label: "BUF",  value: String(format: "%.0f%%",   m.bufferHealthPercent),  color: bufferColor(m.bufferHealthPercent)),
             MetricLine(label: "LAT",  value: String(format: "%.0f ms",  m.latencyMs),            color: latencyColor(m.latencyMs)),
             MetricLine(label: "DROP", value: "\(m.droppedFrames)",                                color: m.droppedFrames > 0 ? .red : .green),
+            MetricLine(label: "THML", value: m.thermalState.uppercased(),                         color: thermalColor(m.thermalState)),
         ]
         return lines
     }
@@ -160,6 +161,16 @@ struct PerformanceOverlayView: View {
         if mb < 2048 { return .green }
         if mb < 4096 { return .yellow }
         return .red
+    }
+    
+    private func thermalColor(_ state: String) -> Color {
+        switch state {
+        case "nominal":  return .green
+        case "fair":     return .yellow
+        case "serious":  return .orange
+        case "critical": return .red
+        default:         return .gray
+        }
     }
     
     private func formatBytes(_ bytes: Int) -> String {

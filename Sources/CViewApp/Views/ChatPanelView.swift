@@ -110,7 +110,10 @@ struct ChatPanelView: View {
             .buttonStyle(.plain)
             .onHover { hovering in isExportHovered = hovering }
             .help("채팅 내보내기")
-            .disabled(chatVM?.chatHistory.isEmpty ?? true)
+            // [Burst GPU 정밀 튜닝 2026-04-23] chatHistory.isEmpty 대신 hasChatHistory 관측 —
+            //   버스트 매 flush 마다 chatHistory append 가 일으키던 chatHeader 재렌더링 제거.
+            //   hasChatHistory 는 empty↔non-empty boundary 에서만 토글되므로 관측 비용 0.
+            .disabled(!(chatVM?.hasChatHistory ?? false))
 
             // Chat settings — [GPU 최적화] 28px 소형 원형에 Material blur 불필요 → surfaceElevated로 교체
             Button(action: onOpenSettings) {

@@ -162,4 +162,23 @@ public actor LiveThumbnailService {
             return nil
         }
     }
+
+    // MARK: - Cache Invalidation
+
+    /// 전체 썸네일 URL 캐시 + 이미지 캐시 강제 만료 (수동 새로고침용)
+    /// - metricsURLCache 제거 → 다음 fetch 시 메트릭 서버 재질의
+    /// - ImageCacheService 내 썸네일 URL 이미지 캐시도 제거
+    public func invalidateAll() async {
+        let urls = metricsURLCache.values.compactMap { $0.url }
+        metricsURLCache.removeAll()
+        await imageCache.invalidate(urls: urls)
+    }
+
+    /// 특정 채널만 무효화
+    public func invalidate(channelId: String) async {
+        if let cached = metricsURLCache.removeValue(forKey: channelId),
+           let url = cached.url {
+            await imageCache.invalidate(url: url)
+        }
+    }
 }

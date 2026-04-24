@@ -312,23 +312,9 @@ struct LiveStreamView: View {
                 .background(DesignTokens.Colors.background)
             }
 
-            // Player overlay (extracted to PlayerControlsView)
-            if showOverlay {
-                PlayerOverlayView(
-                    playerVM: playerVM,
-                    onTogglePiP: togglePiP,
-                    onOpenNewWindow: { openWindow(id: "player-window", value: channelId) },
-                    onScreenshot: { playerVM?.takeScreenshot() },
-                    onToggleRecording: { Task { await playerVM?.toggleRecording() } },
-                    settingsStore: appState.settingsStore,
-                    onToggleSettings: {
-                        withAnimation(DesignTokens.Animation.snappy) {
-                            showSettings.toggle()
-                        }
-                    },
-                    isSettingsOpen: showSettings
-                )
-            }
+            // [2026-04-22] PlayerOverlayView 제거 — 사용자 요청으로 영상 위 오버레이(채널 헤더 +
+            // 하단 컨트롤) 비표시. 재생/음소거/PiP 등은 기존 키보드 단축키·메뉴·설정 패널로 조작.
+            // showOverlay 상태는 ChatOverlayView hit-testing 토글 용도로 남겨둠.
 
             // Stream alert overlay (후원/구독/공지 알림 토스트)
             // [MVVM] 애니메이션을 View 레이어에서 .animation(value:)로 구동

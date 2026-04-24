@@ -146,78 +146,39 @@ struct MultiLiveAddSheet: View {
 
             // 라이브만 토글 (팔로잉 모드일 때만)
             if !isSearchMode {
-                Button {
-                    withAnimation(DesignTokens.Animation.fast) { showLiveOnly.toggle() }
-                } label: {
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(showLiveOnly ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary.opacity(0.3))
-                            .frame(width: 5, height: 5)
-                        Text("LIVE")
-                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                MSChipButton(
+                    icon: nil,
+                    title: "LIVE",
+                    style: .accent,
+                    isActive: showLiveOnly,
+                    action: {
+                        withAnimation(DesignTokens.Animation.fast) { showLiveOnly.toggle() }
                     }
-                    .foregroundStyle(showLiveOnly ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule().fill(
-                            showLiveOnly
-                                ? DesignTokens.Colors.chzzkGreen.opacity(0.10)
-                                : DesignTokens.Colors.surfaceOverlay.opacity(0.5)
-                        )
-                    )
-                    .overlay(
-                        Capsule().strokeBorder(
-                            showLiveOnly
-                                ? DesignTokens.Colors.chzzkGreen.opacity(0.22)
-                                : DesignTokens.Glass.borderColor,
-                            lineWidth: 0.5
-                        )
-                    )
-                }
-                .buttonStyle(.plain)
+                )
             }
 
             // ID 직접입력 토글
-            Button {
-                withAnimation(DesignTokens.Animation.fast) { showDirectInput.toggle() }
-            } label: {
-                Image(systemName: "link")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    .foregroundStyle(showDirectInput ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .fill(showDirectInput
-                                  ? DesignTokens.Colors.chzzkGreen.opacity(0.10)
-                                  : DesignTokens.Colors.surfaceOverlay.opacity(0.5))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .strokeBorder(
-                                showDirectInput
-                                    ? DesignTokens.Colors.chzzkGreen.opacity(0.22)
-                                    : DesignTokens.Glass.borderColor,
-                                lineWidth: 0.5
-                            )
-                    )
-            }
-            .buttonStyle(.plain)
+            MSChipButton(
+                icon: "link",
+                title: nil,
+                style: .ghost,
+                isActive: showDirectInput,
+                action: {
+                    withAnimation(DesignTokens.Animation.fast) { showDirectInput.toggle() }
+                }
+            )
             .help("채널 ID 직접 입력")
 
             // 새로고침
             if !isSearchMode {
-                Button {
-                    Task { await loadFollowingChannels() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .frame(width: 30, height: 30)
-                        .symbolEffect(.rotate, isActive: isLoadingFollowing)
-                }
-                .buttonStyle(.plain)
+                MSChipButton(
+                    icon: "arrow.clockwise",
+                    title: nil,
+                    style: .ghost,
+                    action: { Task { await loadFollowingChannels() } }
+                )
                 .disabled(isLoadingFollowing)
+                .opacity(isLoadingFollowing ? 0.5 : 1.0)
                 .help("팔로잉 새로고침")
             }
         }

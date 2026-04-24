@@ -106,6 +106,10 @@ final class AppState {
     var powerSourceObserver: (any NSObjectProtocol)?
     /// 창 가림 상태(occlusion) 변경 옵저버 — 백그라운드 가림 시 화질 재확인용
     var windowOcclusionObserver: (any NSObjectProtocol)?
+    /// Low Power Mode 변경 옵저버 — 비선택 세션 추가 다운스케일 재적용용 (Phase E)
+    var lowPowerModeObserver: (any NSObjectProtocol)?
+    /// Thermal State 변경 옵저버 — serious/critical 시 GPU 렌더 티어 자동 강등 (Phase F)
+    var thermalStateObserver: (any NSObjectProtocol)?
 
     /// App Nap 방지 activity 토큰 — 재생 중 시스템 절전 및 스로틀링 방지
     var playbackActivity: NSObjectProtocol?

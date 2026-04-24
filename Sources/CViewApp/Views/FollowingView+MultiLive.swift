@@ -63,13 +63,9 @@ extension FollowingView {
                 }
             )
 
-            // [중복 제목 fix 2026-04-19] MLTabBar 채널 칩이 이미 채널명을 표시하므로
-            // 그리드 모드에서는 SessionInfoBar 를 띄우지 않는다 (제목 중복으로 보이는 문제).
-            // 탭 모드에서만 단일 활성 세션의 상세(라이브 제목/카테고리)를 표시.
-            if !multiLiveManager.isGridLayout,
-               let active = multiLiveManager.selectedSession {
-                MLSessionInfoBar(session: active, manager: multiLiveManager)
-            }
+            // [중복 제거 2026-04-21] 탭 칩이 이미 채널명·라이브 제목·상태 도트를
+            // 모두 표시하므로 SessionInfoBar 를 함께 노출하면 3중 중복이 발생한다.
+            // 추가 상세 정보(시청자 수 등)는 영상 hover 시 MLControlOverlay 에서 노출.
 
             // 콘텐츠 영역
             mlVideoMainArea

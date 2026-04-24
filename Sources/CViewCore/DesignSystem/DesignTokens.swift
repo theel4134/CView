@@ -591,3 +591,20 @@ public struct HoverPillButtonStyle: ButtonStyle {
     }
 }
 
+/// 범용 press 스케일 버튼 스타일 — SwiftUI의 누름 상태에 스프링 스케일만 적용
+/// (디자인 시각 스타일은 label 측이 책임지도록 유지 — 오버레이/배경에는 개입하지 않음)
+public struct PressScaleButtonStyle: ButtonStyle {
+    public var scale: CGFloat
+
+    public init(scale: CGFloat = 0.96) {
+        self.scale = scale
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1.0)
+            .opacity(configuration.isPressed ? 0.88 : 1.0)
+            .animation(DesignTokens.Animation.micro, value: configuration.isPressed)
+    }
+}
+

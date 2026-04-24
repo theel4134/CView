@@ -326,6 +326,23 @@ public actor ImageCacheService {
         try? FileManager.default.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
     }
 
+    /// 특정 URL의 캐시 항목 무효화 (메모리 + 디코딩 + 디스크 + inFlight)
+    /// 수동 새로고침 시 썸네일 즉시 재다운로드를 위해 사용
+    public func invalidate(url: URL) {
+        let key = cacheKey(for: url)
+        let nsKey = key as NSString
+        memoryCache.removeObject(forKey: nsKey)
+        decodedImageCache.removeObject(forKey: nsKey)
+        inFlightDownloads[key]?.cancel()
+        inFlightDownloads.removeValue(forKey: key)
+        try? FileManager.default.removeItem(at: diskPath(for: key))
+    }
+
+    /// 여러 URL 배치 무효화 — 팔로잉 수동 새로고침 등에서 사용
+    public func invalidate(urls: [URL]) {
+        for url in urls { invalidate(url: url) }
+    }
+
     /// 만료된 디스크 캐시 정리
     public func pruneExpiredEntries() {
         let fm = FileManager.default

@@ -36,11 +36,10 @@ struct MultiLiveView: View {
                     isSettingsPanelOpen: showSettings
                 )
 
-                // 탭 모드 세션 정보 바
-                if !manager.isGridLayout || manager.sessions.count < 2,
-                   let active = manager.selectedSession {
-                    MLSessionInfoBar(session: active, manager: manager)
-                }
+                // [중복 제거 2026-04-21] 탭 칩이 이미 아바타·채널명·상태 도트·라이브 제목을
+                // 모두 표시하므로, 아래 SessionInfoBar 는 채널명·라이브 제목이 3중으로
+                // 반복되어 보이는 원인이 됨. 시청자 수/카테고리 같은 세부 정보는
+                // hover 시 MLControlOverlay 의 channelStrip 에서 제공한다.
 
                 // ── 콘텐츠 ──
                 ZStack {

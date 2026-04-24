@@ -247,6 +247,13 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
         self.player = AVPlayer()
         super.init()
         renderView.attach(player: player)
+
+        // [Codec Tune 2026-04-23] 미디어 선택은 LiveStream 경로에서 명시적으로 수행하므로
+        // AVPlayer 의 자동 평가(언어/캡션 매칭) 비용을 제거한다. 화질·반응성 무영향.
+        player.appliesMediaSelectionCriteriaAutomatically = false
+        // 백그라운드 활성 정책 명시 — 비활성 윈도우에서도 오디오 디코드 유지 (기본 동작 명문화)
+        player.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
+
         subscribeNetworkMonitor()
         setupPlayerObservers()
     }
@@ -556,6 +563,22 @@ public final class AVPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked Se
             asset = AVURLAsset(url: url, options: assetOptions)
         }
         let item = AVPlayerItem(asset: asset)
+
+        // [Codec Tune 2026-04-23] 매 프레임 HDR 메타데이터 적용 — SDR 콘텐츠는 무비용,
+        // HDR(EDR) 디스플레이에서는 톤 매핑 정확도 향상.
+        item.appliesPerFrameHDRDisplayMetadata = true
+
+        // [Codec Tune 2026-04-23] LowLatencyController rate 기반 catchup 시 사용되는
+        // 오디오 피치 알고리즘을 명시. spectral(default) → timeDomain 으로 강등하면
+        // ±15% 레이트 범위에서는 품질 차이 미미하나 CPU 비용이 절반 이하로 감소.
+        // 비선택 멀티라이브는 catchup 자체를 사용하지 않으므로 가장 가벼운 varispeed 사용.
+        let isSelectedMultiNow = stateLock.withLock { $0.isSelectedMultiLiveSession }
+        if isLive && !isSelectedMultiNow {
+            // 멀티라이브 비선택 — 1.0× 고정, 음높이 보정 불필요
+            item.audioTimePitchAlgorithm = .varispeed
+        } else {
+            item.audioTimePitchAlgorithm = .timeDomain
+        }
 
         // 화질 잠금/기본 선호도 스냅샷을 단일 락 진입으로 획득
         let (qualityLocked, lockedBitrate, lockedResolution, bgMode) = stateLock.withLock { s in

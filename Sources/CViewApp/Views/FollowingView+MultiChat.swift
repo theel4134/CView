@@ -233,16 +233,20 @@ private struct MCTabBar: View {
             Spacer(minLength: 0)
             toolButtonArea
         }
-        .frame(height: 40)
+        // [2026-04-22] MLTabBar 와 동일한 상단 10pt drag-area 확보. ignoresSafeArea 로
+        // detail 이 윈도우 top edge 까지 확장되면서 이 padding 이 없으면 탭 칩이
+        // 트래픽 라이트 높이에 잘려 보임.
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(height: 58)
         .background { DesignTokens.Colors.surfaceBase }
         .overlay(alignment: .bottom) {
-            LinearGradient(
-                colors: [.clear, DesignTokens.Glass.dividerColor.opacity(0.3), .clear],
-                startPoint: .leading, endPoint: .trailing
-            )
-            .frame(height: 0.5)
+            Rectangle()
+                .fill(DesignTokens.Glass.dividerColor.opacity(0.35))
+                .frame(height: 0.5)
         }
-        .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 3)
+        .shadow(color: .black.opacity(0.18), radius: 4, x: 0, y: 2)
+        .zIndex(2)
     }
 
     // MARK: - Tab Scroll
@@ -412,6 +416,7 @@ private struct MCToolButton: View {
                 .foregroundStyle(
                     isActive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary
                 )
+                .symbolEffect(.bounce, value: isActive)
                 .frame(width: 28, height: 28)
                 .background {
                     if isActive {
@@ -421,16 +426,20 @@ private struct MCToolButton: View {
                                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                                     .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.15), lineWidth: 0.5)
                             }
+                            .transition(.opacity.combined(with: .scale(scale: 0.85)))
                     } else if isHovered {
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                             .fill(DesignTokens.Colors.surfaceElevated.opacity(0.3))
+                            .transition(.opacity)
                     }
                 }
+                .scaleEffect(isHovered ? 1.05 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScaleButtonStyle(scale: 0.88))
         .help(help)
         .onHover { isHovered = $0 }
         .animation(DesignTokens.Animation.fast, value: isHovered)
+        .animation(DesignTokens.Animation.snappy, value: isActive)
     }
 }
 

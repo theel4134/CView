@@ -94,6 +94,10 @@ public final class VLCLayerHostView: NSView {
     fileprivate func applyGPURenderTier() {
         guard let layer else { return }
         let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        // [Phase E] Low Power Mode 활성 시 비선택(.visible) 세션을 0.75 → 0.625 로 추가 다운.
+        // 약 60% 픽셀 감소 → GPU/배터리 절감 ↑. 선택(.active) 세션은 화질 유지.
+        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        let visibleFactor: CGFloat = lowPower ? 0.625 : 0.75
         let targetScale: CGFloat
         let shouldHide: Bool
         switch _gpuRenderTier {
@@ -103,7 +107,8 @@ public final class VLCLayerHostView: NSView {
         case .visible:
             // 0.75× → 44% 픽셀 감소. 그리드 셀은 원본보다 작게 표시되므로
             // 시각적 열화는 미미하되 GPU 합성/샘플링 비용이 크게 감소한다.
-            targetScale = max(1.0, backing * 0.75)
+            // Low Power Mode: 0.625× → 약 60% 픽셀 감소.
+            targetScale = max(1.0, backing * visibleFactor)
             shouldHide = false
         case .hidden:
             // 비디오 트랙은 VLC 가 이미 중단 (setVideoTrackEnabled(false)),

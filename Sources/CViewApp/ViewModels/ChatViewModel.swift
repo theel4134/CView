@@ -60,7 +60,15 @@ public final class ChatViewModel {
     // MARK: - Chat History & Replay Mode
 
     /// Full chat history (up to 5000 messages), separate from the visible ring buffer.
-    public var chatHistory: [ChatMessageItem] = []
+    /// [Burst GPU 정밀 튜닝 2026-04-23] @ObservationIgnored 로 전환 —
+    ///   메시지가 초당 수십개 쓰이는 버스트 시 매 flush 마다 chatHistory 가 변경되므로
+    ///   ChatPanelView.chatHeader 가 N×0.5소 파널에서 불필요하게 재평가되었다. SwiftUI 추적 해제.
+    @ObservationIgnored public var chatHistory: [ChatMessageItem] = []
+
+    /// History 가 비어있지 않은지 (export 버튼 활성화 의존용 단독 관측자).
+    /// boundary (empty ↔ non-empty) 상태에서만 능 1회만 토글되어
+    /// chatHistory 추가에 따른 헤더 재렌더링이 발생하지 않음.
+    public var hasChatHistory: Bool = false
 
     /// When true, the user has scrolled up — auto-scroll is paused and new messages
     /// accumulate without jumping the viewport.
@@ -326,6 +334,7 @@ public final class ChatViewModel {
         messages.removeAll()
         pendingMessages.removeAll(keepingCapacity: true)
         chatHistory.removeAll()
+        hasChatHistory = false
         exitReplayMode()
         
         // 통계 카운터 리셋 (채널 전환 시 이전 채널 수치 누적 방지)
@@ -426,8 +435,10 @@ public final class ChatViewModel {
             appendToHistory([localMessage])
             messages.append(localMessage)
 
-            // 서버 에코백 중복 방지: userId+content 해시를 5초간 기억
-            let echoKey = "\(localMessage.userId)_\(localMessage.content.hashValue)"
+            // 서버 에코백 중복 방지: userId+content 를 5초간 기억
+            // [Code Review 2026-04-24] hashValue 는 충돌 가능성으로 이종 메시지 오탐 위험 → content 직접 사용.
+            //   키 길이가 늘어나나 일반 메시지는 수십~수백 바이트 수준 메모리로 무해.
+            let echoKey = "\(localMessage.userId)_\(localMessage.content)"
             recentSentEchoKeys[echoKey] = Date().addingTimeInterval(5)
 
             inputText = ""
@@ -510,6 +521,7 @@ public final class ChatViewModel {
         batchFlushTask = nil
         messageCount = 0
         chatHistory.removeAll()
+        hasChatHistory = false
         resetIncrementalStats()
         exitReplayMode()
         Task { await chatEngine?.clearMessages() }
@@ -591,6 +603,8 @@ public final class ChatViewModel {
         if chatHistory.count > Self.maxHistorySize {
             chatHistory.removeFirst(chatHistory.count - Self.maxHistorySize)
         }
+        // boundary toggle — empty → non-empty 일 때만 Observable 알림 발생.
+        if !hasChatHistory { hasChatHistory = true }
     }
     
     // MARK: - Stream Alert Methods

@@ -44,8 +44,11 @@ public actor ServiceContainer {
         return nil
     }
 
-    /// 서비스 해석 (필수 — fatalError 대신 로깅 후 크래시 방지)
-    public func require<T: Sendable>(_ type: T.Type, file: String = #file, line: Int = #line) -> T? {
+    /// 서비스 해석 (필수 — DEBUG 에서 assertionFailure, RELEASE 에서는 nil 반환)
+    /// [Code Review 2026-04-24] `require` 명칭은 "반드시 존재" 의미를 주지만 실제는 Optional 를 반환해
+    /// 계약이 모순되었다. 호출자가 "DEBUG assert + nil-fallback" 의도임을 알 수 있도록
+    /// `resolveAsserted` 로 명칭 변경. 호출자는 없으므로 호환성 파쇄 없음.
+    public func resolveAsserted<T: Sendable>(_ type: T.Type, file: String = #file, line: Int = #line) -> T? {
         guard let service = resolve(type) else {
             #if DEBUG
             assertionFailure("[\(file):\(line)] Service not registered: \(type)")

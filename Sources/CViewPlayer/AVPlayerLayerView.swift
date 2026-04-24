@@ -111,14 +111,28 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
 
     private func applyGPURenderTier() {
         let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        // [Phase E] Low Power Mode 시 비선택(.visible) 세션 0.75 → 0.625 로 추가 다운.
+        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        let visibleFactor: CGFloat = lowPower ? 0.625 : 0.75
+        // [GPU 정밀 튜닝 2026-04-23] LowPower ON 시 .active 세션도 contentsScale 15% 감산.
+        // 사용자가 명시적으로 배터리 절감을 켠 상태이므로 약간의 화질 트레이드를 허용한다.
+        let activeFactor: CGFloat = lowPower ? 0.85 : 1.0
         let targetScale: CGFloat
         let shouldHide: Bool
+        // [Codec Tune 2026-04-23] tier 별 Color Format / EDR 차등 적용.
+        // - .active  : RGBA16Float + EDR (HDR/Wide Color 정확도, banding 감소) — 선택 세션 풀 화질
+        // - .visible : RGBA8Unorm + no-EDR (메모리 대역폭 ≈50% 감소) — 비선택 셀은 작게 표시되어
+        //              16-bit float 의 시각적 이득이 사실상 무의미. 디코딩/색역 자체는 유지.
+        // - .hidden  : visible 과 동일 (어차피 보이지 않으므로 가벼운 포맷 유지)
+        // [GPU 정밀 튜닝 2026-04-23] LowPower ON 시 .active 도 RGBA8 + no-EDR 로 강제 다운
+        //   (메모리 대역폭 ≈50% 절감, EDR 메타데이터 처리 비용 제거)
+        let highColorFidelity: Bool = (gpuRenderTier == .active) && !lowPower
         switch gpuRenderTier {
         case .active:
-            targetScale = backing
+            targetScale = max(1.0, backing * activeFactor)
             shouldHide = false
         case .visible:
-            targetScale = max(1.0, backing * 0.75)
+            targetScale = max(1.0, backing * visibleFactor)
             shouldHide = false
         case .hidden:
             targetScale = backing
@@ -128,6 +142,8 @@ final class AVPlayerLayerView: NSView, @unchecked Sendable {
         CATransaction.setDisableActions(true)
         playerLayer.isHidden = shouldHide
         playerLayer.contentsScale = targetScale
+        playerLayer.contentsFormat = highColorFidelity ? .RGBA16Float : .RGBA8Uint
+        playerLayer.wantsExtendedDynamicRangeContent = highColorFidelity
         CATransaction.commit()
     }
 

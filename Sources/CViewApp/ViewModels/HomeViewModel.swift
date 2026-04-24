@@ -26,6 +26,11 @@ public final class HomeViewModel {
     public var isLoadingFollowing = false
     public var errorMessage: String?
     public var searchQuery = ""
+
+    /// 전체 통계 수집 실패 시 마지막 에러 메시지 (C6: 에러 상태 UI)
+    public var statsLoadError: String?
+    /// 전체 통계 마지막 수집 시각 (C5: stale 판별용)
+    public var allStatLastLoadedAt: Date?
     
     // 통계 수집 진행률
     public var statsCollectionProgress: Double = 0
@@ -525,6 +530,7 @@ public final class HomeViewModel {
     public func loadAllStatsChannels() async {
         guard !isLoadingStats else { return }
         isLoadingStats = true
+        statsLoadError = nil
         statsCollectionProgress = 0
         statsCollectedCount = 0
         statsEstimatedTotal = nil
@@ -556,6 +562,7 @@ public final class HomeViewModel {
                 )
             }
             allStatChannels = items
+            allStatLastLoadedAt = Date()
             statsCollectionProgress = 1.0
             statsCollectedCount = items.count
             recomputeStats()
@@ -571,9 +578,25 @@ public final class HomeViewModel {
             }
         } catch {
             logger.error("전체 통계 수집 실패: \(error)")
+            // [C6] UI에 노출할 에러 메시지 (기존 allStatChannels 는 보존 — C2)
+            statsLoadError = (error as NSError).localizedDescription
         }
         
         isLoadingStats = false
+    }
+
+    /// [C5] 전체 통계가 stale 이면 재수집. 아니면 no-op.
+    /// - Parameter ttlSeconds: 허용 신선도 (기본 600초 = 10분)
+    public func loadAllStatsChannelsIfStale(ttlSeconds: TimeInterval = 600) async {
+        if allStatChannels.isEmpty {
+            await loadAllStatsChannels()
+            return
+        }
+        if let last = allStatLastLoadedAt,
+           Date().timeIntervalSince(last) < ttlSeconds {
+            return  // fresh
+        }
+        await loadAllStatsChannels()
     }
     
     /// 부분 수집 중 중간 통계 갱신
@@ -621,8 +644,28 @@ public final class HomeViewModel {
     
     /// Load following channels
     public func loadFollowingChannels() async {
+        await loadFollowingChannels(invalidateThumbnails: false)
+    }
+
+    /// Load following channels (썸네일 강제 재다운로드 옵션 포함)
+    /// - Parameter invalidateThumbnails: true이면 라이브 썸네일 + 프로필 이미지 캐시를 만료시켜 즉시 새 이미지 표시
+    public func loadFollowingChannels(invalidateThumbnails: Bool) async {
+        // [Fix] 중복 호출 가드 — 이미 로딩 중이면 무시 (무한 새로고침 방지)
+        guard !isLoadingFollowing else {
+            logger.debug("loadFollowingChannels 중복 호출 무시 (이미 로딩 중)")
+            return
+        }
         isLoadingFollowing = true
         defer { isLoadingFollowing = false }
+
+        // 썸네일 강제 무효화 — 새로고침 시 즉시 새 이미지 표시
+        if invalidateThumbnails {
+            await LiveThumbnailService.shared.invalidateAll()
+            // 프로필 이미지도 재로드를 유도하기 위해 현재 팔로잉 채널들의 channelImageUrl 무효화
+            let profileURLs = followingChannels.compactMap { URL(string: $0.channelImageUrl ?? "") }
+            await ImageCacheService.shared.invalidate(urls: profileURLs)
+        }
+
         do {
             let response = try await apiClient.fetchFollowingChannels()
             // 통계를 백그라운드에서 미리 계산 → MainActor 차단 최소화
@@ -655,7 +698,7 @@ public final class HomeViewModel {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadLiveChannels() }       // UI용 첫 페이지 (빠름)
             group.addTask { await self.loadAllStatsChannels() }   // 통계용 전체 (백그라운드)
-            group.addTask { await self.loadFollowingChannels() }
+            group.addTask { await self.loadFollowingChannels(invalidateThumbnails: true) }
             group.addTask { await self.loadServerStats() }
             group.addTask { await self.loadSystemStats() }
         }

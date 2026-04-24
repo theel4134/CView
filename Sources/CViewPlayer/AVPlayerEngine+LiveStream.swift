@@ -215,8 +215,12 @@ extension AVPlayerEngine {
     ///
     /// [Safety]
     /// - 실제로 비트레이트 상향이 관찰되지 않으면 60초 쿨다운 후 재시도.
-    /// - `isSelectedMultiLiveSession=false` / `isBackgroundMode=true` 세션은 건너뜀.
+    /// - `isBackgroundMode=true` 세션은 건너뜀.
     /// - 화질 잠금이 꺼진 경우에도 아무것도 하지 않는다.
+    /// - **비선택 멀티라이브 세션도 회복 시도** (이전: 절약 우선으로 건너뜀):
+    ///   사용자가 다시 선택했을 때 720p 이하에 고정된 채 노출되는 회귀 차단.
+    ///   단, 더 보수적인 조건(샘플 5회·쿨다운 120s·ceiling 60% 임계)을 적용해
+    ///   백그라운드 nudge 가 셀룰러/저속 회선에서 burst 를 만들지 않도록 한다.
     internal func startHQRecoveryWatchdog() {
         let task = Task { [weak self] in
             // 초기 안정화 대기 (readyToPlay 직후에는 ABR 정보가 부정확)
@@ -229,7 +233,7 @@ extension AVPlayerEngine {
                 try? await Task.sleep(nanoseconds: 6_000_000_000)  // 6s 주기
                 guard let self, !Task.isCancelled else { return }
 
-                // 가드: 잠금 해제 / 비활성 세션 / 비라이브 / 비선택 멀티라이브 → 건너뜀
+                // 가드: 잠금 해제 / 비활성 세션 / 비라이브 → 건너뜀
                 let snap = self.stateLock.withLock { s in
                     (
                         locked: s.isQualityLocked,
@@ -243,9 +247,17 @@ extension AVPlayerEngine {
                 }
                 if !snap.locked || !snap.isLive { continue }
                 if snap.bgMode { continue }
-                if !snap.isSelMulti { continue }          // 비선택 멀티라이브 세션은 절약 우선
                 if snap.warmup { continue }                // warm-up 중에는 건드리지 않음
                 guard snap.peakCeiling > 0 else { continue }
+
+                // [Quality 2026-04-24] 비선택 세션은 더 보수적인 조건 적용
+                //   · 임계값 0.70 → 0.60 (더 심한 강등에서만 nudge)
+                //   · 쿨다운 60s → 120s
+                //   · 누적 샘플 3 → 5
+                let isSelectedSession = snap.isSelMulti
+                let thresholdRatio: Double = isSelectedSession ? 0.70 : 0.60
+                let cooldownSec: Double = isSelectedSession ? 60 : 120
+                let requiredSamples: Int = isSelectedSession ? 3 : 5
 
                 // 현재 재생/버퍼/속도 상태 확인 (MainActor)
                 let status = await MainActor.run { () -> (keepUp: Bool, rate: Float, hasItem: Bool) in
@@ -261,7 +273,7 @@ extension AVPlayerEngine {
                 // AccessLog 기반 observedBitrate (indicatedBitrate) 정확도 확보
                 let indicated = snap.indicated
                 let ceiling = snap.peakCeiling
-                let threshold = ceiling * 0.70  // ceiling 대비 70% 미만 = 저화질 고정 의심
+                let threshold = ceiling * thresholdRatio  // 비선택은 0.60, 선택은 0.70
 
                 // 조건 미충족 시 카운터 리셋
                 guard bufferOk, rateNormal, indicated > 0, indicated < threshold else {
@@ -269,18 +281,18 @@ extension AVPlayerEngine {
                     continue
                 }
 
-                // 쿨다운 (nudge 후 60초 이내 재시도 금지)
-                if Date().timeIntervalSince(lastNudgeAt) < 60 { continue }
+                // 쿨다운 (nudge 후 일정 시간 이내 재시도 금지)
+                if Date().timeIntervalSince(lastNudgeAt) < cooldownSec { continue }
 
                 lowBitrateSamples += 1
-                // 3 연속 샘플(≈18s) 동안 저화질 고정 → nudge
-                guard lowBitrateSamples >= 3 else { continue }
+                // 누적 샘플 충족 시 nudge (선택=3 ≈18s, 비선택=5 ≈30s)
+                guard lowBitrateSamples >= requiredSamples else { continue }
                 lowBitrateSamples = 0
 
                 await MainActor.run {
                     guard let item = self.player.currentItem else { return }
                     self.logger.info(
-                        "AVPlayerEngine: HQ recovery nudge — indicated=\(Int(indicated/1000))kbps ceiling=\(Int(ceiling/1000))kbps"
+                        "AVPlayerEngine: HQ recovery nudge — indicated=\(Int(indicated/1000))kbps ceiling=\(Int(ceiling/1000))kbps selected=\(isSelectedSession)"
                     )
                     // ceiling 잠시 해제 → AVFoundation 내부 ABR 재평가 유도
                     item.preferredPeakBitRate = 0
