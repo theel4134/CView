@@ -73,6 +73,9 @@ extension AppState {
             )
             // 멀티라이브 매니저에 메트릭 포워더 주입
             multiLiveManager.metricsForwarder = self.metricsForwarder
+            // [P2-4 / 2026-04-25] PDT focus 용 metricsClient 주입 — 멀티라이브
+            // multiLivePDTEnabled 플래그 ON 시 선택 세션만 WebLatencyClient 를 attach 한다.
+            multiLiveManager.metricsClient = metricsClient
         }
 
         // 5. DataStore/Settings 초기화 (디스크 I/O, 비차단) — 살짝 지연

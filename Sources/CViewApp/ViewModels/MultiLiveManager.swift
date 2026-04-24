@@ -100,6 +100,17 @@ public final class MultiLiveManager {
     /// 메트릭 전송 포워더 (AppState에서 주입)
     var metricsForwarder: MetricsForwarder?
 
+    /// [P2-4 / 2026-04-25] 멀티라이브 PDT(WebLatencyClient) 연동용 API 클라이언트.
+    /// AppState에서 configure() 에 함께 / 메트릭 메키니즘 초기화 이후 주입.
+    /// nil 이면 PDT focus 동작이 완전 비활성(기존 동작 유지).
+    weak var metricsClient: MetricsAPIClient?
+
+    /// [P2-4 / 2026-04-25] 멀티라이브 PDT 정밀 동기화 기능 ON/OFF.
+    /// 기본값 false — 기능 공개 전에는 아무 동작도 달라지지 않으며,
+    /// 활성화 시 선택 세션에만 WebLatencyClient 를 attach 하고 재선택/제거 시
+    /// 이전 세션은 detach 된다. 멀티 PDT 수집 쇄도/서버 부하 폭주 방지.
+    var multiLivePDTEnabled: Bool = false
+
     /// 로그인 사용자 정보 (세션 채팅 전송용)
     private var userUid: String?
     private var userNickname: String?
@@ -340,6 +351,9 @@ public final class MultiLiveManager {
             }
 
             saveState()
+            // [P2-4 / 2026-04-25] 신규 세션 추가 후 PDT focus 재배치 —
+            // 첫 세션이면 자동 선택되므로 attach, 이후 세션은 detach 유지.
+            Task { await self.applyPDTFocusToSelected() }
             logger.info("MultiLive: 세션 추가 — \(channelName) (\(channelId)) [\(preferredEngine.rawValue)]")
         } catch {
             // API 실패 시 엔진 풀에 반환
@@ -497,6 +511,10 @@ public final class MultiLiveManager {
         // 여기서 중복 호출하면 500ms 후 2차 검은 프레임 플래시 발생.
 
         saveState()
+        // [P2-4 / 2026-04-25] 세션 제거 후 PDT focus 재배치 —
+        // 제거된 세션이 선택 세션이었다면 폴레터 세션으로 attach 강등
+        // (이미 detach 된 세션은 idempotent 하므로 안전).
+        Task { await self.applyPDTFocusToSelected() }
         logger.info("MultiLive: 세션 제거 — \(session.channelName)")
     }
 
@@ -601,6 +619,10 @@ public final class MultiLiveManager {
                 }
             }
         }
+
+        // [P2-4 / 2026-04-25] PDT focus 재배치 — 선택된 세션만 WebLatencyClient 유지,
+        // 이전 선택 세션은 detach. multiLivePDTEnabled=false 이면 no-op.
+        Task { await self.applyPDTFocusToSelected() }
         saveState()
     }
 
@@ -1228,5 +1250,34 @@ public final class MultiLiveManager {
         }
 
         return restoredCount
+    }
+
+    // MARK: - PDT Focus (P2-4 / 2026-04-25)
+
+    /// 멀티라이브 PDT(WebLatencyClient) 포커스를 선택 세션에만 한정시킨다.
+    ///
+    /// 동작:
+    /// - `multiLivePDTEnabled == false` 또는 `metricsClient == nil` 이면 no-op (기본 상태).
+    /// - VLC 엔진 + 선택된 세션 → `attachWebLatencyClient(metricsClient:channelId:)` 호출.
+    /// - 그 외 모든 세션(비선택, AVPlayer, HLSJS) → `detachWebLatencyClient()` 호출.
+    ///
+    /// 이로써 멀티라이브에서도 정밀 동기화는 한 채널만 수집하여
+    /// 서버/네트워크 부하 폭주를 방지하면서, 선택 변경 시 자연스럽게 PDT 추적 대상이 따라온다.
+    /// `attach/detach` 는 idempotent 라 반복 호출에 안전.
+    func applyPDTFocusToSelected() async {
+        guard multiLivePDTEnabled, let client = metricsClient else { return }
+        let selectedId = selectedSessionId
+        for session in sessions {
+            let isSelected = (session.id == selectedId)
+            let isVLC = session.playerViewModel.playerEngine is VLCPlayerEngine
+            if isSelected && isVLC {
+                await session.playerViewModel.attachWebLatencyClient(
+                    metricsClient: client,
+                    channelId: session.channelId
+                )
+            } else {
+                await session.playerViewModel.detachWebLatencyClient()
+            }
+        }
     }
 }
