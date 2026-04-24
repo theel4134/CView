@@ -212,15 +212,19 @@ struct HomeView_v2: View {
                 }
             }
             .padding(DesignTokens.Spacing.xl)
+            // [hit-test fix] MainContentView 의 detail 이 .ignoresSafeArea(.container, edges: .top)
+            // 으로 macOS 타이틀바(트래픽라이트, ~28pt) 영역까지 확장된다.
+            // 타이틀바 영역은 윈도우 드래그를 위해 클릭이 흡수되므로,
+            // CommandBar 가 그 아래에 위치하도록 추가 top padding 을 부여한다.
+            .padding(.top, 32)
         }
         .contentBackground()
         .overlay(alignment: .topTrailing) {
             if monitorEnabled {
                 HomeMonitorPanel(viewModel: viewModel)
                     // CommandBar(아이콘 버튼 row) 아래로 내려서 상단 버튼 클릭을 막지 않도록 한다.
-                    // (이전: .padding(.top, .md) 만 두어 우상단 검색바/멀티라이브/모니터/새로고침/편집 버튼들과
-                    //  hit-test 가 겹쳐서 버튼이 "눌러도 반응 없음" 상태로 보였음)
-                    .padding(.top, 64)
+                    // 타이틀바(28) + xl(24) + CommandBar 높이(~40) ≈ 92pt 아래에 배치.
+                    .padding(.top, 100)
                     .padding(.trailing, DesignTokens.Spacing.md)
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity),
