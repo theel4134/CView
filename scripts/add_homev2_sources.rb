@@ -16,6 +16,7 @@ files = [
   'Sources/CViewApp/Views/HomeV2/HomeRecommendationEngine.swift',
   'Sources/CViewApp/Views/HomeV2/HomeV2Components.swift',
   'Sources/CViewApp/Views/HomeV2/HomeView_v2.swift',
+  'Sources/CViewApp/Views/HomeV2/HomeMonitorPanel.swift',
 ]
 
 files.each do |rel_path|

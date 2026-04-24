@@ -43,6 +43,8 @@ struct HomeCommandBar: View {
     @Environment(AppState.self) private var appState
     let greeting: String
     let isRefreshing: Bool
+    let monitorEnabled: Bool
+    let onToggleMonitor: () -> Void
     let onRefresh: () -> Void
 
     var body: some View {
@@ -94,6 +96,14 @@ struct HomeCommandBar: View {
                 router.selectSidebar(.following)
             }
 
+            // Performance monitor toggle
+            iconButton(
+                systemName: monitorEnabled ? "gauge.with.dots.needle.67percent" : "gauge.with.dots.needle.0percent",
+                help: monitorEnabled ? "성능 모니터 숨기기" : "성능 모니터 보기",
+                tinted: monitorEnabled,
+                action: onToggleMonitor
+            )
+
             // Refresh
             iconButton(systemName: "arrow.clockwise", help: "새로고침", spinning: isRefreshing) {
                 onRefresh()
@@ -103,16 +113,26 @@ struct HomeCommandBar: View {
     }
 
     @ViewBuilder
-    private func iconButton(systemName: String, help: String, spinning: Bool = false, action: @escaping () -> Void) -> some View {
+    private func iconButton(systemName: String, help: String, spinning: Bool = false, tinted: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .foregroundStyle(tinted ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
                 .frame(width: 30, height: 30)
-                .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                .background(
+                    tinted
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.15)
+                        : DesignTokens.Colors.surfaceElevated,
+                    in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                )
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                        .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                        .strokeBorder(
+                            tinted
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.45)
+                                : DesignTokens.Glass.borderColor,
+                            lineWidth: tinted ? 1.0 : 0.5
+                        )
                 }
                 .rotationEffect(.degrees(spinning ? 360 : 0))
                 .animation(spinning ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: spinning)

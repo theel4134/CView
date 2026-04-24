@@ -54,6 +54,7 @@
 		A1B2C3D4E5F60004BB440099 /* AppState+Auth.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60004AA440099 /* AppState+Auth.swift */; };
 		A1B2C3D4E5F60005BB550001 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550001 /* CommandPaletteView.swift */; };
 		A1B2C3D4E5F60005BB550004 /* StatisticsDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550004 /* StatisticsDetailViews.swift */; };
+		A5A18BAD6416A63196D65D4D /* HomeMonitorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */; };
 		AA00112233445566AABB0001 /* MLNetworkWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0001 /* MLNetworkWindowView.swift */; };
 		AA00112233445566AABB0002 /* MLMetricsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0002 /* MLMetricsWindowView.swift */; };
 		AA00112233445566AABB0003 /* KeyboardShortcutsHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0003 /* KeyboardShortcutsHelpView.swift */; };
@@ -204,6 +205,7 @@
 		396CDE2664A7DC5449A29E2E /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Navigation/AppRouter.swift; sourceTree = SOURCE_ROOT; };
 		447BA75BCCBEC31888890E33 /* CView_v2.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SupportFiles/CView_v2.entitlements; sourceTree = SOURCE_ROOT; };
 		5036F3011DB6CA1FDF07546E /* LiveCountWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveCountWidget.swift; sourceTree = "<group>"; };
+		5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeMonitorPanel.swift; path = Sources/CViewApp/Views/HomeV2/HomeMonitorPanel.swift; sourceTree = SOURCE_ROOT; };
 		5E200C928B248E62767BD27A /* DeepLinkRouter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeepLinkRouter.swift; path = Sources/CViewApp/Navigation/DeepLinkRouter.swift; sourceTree = SOURCE_ROOT; };
 		5F62BD3A9B33094018E0EDE2 /* CViewWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CViewWidgetsBundle.swift; sourceTree = "<group>"; };
 		635C3C61AC212E0FAB710257 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = SOURCE_ROOT; };
@@ -577,6 +579,7 @@
 				BF2FD4E132AE0375587B49F5 /* HomeRecommendationEngine.swift */,
 				731DE311037F0BF2A7D8889B /* HomeV2Components.swift */,
 				D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */,
+				5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -981,6 +984,7 @@
 				E7E8DFDC2042D2EC09C09553 /* HomeRecommendationEngine.swift in Sources */,
 				863203EE11F375A60C649C79 /* HomeV2Components.swift in Sources */,
 				181653DAF0FD0A95B8C6EA5E /* HomeView_v2.swift in Sources */,
+				A5A18BAD6416A63196D65D4D /* HomeMonitorPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
