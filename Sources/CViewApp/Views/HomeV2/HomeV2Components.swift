@@ -104,7 +104,14 @@ struct HomeCommandBar: View {
             .help("검색 (⌘K)")
 
             // Multilive shortcut
-            iconButton(systemName: "square.grid.2x2.fill", help: "멀티라이브") {
+            //   1) FollowingView 의 멀티라이브 패널을 강제로 on (이전에 숨겼던 경우 대비)
+            //   2) 세션이 이미 롬으면 채팅 패널도 상시 표시
+            //   3) 사이드바를 팔로잉(멀티라이브 통합)으로 이동
+            iconButton(systemName: "square.grid.2x2.fill", help: "멀티라이브 열기") {
+                appState.followingViewState.showMultiLive = true
+                if !appState.multiLiveManager.sessions.isEmpty {
+                    appState.followingViewState.showMultiChat = true
+                }
                 router.selectSidebar(.following)
             }
 
@@ -147,7 +154,12 @@ struct HomeCommandBar: View {
                         )
                 }
                 .rotationEffect(.degrees(spinning ? 360 : 0))
-                .animation(spinning ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: spinning)
+                .animation(
+                    spinning
+                        ? .linear(duration: 1.0).repeatForever(autoreverses: false)
+                        : DesignTokens.Animation.smooth,
+                    value: spinning
+                )
         }
         .buttonStyle(.plain)
         .help(help)
