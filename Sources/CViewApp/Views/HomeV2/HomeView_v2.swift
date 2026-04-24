@@ -240,11 +240,11 @@ struct HomeView_v2: View {
                 .padding(.horizontal, DesignTokens.Spacing.xl)
                 .padding(.bottom, DesignTokens.Spacing.xl)
             }
-            .refreshable {
-                await viewModel.refresh()
-                await reloadStore()
-                recomputeCachesIfNeeded()
-            }
+            // [Perf 2026-04-24] .refreshable 제거.
+            //   macOS 에는 pull-to-refresh UI 가 없어 사실상 dead UI 였지만
+            //   SwiftUI 는 invisible scroll observer + refresh state coordinator 를
+            //   ScrollView 에 부착 → 스크롤 이벤트마다 추가 hit-test/state 갱신.
+            //   사용자에겐 이미 CommandBar 새로고침 버튼이 있어 기능 손실 없음.
         }   // outer VStack (sticky header + ScrollView)
         .contentBackground()
         .overlay(alignment: .topTrailing) {

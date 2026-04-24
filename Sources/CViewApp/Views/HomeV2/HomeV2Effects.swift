@@ -70,16 +70,21 @@ struct HomeHoverLift: ViewModifier {
         content
             .scaleEffect(hovered && !reduceMotion ? scale : 1.0, anchor: .center)
             .offset(y: hovered && !reduceMotion ? -lift : 0)
+            // [Perf 2026-04-24] shadow radius 애니메이션 제거.
+            //   이전: radius 가 5 ↔ 14 로 애니메이션 되면 SwiftUI 가 중간값마다
+            //   가우시안 블러 커널을 재생성 → 호버 시 0.18s 동안 매 프레임 GPU 스파이크
+                //   (클래식 stutter 원인). 수정: radius 고정 + opacity 만 애니메이션
+            //   (CALayer 는 opacity 변화는 블러 재생성 없이 공직 합성—비용 거의 0).
             .shadow(
-                color: hovered ? accent.opacity(0.22) : .black.opacity(0.08),
-                radius: hovered ? 14 : 5,
-                y: hovered ? 6 : 2
+                color: (hovered ? accent.opacity(0.22) : .black.opacity(0.08)),
+                radius: 8,
+                y: hovered ? 4 : 2
             )
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .strokeBorder(
                         accent.opacity(hovered ? 0.55 : 0.0),
-                        lineWidth: hovered ? 1.0 : 0.0
+                        lineWidth: 1.0
                     )
                     .allowsHitTesting(false)
             }
