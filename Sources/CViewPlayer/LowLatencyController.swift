@@ -254,7 +254,10 @@ public actor LowLatencyController {
     private var onWebSyncSnap: (@Sendable (Double) -> Void)?
     /// 매 측정 후 (raw, ewma, target) 알림 — StreamCoordinator → PlayerViewModel.latencyInfo 갱신용
     private var onLatencyMeasured: (@Sendable (TimeInterval, TimeInterval, TimeInterval) -> Void)?
-    
+    /// [P1-2 / 2026-04-25] PlaybackActuator — SyncCommand 기반 단일 적용 경로.
+    /// 등록되면 기존 콜백(onRateChange/onSeekRequired/onWebSyncSnap) 과 동일 결정에
+    /// 대해 명령이 추가 발행된다. nil 이면 기존 경로만 동작(하위 호환).
+    private var actuator: PlaybackActuator?    
     // MARK: - Public Accessors
     
     public var syncState: SyncState { _state }
@@ -311,6 +314,19 @@ public actor LowLatencyController {
     /// nil 로 등록하면 기존 latency 기반 `onSeekRequired` 경로로 fallback.
     public func setOnWebSyncSnap(_ handler: (@Sendable (Double) -> Void)?) {
         self.onWebSyncSnap = handler
+    }
+
+    /// [P1-2 / 2026-04-25] PlaybackActuator 등록. nil 로 해제 가능.
+    /// 등록 시 결정 결과가 SyncCommand 로 추가 발행된다(기존 콜백과 병행).
+    public func setActuator(_ actuator: PlaybackActuator?) {
+        self.actuator = actuator
+    }
+
+    /// [P1-2] 내부 헬퍼 — actuator 등록 시 해당 명령을 디패치.
+    /// nil 이면 아무 동작하지 않는다(하위 호환).
+    private func dispatch(_ command: SyncCommand) {
+        guard let actuator else { return }
+        Task { await actuator.apply(command) }
     }
 
     /// Set callback for latency measurements (current, ewma, target — all in seconds)
@@ -573,15 +589,18 @@ public actor LowLatencyController {
 
         // Stale guard — PDT 데이터 신선하지 않으면 1.0 으로 hold.
         guard sample.isFresh && sample.hasPdt else {
+            let reason = sample.isFresh ? "no_pdt" : "stale"
             if _webPhase != .idle, case .hold = _webPhase {} else {
-                _webPhase = .hold(reason: sample.isFresh ? "no_pdt" : "stale")
-                logger.info("WebSync phase=hold (\(sample.isFresh ? "no_pdt" : "stale"))")
+                _webPhase = .hold(reason: reason)
+                logger.info("WebSync phase=hold (\(reason))")
             }
             if abs(_currentRate - 1.0) > 0.005 {
                 _currentRate = 1.0
                 onRateChange?(1.0)
             }
             _consecutiveExcellent = 0
+            // [P1-2] actuator 경로 — hold 명령 발행
+            dispatch(.hold(reason: reason))
             return
         }
 
@@ -616,8 +635,12 @@ public actor LowLatencyController {
                 // 미등록 시 기존 targetLatency 기반 seek 으로 fallback.
                 if let snapHandler = onWebSyncSnap {
                     snapHandler(smoothed)
+                    // [P1-2] actuator 경로 — PDT 정밀 snap
+                    dispatch(.snap(toDriftMs: smoothed))
                 } else {
                     onSeekRequired?(config.targetLatency)
+                    // [P1-2] actuator 경로 — PDT 미등록 fallback seek
+                    dispatch(.fallbackSeek(targetSeconds: config.targetLatency))
                 }
                 enterPostSeekGrace()
                 _webPhase = .reacquire(reason: "snap")
@@ -704,6 +727,9 @@ public actor LowLatencyController {
             onRateChange?(newRate)
             logger.debug("WebSync drift=\(Int(smoothed))ms phase=\(String(describing: self._webPhase)) rate=\(String(format: "%.3f", newRate))")
         }
+        // [P1-2] actuator 경로 — 변화 여부와 무관하게 현재 rate 를 매 샘플 전파.
+        // (명령 재적용은 actuator 구현 측의 idempotent 책임)
+        dispatch(.rate(newRate))
     }
 
     /// phase 별 EWMA alpha — acquiring 빠른 추종, tracking 안정.
