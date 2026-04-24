@@ -72,9 +72,9 @@ struct HomeCommandBar: View {
 
             Spacer()
 
-            // Search entry (Spotlight-style invocation)
+            // Search entry (전역 ⌘K Command Palette 토글과 동일 동작)
             Button {
-                router.selectSidebar(.search)
+                appState.showCommandPalette.toggle()
             } label: {
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     Image(systemName: "magnifyingglass")

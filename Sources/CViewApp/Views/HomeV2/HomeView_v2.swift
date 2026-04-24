@@ -46,6 +46,15 @@ struct HomeView_v2: View {
     /// 탐색/인기 섹션 카테고리 필터 (nil = 전체)
     @State private var selectedCategory: String? = nil
 
+    // MARK: - Layout Preferences (P2-1)
+    @AppStorage("home.v2.show.hero")        private var prefShowHero: Bool = true
+    @AppStorage("home.v2.show.personalLive") private var prefShowPersonalLive: Bool = true
+    @AppStorage("home.v2.show.continue")    private var prefShowContinue: Bool = true
+    @AppStorage("home.v2.show.discover")    private var prefShowDiscover: Bool = true
+    @AppStorage("home.v2.show.top")         private var prefShowTop: Bool = true
+    @AppStorage("home.v2.show.insights")    private var prefShowInsights: Bool = true
+    @AppStorage("home.v2.show.activeMulti") private var prefShowActiveMulti: Bool = true
+
     // MARK: - Derived
 
     /// 인사말 (HomeView 와 동일 규칙)
@@ -121,13 +130,16 @@ struct HomeView_v2: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
                 // 1. Command Bar
-                HomeCommandBar(
-                    greeting: greeting,
-                    isRefreshing: refreshing,
-                    monitorEnabled: monitorEnabled,
-                    onToggleMonitor: { monitorEnabled.toggle() },
-                    onRefresh: { triggerRefresh() }
-                )
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    HomeCommandBar(
+                        greeting: greeting,
+                        isRefreshing: refreshing,
+                        monitorEnabled: monitorEnabled,
+                        onToggleMonitor: { monitorEnabled.toggle() },
+                        onRefresh: { triggerRefresh() }
+                    )
+                    HomeLayoutMenu()
+                }
                 .homeSectionAppear(index: 0)
 
                 // 2. Cookie login (필요 시 상단 노출)
@@ -137,59 +149,67 @@ struct HomeView_v2: View {
                 }
 
                 // 2-1. 활성 멀티라이브 세션 strip
-                HomeActiveMultiLiveStrip(liveLookup: cachedLiveLookup)
-                    .homeSectionAppear(index: 1)
+                if prefShowActiveMulti {
+                    HomeActiveMultiLiveStrip(liveLookup: cachedLiveLookup)
+                        .homeSectionAppear(index: 1)
+                }
 
                 // 3. Hero
-                if let hero = cachedRecommendations.first {
+                if prefShowHero, let hero = cachedRecommendations.first {
                     HomeHeroLiveCard(item: hero)
                         .homeSectionAppear(index: 2)
                 }
 
                 // 4. Personal Live (인라인 재구현)
-                if appState.isLoggedIn {
+                if prefShowPersonalLive, appState.isLoggedIn {
                     personalLiveSection
                         .homeSectionAppear(index: 3)
                 }
 
                 // 5/6. Continue Watching + Favorites
-                HStack(alignment: .top, spacing: DesignTokens.Spacing.xl) {
-                    HomeContinueWatchingStrip(
-                        title: "이어보기",
-                        icon: "clock.arrow.circlepath",
-                        items: recentItems,
-                        liveLookup: cachedLiveLookup
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if prefShowContinue {
+                    HStack(alignment: .top, spacing: DesignTokens.Spacing.xl) {
+                        HomeContinueWatchingStrip(
+                            title: "이어보기",
+                            icon: "clock.arrow.circlepath",
+                            items: recentItems,
+                            liveLookup: cachedLiveLookup
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HomeContinueWatchingStrip(
-                        title: "즐겨찾기",
-                        icon: "star.fill",
-                        items: favoriteItems,
-                        liveLookup: cachedLiveLookup
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                        HomeContinueWatchingStrip(
+                            title: "즐겨찾기",
+                            icon: "star.fill",
+                            items: favoriteItems,
+                            liveLookup: cachedLiveLookup
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .homeSectionAppear(index: 4)
                 }
-                .homeSectionAppear(index: 4)
 
                 // 7. Discover (rule-based recommendations)
-                if cachedRecommendations.count > 1 {
+                if prefShowDiscover, cachedRecommendations.count > 1 {
                     discoverSection
                         .homeSectionAppear(index: 5)
                 }
 
                 // 8. Top Channels (인라인 재구현)
-                topChannelsInlineSection
-                    .homeSectionAppear(index: 6)
+                if prefShowTop {
+                    topChannelsInlineSection
+                        .homeSectionAppear(index: 6)
+                }
 
                 // 9. Compact Insights
-                HomeInsightsCompactStrip(
-                    totalLive: viewModel.totalLiveChannelCount,
-                    totalViewers: viewModel.totalViewers,
-                    categoryCount: viewModel.categoryCount,
-                    followingLive: viewModel.followingLiveCount
-                )
-                .homeSectionAppear(index: 7)
+                if prefShowInsights {
+                    HomeInsightsCompactStrip(
+                        totalLive: viewModel.totalLiveChannelCount,
+                        totalViewers: viewModel.totalViewers,
+                        categoryCount: viewModel.categoryCount,
+                        followingLive: viewModel.followingLiveCount
+                    )
+                    .homeSectionAppear(index: 7)
+                }
             }
             .padding(DesignTokens.Spacing.xl)
         }

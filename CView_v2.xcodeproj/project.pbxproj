@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B51DB9BDCB9752C5E4DE96F /* HomeV2Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21F5508BFB114CDFF6AE5493 /* HomeV2Layout.swift */; };
 		13E7C8A62D6F68491D492166 /* SelectChannelIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6442646753920D19041BC479 /* SelectChannelIntent.swift */; };
 		181653DAF0FD0A95B8C6EA5E /* HomeView_v2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */; };
 		18A71DB566A7C6A727A5AFC3 /* HomeV2Extras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */; };
@@ -200,6 +201,7 @@
 
 /* Begin PBXFileReference section */
 		1903D51ACC1B74A7955D5B35 /* FollowingLiveListWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FollowingLiveListWidget.swift; sourceTree = "<group>"; };
+		21F5508BFB114CDFF6AE5493 /* HomeV2Layout.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Layout.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Layout.swift; sourceTree = SOURCE_ROOT; };
 		29DFCF37AFC447A104B9AC1A /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ChatViewModel.swift; sourceTree = SOURCE_ROOT; };
 		2A99A6CE4FD3E9ACBDA71025 /* NowWatchingWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NowWatchingWidget.swift; sourceTree = "<group>"; };
 		2FE8F901A0136070800AC560 /* CView_v2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CView_v2.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -586,6 +588,7 @@
 				5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */,
 				CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */,
 				8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */,
+				21F5508BFB114CDFF6AE5493 /* HomeV2Layout.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -993,6 +996,7 @@
 				A5A18BAD6416A63196D65D4D /* HomeMonitorPanel.swift in Sources */,
 				64F42BE19BA1F44629D7615C /* HomeV2Effects.swift in Sources */,
 				18A71DB566A7C6A727A5AFC3 /* HomeV2Extras.swift in Sources */,
+				0B51DB9BDCB9752C5E4DE96F /* HomeV2Layout.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
