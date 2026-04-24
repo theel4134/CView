@@ -138,8 +138,9 @@ struct HomeHeroLiveCard: View {
                     channelId: item.channel.channelId,
                     thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? "")
                 )
-                .aspectRatio(16/9, contentMode: .fill)
                 .frame(maxWidth: .infinity)
+                .frame(height: 320)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
@@ -151,7 +152,9 @@ struct HomeHeroLiveCard: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+                .allowsHitTesting(false)
 
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
                     HStack(spacing: DesignTokens.Spacing.xs) {
@@ -188,7 +191,7 @@ struct HomeHeroLiveCard: View {
                 .padding(DesignTokens.Spacing.lg)
             }
             .frame(maxWidth: .infinity)
-            .frame(maxHeight: 360)
+            .frame(height: 320)
             .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
         }
         .buttonStyle(.plain)
@@ -257,7 +260,9 @@ struct HomeRecommendedCard: View {
                         channelId: item.channel.channelId,
                         thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? "")
                     )
-                    .aspectRatio(16/9, contentMode: .fill)
+                    .aspectRatio(16/9, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
                     .clipShape(UnevenRoundedRectangle(
                         topLeadingRadius: DesignTokens.Radius.sm,
                         topTrailingRadius: DesignTokens.Radius.sm
