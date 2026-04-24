@@ -62,6 +62,29 @@ extension StreamCoordinator {
                 }
             }
         }
+
+        // [P2-1 / 2026-04-25] WebSync snap PDT 정밀 seek.
+        // drift > 0  → 앱이 웹보다 뒤쳐짐 → 앞으로 seek (currentTime + drift).
+        // drift < 0  → 앱이 웹보다 앞섬   → 뒤로  seek (currentTime + drift, 음수).
+        // 라이브 가용 범위 [1.0, duration - vlcPipelineDelay] 로 클램프하여 보호.
+        await controller.setOnWebSyncSnap { [weak self] driftMs in
+            Task { [weak self] in
+                guard let engine = await self?.playerEngine else { return }
+                let driftSec = driftMs / 1000.0
+                let current = engine.currentTime
+                let duration = engine.duration
+                guard duration > 2.0 else { return }
+                let vlcPipelineDelay: TimeInterval = 1.0
+                let liveEdge = duration - vlcPipelineDelay
+                // currentTime + drift 가 1차 목표. 라이브 가용 범위로 클램프.
+                let raw = current + driftSec
+                let seekTarget = max(1.0, min(liveEdge, raw))
+                // 변화량이 무의미하면 스킵 (±100ms)
+                if abs(seekTarget - current) < 0.1 { return }
+                AppLogger.sync.warning("WebSync PDT snap: drift=\(Int(driftMs))ms, current=\(String(format: "%.2f", current))s → seek=\(String(format: "%.2f", seekTarget))s (clamped from \(String(format: "%.2f", raw))s, liveEdge=\(String(format: "%.2f", liveEdge))s)")
+                engine.seek(to: seekTarget)
+            }
+        }
         
         // Method A: 미디어 플레이리스트 URL 확보 (마스터 플레이리스트 파싱)
         // loadManifestInfo가 백그라운드 Task이므로 직접 fetch해서 타이밍 문제 해결

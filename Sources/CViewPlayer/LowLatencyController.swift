@@ -248,6 +248,10 @@ public actor LowLatencyController {
     // Callbacks
     private var onRateChange: (@Sendable (Double) -> Void)?
     private var onSeekRequired: (@Sendable (TimeInterval) -> Void)?
+    /// [P2-1 / 2026-04-25] WebSync snap 전용 — drift 기반 정밀 seek 콜백.
+    /// 등록되면 snap 시 `onSeekRequired(targetLatency)` 대신 이 콜백이 호출된다.
+    /// 인자: smoothed driftMs (양수=앱이 웹보다 뒤쳐짐 → 앞으로 seek 필요).
+    private var onWebSyncSnap: (@Sendable (Double) -> Void)?
     /// 매 측정 후 (raw, ewma, target) 알림 — StreamCoordinator → PlayerViewModel.latencyInfo 갱신용
     private var onLatencyMeasured: (@Sendable (TimeInterval, TimeInterval, TimeInterval) -> Void)?
     
@@ -301,6 +305,12 @@ public actor LowLatencyController {
     /// Set callback for seek requirements
     public func setOnSeekRequired(_ handler: @escaping @Sendable (TimeInterval) -> Void) {
         self.onSeekRequired = handler
+    }
+
+    /// [P2-1] WebSync snap 전용 PDT 기반 seek 콜백 등록.
+    /// nil 로 등록하면 기존 latency 기반 `onSeekRequired` 경로로 fallback.
+    public func setOnWebSyncSnap(_ handler: (@Sendable (Double) -> Void)?) {
+        self.onWebSyncSnap = handler
     }
 
     /// Set callback for latency measurements (current, ewma, target — all in seconds)
@@ -602,7 +612,13 @@ public actor LowLatencyController {
                 let prevPhase = _webPhase
                 _webPhase = .snap
                 _state = .seekRequired
-                onSeekRequired?(config.targetLatency)
+                // [P2-1] PDT 기반 정밀 snap 우선 — coordinator 가 currentTime+drift 계산.
+                // 미등록 시 기존 targetLatency 기반 seek 으로 fallback.
+                if let snapHandler = onWebSyncSnap {
+                    snapHandler(smoothed)
+                } else {
+                    onSeekRequired?(config.targetLatency)
+                }
                 enterPostSeekGrace()
                 _webPhase = .reacquire(reason: "snap")
                 _consecutiveExcellent = 0
