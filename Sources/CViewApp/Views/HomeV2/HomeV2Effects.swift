@@ -69,24 +69,28 @@ struct HomeHoverLift: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scaleEffect(hovered && !reduceMotion ? scale : 1.0, anchor: .center)
-            .offset(y: hovered && !reduceMotion ? -lift : 0)
+            // [Perf 2026-04-27] offset 제거 — scaleEffect 와 동시 적용 시 추가 geometry pass
+            // 발생. scale 만으로 시각적 들어올림 효과 충분.
             // [Perf 2026-04-24] shadow radius 애니메이션 제거.
             //   이전: radius 가 5 ↔ 14 로 애니메이션 되면 SwiftUI 가 중간값마다
             //   가우시안 블러 커널을 재생성 → 호버 시 0.18s 동안 매 프레임 GPU 스파이크
-                //   (클래식 stutter 원인). 수정: radius 고정 + opacity 만 애니메이션
-            //   (CALayer 는 opacity 변화는 블러 재생성 없이 공직 합성—비용 거의 0).
+            //   (클래식 stutter 원인). 수정: radius 고정 + opacity 만 애니메이션
+            //   (CALayer 는 opacity 변화는 블러 재생성 없이 합성—비용 거의 0).
             .shadow(
                 color: (hovered ? accent.opacity(0.22) : .black.opacity(0.08)),
                 radius: 8,
                 y: hovered ? 4 : 2
             )
+            // [Perf 2026-04-27] overlay 조건부 렌더링 — opacity:0 상태에서도 strokeBorder
+            // overlay 가 합성 레이어로 상시 존재하던 문제 수정. HomeContinueWatchingStrip
+            // 12개 항목 × 1 레이어 절약 → WindowServer 합성 비용 감소.
             .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(
-                        accent.opacity(hovered ? 0.55 : 0.0),
-                        lineWidth: 1.0
-                    )
-                    .allowsHitTesting(false)
+                if hovered {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(accent.opacity(0.55), lineWidth: 1.0)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
             }
             .animation(DesignTokens.Animation.smooth, value: hovered)
             .onHover { hovered = $0 }

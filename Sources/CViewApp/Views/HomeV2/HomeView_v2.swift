@@ -51,6 +51,8 @@ struct HomeView_v2: View {
     @State private var upNextSegment: UpNextSegment = .following
     @AppStorage("home.v2.upnext.segment") private var upNextSegmentRaw: String = UpNextSegment.following.rawValue
     @State private var showDataHealthDetail: Bool = false
+    /// Discover 섹션 "더 보기" 펼침 상태
+    @State private var discoverShowAll: Bool = false
 
     // MARK: - Layout Preferences (P2-1)
     @AppStorage("home.v2.show.hero")        private var prefShowHero: Bool = true
@@ -695,6 +697,9 @@ struct HomeView_v2: View {
                 channels: viewModel.allStatChannels.isEmpty ? viewModel.liveChannels : viewModel.allStatChannels,
                 selected: $selectedCategory
             )
+            .onChange(of: selectedCategory) {
+                discoverShowAll = false
+            }
 
             let filtered = filteredRecommendations
             if filtered.isEmpty {
@@ -708,11 +713,14 @@ struct HomeView_v2: View {
                 .padding(.vertical, DesignTokens.Spacing.lg)
                 .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             } else {
+                // 초기 노출 6개, 더 보기 시 전체 표시
+                let initialCount = 6
+                let visibleItems = discoverShowAll ? filtered : Array(filtered.prefix(initialCount))
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: discoverGridMinimum, maximum: 340), spacing: DesignTokens.Spacing.sm)],
                     spacing: DesignTokens.Spacing.sm
                 ) {
-                    ForEach(filtered) { item in
+                    ForEach(visibleItems) { item in
                         HomeRecommendedCard(item: item)
                             .liveCardActions(
                                 channelId: item.channel.channelId,
@@ -720,6 +728,46 @@ struct HomeView_v2: View {
                                 isLive: true
                             )
                     }
+                }
+                if !discoverShowAll, filtered.count > initialCount {
+                    Button {
+                        withAnimation(DesignTokens.Animation.smooth) {
+                            discoverShowAll = true
+                        }
+                    } label: {
+                        HStack(spacing: DesignTokens.Spacing.xs) {
+                            Text("더 보기 (\(filtered.count - initialCount)개)")
+                                .font(DesignTokens.Typography.captionSemibold)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DesignTokens.Spacing.sm)
+                        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } else if discoverShowAll, filtered.count > initialCount {
+                    Button {
+                        withAnimation(DesignTokens.Animation.smooth) {
+                            discoverShowAll = false
+                        }
+                    } label: {
+                        HStack(spacing: DesignTokens.Spacing.xs) {
+                            Text("접기")
+                                .font(DesignTokens.Typography.captionSemibold)
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DesignTokens.Spacing.xs)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }

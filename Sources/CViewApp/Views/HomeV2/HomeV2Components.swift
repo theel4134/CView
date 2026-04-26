@@ -396,25 +396,29 @@ struct HomeRecommendedCard: View {
                     .aspectRatio(16/9, contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .clipped()
-                    .scaleEffect(hovered ? 1.04 : 1.0, anchor: .center)
+                    // [Perf 2026-04-27] 썸네일 개별 scaleEffect 제거 — 카드 전체 scale 로 통일.
+                    // 썸네일 scale + 카드 scale 이중 합성 레이어가 카드 N개 × 2배 WindowServer
+                    // 합성 비용을 유발하므로 썸네일은 정적으로 유지.
                     .clipShape(UnevenRoundedRectangle(
                         topLeadingRadius: DesignTokens.Radius.sm,
                         topTrailingRadius: DesignTokens.Radius.sm
                     ))
-                    .animation(DesignTokens.Animation.smooth, value: hovered)
 
-                    // 호버 시 그라디언트 오버레이
-                    LinearGradient(
-                        colors: [DesignTokens.Colors.chzzkGreen.opacity(hovered ? 0.18 : 0), .clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .clipShape(UnevenRoundedRectangle(
-                        topLeadingRadius: DesignTokens.Radius.sm,
-                        topTrailingRadius: DesignTokens.Radius.sm
-                    ))
-                    .allowsHitTesting(false)
-                    .animation(DesignTokens.Animation.smooth, value: hovered)
+                    // [Perf 2026-04-27] 호버 그라디언트: opacity 보간 대신 조건부 렌더링으로
+                    // 비활성 상태에서 합성 레이어 자체를 제거.
+                    if hovered {
+                        LinearGradient(
+                            colors: [DesignTokens.Colors.chzzkGreen.opacity(0.18), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .clipShape(UnevenRoundedRectangle(
+                            topLeadingRadius: DesignTokens.Radius.sm,
+                            topTrailingRadius: DesignTokens.Radius.sm
+                        ))
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                    }
 
                     if let reason = item.reasons.first {
                         Text(reason)
@@ -486,15 +490,17 @@ struct HomeRecommendedCard: View {
             .padding(.vertical, DesignTokens.Spacing.xs)
         }
         .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        // [Perf 2026-04-27] strokeBorder lineWidth 0.5↔1.2 변경 시 path 재계산 발생.
+        // lineWidth 1.0 고정, 색만 보간 (opacity 변화만 발생 → 블러 재계산 없음).
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(
                     hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.55) : DesignTokens.Glass.borderColor,
-                    lineWidth: hovered ? 1.2 : 0.5
+                    lineWidth: 1.0
                 )
         }
-        .scaleEffect(hovered ? 1.022 : 1.0, anchor: .center)
-        .offset(y: hovered ? -2 : 0)
+        .scaleEffect(hovered ? 1.015 : 1.0, anchor: .center)
+        // [Perf 2026-04-27] offset 제거 — scaleEffect 와 동시 적용 시 추가 pass 발생.
         // [Perf 2026-04-24] radius 고정 (Gaussian blur 재계산 방지). 색/y 만 보간.
         .shadow(
             color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.20) : .black.opacity(0.07),
