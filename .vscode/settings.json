@@ -1,11 +1,11 @@
 {
   "terminal.integrated.textBlinking": true,
   // ── Swift(SPM) 빌드 산출물을 외장 SSD로 리다이렉트 ──
-  // Xcode DerivedData: /Volumes/projectssd/work/build
-  // SPM scratch:       /Volumes/projectssd/work/build/SPM
-  "swift.buildPath": "/Volumes/projectssd/work/build/SPM",
+  // Xcode DerivedData: /Volumes/hdd/app-work/build
+  // SPM scratch:       /Volumes/hdd/app-work/build/SPM
+  "swift.buildPath": "/Volumes/hdd/app-work/build/SPM",
   "swift.buildArguments": [
     "--scratch-path",
-    "/Volumes/projectssd/work/build/SPM"
+    "/Volumes/hdd/app-work/build/SPM"
   ]
 }

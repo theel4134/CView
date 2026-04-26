@@ -48,6 +48,9 @@ struct HomeView_v2: View {
 
     /// 탐색/인기 섹션 카테고리 필터 (nil = 전체)
     @State private var selectedCategory: String? = nil
+    @State private var upNextSegment: UpNextSegment = .following
+    @AppStorage("home.v2.upnext.segment") private var upNextSegmentRaw: String = UpNextSegment.following.rawValue
+    @State private var showDataHealthDetail: Bool = false
 
     // MARK: - Layout Preferences (P2-1)
     @AppStorage("home.v2.show.hero")        private var prefShowHero: Bool = true
@@ -57,6 +60,7 @@ struct HomeView_v2: View {
     @AppStorage("home.v2.show.top")         private var prefShowTop: Bool = true
     @AppStorage("home.v2.show.insights")    private var prefShowInsights: Bool = true
     @AppStorage("home.v2.show.activeMulti") private var prefShowActiveMulti: Bool = true
+    @AppStorage("home.v2.density")          private var densityRaw: String = HomeCardDensity.comfortable.rawValue
 
     // MARK: - Derived
 
@@ -91,6 +95,324 @@ struct HomeView_v2: View {
             hasher.combine(first)
         }
         return hasher.finalize()
+    }
+
+    private var density: HomeCardDensity {
+        HomeCardDensity(rawValue: densityRaw) ?? .comfortable
+    }
+
+    private var heroHeight: CGFloat {
+        switch density {
+        case .compact: return 236
+        case .comfortable: return 292
+        case .spacious: return 336
+        }
+    }
+
+    private var sectionSpacing: CGFloat {
+        switch density {
+        case .compact: return 12
+        case .comfortable: return 16
+        case .spacious: return 20
+        }
+    }
+
+    private var discoverGridMinimum: CGFloat {
+        switch density {
+        case .compact: return 200
+        case .comfortable: return 220
+        case .spacious: return 250
+        }
+    }
+
+    private var topGridMinimum: CGFloat {
+        switch density {
+        case .compact: return 210
+        case .comfortable: return 230
+        case .spacious: return 260
+        }
+    }
+
+    private var queueLimit: Int {
+        switch density {
+        case .compact: return 6
+        case .comfortable: return 7
+        case .spacious: return 8
+        }
+    }
+
+    private struct UpNextItem: Identifiable {
+        let id: String
+        let channel: LiveChannelItem
+        let source: String
+    }
+
+    private enum UpNextSegment: String, CaseIterable, Identifiable {
+        case following = "팔로잉"
+        case favorites = "즐겨찾기"
+        case recent = "최근"
+
+        var id: String { rawValue }
+    }
+
+    private var upNextItemsBySegment: [UpNextSegment: [UpNextItem]] {
+        var map: [UpNextSegment: [UpNextItem]] = [:]
+
+        map[.following] = Array(
+            viewModel.recentLiveFollowing
+                .prefix(queueLimit)
+                .map { .init(id: $0.channelId, channel: $0, source: "팔로잉 LIVE") }
+        )
+
+        var favorites: [UpNextItem] = []
+        for item in favoriteItems {
+            if let live = cachedLiveLookup[item.channelId] {
+                favorites.append(.init(id: live.channelId, channel: live, source: "즐겨찾기"))
+            }
+            if favorites.count >= queueLimit { break }
+        }
+        map[.favorites] = favorites
+
+        var recents: [UpNextItem] = []
+        for item in recentItems {
+            if let live = cachedLiveLookup[item.channelId] {
+                recents.append(.init(id: live.channelId, channel: live, source: "최근 시청"))
+            }
+            if recents.count >= queueLimit { break }
+        }
+        map[.recent] = recents
+
+        return map
+    }
+
+    private var currentUpNextItems: [UpNextItem] {
+        upNextItemsBySegment[upNextSegment] ?? []
+    }
+
+    private enum HomeDataHealth {
+        case loading
+        case error(String)
+        case stale
+        case healthy
+
+        var icon: String {
+            switch self {
+            case .loading: return "arrow.triangle.2.circlepath"
+            case .error: return "exclamationmark.triangle.fill"
+            case .stale: return "clock.badge.exclamationmark"
+            case .healthy: return "checkmark.seal.fill"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .loading: return "갱신 중"
+            case .error: return "오류"
+            case .stale: return "지연"
+            case .healthy: return "정상"
+            }
+        }
+
+        var tint: Color {
+            switch self {
+            case .loading: return DesignTokens.Colors.textSecondary
+            case .error: return DesignTokens.Colors.warning
+            case .stale: return DesignTokens.Colors.warning
+            case .healthy: return DesignTokens.Colors.chzzkGreen
+            }
+        }
+
+        var help: String {
+            switch self {
+            case .loading:
+                return "라이브/통계 데이터를 새로 갱신하고 있어요"
+            case let .error(msg):
+                return "최근 통계 수집 오류: \(msg)"
+            case .stale:
+                return "통계 데이터가 오래되었어요. 새로고침을 권장합니다"
+            case .healthy:
+                return "데이터 상태가 안정적입니다"
+            }
+        }
+    }
+
+    private enum HomeDataIssueKind {
+        case auth
+        case network
+        case rateLimited
+        case server
+        case unknown
+
+        var label: String {
+            switch self {
+            case .auth: return "인증"
+            case .network: return "네트워크"
+            case .rateLimited: return "요청 제한"
+            case .server: return "서버"
+            case .unknown: return "일반"
+            }
+        }
+
+        var recommendation: String {
+            switch self {
+            case .auth:
+                return "쿠키 로그인을 다시 진행한 뒤 새로고침하세요"
+            case .network:
+                return "네트워크 연결 상태를 확인한 뒤 다시 시도하세요"
+            case .rateLimited:
+                return "짧게 대기한 후 다시 새로고침하는 것이 안전합니다"
+            case .server:
+                return "일시적인 서버 응답 문제일 수 있어 잠시 후 재시도하는 편이 좋습니다"
+            case .unknown:
+                return "문제가 반복되면 새로고침 후 다시 확인하세요"
+            }
+        }
+    }
+
+    private var dataHealth: HomeDataHealth {
+        if refreshing || viewModel.isLoadingStats {
+            return .loading
+        }
+        if let err = viewModel.statsLoadError, !err.isEmpty {
+            return .error(err)
+        }
+        if let last = viewModel.allStatLastLoadedAt,
+           Date().timeIntervalSince(last) > 60 * 10 {
+            return .stale
+        }
+        return .healthy
+    }
+
+    private var dataIssueKind: HomeDataIssueKind? {
+        guard case let .error(message) = dataHealth else { return nil }
+        return classifyDataIssue(message)
+    }
+
+    private var shouldShowRefreshAction: Bool {
+        switch dataHealth {
+        case .loading, .healthy:
+            return false
+        case .error, .stale:
+            return true
+        }
+    }
+
+    private var upNextEmptyMessage: String {
+        switch upNextSegment {
+        case .following:
+            return "라이브 중인 팔로잉 채널이 없어요"
+        case .favorites:
+            return "즐겨찾기한 채널 중 라이브가 없어요"
+        case .recent:
+            return "최근 시청 채널 중 라이브가 없어요"
+        }
+    }
+
+    private var isUpNextLoading: Bool {
+        (refreshing || viewModel.isLoadingStats) && currentUpNextItems.isEmpty
+    }
+
+    private var dataHealthUpdatedAtText: String {
+        guard let at = viewModel.allStatLastLoadedAt else { return "기록 없음" }
+        return Self.absoluteTimeFormatter.string(from: at)
+    }
+
+    private var upNextSegmentBinding: Binding<UpNextSegment> {
+        Binding(
+            get: { upNextSegment },
+            set: { newValue in
+                upNextSegment = newValue
+                upNextSegmentRaw = newValue.rawValue
+            }
+        )
+    }
+
+    private static let relativeTimeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        formatter.locale = Locale(identifier: "ko_KR")
+        return formatter
+    }()
+
+    private static let absoluteTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M/d HH:mm:ss"
+        return formatter
+    }()
+
+    private var statusPanelSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Button {
+                    if !appState.isLoggedIn {
+                        router.presentSheet(.login)
+                    }
+                } label: {
+                    HomeV2StatusPill(
+                        icon: appState.isLoggedIn ? "person.fill.checkmark" : "person.badge.key",
+                        title: "로그인",
+                        value: appState.isLoggedIn ? "연결됨" : "필요",
+                        tint: appState.isLoggedIn ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.warning
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(appState.isLoggedIn ? "로그인 상태" : "로그인 열기")
+
+                Button {
+                    if viewModel.needsCookieLogin {
+                        router.presentSheet(.login)
+                    }
+                } label: {
+                    HomeV2StatusPill(
+                        icon: "key.fill",
+                        title: "쿠키",
+                        value: viewModel.needsCookieLogin ? "재로그인 필요" : "정상",
+                        tint: viewModel.needsCookieLogin ? DesignTokens.Colors.warning : DesignTokens.Colors.chzzkGreen
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(viewModel.needsCookieLogin ? "쿠키 로그인 열기" : "쿠키 상태 정상")
+
+                Button {
+                    triggerRefresh()
+                } label: {
+                    HomeV2StatusPill(
+                        icon: "arrow.clockwise",
+                        title: "추천 캐시",
+                        value: cachedRecommendations.isEmpty ? "비어있음" : "준비됨",
+                        tint: cachedRecommendations.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("라이브/추천 데이터 새로고침")
+
+                Button {
+                    showDataHealthDetail.toggle()
+                } label: {
+                    HomeV2StatusPill(
+                        icon: dataHealth.icon,
+                        title: "데이터",
+                        value: dataHealth.label,
+                        tint: dataHealth.tint
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(dataHealth.help)
+                .popover(isPresented: $showDataHealthDetail, arrowEdge: .bottom) {
+                    dataHealthPopoverContent
+                }
+
+                if let cachedAt = viewModel.liveChannelsCachedAt {
+                    HomeV2StatusPill(
+                        icon: "clock",
+                        title: "업데이트",
+                        value: relativeTime(cachedAt),
+                        tint: DesignTokens.Colors.textSecondary
+                    )
+                }
+            }
+        }
     }
 
     private func recomputeCachesIfNeeded() {
@@ -178,10 +500,25 @@ struct HomeView_v2: View {
             .padding(.horizontal, DesignTokens.Spacing.xl)
             .padding(.top, DesignTokens.Spacing.xl + 32)   // 타이틀바(28) 보정 포함
             .padding(.bottom, DesignTokens.Spacing.sm)
-            .background(.bar)   // 스크롤 시에도 명확히 구분되도록 머티리얼 배경
+            .background {
+                ZStack {
+                    DesignTokens.Colors.background.opacity(0.96)
+                    LinearGradient(
+                        colors: [
+                            DesignTokens.Colors.surfaceElevated.opacity(0.78),
+                            DesignTokens.Colors.background.opacity(0.92)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                LazyVStack(alignment: .leading, spacing: sectionSpacing) {
+                    statusPanelSection
+                        .homeSectionAppear(index: 0)
+
                     // 2. Cookie login (필요 시 상단 노출)
                     if appState.isLoggedIn && viewModel.needsCookieLogin {
                         cookieLoginBannerInline
@@ -194,9 +531,9 @@ struct HomeView_v2: View {
                             .homeSectionAppear(index: 1)
                     }
 
-                    // 3. Hero
+                    // 3. Hero + Personal Queue
                     if prefShowHero, let hero = cachedRecommendations.first {
-                        HomeHeroLiveCard(item: hero)
+                        topFocusSection(hero: hero)
                             .homeSectionAppear(index: 2)
                     }
 
@@ -208,22 +545,39 @@ struct HomeView_v2: View {
 
                     // 5/6. Continue Watching + Favorites
                     if prefShowContinue {
-                        HStack(alignment: .top, spacing: DesignTokens.Spacing.xl) {
-                            HomeContinueWatchingStrip(
-                                title: "이어보기",
-                                icon: "clock.arrow.circlepath",
-                                items: recentItems,
-                                liveLookup: cachedLiveLookup
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: sectionSpacing) {
+                                HomeContinueWatchingStrip(
+                                    title: "이어보기",
+                                    icon: "clock.arrow.circlepath",
+                                    items: recentItems,
+                                    liveLookup: cachedLiveLookup
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
 
-                            HomeContinueWatchingStrip(
-                                title: "즐겨찾기",
-                                icon: "star.fill",
-                                items: favoriteItems,
-                                liveLookup: cachedLiveLookup
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                                HomeContinueWatchingStrip(
+                                    title: "즐겨찾기",
+                                    icon: "star.fill",
+                                    items: favoriteItems,
+                                    liveLookup: cachedLiveLookup
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            VStack(alignment: .leading, spacing: sectionSpacing) {
+                                HomeContinueWatchingStrip(
+                                    title: "이어보기",
+                                    icon: "clock.arrow.circlepath",
+                                    items: recentItems,
+                                    liveLookup: cachedLiveLookup
+                                )
+                                HomeContinueWatchingStrip(
+                                    title: "즐겨찾기",
+                                    icon: "star.fill",
+                                    items: favoriteItems,
+                                    liveLookup: cachedLiveLookup
+                                )
+                            }
                         }
                         .homeSectionAppear(index: 4)
                     }
@@ -355,7 +709,7 @@ struct HomeView_v2: View {
                 .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: DesignTokens.Spacing.sm)],
+                    columns: [GridItem(.adaptive(minimum: discoverGridMinimum, maximum: 340), spacing: DesignTokens.Spacing.sm)],
                     spacing: DesignTokens.Spacing.sm
                 ) {
                     ForEach(filtered) { item in
@@ -440,7 +794,7 @@ struct HomeView_v2: View {
                 .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: DesignTokens.Spacing.sm)],
+                    columns: [GridItem(.adaptive(minimum: discoverGridMinimum, maximum: 340), spacing: DesignTokens.Spacing.sm)],
                     spacing: DesignTokens.Spacing.sm
                 ) {
                     ForEach(viewModel.recentLiveFollowing) { channel in
@@ -484,7 +838,7 @@ struct HomeView_v2: View {
             )
 
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 220, maximum: 340), spacing: DesignTokens.Spacing.sm)],
+                columns: [GridItem(.adaptive(minimum: topGridMinimum, maximum: 360), spacing: DesignTokens.Spacing.sm)],
                 spacing: DesignTokens.Spacing.sm
             ) {
                 ForEach(filteredTopChannels) { channel in
@@ -512,6 +866,223 @@ struct HomeView_v2: View {
 
     // MARK: - Refresh
 
+    @ViewBuilder
+    private func topFocusSection(hero: HomeRecommendationEngine.ScoredChannel) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: sectionSpacing) {
+                HomeHeroLiveCard(item: hero, height: heroHeight)
+                    .frame(maxWidth: .infinity)
+
+                upNextQueuePanel
+                    .frame(width: 360)
+            }
+
+            VStack(alignment: .leading, spacing: sectionSpacing) {
+                HomeHeroLiveCard(item: hero, height: heroHeight)
+                upNextQueuePanel
+            }
+        }
+    }
+
+    private var upNextQueuePanel: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            HomeV2SectionHeader(
+                icon: "rectangle.stack.fill",
+                title: "Up Next Queue",
+                subtitle: upNextSegment.rawValue
+            )
+
+            Picker("Up Next Segment", selection: upNextSegmentBinding) {
+                ForEach(UpNextSegment.allCases) { seg in
+                    Text(seg.rawValue).tag(seg)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onAppear {
+                upNextSegment = UpNextSegment(rawValue: upNextSegmentRaw) ?? .following
+            }
+            .onChange(of: upNextSegmentRaw) { _, newValue in
+                let restored = UpNextSegment(rawValue: newValue) ?? .following
+                if restored != upNextSegment {
+                    upNextSegment = restored
+                }
+            }
+
+            ZStack {
+                if isUpNextLoading {
+                    VStack(spacing: DesignTokens.Spacing.xs) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            UpNextSkeletonRow()
+                        }
+                    }
+                    .transition(.opacity)
+                } else if currentUpNextItems.isEmpty {
+                    HStack {
+                        Spacer()
+                        Text(upNextEmptyMessage)
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        Spacer()
+                    }
+                    .padding(.vertical, DesignTokens.Spacing.lg)
+                    .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+                    .transition(.opacity)
+                } else {
+                    VStack(spacing: DesignTokens.Spacing.xs) {
+                        ForEach(currentUpNextItems) { entry in
+                            HStack(spacing: DesignTokens.Spacing.xs) {
+                                Button {
+                                    router.navigate(to: .live(channelId: entry.channel.channelId))
+                                } label: {
+                                    HStack(spacing: DesignTokens.Spacing.xs) {
+                                        CachedAsyncImage(url: URL(string: entry.channel.channelImageUrl ?? "")) {
+                                            Circle().fill(DesignTokens.Colors.surfaceBase)
+                                        }
+                                        .frame(width: 30, height: 30)
+                                        .clipShape(Circle())
+                                        .overlay {
+                                            Circle().strokeBorder(DesignTokens.Colors.live.opacity(0.45), lineWidth: 1)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(entry.channel.channelName)
+                                                .font(DesignTokens.Typography.captionSemibold)
+                                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                                .lineLimit(1)
+                                            Text(entry.source)
+                                                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                                                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    router.navigate(to: .live(channelId: entry.channel.channelId))
+                                } label: {
+                                    UpNextCircleActionButton(
+                                        systemName: "play.fill",
+                                        fgColor: .white,
+                                        bgColor: DesignTokens.Colors.live.opacity(0.85)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    Task { @MainActor in
+                                        await appState.multiLiveManager.addSession(
+                                            channelId: entry.channel.channelId,
+                                            presentationOverride: .embedded
+                                        )
+                                    }
+                                } label: {
+                                    UpNextCircleActionButton(
+                                        systemName: "plus",
+                                        fgColor: DesignTokens.Colors.chzzkGreen,
+                                        bgColor: DesignTokens.Colors.chzzkGreen.opacity(0.14)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .help("멀티라이브에 추가")
+                            }
+                            .padding(.horizontal, DesignTokens.Spacing.sm)
+                            .padding(.vertical, DesignTokens.Spacing.xs)
+                            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                        }
+                    }
+                    .id(upNextSegment)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .trailing)), removal: .opacity))
+                }
+            }
+            .animation(DesignTokens.Animation.smooth, value: upNextSegment)
+            .animation(DesignTokens.Animation.fast, value: isUpNextLoading)
+        }
+        .padding(DesignTokens.Spacing.sm)
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+        }
+    }
+
+    private var dataHealthPopoverContent: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                Image(systemName: dataHealth.icon)
+                    .foregroundStyle(dataHealth.tint)
+                Text("데이터 상태: \(dataHealth.label)")
+                    .font(DesignTokens.Typography.captionSemibold)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+            }
+
+            Text(dataHealth.help)
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                dataHealthRow(label: "최근 갱신", value: dataHealthUpdatedAtText)
+                dataHealthRow(label: "통계 로딩", value: viewModel.isLoadingStats ? "진행 중" : "대기")
+                dataHealthRow(label: "로컬 새로고침", value: refreshing ? "진행 중" : "대기")
+                if let issue = dataIssueKind {
+                    dataHealthRow(label: "오류 유형", value: issue.label)
+                }
+            }
+
+            if let issue = dataIssueKind {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("권장 조치")
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Text(issue.recommendation)
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+            }
+
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                if let issue = dataIssueKind, issue == .auth || viewModel.needsCookieLogin {
+                    Button("로그인 열기") {
+                        showDataHealthDetail = false
+                        router.presentSheet(.login)
+                    }
+                    .controlSize(.small)
+                }
+
+                if shouldShowRefreshAction {
+                    Button("지금 새로고침") {
+                        showDataHealthDetail = false
+                        triggerRefresh()
+                    }
+                    .controlSize(.small)
+                }
+
+                Button("닫기") {
+                    showDataHealthDetail = false
+                }
+                .controlSize(.small)
+            }
+            .padding(.top, 2)
+        }
+        .padding(DesignTokens.Spacing.md)
+        .frame(width: 300, alignment: .leading)
+    }
+
+    private func dataHealthRow(label: String, value: String) -> some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Text(label)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .frame(width: 62, alignment: .leading)
+            Text(value)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+    }
+
     private func triggerRefresh() {
         guard !refreshing else { return }
         refreshing = true
@@ -522,13 +1093,6 @@ struct HomeView_v2: View {
         }
     }
 
-    private func scheduleStoreReload() {
-        loadStoreTask?.cancel()
-        loadStoreTask = Task { @MainActor in
-            await reloadStore()
-        }
-    }
-
     private func reloadStore() async {
         guard let ds = appState.dataStore else { return }
         let recents = (try? await ds.fetchRecentItems(limit: 20)) ?? []
@@ -536,5 +1100,107 @@ struct HomeView_v2: View {
         recentItems = recents
         favoriteItems = favs
         recomputeCachesIfNeeded()
+    }
+
+    private func relativeTime(_ d: Date) -> String {
+        Self.relativeTimeFormatter.localizedString(for: d, relativeTo: Date())
+    }
+
+    private func classifyDataIssue(_ message: String) -> HomeDataIssueKind {
+        let lowercased = message.lowercased()
+
+        if lowercased.contains("cookie")
+            || lowercased.contains("login")
+            || lowercased.contains("auth")
+            || lowercased.contains("401")
+            || message.contains("로그인")
+            || message.contains("인증") {
+            return .auth
+        }
+
+        if lowercased.contains("timeout")
+            || lowercased.contains("network")
+            || lowercased.contains("offline")
+            || lowercased.contains("dns")
+            || lowercased.contains("connection")
+            || message.contains("네트워크")
+            || message.contains("연결")
+            || message.contains("타임아웃") {
+            return .network
+        }
+
+        if lowercased.contains("429")
+            || lowercased.contains("rate")
+            || lowercased.contains("too many")
+            || message.contains("요청이 많")
+            || message.contains("제한") {
+            return .rateLimited
+        }
+
+        if lowercased.contains("500")
+            || lowercased.contains("502")
+            || lowercased.contains("503")
+            || lowercased.contains("server")
+            || message.contains("서버") {
+            return .server
+        }
+
+        return .unknown
+    }
+}
+
+private struct UpNextCircleActionButton: View {
+    let systemName: String
+    let fgColor: Color
+    let bgColor: Color
+    @State private var hovered = false
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(fgColor)
+            .frame(width: 24, height: 24)
+            .background(bgColor, in: Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(hovered ? fgColor.opacity(0.4) : .clear, lineWidth: 0.8)
+            }
+            .scaleEffect(hovered ? 1.08 : 1.0)
+            .onHover { hovering in
+                hovered = hovering
+            }
+            .animation(DesignTokens.Animation.fast, value: hovered)
+    }
+}
+
+private struct UpNextSkeletonRow: View {
+    var body: some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Circle()
+                .fill(DesignTokens.Colors.surfaceBase)
+                .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 4) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(DesignTokens.Colors.surfaceBase)
+                    .frame(height: 9)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(DesignTokens.Colors.surfaceBase.opacity(0.7))
+                    .frame(width: 72, height: 8)
+            }
+
+            Spacer()
+
+            Circle()
+                .fill(DesignTokens.Colors.surfaceBase)
+                .frame(width: 24, height: 24)
+            Circle()
+                .fill(DesignTokens.Colors.surfaceBase)
+                .frame(width: 24, height: 24)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, DesignTokens.Spacing.xs)
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .redacted(reason: .placeholder)
     }
 }

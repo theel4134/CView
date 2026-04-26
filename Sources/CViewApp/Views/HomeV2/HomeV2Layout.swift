@@ -12,17 +12,20 @@ import CViewCore
 enum HomeCardDensity: String, CaseIterable, Identifiable {
     case compact
     case comfortable
+    case spacious
     var id: String { rawValue }
     var label: String {
         switch self {
         case .compact:     return "compact"
         case .comfortable: return "comfortable"
+        case .spacious:    return "spacious"
         }
     }
     var koreanLabel: String {
         switch self {
         case .compact:     return "촘촘하게"
         case .comfortable: return "여유있게"
+        case .spacious:    return "넓게"
         }
     }
 }

@@ -81,6 +81,7 @@ struct MiniChannelCard: View {
     /// - 외부에서 `.onHover`를 추가하면 카드당 NSTrackingArea 와 cursor push가 이중 등록되므로
     ///   반드시 이 콜백을 사용할 것.
     var onHoverChange: ((Bool) -> Void)? = nil
+    @Environment(AppState.self) private var appState
     @State private var isHovered = false
 
     var body: some View {
@@ -93,6 +94,31 @@ struct MiniChannelCard: View {
                 )
                 .aspectRatio(16/9, contentMode: .fill)
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: DesignTokens.Radius.sm, topTrailingRadius: DesignTokens.Radius.sm))
+
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task { @MainActor in
+                                await appState.multiLiveManager.addSession(
+                                    channelId: channel.channelId,
+                                    presentationOverride: .embedded
+                                )
+                            }
+                        } label: {
+                            Label("+ 멀티", systemImage: "plus")
+                                .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(DesignTokens.Colors.chzzkGreen.opacity(0.9), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(isHovered ? 1 : 0.92)
+                    }
+                    Spacer()
+                }
+                .padding(DesignTokens.Spacing.xs)
                 
                 // Viewer count + LIVE badge
                 VStack(alignment: .leading, spacing: 4) {

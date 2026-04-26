@@ -47,6 +47,34 @@ struct HomeV2SectionHeader: View {
     }
 }
 
+struct HomeV2StatusPill: View {
+    let icon: String
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+            Text(value)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, 6)
+        .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+        }
+    }
+}
+
 // MARK: - Command Bar (검색 진입 + 빠른 액션)
 
 struct HomeCommandBar: View {
@@ -63,7 +91,8 @@ struct HomeCommandBar: View {
             VStack(alignment: .leading, spacing: 2) {
                 AnimatedGradientText(
                     text: greeting,
-                    font: DesignTokens.Typography.titleSemibold
+                    font: DesignTokens.Typography.titleSemibold,
+                    animate: false
                 )
                 Text("오늘의 라이브를 한눈에 둘러보세요")
                     .font(DesignTokens.Typography.footnote)
@@ -177,84 +206,110 @@ struct HomeHeroLiveCard: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     let item: HomeRecommendationEngine.ScoredChannel
+    var height: CGFloat = 320
     @State private var hovered = false
 
     var body: some View {
-        Button {
-            router.navigate(to: .live(channelId: item.channel.channelId))
-        } label: {
-            ZStack(alignment: .bottomLeading) {
-                LiveThumbnailView(
-                    channelId: item.channel.channelId,
-                    thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? "")
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 320)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
-                .overlay {
-                    RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                        .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1.0)
-                }
-
-                LinearGradient(
-                    colors: [.black.opacity(0.0), .black.opacity(0.0), .black.opacity(0.78)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
-                .allowsHitTesting(false)
-
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-                    HStack(spacing: DesignTokens.Spacing.xs) {
-                        liveBadge
-                        viewerBadge
-                        if !item.reasons.isEmpty {
-                            ForEach(item.reasons.prefix(2), id: \.self) { r in
-                                reasonBadge(r)
-                            }
-                        }
-                    }
-                    Text(item.channel.liveTitle)
-                        .font(DesignTokens.Typography.headlineBold)
-                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    HStack(spacing: DesignTokens.Spacing.xs) {
-                        CachedAsyncImage(url: URL(string: item.channel.channelImageUrl ?? "")) {
-                            Circle().fill(.white.opacity(0.2))
-                        }
-                        .frame(width: 22, height: 22)
-                        .clipShape(Circle())
-                        Text(item.channel.channelName)
-                            .font(DesignTokens.Typography.captionSemibold)
-                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        if let cat = item.channel.categoryName, !cat.isEmpty {
-                            Text("·  \(cat)")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(.white.opacity(0.75))
-                                .lineLimit(1)
-                        }
-                    }
-                }
-                .padding(DesignTokens.Spacing.lg)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 320)
-            .scaleEffect(hovered ? 1.012 : 1.0, anchor: .center)
-            // [Perf 2026-04-24] shadow radius 는 Gaussian blur 커널이라 값이 바뀌면
-            // 매 프레임 재계산. 대형 카드(320pt)에서 14↔24 진행은 비용이 큼 → 14 고정,
-            // color/y 만 hover 에 따라 보간.
-            .shadow(
-                color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .black.opacity(0.18),
-                radius: 14,
-                y: hovered ? 10 : 6
+        ZStack(alignment: .bottomLeading) {
+            LiveThumbnailView(
+                channelId: item.channel.channelId,
+                thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? "")
             )
-            .animation(DesignTokens.Animation.smooth, value: hovered)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1.0)
+            }
+
+            LinearGradient(
+                colors: [.black.opacity(0.0), .black.opacity(0.0), .black.opacity(0.78)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+            .allowsHitTesting(false)
+
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    liveBadge
+                    viewerBadge
+                    if !item.reasons.isEmpty {
+                        ForEach(item.reasons.prefix(2), id: \.self) { r in
+                            reasonBadge(r)
+                        }
+                    }
+                }
+                Text(item.channel.liveTitle)
+                    .font(DesignTokens.Typography.headlineBold)
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    CachedAsyncImage(url: URL(string: item.channel.channelImageUrl ?? "")) {
+                        Circle().fill(.white.opacity(0.2))
+                    }
+                    .frame(width: 22, height: 22)
+                    .clipShape(Circle())
+                    Text(item.channel.channelName)
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    if let cat = item.channel.categoryName, !cat.isEmpty {
+                        Text("·  \(cat)")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(.white.opacity(0.75))
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(DesignTokens.Spacing.lg)
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        Task { @MainActor in
+                            await appState.multiLiveManager.addSession(
+                                channelId: item.channel.channelId,
+                                presentationOverride: .embedded
+                            )
+                        }
+                    } label: {
+                        Label("+ 멀티", systemImage: "plus")
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, DesignTokens.Spacing.xs)
+                            .padding(.vertical, 4)
+                            .background(DesignTokens.Colors.chzzkGreen.opacity(0.85), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(hovered ? 1 : 0)
+                    .animation(DesignTokens.Animation.fast, value: hovered)
+                }
+                Spacer()
+            }
+            .padding(DesignTokens.Spacing.sm)
         }
-        .buttonStyle(.plain)
-        .homeAccentPulse(color: DesignTokens.Colors.chzzkGreen, cornerRadius: DesignTokens.Radius.lg)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .scaleEffect(hovered ? 1.012 : 1.0, anchor: .center)
+        // [Perf 2026-04-24] shadow radius 는 Gaussian blur 커널이라 값이 바뀌면
+        // 매 프레임 재계산. 대형 카드(320pt)에서 14↔24 진행은 비용이 큼 → 14 고정,
+        // color/y 만 hover 에 따라 보간.
+        .shadow(
+            color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .black.opacity(0.18),
+            radius: 9,
+            y: hovered ? 7 : 4
+        )
+        .animation(DesignTokens.Animation.smooth, value: hovered)
+        .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        .onTapGesture {
+            router.navigate(to: .live(channelId: item.channel.channelId))
+        }
+        .homeAccentPulse(color: DesignTokens.Colors.chzzkGreen, cornerRadius: DesignTokens.Radius.lg, enabled: hovered)
         .onHover { hovering in
             hovered = hovering
             if hovering {
@@ -268,7 +323,7 @@ struct HomeHeroLiveCard: View {
 
     private var liveBadge: some View {
         HStack(spacing: 4) {
-            LivePulseDot(size: 5, color: .white)
+            LivePulseDot(size: 5, color: .white, animate: false)
             Text("LIVE")
                 .font(DesignTokens.Typography.custom(size: 10, weight: .black))
         }
@@ -283,7 +338,7 @@ struct HomeHeroLiveCard: View {
             ),
             in: Capsule()
         )
-        .shadow(color: DesignTokens.Colors.live.opacity(0.45), radius: 6, y: 2)
+        .shadow(color: DesignTokens.Colors.live.opacity(0.32), radius: 3, y: 1)
     }
 
     private var viewerBadge: some View {
@@ -325,11 +380,9 @@ struct HomeRecommendedCard: View {
     }
 
     var body: some View {
-        Button {
-            router.navigate(to: .live(channelId: item.channel.channelId))
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .topLeading) {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                ZStack(alignment: .topTrailing) {
                     LiveThumbnailView(
                         channelId: item.channel.channelId,
                         thumbnailUrl: URL(string: item.channel.thumbnailUrl ?? ""),
@@ -373,6 +426,25 @@ struct HomeRecommendedCard: View {
                             .padding(DesignTokens.Spacing.xs)
                     }
 
+                    Button {
+                        Task { @MainActor in
+                            await appState.multiLiveManager.addSession(
+                                channelId: item.channel.channelId,
+                                presentationOverride: .embedded
+                            )
+                        }
+                    } label: {
+                        Label("+ 멀티", systemImage: "plus")
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(DesignTokens.Colors.chzzkGreen.opacity(0.9), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(DesignTokens.Spacing.xs)
+                    .opacity(hovered ? 1 : 0.92)
+
                     // 이미 멀티라이브 세션에 포함된 채널이면 "시청 중" 뱃지 (우상단)
                     if isAlreadyWatching {
                         HStack(spacing: 3) {
@@ -389,47 +461,50 @@ struct HomeRecommendedCard: View {
                         .frame(maxWidth: .infinity, alignment: .topTrailing)
                     }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.channel.channelName)
-                        .font(DesignTokens.Typography.captionSemibold)
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        .lineLimit(1)
-                    Text(item.channel.liveTitle)
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .lineLimit(1)
-                    HStack(spacing: 3) {
-                        Image(systemName: "person.fill").font(.system(size: 8))
-                        Text(item.channel.formattedViewerCount)
-                            .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
-                        if let cat = item.channel.categoryName, !cat.isEmpty {
-                            Text("·  \(cat)").lineLimit(1)
-                                .font(DesignTokens.Typography.custom(size: 9, weight: .regular))
-                        }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.channel.channelName)
+                    .font(DesignTokens.Typography.captionSemibold)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .lineLimit(1)
+                Text(item.channel.liveTitle)
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .lineLimit(1)
+                HStack(spacing: 3) {
+                    Image(systemName: "person.fill").font(.system(size: 8))
+                    Text(item.channel.formattedViewerCount)
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
+                    if let cat = item.channel.categoryName, !cat.isEmpty {
+                        Text("·  \(cat)").lineLimit(1)
+                            .font(DesignTokens.Typography.custom(size: 9, weight: .regular))
                     }
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
-                .padding(.horizontal, DesignTokens.Spacing.xs)
-                .padding(.vertical, DesignTokens.Spacing.xs)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
-            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                    .strokeBorder(
-                        hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.55) : DesignTokens.Glass.borderColor,
-                        lineWidth: hovered ? 1.2 : 0.5
-                    )
-            }
-            .scaleEffect(hovered ? 1.022 : 1.0, anchor: .center)
-            .offset(y: hovered ? -2 : 0)
-            // [Perf 2026-04-24] radius 고정 (Gaussian blur 재계산 방지). 색/y 만 보간.
-            .shadow(
-                color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.20) : .black.opacity(0.07),
-                radius: 8,
-                y: hovered ? 6 : 2
-            )
+            .padding(.horizontal, DesignTokens.Spacing.xs)
+            .padding(.vertical, DesignTokens.Spacing.xs)
         }
-        .buttonStyle(.plain)
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                .strokeBorder(
+                    hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.55) : DesignTokens.Glass.borderColor,
+                    lineWidth: hovered ? 1.2 : 0.5
+                )
+        }
+        .scaleEffect(hovered ? 1.022 : 1.0, anchor: .center)
+        .offset(y: hovered ? -2 : 0)
+        // [Perf 2026-04-24] radius 고정 (Gaussian blur 재계산 방지). 색/y 만 보간.
+        .shadow(
+            color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.20) : .black.opacity(0.07),
+            radius: 5,
+            y: hovered ? 4 : 1
+        )
+        .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .onTapGesture {
+            router.navigate(to: .live(channelId: item.channel.channelId))
+        }
         .onHover { hovering in
             hovered = hovering
             if hovering {
@@ -495,7 +570,7 @@ struct HomeContinueWatchingStrip: View {
                         )
                     }
                     if live != nil {
-                        LivePulseDot(size: 8)
+                        LivePulseDot(size: 8, animate: false)
                             .padding(2)
                     }
                 }

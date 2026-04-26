@@ -132,6 +132,11 @@ struct HomeAccentPulse: ViewModifier {
                 radius: enabled ? 12 : 0,
                 y: 3
             )
+            .onChange(of: enabled) { _, isEnabled in
+                if !isEnabled {
+                    phase = 0
+                }
+            }
             .onAppear {
                 guard enabled, !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
@@ -156,6 +161,7 @@ extension View {
 struct LivePulseDot: View {
     var size: CGFloat = 6
     var color: Color = DesignTokens.Colors.live
+    var animate: Bool = false
     @State private var pulsing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -173,9 +179,13 @@ struct LivePulseDot: View {
                 .shadow(color: color.opacity(0.55), radius: 2.5)
         }
         .frame(width: size * 2.5, height: size * 2.5)
-        .drawingGroup()  // 단일 Metal 텍스처로 합성 — 화면 내 N개 인스턴스 비용 ↓
+        .onChange(of: animate) { _, shouldAnimate in
+            if !shouldAnimate {
+                pulsing = false
+            }
+        }
         .onAppear {
-            guard !reduceMotion else { return }
+            guard animate, !reduceMotion else { return }
             withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) {
                 pulsing = true
             }
@@ -191,6 +201,7 @@ struct LivePulseDot: View {
 struct AnimatedGradientText: View {
     let text: String
     var font: Font = DesignTokens.Typography.titleSemibold
+    var animate: Bool = false
     var colors: [Color] = [
         DesignTokens.Colors.chzzkGreen,
         DesignTokens.Colors.textPrimary,
@@ -203,7 +214,7 @@ struct AnimatedGradientText: View {
         Text(text)
             .font(font)
             .foregroundStyle(
-                reduceMotion
+                reduceMotion || !animate
                     ? AnyShapeStyle(DesignTokens.Colors.textPrimary)
                     : AnyShapeStyle(LinearGradient(
                         colors: colors,
@@ -211,11 +222,13 @@ struct AnimatedGradientText: View {
                         endPoint: UnitPoint(x: phase + 0.7, y: 1)
                     ))
             )
-            // [Perf 2026-04-24] drawingGroup — 그라디언트 phase 변경을 단일 Metal 레이어 안에서
-            // 처리. 주변 HStack/Text 레이아웃 invalidation 없이 GPU 만 사용.
-            .drawingGroup(opaque: false)
+            .onChange(of: animate) { _, shouldAnimate in
+                if !shouldAnimate {
+                    phase = 0
+                }
+            }
             .onAppear {
-                guard !reduceMotion else { return }
+                guard animate, !reduceMotion else { return }
                 phase = 0
                 // [Perf] duration 5.2 → 7.0 — 사이클을 길게 하여 단위시간당 합성 frame 수 감소
                 withAnimation(.easeInOut(duration: 7.0).repeatForever(autoreverses: true)) {

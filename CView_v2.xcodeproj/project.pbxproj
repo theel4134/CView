@@ -810,15 +810,17 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/VLCKit.framework",
 			);
 			name = "Re-sign VLCKit (macOS 26)";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/resign-vlckit.stamp",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# macOS 26: dyld rejects frameworks with different signing attributes\n# Re-sign VLCKit.framework with the same identity + hardened runtime as the app\nFW_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nVLC_FW=\"${FW_DIR}/VLCKit.framework\"\nif [ -d \"$VLC_FW\" ]; then\n  echo \"Re-signing VLCKit.framework for macOS 26 compatibility...\"\n  SIGN_FLAGS=\"--force --sign ${EXPANDED_CODE_SIGN_IDENTITY:--} --timestamp=none --generate-entitlement-der\"\n  if [ \"${ENABLE_HARDENED_RUNTIME}\" = \"YES\" ]; then\n    SIGN_FLAGS=\"${SIGN_FLAGS} --options runtime\"\n  fi\n  /usr/bin/codesign ${SIGN_FLAGS} \"$VLC_FW\"\n  echo \"VLCKit.framework re-signed (hardened_runtime=${ENABLE_HARDENED_RUNTIME})\"\nelse\n  echo \"VLCKit.framework not found at: $VLC_FW\"\nfi\n";
+			shellScript = "# macOS 26: dyld rejects frameworks with different signing attributes\n# Re-sign VLCKit.framework with the same identity + hardened runtime as the app\nset -e\nFW_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nVLC_FW=\"${FW_DIR}/VLCKit.framework\"\nSTAMP=\"${DERIVED_FILE_DIR}/resign-vlckit.stamp\"\nif [ -d \"$VLC_FW\" ]; then\n  echo \"Re-signing VLCKit.framework for macOS 26 compatibility...\"\n  SIGN_FLAGS=\"--force --sign ${EXPANDED_CODE_SIGN_IDENTITY:--} --timestamp=none --generate-entitlement-der\"\n  if [ \"${ENABLE_HARDENED_RUNTIME}\" = \"YES\" ]; then\n    SIGN_FLAGS=\"${SIGN_FLAGS} --options runtime\"\n  fi\n  /usr/bin/codesign ${SIGN_FLAGS} \"$VLC_FW\"\n  echo \"VLCKit.framework re-signed (hardened_runtime=${ENABLE_HARDENED_RUNTIME})\"\nelse\n  echo \"VLCKit.framework not found at: $VLC_FW\"\nfi\ntouch \"$STAMP\"\n";
 		};
 		CC44DD55EE66FF770088AA99 /* Re-sign with App Group entitlements */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -830,15 +832,17 @@
 			inputPaths = (
 				"$(SRCROOT)/SupportFiles/runtime/CView_v2-runtime.entitlements",
 				"$(SRCROOT)/SupportFiles/runtime/CViewWidgets-runtime.entitlements",
+				"$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Contents/PlugIns/CViewWidgets.appex",
 			);
 			name = "Re-sign with App Group entitlements";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/resign-widget-app-group.stamp",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Ad-hoc signing strips application-groups entitlement at build time.\n# Re-sign the widget appex post-build with runtime entitlements that include the App Group.\n# (Main app is sandbox=false and can already access the App Group container without entitlement.)\nset -e\nAPP=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}\"\nAPPEX=\"$APP/Contents/PlugIns/CViewWidgets.appex\"\nWIDGET_ENT=\"${SRCROOT}/SupportFiles/runtime/CViewWidgets-runtime.entitlements\"\nIDENT=\"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\nif [ -d \"$APPEX\" ] && [ -f \"$WIDGET_ENT\" ]; then\n  /usr/bin/codesign --force --sign \"$IDENT\" --entitlements \"$WIDGET_ENT\" --generate-entitlement-der --timestamp=none \"$APPEX\"\n  echo \"Re-signed widget appex with App Group entitlement\"\nfi\n";
+			shellScript = "# Ad-hoc signing strips application-groups entitlement at build time.\n# Re-sign the widget appex post-build with runtime entitlements that include the App Group.\n# (Main app is sandbox=false and can already access the App Group container without entitlement.)\nset -e\nAPP=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}\"\nAPPEX=\"$APP/Contents/PlugIns/CViewWidgets.appex\"\nWIDGET_ENT=\"${SRCROOT}/SupportFiles/runtime/CViewWidgets-runtime.entitlements\"\nIDENT=\"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\nSTAMP=\"${DERIVED_FILE_DIR}/resign-widget-app-group.stamp\"\nif [ -d \"$APPEX\" ] && [ -f \"$WIDGET_ENT\" ]; then\n  /usr/bin/codesign --force --sign \"$IDENT\" --entitlements \"$WIDGET_ENT\" --generate-entitlement-der --timestamp=none \"$APPEX\"\n  echo \"Re-signed widget appex with App Group entitlement\"\nfi\ntouch \"$STAMP\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

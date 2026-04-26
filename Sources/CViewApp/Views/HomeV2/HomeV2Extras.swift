@@ -194,7 +194,7 @@ struct HomeActiveMultiLiveStrip: View {
             .padding(.vertical, 6)
             .background(barBackground)
             .overlay(barBorder)
-            .shadow(DesignTokens.Shadow.control)
+            .shadow(color: .black.opacity(0.10), radius: 4, y: 2)
             .scaleEffect(hovering ? 1.005 : 1.0)
             .animation(.easeOut(duration: 0.18), value: hovering)
             .onHover { hovering = $0 }
@@ -208,7 +208,7 @@ struct HomeActiveMultiLiveStrip: View {
     /// 좌측: pulsing LIVE dot + "LIVE" 배지 + 세션 카운트
     private var liveBadge: some View {
         HStack(spacing: 6) {
-            LiveRippleDot(color: DesignTokens.Colors.live, paused: reduceMotion)
+            LiveRippleDot(color: DesignTokens.Colors.live, paused: reduceMotion || !hovering)
             Text("LIVE")
                 .font(.system(size: 10, weight: .heavy, design: .rounded))
                 .tracking(0.6)
@@ -237,9 +237,9 @@ struct HomeActiveMultiLiveStrip: View {
     private var marqueeChips: some View {
         MarqueeRow(
             items: sessions.map(\.channelId),
-            speed: 26,
+            speed: 20,
             spacing: 10,
-            paused: reduceMotion || hovering
+            paused: reduceMotion || !hovering
         ) { channelId in
             channelChip(channelId: channelId)
         }
@@ -329,16 +329,14 @@ struct HomeActiveMultiLiveStrip: View {
 
     private var barBackground: some View {
         ZStack {
-            // 글래스 베이스
             Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-            // 좌→우 미세 그린 글로우
+                .fill(DesignTokens.Colors.surfaceElevated)
             Capsule(style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            DesignTokens.Colors.chzzkGreen.opacity(0.16),
-                            DesignTokens.Colors.chzzkGreen.opacity(0.04),
+                            DesignTokens.Colors.chzzkGreen.opacity(0.10),
+                            DesignTokens.Colors.chzzkGreen.opacity(0.02),
                             .clear
                         ],
                         startPoint: .leading, endPoint: .trailing
@@ -388,7 +386,6 @@ private struct LiveRippleDot: View {
                 )
         }
         .frame(width: 20, height: 20)
-        .drawingGroup()
         .onAppear {
             guard !paused else { return }
             phase = 0
@@ -454,7 +451,6 @@ private struct MarqueeRow<Item: Hashable, Cell: View>: View {
                 }
             }
             .onHover { hovering = $0 }
-            .drawingGroup()  // GPU 합성 — translation 시 매 프레임 layout 비용 0
         }
     }
 

@@ -9,7 +9,7 @@
       "args": [
         "-scheme", "CView_v2",
         "-configuration", "Debug",
-        "-derivedDataPath", "/Volumes/projectssd/work/build",
+        "-derivedDataPath", "/Volumes/hdd/app-work/build",
         "build"
       ],
       "group": {
@@ -37,7 +37,7 @@
     {
       "label": "Build & Run",
       "type": "shell",
-      "command": "pkill -x CView_v2 2>/dev/null; sleep 0.3; xcodebuild -scheme CView_v2 -configuration Debug -derivedDataPath /Volumes/projectssd/work/build build && open '/Volumes/projectssd/work/build/Build/Products/Debug/CView_v2.app'",
+      "command": "pkill -x CView_v2 2>/dev/null; sleep 0.3; xcodebuild -scheme CView_v2 -configuration Debug -derivedDataPath /Volumes/hdd/app-work/build build && open '/Volumes/hdd/app-work/build/Build/Products/Debug/CView_v2.app'",
       "group": "build",
       "presentation": {
         "reveal": "always",
@@ -64,7 +64,7 @@
       "args": [
         "-scheme", "CView_v2",
         "-configuration", "Debug",
-        "-derivedDataPath", "/Volumes/projectssd/work/build",
+        "-derivedDataPath", "/Volumes/hdd/app-work/build",
         "clean", "build"
       ],
       "group": "build",
