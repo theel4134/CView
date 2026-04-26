@@ -351,59 +351,57 @@ struct FollowingView: View {
             let totalWidth = geo.size.width
             let listWidth = totalWidth * FollowingViewState.followingListRatio
 
-            HStack(spacing: 0) {
-                // 팔로잉 리스트 — 왼쪽에서 push 슬라이드
-                if showFollowingList {
-                    followingListContent
-                        .frame(width: listWidth)
-                        .frame(maxHeight: .infinity)
-                        .compositingGroup()
-                        .background {
-                            HStack(spacing: 0) {
-                                LinearGradient(
-                                    colors: [.black.opacity(0.06), .clear],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                                .frame(width: 8)
-                                Spacer(minLength: 0)
-                                LinearGradient(
-                                    colors: [.clear, .black.opacity(0.08)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                                .frame(width: 10)
+            if !hasSidePanel {
+                // P0: 세션이 없으면 팔로잉 목록을 전체 너비로 바로 노출
+                followingListContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+            } else {
+                HStack(spacing: 0) {
+                    // 팔로잉 리스트 — 왼쪽에서 push 슬라이드
+                    if showFollowingList {
+                        followingListContent
+                            .frame(width: listWidth)
+                            .frame(maxHeight: .infinity)
+                            .compositingGroup()
+                            .background {
+                                HStack(spacing: 0) {
+                                    LinearGradient(
+                                        colors: [.black.opacity(0.06), .clear],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                    .frame(width: 8)
+                                    Spacer(minLength: 0)
+                                    LinearGradient(
+                                        colors: [.clear, .black.opacity(0.08)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                    .frame(width: 10)
+                                }
+                                .allowsHitTesting(false)
                             }
-                            .allowsHitTesting(false)
-                        }
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .leading).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
-
-                    // 구분선
-                    Rectangle()
-                        .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
-                        .frame(width: 1)
-                        .transition(.opacity)
-                }
-
-                // 우측 컨텐츠 — 사이드 패널 또는 빈 상태
-                ZStack {
-                    if hasSidePanel {
-                        sidePanelContent(windowWidth: totalWidth)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .transition(.asymmetric(
-                                insertion: .move(edge: .trailing).combined(with: .opacity),
-                                removal: .opacity
+                                insertion: .move(edge: .leading).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
                             ))
-                    } else {
-                        followingListEmptyPanel
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+
+                        // 구분선
+                        Rectangle()
+                            .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
+                            .frame(width: 1)
+                            .transition(.opacity)
                     }
+
+                    // 우측 컨텐츠 — 사이드 패널
+                    sidePanelContent(windowWidth: totalWidth)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .opacity
+                        ))
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .animation(DesignTokens.Animation.smooth, value: showFollowingList)
@@ -638,24 +636,41 @@ struct FollowingView: View {
                     if !filterLiveOnly && totalOfflineCount > 0 {
                         widgetCard {
                             VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
-                                sectionHeader(
-                                    icon: "moon.zzz.fill",
-                                    title: "오프라인",
-                                    count: totalOfflineCount,
-                                    color: DesignTokens.Colors.textTertiary
-                                )
+                                // 접이식 헤더
+                                Button {
+                                    withAnimation(DesignTokens.Animation.smooth) {
+                                        ps.isOfflineSectionExpanded.toggle()
+                                    }
+                                } label: {
+                                    HStack(spacing: 0) {
+                                        sectionHeader(
+                                            icon: "moon.zzz.fill",
+                                            title: "오프라인",
+                                            count: totalOfflineCount,
+                                            color: DesignTokens.Colors.textTertiary
+                                        )
+                                        Image(systemName: ps.isOfflineSectionExpanded ? "chevron.up" : "chevron.down")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                            .padding(.trailing, DesignTokens.Spacing.xs)
+                                            .animation(DesignTokens.Animation.snappy, value: ps.isOfflineSectionExpanded)
+                                    }
+                                }
+                                .buttonStyle(.plain)
 
-                                offlinePagingView
+                                if ps.isOfflineSectionExpanded {
+                                    offlinePagingView
 
-                                if totalOfflinePages > 1 {
-                                    pageNavigator(
-                                        currentPage: Binding(
-                                            get: { ps.offlinePageIndex },
-                                            set: { ps.offlinePageIndex = $0 }
-                                        ),
-                                        totalPages: totalOfflinePages,
-                                        accentColor: DesignTokens.Colors.accentPurple
-                                    )
+                                    if totalOfflinePages > 1 {
+                                        pageNavigator(
+                                            currentPage: Binding(
+                                                get: { ps.offlinePageIndex },
+                                                set: { ps.offlinePageIndex = $0 }
+                                            ),
+                                            totalPages: totalOfflinePages,
+                                            accentColor: DesignTokens.Colors.accentPurple
+                                        )
+                                    }
                                 }
                             }
                         }

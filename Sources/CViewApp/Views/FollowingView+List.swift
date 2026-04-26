@@ -337,7 +337,14 @@ extension FollowingView {
                     if let service = appState.hlsPrefetchService {
                         Task { await service.prefetch(channelId: channelId) }
                     }
-                }, layout: layout)
+                }, onGoLive: {
+                    router.navigate(to: .live(channelId: channel.channelId))
+                }, onOpenChat: {
+                    Task { await addChatChannel(channelId: channel.channelId) }
+                    showMultiChat = true
+                }, onChannelDetail: {
+                    router.navigate(to: .channelDetail(channelId: channel.channelId))
+                }, canAddMultiLive: multiLiveManager.canAddSession, layout: layout)
                 .equatable()
                 .frame(height: cellHeight)  // [2026-04-23] 결정적 카드 높이
                 .onTapGesture {

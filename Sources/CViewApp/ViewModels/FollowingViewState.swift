@@ -44,5 +44,10 @@ final class FollowingViewState {
     /// 팔로잉 리스트 : 사이드 패널 고정 비율 (패널 열림 시)
     static let followingListRatio: CGFloat = 0.25
 
+    // MARK: - 오프라인 섹션
+
+    /// 오프라인 채널 섹션 펼침 여부 (기본 접힘)
+    var isOfflineSectionExpanded: Bool = false
+
     init() {}
 }

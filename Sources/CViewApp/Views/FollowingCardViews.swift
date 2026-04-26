@@ -154,6 +154,14 @@ struct FollowingLiveCard: View, Equatable {
     let index: Int
     let onPlay: () -> Void
     var onPrefetch: ((String) -> Void)? = nil
+    /// 재생 — 단독 라이브 뷰로 이동
+    var onGoLive: (() -> Void)? = nil
+    /// 채팅만 열기 — 멀티채팅에 추가
+    var onOpenChat: (() -> Void)? = nil
+    /// 채널 상세 페이지 이동
+    var onChannelDetail: (() -> Void)? = nil
+    /// 멀티라이브 슬롯 추가 가능 여부
+    var canAddMultiLive: Bool = true
     var layout: ResponsiveFollowingLayout = .init(width: 900)
 
     @State private var isHovered = false
@@ -342,28 +350,84 @@ struct FollowingLiveCard: View, Equatable {
             // 반투명 오버레이
             Color.black.opacity(0.35)
 
-            Button(action: onPlay) {
-                HStack(spacing: 6) {
-                    Image(systemName: "rectangle.split.2x2.fill")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("멀티라이브")
-                        .font(.system(size: 12, weight: .bold))
+            VStack(spacing: 7) {
+                // 재생 (Primary CTA)
+                Button(action: { onGoLive?() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("재생")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(DesignTokens.Colors.chzzkGreen))
+                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.45), radius: 6, y: 2)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 9)
-                .background(
-                    Capsule().fill(DesignTokens.Colors.accentBlue)
-                )
-                // [GPU] shadow는 opacity만 변화. radius 고정.
-                .shadow(color: DesignTokens.Colors.accentBlue.opacity(isHovered ? 0.45 : 0), radius: 8, y: 2)
+                .buttonStyle(.plain)
+
+                // 보조 액션 3개
+                HStack(spacing: 6) {
+                    // + 멀티라이브
+                    hoverActionButton(
+                        icon: "rectangle.split.2x2.fill",
+                        label: "멀티라이브",
+                        color: DesignTokens.Colors.accentBlue,
+                        disabled: !canAddMultiLive,
+                        action: onPlay
+                    )
+
+                    // 채팅만 열기
+                    hoverActionButton(
+                        icon: "bubble.left.fill",
+                        label: "채팅",
+                        color: DesignTokens.Colors.accentOrange,
+                        action: { onOpenChat?() }
+                    )
+
+                    // 채널 상세
+                    hoverActionButton(
+                        icon: "person.crop.circle",
+                        label: "채널 정보",
+                        color: DesignTokens.Colors.textSecondary,
+                        action: { onChannelDetail?() }
+                    )
+                }
             }
-            .buttonStyle(.plain)
-            .scaleEffect(isHovered ? 1.0 : 0.85)
+            .padding(.horizontal, 10)
+            .scaleEffect(isHovered ? 1.0 : 0.88)
             .opacity(isHovered ? 1.0 : 0.0)
         }
         .transition(.opacity.combined(with: .scale(scale: 1.02)))
         .animation(DesignTokens.Animation.bouncy, value: isHovered)
+    }
+
+    private func hoverActionButton(
+        icon: String,
+        label: String,
+        color: Color,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .bold))
+                Text(label)
+                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(disabled ? Color.white.opacity(0.35) : .white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(disabled ? Color.white.opacity(0.08) : color.opacity(0.8))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 
     // MARK: - Info Area (채널 정보 — 미니멀 하단 바)
