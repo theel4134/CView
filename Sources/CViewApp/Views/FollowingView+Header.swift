@@ -14,6 +14,8 @@ extension FollowingView {
                 .font(DesignTokens.Typography.custom(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
 
+            hubInfoPill(text: hubStageSummaryText, tint: DesignTokens.Colors.textSecondary)
+
             Spacer(minLength: 0)
 
             hubModeSegment
@@ -25,6 +27,7 @@ extension FollowingView {
                     hubInfoPill(text: selected.channelName, tint: DesignTokens.Colors.textSecondary)
                 }
                 hubInfoPill(text: "멀티 \(multiLiveManager.sessions.count)/\(multiLiveManager.effectiveMaxSessions)", tint: DesignTokens.Colors.chzzkGreen)
+                hubInfoPill(text: hubDrawerSummaryText, tint: DesignTokens.Colors.accentOrange)
                 Button {
                     guard !viewModel.isLoadingFollowing else { return }
                     Task { await viewModel.loadFollowingChannels(invalidateThumbnails: true) }
@@ -104,20 +107,42 @@ extension FollowingView {
                 showMultiChat = false
                 filterLiveOnly = false
                 sortOrder = .liveFirst
+                // 탐색 모드는 중앙 stage를 비워두므로 다음 시청 복귀 시 기본 단일 모드로 준비.
+                multiLiveManager.isGridLayout = false
             case .watch:
                 showFollowingList = true
                 showMultiLive = true
                 showMultiChat = false
                 filterLiveOnly = true
                 sortOrder = .liveFirst
+                // 시청 모드는 단일 stage 중심.
+                multiLiveManager.isGridLayout = false
             case .multi:
                 showFollowingList = true
                 showMultiLive = true
                 showMultiChat = true
                 filterLiveOnly = true
                 sortOrder = .viewers
+                // 멀티 모드는 grid stage 중심.
+                multiLiveManager.isGridLayout = true
             }
         }
+    }
+
+    private var hubStageSummaryText: String {
+        switch hubMode {
+        case .explore: return "탐색 중심"
+        case .watch: return "단일 시청"
+        case .multi: return "멀티 시청"
+        }
+    }
+
+    private var hubDrawerSummaryText: String {
+        var states: [String] = []
+        if showMultiLive { states.append("라이브") }
+        if showMultiChat { states.append("채팅") }
+        if states.isEmpty { return "드로어 닫힘" }
+        return "드로어 " + states.joined(separator: "+")
     }
 
     // MARK: - Header Section (모던 리디자인)

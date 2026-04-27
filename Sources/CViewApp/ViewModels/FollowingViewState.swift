@@ -37,14 +37,14 @@ final class FollowingViewState {
 
     // MARK: - 팔로잉 리스트
 
-    /// 팔로잉 리스트 표시 여부 (기본 숨김, 왼쪽 슬라이드)
-    var showFollowingList: Bool = false
+    /// 팔로잉 리스트 표시 여부 (기본 표시, 최종안의 좌측 탐색 컬럼)
+    var showFollowingList: Bool = true
 
     // MARK: - 멀티라이브 UI
 
     var showMultiLive: Bool = true
     var showMLSettings: Bool = false
-    var showMultiChat: Bool = true
+    var showMultiChat: Bool = false
 
     /// PiP 모드 활성 여부 (비영속 — 멀티라이브 → PiP 자동 전환 시 true)
     var isMultiLivePiPMode: Bool = false

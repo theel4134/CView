@@ -628,8 +628,29 @@ struct FollowingView: View {
 
     private func compactExploreRow(_ channel: LiveChannelItem) -> some View {
         Button {
-            let alreadyAdded = multiLiveManager.sessions.contains { $0.channelId == channel.channelId }
-            if multiLiveManager.canAddSession && !alreadyAdded {
+            let existingSession = multiLiveManager.sessions.first { $0.channelId == channel.channelId }
+
+            switch hubMode {
+            case .explore:
+                router.navigate(to: .live(channelId: channel.channelId))
+
+            case .watch, .multi:
+                showFollowingList = true
+                showMultiLive = true
+                if hubMode == .multi {
+                    showMultiChat = true
+                }
+
+                if let existingSession {
+                    multiLiveManager.select(existingSession)
+                    return
+                }
+
+                guard multiLiveManager.canAddSession else {
+                    router.navigate(to: .live(channelId: channel.channelId))
+                    return
+                }
+
                 Task {
                     await multiLiveManager.addSession(
                         channelId: channel.channelId,
@@ -637,8 +658,6 @@ struct FollowingView: View {
                         presentationOverride: .embedded
                     )
                 }
-            } else {
-                router.navigate(to: .live(channelId: channel.channelId))
             }
         } label: {
             HStack(spacing: DesignTokens.Spacing.sm) {
