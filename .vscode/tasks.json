@@ -141,6 +141,14 @@
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },
     {
+      "label": "Server: Superset Sync",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["superset-sync"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
       "label": "Server: Logs (Metrics)",
       "type": "shell",
       "command": "${workspaceFolder}/server-dev/server.sh",

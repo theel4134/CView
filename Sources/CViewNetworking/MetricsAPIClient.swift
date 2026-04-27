@@ -225,7 +225,8 @@ public actor MetricsAPIClient {
         body: Req,
         as type: Res.Type
     ) async throws -> Res {
-        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        let effectiveBaseURL = endpoint.usesDirectMetricsServer ? directBaseURL : baseURL
+        var urlComponents = URLComponents(url: effectiveBaseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = endpoint.queryItems
 
         guard let url = urlComponents.url else {
@@ -265,7 +266,8 @@ public actor MetricsAPIClient {
     
     /// POST 요청 (응답 무시)
     public func postIgnoringResponse(_ endpoint: MetricsEndpoint) async throws {
-        var urlComponents = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
+        let effectiveBaseURL = endpoint.usesDirectMetricsServer ? directBaseURL : baseURL
+        var urlComponents = URLComponents(url: effectiveBaseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = endpoint.queryItems
         
         guard let url = urlComponents.url else {

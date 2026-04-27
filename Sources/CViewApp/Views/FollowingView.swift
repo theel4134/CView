@@ -40,6 +40,10 @@ struct FollowingView: View {
         get { ps.selectedCategory }
         nonmutating set { ps.selectedCategory = newValue }
     }
+    var hubMode: FollowingHubMode {
+        get { ps.hubMode }
+        nonmutating set { ps.hubMode = newValue }
+    }
     // 페이징 — 영속
     var livePageIndex: Int {
         get { ps.livePageIndex }
@@ -347,60 +351,63 @@ struct FollowingView: View {
         let effectiveShowMultiLive = showMultiLive && !isMultiLivePiPMode
         let hasSidePanel = effectiveShowMultiLive || showMultiChat
 
-        return GeometryReader { geo in
-            let totalWidth = geo.size.width
-            let listWidth = totalWidth * FollowingViewState.followingListRatio
+        return VStack(spacing: 0) {
+            liveHubTopBar
 
-            if !hasSidePanel {
-                // P0: 세션이 없으면 팔로잉 목록을 전체 너비로 바로 노출
-                followingListContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
-            } else {
-                HStack(spacing: 0) {
-                    // 팔로잉 리스트 — 왼쪽에서 push 슬라이드
-                    if showFollowingList {
-                        followingListContent
-                            .frame(width: listWidth)
-                            .frame(maxHeight: .infinity)
-                            .compositingGroup()
-                            .background {
-                                HStack(spacing: 0) {
-                                    LinearGradient(
-                                        colors: [.black.opacity(0.06), .clear],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                    .frame(width: 8)
-                                    Spacer(minLength: 0)
-                                    LinearGradient(
-                                        colors: [.clear, .black.opacity(0.08)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                    .frame(width: 10)
-                                }
-                                .allowsHitTesting(false)
-                            }
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .leading).combined(with: .opacity),
-                                removal: .move(edge: .leading).combined(with: .opacity)
-                            ))
+            GeometryReader { geo in
+                let totalWidth = geo.size.width
+                let listWidth = totalWidth * FollowingViewState.followingListRatio
 
-                        // 구분선
-                        Rectangle()
-                            .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
-                            .frame(width: 1)
-                            .transition(.opacity)
-                    }
-
-                    // 우측 컨텐츠 — 사이드 패널
-                    sidePanelContent(windowWidth: totalWidth)
+                if !hasSidePanel {
+                    // 탐색 모드: 리스트를 메인으로
+                    activeLeftPanelContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .opacity
-                        ))
+                        .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+                } else {
+                    HStack(spacing: 0) {
+                        // 좌측 탐색 컬럼
+                        if showFollowingList {
+                            activeLeftPanelContent
+                                .frame(width: listWidth)
+                                .frame(maxHeight: .infinity)
+                                .compositingGroup()
+                                .background {
+                                    HStack(spacing: 0) {
+                                        LinearGradient(
+                                            colors: [.black.opacity(0.06), .clear],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                        .frame(width: 8)
+                                        Spacer(minLength: 0)
+                                        LinearGradient(
+                                            colors: [.clear, .black.opacity(0.08)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                        .frame(width: 10)
+                                    }
+                                    .allowsHitTesting(false)
+                                }
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .leading).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                ))
+
+                            Rectangle()
+                                .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
+                                .frame(width: 1)
+                                .transition(.opacity)
+                        }
+
+                        // 중앙/우측 stage + drawer
+                        sidePanelContent(windowWidth: totalWidth)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                    }
                 }
             }
         }
@@ -549,6 +556,134 @@ struct FollowingView: View {
     }
 
     // MARK: - Following List Content
+
+    private var activeLeftPanelContent: some View {
+        Group {
+            if hubMode == .explore {
+                followingListContent
+            } else {
+                compactExploreListContent
+            }
+        }
+    }
+
+    private var compactExploreListContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                compactExploreHeader
+
+                ForEach(cachedLive.prefix(10), id: \.channelId) { channel in
+                    compactExploreRow(channel)
+                }
+
+                if cachedLive.isEmpty {
+                    emptySearchResult
+                }
+            }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.top, DesignTokens.Spacing.md)
+            .padding(.bottom, DesignTokens.Spacing.lg)
+        }
+        .background(DesignTokens.Colors.background)
+    }
+
+    private var compactExploreHeader: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            searchBarContent
+            filterSegmentContent
+
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Text("라이브 \(cachedLive.count)")
+                    .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+
+                Spacer(minLength: 0)
+
+                Menu {
+                    ForEach(FollowingSortOrder.allCases, id: \.self) { order in
+                        Button {
+                            withAnimation(DesignTokens.Animation.smooth) {
+                                sortOrder = order
+                                resetPaginationAndRecompute()
+                            }
+                        } label: {
+                            Label(order.rawValue, systemImage: sortOrder == order ? "checkmark" : "")
+                        }
+                    }
+                } label: {
+                    Label(sortOrder.rawValue, systemImage: "arrow.up.arrow.down")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 24)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(DesignTokens.Colors.surfaceBase)
+                        )
+                }
+                .menuStyle(.borderlessButton)
+            }
+        }
+    }
+
+    private func compactExploreRow(_ channel: LiveChannelItem) -> some View {
+        Button {
+            let alreadyAdded = multiLiveManager.sessions.contains { $0.channelId == channel.channelId }
+            if multiLiveManager.canAddSession && !alreadyAdded {
+                Task {
+                    await multiLiveManager.addSession(
+                        channelId: channel.channelId,
+                        preferredEngine: appState.settingsStore.player.preferredEngine,
+                        presentationOverride: .embedded
+                    )
+                }
+            } else {
+                router.navigate(to: .live(channelId: channel.channelId))
+            }
+        } label: {
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(DesignTokens.Colors.surfaceBase)
+                        .frame(width: 34, height: 34)
+                    Text(String(channel.channelName.prefix(1)).uppercased())
+                        .font(DesignTokens.Typography.custom(size: 12, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(channel.channelName)
+                        .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        .lineLimit(1)
+
+                    Text(channel.liveTitle)
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(channel.formattedViewerCount)
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    .padding(.horizontal, 8)
+                    .frame(height: 20)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(DesignTokens.Colors.chzzkGreen.opacity(0.12))
+                    )
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.55))
+            )
+        }
+        .buttonStyle(PressScaleButtonStyle(scale: 0.98))
+    }
 
     private var followingListContent: some View {
         let outerPad = DesignTokens.Spacing.xl

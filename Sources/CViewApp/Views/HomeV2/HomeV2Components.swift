@@ -75,6 +75,257 @@ struct HomeV2StatusPill: View {
     }
 }
 
+// MARK: - Superset Insight Dock (Design A)
+
+struct HomeSupersetInsightDock: View {
+    let metricsOnline: Bool
+    let supersetReachable: Bool?
+    let checkingSuperset: Bool
+    let supersetURL: URL
+    let p95LatencyMs: Double?
+    let bufferWarnings: Int
+    let vlcSamples: Int?
+    let viewerHistory: [ViewerHistoryEntry]
+    let onRetrySupersetCheck: () -> Void
+
+    @Environment(\.openURL) private var openURL
+
+    private var supersetLabel: String {
+        if checkingSuperset { return "확인 중" }
+        switch supersetReachable {
+        case .some(true): return "연결 가능"
+        case .some(false): return "연결 실패"
+        case .none: return "미확인"
+        }
+    }
+
+    private var supersetTint: Color {
+        if checkingSuperset { return DesignTokens.Colors.textSecondary }
+        switch supersetReachable {
+        case .some(true): return DesignTokens.Colors.chzzkGreen
+        case .some(false): return DesignTokens.Colors.warning
+        case .none: return DesignTokens.Colors.textSecondary
+        }
+    }
+
+    private var trendDelta: Int? {
+        guard let first = viewerHistory.first?.totalViewers,
+              let last = viewerHistory.last?.totalViewers else {
+            return nil
+        }
+        return last - first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            HStack(alignment: .top, spacing: DesignTokens.Spacing.xs) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Superset Insight Dock")
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    Text("요약은 홈에서, 상세는 Superset")
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    onRetrySupersetCheck()
+                } label: {
+                    Image(systemName: checkingSuperset ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .help("Superset 연결 상태 다시 확인")
+            }
+
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                HomeV2StatusPill(
+                    icon: metricsOnline ? "server.rack" : "server.rack",
+                    title: "Metrics",
+                    value: metricsOnline ? "정상" : "오프라인",
+                    tint: metricsOnline ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.warning
+                )
+
+                HomeV2StatusPill(
+                    icon: "chart.xyaxis.line",
+                    title: "Superset",
+                    value: supersetLabel,
+                    tint: supersetTint
+                )
+            }
+
+            VStack(spacing: DesignTokens.Spacing.xs) {
+                dockMetricRow(
+                    icon: "waveform.path.ecg",
+                    title: "P95 레이턴시",
+                    value: p95LatencyMs.map { String(format: "%.0fms", $0) } ?? "—",
+                    tint: latencyTint
+                )
+                dockMetricRow(
+                    icon: "exclamationmark.triangle.fill",
+                    title: "버퍼 경고",
+                    value: "\(bufferWarnings)",
+                    tint: bufferWarnings > 0 ? DesignTokens.Colors.warning : DesignTokens.Colors.textSecondary
+                )
+                dockMetricRow(
+                    icon: "desktopcomputer",
+                    title: "VLC 샘플",
+                    value: vlcSamples.map { formatCompact($0) } ?? "—",
+                    tint: DesignTokens.Colors.textSecondary
+                )
+            }
+
+            viewerTrendPanel
+
+            Button {
+                openURL(supersetURL)
+            } label: {
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    Image(systemName: "safari")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Superset 상세 열기")
+                        .font(DesignTokens.Typography.captionSemibold)
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.vertical, 7)
+                .background(
+                    LinearGradient(
+                        colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0.82)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                )
+            }
+            .buttonStyle(.plain)
+            .help("\(supersetURL.absoluteString)")
+        }
+        .padding(DesignTokens.Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
+        }
+    }
+
+    private var viewerTrendPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                Text("시청자 추이")
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                Spacer(minLength: 0)
+                if let delta = trendDelta {
+                    Text(delta >= 0 ? "+\(formatCompact(delta))" : "-\(formatCompact(abs(delta)))")
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
+                        .foregroundStyle(delta >= 0 ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.warning)
+                }
+            }
+
+            HomeTrendSparkline(values: viewerHistory.map(\.totalViewers))
+                .frame(height: 34)
+                .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+        }
+    }
+
+    @ViewBuilder
+    private func dockMetricRow(icon: String, title: String, value: String, tint: Color) -> some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 14)
+            Text(title)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+            Spacer(minLength: 0)
+            Text(value)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+    }
+
+    private var latencyTint: Color {
+        guard let p95LatencyMs else { return DesignTokens.Colors.textSecondary }
+        if p95LatencyMs < 3000 { return DesignTokens.Colors.chzzkGreen }
+        if p95LatencyMs < 6000 { return DesignTokens.Colors.warning }
+        return DesignTokens.Colors.live
+    }
+
+    private func formatCompact(_ value: Int) -> String {
+        if value >= 1_000_000 {
+            return String(format: "%.1fM", Double(value) / 1_000_000.0)
+        }
+        if value >= 1_000 {
+            return String(format: "%.1fK", Double(value) / 1_000.0)
+        }
+        return "\(value)"
+    }
+}
+
+private struct HomeTrendSparkline: View {
+    let values: [Int]
+
+    var body: some View {
+        GeometryReader { geo in
+            let data = normalized
+
+            if data.count < 2 {
+                HStack {
+                    Spacer()
+                    Text("데이터 수집 중")
+                        .font(DesignTokens.Typography.custom(size: 9, weight: .medium))
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    Spacer()
+                }
+            } else {
+                ZStack {
+                    Path { path in
+                        for (idx, point) in data.enumerated() {
+                            let x = geo.size.width * CGFloat(idx) / CGFloat(max(data.count - 1, 1))
+                            let y = geo.size.height * CGFloat(1.0 - point)
+                            if idx == 0 {
+                                path.move(to: CGPoint(x: x, y: y))
+                            } else {
+                                path.addLine(to: CGPoint(x: x, y: y))
+                            }
+                        }
+                    }
+                    .stroke(
+                        LinearGradient(
+                            colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.accentCyan],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+                    )
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 5)
+            }
+        }
+    }
+
+    private var normalized: [Double] {
+        let vals = values.map(Double.init)
+        guard let min = vals.min(), let max = vals.max(), max > min else {
+            return vals.isEmpty ? [] : Array(repeating: 0.5, count: vals.count)
+        }
+        return vals.map { ($0 - min) / (max - min) }
+    }
+}
+
 // MARK: - Command Bar (검색 진입 + 빠른 액션)
 
 struct HomeCommandBar: View {

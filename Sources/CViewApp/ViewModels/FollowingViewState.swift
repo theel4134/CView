@@ -4,6 +4,20 @@
 
 import SwiftUI
 
+enum FollowingHubMode: String, CaseIterable {
+    case explore = "탐색"
+    case watch = "시청"
+    case multi = "멀티"
+
+    var icon: String {
+        switch self {
+        case .explore: return "safari"
+        case .watch: return "play.rectangle"
+        case .multi: return "square.grid.2x2"
+        }
+    }
+}
+
 /// 라이브 메뉴의 영속 상태 — AppState에 보관되어 뷰 재생성에도 유지됨
 @Observable
 @MainActor
@@ -14,6 +28,7 @@ final class FollowingViewState {
     var sortOrder: FollowingSortOrder = .liveFirst
     var filterLiveOnly: Bool = false
     var selectedCategory: String? = nil
+    var hubMode: FollowingHubMode = .watch
 
     // MARK: - 페이징
 

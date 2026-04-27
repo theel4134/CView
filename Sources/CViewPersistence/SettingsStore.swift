@@ -128,7 +128,7 @@ public final class SettingsStore {
             let generalVal = self.general
             let appearanceVal = self.appearance
             let networkVal = self.network
-            let metricsVal = self.metrics
+            let metricsVal = self.metrics.normalized()
             let keyboardVal = self.keyboard
             let channelNotificationsVal = self.channelNotifications
             let multiLiveVal = self.multiLive

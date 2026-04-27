@@ -12,6 +12,21 @@ import CViewNetworking
 /// - 설정에서 활성화/비활성화 제어 가능
 public actor MetricsForwarder {
 
+    // MARK: - Interval Bounds
+
+    private static let minForwardInterval: TimeInterval = 2.0
+    private static let maxForwardInterval: TimeInterval = 120.0
+    private static let minPingInterval: TimeInterval = 5.0
+    private static let maxPingInterval: TimeInterval = 300.0
+
+    private static func clampForwardInterval(_ value: TimeInterval) -> TimeInterval {
+        max(minForwardInterval, min(maxForwardInterval, value))
+    }
+
+    private static func clampPingInterval(_ value: TimeInterval) -> TimeInterval {
+        max(minPingInterval, min(maxPingInterval, value))
+    }
+
     // MARK: - Snapshot (뷰에서 폴링용)
 
     /// 포워더 상태 스냅샷 — 설정 패널에 메트릭 전송 현황 표시용
@@ -154,8 +169,8 @@ public actor MetricsForwarder {
         self.apiClient = apiClient
         self.monitor = monitor
         self.isEnabled = isEnabled
-        self.forwardInterval = forwardInterval
-        self.pingInterval = pingInterval
+        self.forwardInterval = Self.clampForwardInterval(forwardInterval)
+        self.pingInterval = Self.clampPingInterval(pingInterval)
         self.clientId = UUID().uuidString
     }
 
@@ -229,14 +244,22 @@ public actor MetricsForwarder {
 
     /// 전송 주기 업데이트
     public func updateIntervals(forward: TimeInterval, ping: TimeInterval) {
-        let changed = (forward != forwardInterval || ping != pingInterval)
-        forwardInterval = forward
-        pingInterval = ping
+        let normalizedForward = Self.clampForwardInterval(forward)
+        let normalizedPing = Self.clampPingInterval(ping)
+        let changed = (normalizedForward != forwardInterval || normalizedPing != pingInterval)
+        let pingChanged = normalizedPing != pingInterval
+
+        forwardInterval = normalizedForward
+        pingInterval = normalizedPing
 
         // 현재 실행 중이면 재시작
         if changed && isEnabled && (activeChannelId != nil || !multiLiveChannels.isEmpty) {
             startForwarding()
             startPing()
+            if pingChanged && syncStatusTask != nil {
+                adaptiveSyncInterval = normalizedPing
+                restartSyncPolling()
+            }
         }
     }
 

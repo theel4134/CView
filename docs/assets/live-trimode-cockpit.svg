@@ -1,0 +1,99 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141416"/>
+      <stop offset="1" stop-color="#0F1012"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00FFA3"/>
+      <stop offset="1" stop-color="#00A86B"/>
+    </linearGradient>
+    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1B4037"/>
+      <stop offset="0.46" stop-color="#243951"/>
+      <stop offset="1" stop-color="#111317"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 700 18px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; }
+      .panel { fill: #1C1C1E; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+      .elevated { fill: #242426; stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="24" y="22" width="1392" height="856" rx="24" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="24" y="22" width="236" height="856" rx="24" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <rect x="24" y="68" width="1392" height="1" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+
+  <text x="58" y="116" class="title">CView</text>
+  <rect x="48" y="146" width="188" height="38" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="171" class="caption">홈</text>
+  <rect x="48" y="196" width="188" height="38" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.45"/>
+  <text x="70" y="221" class="body" fill="#F5F5F7">라이브</text>
+
+  <text x="300" y="116" class="title">플레이어 중심 Live Cockpit</text>
+  <text x="300" y="142" class="body">시청 stage를 중심에 두고 탐색과 멀티를 overlay/drawer로 전환하는 몰입형 디자인</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="170" width="1068" height="658" rx="26" fill="#0C0D10" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="326" y="198" width="1016" height="572" rx="22" fill="url(#stage)" stroke="#00FFA3" stroke-opacity="0.18"/>
+    <circle cx="518" cy="354" r="118" fill="#00FFA3" fill-opacity="0.10"/>
+    <circle cx="1050" cy="318" r="146" fill="#5BA3FF" fill-opacity="0.08"/>
+    <path d="M326 588C460 520 592 634 730 550C902 445 1060 548 1342 444V770H326V588Z" fill="#050607" fill-opacity="0.54"/>
+
+    <rect x="486" y="216" width="670" height="58" rx="22" fill="#111317" fill-opacity="0.82" stroke="rgba(255,255,255,0.12)"/>
+    <rect x="500" y="228" width="128" height="34" rx="17" class="elevated"/>
+    <text x="548" y="250" class="micro">탐색</text>
+    <rect x="640" y="228" width="128" height="34" rx="17" fill="url(#green)"/>
+    <text x="688" y="250" class="micro" fill="#0A0A0A">시청</text>
+    <rect x="780" y="228" width="128" height="34" rx="17" class="elevated"/>
+    <text x="828" y="250" class="micro">멀티</text>
+    <rect x="926" y="228" width="94" height="34" rx="17" class="elevated"/>
+    <text x="956" y="250" class="micro">PiP</text>
+    <rect x="1032" y="228" width="104" height="34" rx="17" class="elevated"/>
+    <text x="1060" y="250" class="micro">설정</text>
+
+    <rect x="360" y="682" width="356" height="56" rx="18" fill="#111317" fill-opacity="0.82" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="382" y="698" width="54" height="24" rx="12" fill="#FF3B30"/>
+    <text x="395" y="714" class="micro" fill="#FFFFFF">LIVE</text>
+    <text x="452" y="706" class="body">단일 시청: 채널 A</text>
+    <text x="452" y="724" class="caption">LiveStreamView 기반 stage</text>
+
+    <rect x="744" y="682" width="248" height="56" rx="18" fill="#111317" fill-opacity="0.82" stroke="rgba(255,255,255,0.10)"/>
+    <text x="768" y="706" class="body">채팅 overlay</text>
+    <text x="768" y="724" class="caption">side / overlay / hidden</text>
+    <rect x="1020" y="682" width="286" height="56" rx="18" fill="#111317" fill-opacity="0.82" stroke="rgba(255,255,255,0.10)"/>
+    <text x="1044" y="706" class="body">멀티 전환 시 grid stage</text>
+    <text x="1044" y="724" class="caption">MultiLive + chat drawer</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="328" y="300" width="278" height="314" rx="22" fill="#111317" fill-opacity="0.88" stroke="rgba(255,255,255,0.12)"/>
+    <text x="352" y="338" class="headline">탐색 overlay shelf</text>
+    <text x="352" y="362" class="caption">탐색 버튼 클릭 시 stage 위에 열림</text>
+    <rect x="352" y="392" width="230" height="38" rx="12" class="elevated"/>
+    <text x="376" y="416" class="caption">채널 검색</text>
+    <g transform="translate(352 456)">
+      <rect width="230" height="48" rx="14" class="elevated"/>
+      <circle cx="24" cy="24" r="14" fill="#00FFA3" fill-opacity="0.24"/>
+      <text x="50" y="22" class="body">채널 A</text>
+      <text x="50" y="38" class="caption">클릭 → 시청</text>
+    </g>
+    <g transform="translate(352 516)">
+      <rect width="230" height="48" rx="14" class="elevated"/>
+      <circle cx="24" cy="24" r="14" fill="#5BA3FF" fill-opacity="0.22"/>
+      <text x="50" y="22" class="body">채널 B</text>
+      <text x="50" y="38" class="caption">+ 멀티</text>
+    </g>
+  </g>
+</svg>

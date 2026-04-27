@@ -194,10 +194,49 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
     /// 기본 WebSocket URL
     public static let defaultWebSocketURL = "wss://cv.dododo.app/ws"
 
+    public static let minForwardInterval: TimeInterval = 2.0
+    public static let maxForwardInterval: TimeInterval = 120.0
+    public static let minPingInterval: TimeInterval = 5.0
+    public static let maxPingInterval: TimeInterval = 300.0
+
     public var metricsEnabled: Bool
     public var serverURL: String
     public var forwardInterval: TimeInterval
     public var pingInterval: TimeInterval
+
+    enum CodingKeys: String, CodingKey {
+        case metricsEnabled
+        case serverURL
+        case forwardInterval
+        case pingInterval
+    }
+
+    public static func clampForwardInterval(_ value: TimeInterval) -> TimeInterval {
+        max(minForwardInterval, min(maxForwardInterval, value))
+    }
+
+    public static func clampPingInterval(_ value: TimeInterval) -> TimeInterval {
+        max(minPingInterval, min(maxPingInterval, value))
+    }
+
+    public static func normalizeServerURL(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return defaultServerURL
+        }
+
+        let candidate: String
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            candidate = trimmed
+        } else {
+            candidate = "https://\(trimmed)"
+        }
+
+        if URL(string: candidate) != nil {
+            return candidate
+        }
+        return defaultServerURL
+    }
 
     public init(
         metricsEnabled: Bool = false,
@@ -206,9 +245,32 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
         pingInterval: TimeInterval = 30.0
     ) {
         self.metricsEnabled = metricsEnabled
-        self.serverURL = serverURL
-        self.forwardInterval = forwardInterval
-        self.pingInterval = pingInterval
+        self.serverURL = Self.normalizeServerURL(serverURL)
+        self.forwardInterval = Self.clampForwardInterval(forwardInterval)
+        self.pingInterval = Self.clampPingInterval(pingInterval)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        let metricsEnabled = try container.decodeIfPresent(Bool.self, forKey: .metricsEnabled) ?? false
+        let serverURL = try container.decodeIfPresent(String.self, forKey: .serverURL) ?? Self.defaultServerURL
+        let forwardInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .forwardInterval) ?? 5.0
+        let pingInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .pingInterval) ?? 30.0
+
+        self.metricsEnabled = metricsEnabled
+        self.serverURL = Self.normalizeServerURL(serverURL)
+        self.forwardInterval = Self.clampForwardInterval(forwardInterval)
+        self.pingInterval = Self.clampPingInterval(pingInterval)
+    }
+
+    public func normalized() -> Self {
+        Self(
+            metricsEnabled: metricsEnabled,
+            serverURL: serverURL,
+            forwardInterval: forwardInterval,
+            pingInterval: pingInterval
+        )
     }
 
     public static let `default` = MetricsSettings()

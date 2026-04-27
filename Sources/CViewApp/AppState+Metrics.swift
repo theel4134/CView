@@ -28,7 +28,14 @@ extension AppState {
     /// 메트릭 설정을 MetricsAPIClient · MetricsForwarder에 적용
     /// DataStore 로드 완료 후, 또는 사용자가 설정을 변경할 때 호출
     func applyMetricsSettings() async {
-        let ms = settingsStore.metrics
+        let normalized = settingsStore.metrics.normalized()
+        if normalized != settingsStore.metrics {
+            settingsStore.metrics = normalized
+        }
+
+        let ms = normalized
+        let forwardInterval = MetricsSettings.clampForwardInterval(ms.forwardInterval)
+        let pingInterval = MetricsSettings.clampPingInterval(ms.pingInterval)
 
         // 서버 URL 업데이트
         if let url = URL(string: ms.serverURL), !ms.serverURL.isEmpty {
@@ -37,13 +44,13 @@ extension AppState {
 
         // 전송 주기 업데이트
         await metricsForwarder?.updateIntervals(
-            forward: ms.forwardInterval,
-            ping: ms.pingInterval
+            forward: forwardInterval,
+            ping: pingInterval
         )
 
         // 활성화/비활성화 (setEnabled가 내부에서 상태 변화 감지)
         await metricsForwarder?.setEnabled(ms.metricsEnabled)
 
-        logger.info("Metrics settings applied – enabled: \(ms.metricsEnabled), url: \(ms.serverURL, privacy: .private)")
+        logger.info("Metrics settings applied – enabled: \(ms.metricsEnabled), url: \(ms.serverURL, privacy: .private), intervals: fwd=\(forwardInterval, privacy: .public)s ping=\(pingInterval, privacy: .public)s")
     }
 }

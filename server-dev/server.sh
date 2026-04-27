@@ -313,6 +313,41 @@ cmd_edit() {
     ssh -t "$SERVER" "vim $REMOTE_PROJECT/$file"
 }
 
+# Superset 연동 자동화 (views + datasets + dashboards + verify)
+cmd_superset_sync() {
+    local base_url="${1:-https://cv.dododo.app:9443}"
+    local superset_user="${SUPERSET_USER:-admin}"
+    local superset_pass="${SUPERSET_PASS:-admin}"
+    local db_name="${SUPERSET_DB_NAME:-ChzzkMetricsDB}"
+
+    header "Superset 연동: 메트릭 뷰/데이터셋/대시보드 동기화"
+    info "BASE=$base_url, DB=$db_name, USER=$superset_user"
+
+    info "1) PostgreSQL view 적용 (superset_views_poc.sql + views_app_metrics.sql)..."
+    ssh "$SERVER" "cd $REMOTE_PROJECT && cat scripts/superset_views_poc.sql | docker compose exec -T postgres psql -U chzzk -d chzzk_db && cat scripts/sql/views_app_metrics.sql | docker compose exec -T postgres psql -U chzzk -d chzzk_db"
+    ok "View 적용 완료"
+
+    info "2) Superset dataset 등록/동기화..."
+    ssh "$SERVER" "cd $REMOTE_PROJECT/scripts && SUPERSET_URL='$base_url' SUPERSET_USER='$superset_user' SUPERSET_PASS='$superset_pass' SUPERSET_DB_NAME='$db_name' python3 superset_register_datasets.py"
+    ok "Dataset 동기화 완료"
+
+    info "3) Superset 대시보드 생성/업데이트..."
+    ssh "$SERVER" "cd $REMOTE_PROJECT/scripts && SUPERSET_BASE='$base_url' SUPERSET_USER='$superset_user' SUPERSET_PASSWORD='$superset_pass' python3 superset_create_dashboards.py"
+    ok "Dashboard 동기화 완료"
+
+    info "4) 대시보드 메타데이터 검증..."
+    ssh "$SERVER" "cd $REMOTE_PROJECT && docker exec -t chzzk-superset python - <<'PY'
+from superset.app import create_app
+app = create_app()
+from superset import db
+from superset.models.dashboard import Dashboard
+with app.app_context():
+    rows = db.session.query(Dashboard.slug, Dashboard.dashboard_title).all()
+    print('DASHBOARDS', rows)
+PY"
+    ok "Superset 연동 완료"
+}
+
 # ── 도움말 ────────────────────────────────────────────────────
 cmd_help() {
     cat <<EOF
@@ -334,6 +369,7 @@ ${GREEN}빌드 & 배포:${NC}
   build [service]     빌드 & 재시작 (기본: chzzk-metrics)
   restart [service]   재시작 (빌드 없이)
   deploy [target]     push + build (collector|statsweb|nginx)
+    superset-sync [url] Superset 연동 실행 (view+dataset+dashboard)
   rebuild-all         전체 스택 리빌드
 
 ${GREEN}서비스 관리:${NC}
@@ -353,6 +389,7 @@ ${YELLOW}예시:${NC}
   ./server-dev/server.sh pull
   ./server-dev/server.sh logs chzzk-metrics 50
   ./server-dev/server.sh deploy collector
+    ./server-dev/server.sh superset-sync
   ./server-dev/server.sh exec chzzk-metrics
 
 EOF
@@ -371,6 +408,7 @@ case "$command" in
     build)       check_ssh; cmd_build "$@" ;;
     restart)     check_ssh; cmd_restart "$@" ;;
     deploy)      check_ssh; cmd_deploy "$@" ;;
+    superset-sync) check_ssh; cmd_superset_sync "$@" ;;
     rebuild-all) check_ssh; cmd_rebuild_all ;;
     start)       check_ssh; cmd_start "$@" ;;
     stop)        check_ssh; cmd_stop "$@" ;;

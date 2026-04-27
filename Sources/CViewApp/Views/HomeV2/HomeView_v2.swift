@@ -38,6 +38,8 @@ struct HomeView_v2: View {
 
     /// 간이 성능 모니터 패널 표시 여부 (CommandBar 의 ⌥M 버튼으로 토글, AppStorage 영속)
     @AppStorage("home.monitor.enabled") private var monitorEnabled: Bool = false
+    @State private var supersetReachable: Bool? = nil
+    @State private var checkingSuperset: Bool = false
 
     /// 캐시된 추천 결과 — 입력 시그니처가 바뀌는 때며 재계산 (매 렌더 O(N log N) 회피)
     @State private var cachedRecommendations: [HomeRecommendationEngine.ScoredChannel] = []
@@ -62,6 +64,7 @@ struct HomeView_v2: View {
     @AppStorage("home.v2.show.top")         private var prefShowTop: Bool = true
     @AppStorage("home.v2.show.insights")    private var prefShowInsights: Bool = true
     @AppStorage("home.v2.show.activeMulti") private var prefShowActiveMulti: Bool = true
+    @AppStorage("home.v2.show.supersetDock") private var prefShowSupersetDock: Bool = true
     @AppStorage("home.v2.density")          private var densityRaw: String = HomeCardDensity.comfortable.rawValue
 
     // MARK: - Derived
@@ -141,6 +144,44 @@ struct HomeView_v2: View {
         case .comfortable: return 7
         case .spacious: return 8
         }
+    }
+
+    private var supersetURL: URL {
+        let raw = MetricsSettings.normalizeServerURL(appState.settingsStore.metrics.serverURL)
+        if var components = URLComponents(string: raw), let host = components.host {
+            components.scheme = "https"
+            components.host = host
+            components.port = 9443
+            components.path = "/"
+            components.query = nil
+            components.fragment = nil
+            if let url = components.url {
+                return url
+            }
+        }
+        return URL(string: "https://cv.dododo.app:9443/")!
+    }
+
+    private var p95LatencyMs: Double? {
+        let candidates = viewModel.serverChannelStats.compactMap { ch -> Double? in
+            ch.app?.last ?? ch.web?.last ?? ch.app?.avg ?? ch.web?.avg
+        }
+        guard !candidates.isEmpty else { return nil }
+        return percentile(candidates, p: 0.95)
+    }
+
+    private var bufferWarnings: Int {
+        if let waiting = viewModel.cviewAggregate?.waitingChannels {
+            return waiting
+        }
+        return viewModel.serverChannelStats.reduce(0) { acc, item in
+            let delta = abs(item.delta?.current ?? 0)
+            return acc + (delta >= 2000 ? 1 : 0)
+        }
+    }
+
+    private var vlcSampleCount: Int? {
+        viewModel.systemStats?.recordCounts?.vlcMetrics
     }
 
     private struct UpNextItem: Identifiable {
@@ -475,6 +516,34 @@ struct HomeView_v2: View {
         HomeThumbnailPrefetcher.prefetchPersisted(items: recentItems + favoriteItems)
     }
 
+    private func percentile(_ values: [Double], p: Double) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let rank = max(0, min(sorted.count - 1, Int((Double(sorted.count - 1) * p).rounded())))
+        return sorted[rank]
+    }
+
+    private func probeSupersetAvailability() async {
+        if checkingSuperset { return }
+        checkingSuperset = true
+        defer { checkingSuperset = false }
+
+        var request = URLRequest(url: supersetURL)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 2.5
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse {
+                supersetReachable = (200...399).contains(http.statusCode) || http.statusCode == 401 || http.statusCode == 403
+            } else {
+                supersetReachable = true
+            }
+        } catch {
+            supersetReachable = false
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -661,6 +730,10 @@ struct HomeView_v2: View {
                 await reloadStore()
                 // reloadStore 가 끝에서 recomputeCachesIfNeeded 를 호출하므로
                 // 추가 호출 불필요.
+            }
+
+            Task { @MainActor in
+                await probeSupersetAvailability()
             }
         }
         .onDisappear {
@@ -922,12 +995,70 @@ struct HomeView_v2: View {
                     .frame(maxWidth: .infinity)
 
                 upNextQueuePanel
-                    .frame(width: 360)
+                    .frame(width: 340)
+
+                if prefShowSupersetDock {
+                    HomeSupersetInsightDock(
+                        metricsOnline: viewModel.isMetricsServerOnline,
+                        supersetReachable: supersetReachable,
+                        checkingSuperset: checkingSuperset,
+                        supersetURL: supersetURL,
+                        p95LatencyMs: p95LatencyMs,
+                        bufferWarnings: bufferWarnings,
+                        vlcSamples: vlcSampleCount,
+                        viewerHistory: viewModel.viewerHistory,
+                        onRetrySupersetCheck: {
+                            Task { await probeSupersetAvailability() }
+                        }
+                    )
+                    .frame(width: 300)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: sectionSpacing) {
+                HomeHeroLiveCard(item: hero, height: heroHeight)
+                if prefShowSupersetDock {
+                    HStack(alignment: .top, spacing: sectionSpacing) {
+                        upNextQueuePanel
+                            .frame(maxWidth: .infinity)
+                        HomeSupersetInsightDock(
+                            metricsOnline: viewModel.isMetricsServerOnline,
+                            supersetReachable: supersetReachable,
+                            checkingSuperset: checkingSuperset,
+                            supersetURL: supersetURL,
+                            p95LatencyMs: p95LatencyMs,
+                            bufferWarnings: bufferWarnings,
+                            vlcSamples: vlcSampleCount,
+                            viewerHistory: viewModel.viewerHistory,
+                            onRetrySupersetCheck: {
+                                Task { await probeSupersetAvailability() }
+                            }
+                        )
+                        .frame(width: 320)
+                    }
+                } else {
+                    upNextQueuePanel
+                }
             }
 
             VStack(alignment: .leading, spacing: sectionSpacing) {
                 HomeHeroLiveCard(item: hero, height: heroHeight)
                 upNextQueuePanel
+                if prefShowSupersetDock {
+                    HomeSupersetInsightDock(
+                        metricsOnline: viewModel.isMetricsServerOnline,
+                        supersetReachable: supersetReachable,
+                        checkingSuperset: checkingSuperset,
+                        supersetURL: supersetURL,
+                        p95LatencyMs: p95LatencyMs,
+                        bufferWarnings: bufferWarnings,
+                        vlcSamples: vlcSampleCount,
+                        viewerHistory: viewModel.viewerHistory,
+                        onRetrySupersetCheck: {
+                            Task { await probeSupersetAvailability() }
+                        }
+                    )
+                }
             }
         }
     }
@@ -1137,6 +1268,7 @@ struct HomeView_v2: View {
         Task { @MainActor in
             await viewModel.refresh()
             await reloadStore()
+            await probeSupersetAvailability()
             refreshing = false
         }
     }

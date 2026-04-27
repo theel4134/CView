@@ -6,6 +6,120 @@ import CViewCore
 
 extension FollowingView {
 
+    // MARK: - Live Hub Top Bar (최종안)
+
+    var liveHubTopBar: some View {
+        HStack(spacing: DesignTokens.Spacing.md) {
+            Text("Live Hub")
+                .font(DesignTokens.Typography.custom(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+
+            Spacer(minLength: 0)
+
+            hubModeSegment
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                if let selected = multiLiveManager.selectedSession ?? multiLiveManager.sessions.first {
+                    hubInfoPill(text: selected.channelName, tint: DesignTokens.Colors.textSecondary)
+                }
+                hubInfoPill(text: "멀티 \(multiLiveManager.sessions.count)/\(multiLiveManager.effectiveMaxSessions)", tint: DesignTokens.Colors.chzzkGreen)
+                Button {
+                    guard !viewModel.isLoadingFollowing else { return }
+                    Task { await viewModel.loadFollowingChannels(invalidateThumbnails: true) }
+                } label: {
+                    hubInfoPill(text: "새로고침", tint: DesignTokens.Colors.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isLoadingFollowing)
+            }
+        }
+        .padding(.horizontal, DesignTokens.Spacing.lg)
+        .padding(.vertical, DesignTokens.Spacing.sm)
+        .background(DesignTokens.Colors.background)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DesignTokens.Glass.dividerColor.opacity(0.45))
+                .frame(height: 1)
+        }
+    }
+
+    private var hubModeSegment: some View {
+        HStack(spacing: 3) {
+            ForEach(FollowingHubMode.allCases, id: \.self) { mode in
+                Button {
+                    applyHubModePreset(mode)
+                } label: {
+                    Text(mode.rawValue)
+                        .font(DesignTokens.Typography.custom(size: 11, weight: hubMode == mode ? .bold : .medium))
+                        .foregroundStyle(hubMode == mode ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .frame(height: 24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(hubMode == mode ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceBase)
+                                .opacity(hubMode == mode ? 1 : 0.9)
+                        )
+                }
+                .buttonStyle(PressScaleButtonStyle(scale: 0.96))
+            }
+        }
+        .padding(4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.45))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    private func hubInfoPill(text: String, tint: Color) -> some View {
+        Text(text)
+            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(DesignTokens.Colors.surfaceBase)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.35), lineWidth: 0.5)
+            )
+    }
+
+    private func applyHubModePreset(_ mode: FollowingHubMode) {
+        withAnimation(DesignTokens.Animation.snappy) {
+            hubMode = mode
+
+            switch mode {
+            case .explore:
+                showFollowingList = true
+                showMultiLive = false
+                showMultiChat = false
+                filterLiveOnly = false
+                sortOrder = .liveFirst
+            case .watch:
+                showFollowingList = true
+                showMultiLive = true
+                showMultiChat = false
+                filterLiveOnly = true
+                sortOrder = .liveFirst
+            case .multi:
+                showFollowingList = true
+                showMultiLive = true
+                showMultiChat = true
+                filterLiveOnly = true
+                sortOrder = .viewers
+            }
+        }
+    }
+
     // MARK: - Header Section (모던 리디자인)
 
     var headerSection: some View {
