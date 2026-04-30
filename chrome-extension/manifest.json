@@ -1,0 +1,84 @@
+{
+  "manifest_version": 3,
+  "name": "CView Chzzk Metrics Collector",
+  "short_name": "CView Metrics",
+  "version": "3.7.4",
+  "description": "CView 앱 라이브 재생 감지 → 치지직 웹 메트릭 자동 수집 (TimescaleDB 직접 적재 / Grafana Analytics 연동)",
+  "minimum_chrome_version": "116",
+
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "scripting",
+    "offscreen"
+  ],
+
+  "host_permissions": [
+    "https://chzzk.naver.com/*",
+    "https://api.chzzk.naver.com/*",
+    "https://*.naver.net/*",
+    "https://*.pstatic.net/*",
+    "https://cv.dododo.app/*",
+    "https://cv.dododo.app:8443/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_title": "CView Metrics",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://chzzk.naver.com/*"],
+      "js": ["src/content/page-hooks.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://chzzk.naver.com/*"],
+      "js": ["src/content/bridge.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://chzzk.naver.com/*", "https://cv.dododo.app/*", "https://cv.dododo.app:8443/*"],
+      "js": ["src/content/status-overlay.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED",
+      "all_frames": false
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["src/offscreen/offscreen.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

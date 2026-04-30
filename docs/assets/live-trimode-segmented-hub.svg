@@ -1,0 +1,113 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141416"/>
+      <stop offset="1" stop-color="#101114"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00FFA3"/>
+      <stop offset="1" stop-color="#00A86B"/>
+    </linearGradient>
+    <linearGradient id="media" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1D3E36"/>
+      <stop offset="0.52" stop-color="#26364A"/>
+      <stop offset="1" stop-color="#15171B"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 700 18px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; }
+      .panel { fill: #1C1C1E; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+      .elevated { fill: #242426; stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="24" y="22" width="1392" height="856" rx="24" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="24" y="22" width="236" height="856" rx="24" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <rect x="24" y="68" width="1392" height="1" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+
+  <text x="58" y="116" class="title">CView</text>
+  <rect x="48" y="146" width="188" height="38" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="171" class="caption">홈</text>
+  <rect x="48" y="196" width="188" height="38" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.45"/>
+  <text x="70" y="221" class="body" fill="#F5F5F7">라이브</text>
+  <rect x="48" y="246" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="268" class="caption">검색</text>
+  <rect x="48" y="292" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="314" class="caption">최근/즐겨찾기</text>
+
+  <text x="300" y="116" class="title">상단 세그먼트형 Live Hub</text>
+  <text x="300" y="142" class="body">탐색, 시청, 멀티 버튼을 상단에 고정하고 콘텐츠 영역 전체를 전환하는 기본 추천안</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="170" width="1068" height="88" rx="20" class="panel"/>
+    <text x="326" y="204" class="headline">Live Hub</text>
+    <text x="326" y="228" class="caption">mode = explore / watch / multi</text>
+    <rect x="620" y="188" width="382" height="48" rx="16" fill="#141416" stroke="rgba(255,255,255,0.08)"/>
+    <rect x="628" y="196" width="118" height="32" rx="12" fill="url(#green)"/>
+    <text x="673" y="217" class="micro" fill="#0A0A0A">탐색</text>
+    <text x="789" y="217" class="caption">시청</text>
+    <text x="916" y="217" class="caption">멀티</text>
+    <rect x="1040" y="194" width="128" height="36" rx="12" class="elevated"/>
+    <text x="1072" y="217" class="micro">현재 채널</text>
+    <rect x="1182" y="194" width="128" height="36" rx="12" class="elevated"/>
+    <text x="1214" y="217" class="micro">세션 2/4</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="286" width="1068" height="542" rx="24" class="panel"/>
+    <text x="326" y="326" class="headline">탐색 화면</text>
+    <text x="326" y="350" class="caption">FollowingView의 검색, 필터, 카테고리, 라이브 grid를 전체 폭으로 표시</text>
+    <rect x="326" y="376" width="420" height="40" rx="12" class="elevated"/>
+    <text x="352" y="401" class="caption">채널, 방송 제목, 카테고리 검색</text>
+    <rect x="762" y="376" width="174" height="40" rx="12" fill="#141416" stroke="rgba(255,255,255,0.08)"/>
+    <rect x="770" y="384" width="78" height="24" rx="12" fill="url(#green)"/>
+    <text x="794" y="400" class="micro" fill="#0A0A0A">전체</text>
+    <text x="872" y="400" class="caption">라이브</text>
+    <rect x="950" y="376" width="112" height="40" rx="12" class="elevated"/>
+    <text x="982" y="401" class="caption">정렬</text>
+
+    <g transform="translate(326 448)">
+      <rect width="236" height="166" rx="18" class="elevated"/>
+      <rect x="14" y="14" width="208" height="88" rx="12" fill="url(#media)"/>
+      <rect x="28" y="28" width="46" height="20" rx="10" fill="#FF3B30"/>
+      <text x="39" y="42" class="micro" fill="#FFFFFF">LIVE</text>
+      <text x="14" y="130" class="body">채널 A</text>
+      <text x="14" y="150" class="caption">클릭하면 시청 모드</text>
+    </g>
+    <g transform="translate(584 448)">
+      <rect width="236" height="166" rx="18" class="elevated"/>
+      <rect x="14" y="14" width="208" height="88" rx="12" fill="url(#media)"/>
+      <text x="14" y="130" class="body">채널 B</text>
+      <text x="14" y="150" class="caption">+ 멀티 → 세션 추가</text>
+    </g>
+    <g transform="translate(842 448)">
+      <rect width="236" height="166" rx="18" class="elevated"/>
+      <rect x="14" y="14" width="208" height="88" rx="12" fill="url(#media)"/>
+      <text x="14" y="130" class="body">채널 C</text>
+      <text x="14" y="150" class="caption">채팅만 열기</text>
+    </g>
+    <g transform="translate(1100 448)">
+      <rect width="238" height="166" rx="18" class="elevated"/>
+      <rect x="14" y="14" width="210" height="88" rx="12" fill="url(#media)"/>
+      <text x="14" y="130" class="body">채널 D</text>
+      <text x="14" y="150" class="caption">채널 상세</text>
+    </g>
+
+    <rect x="326" y="664" width="320" height="92" rx="18" fill="#15171B" stroke="rgba(255,255,255,0.08)"/>
+    <text x="350" y="700" class="headline">시청 모드 empty state</text>
+    <text x="350" y="724" class="caption">선택 채널 없으면 탐색에서 고르도록 안내</text>
+    <rect x="680" y="664" width="320" height="92" rx="18" fill="#15171B" stroke="rgba(255,255,255,0.08)"/>
+    <text x="704" y="700" class="headline">멀티 모드 empty state</text>
+    <text x="704" y="724" class="caption">빈 슬롯 CTA와 탐색 이동 버튼</text>
+  </g>
+</svg>

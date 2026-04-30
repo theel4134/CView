@@ -1,0 +1,988 @@
+// MARK: - PlayerViewModel.swift
+// CViewApp — 재작성된 Player ViewModel
+// @Observable ViewModel + StreamCoordinator 아키텍처
+
+import Foundation
+import SwiftUI
+import CViewCore
+import CViewPlayer
+import CViewMonitoring
+import CViewNetworking
+
+// MARK: - Player ViewModel
+
+@Observable
+@MainActor
+public final class PlayerViewModel {
+
+    // MARK: - Constants
+
+    static let maxLatencyHistory = 60
+
+    // MARK: - 재생 상태
+
+    public var streamPhase: StreamCoordinator.StreamPhase = .idle
+    public var currentQuality: StreamQualityInfo?
+    public var availableQualities: [StreamQualityInfo] = []
+    public var latencyInfo: LatencyInfo?
+    public var latencyHistory: [LatencyDataPoint] = []
+    public var bufferHealth: BufferHealth?
+    public var playbackRate: Double = 1.0
+    public var volume: Float = 1.0
+    public var isMuted = false
+    public var isFullscreen = false
+    public var isAudioOnly = false
+    public var showControls = true
+    public var errorMessage: String?
+    public var isLiveStream: Bool = true
+
+    // MARK: - 네트워크 메트릭
+
+    public var latestMetrics: VLCLiveMetrics?
+    public var showNetworkMetrics: Bool = false
+
+    // MARK: - 정밀 동기화 (P2 / 2026-04-25) — VLC + WebLatencyClient 부착 시에만 갱신
+    /// LowLatencyController.WebSyncPhase 의 사람-읽기 표현 (예: "tracking", "hold(stale)")
+    public var webSyncPhaseLabel: String = "-"
+    /// EWMA 평활된 web↔app drift (ms). 양수 = 앱이 웹보다 뒤쳐짐.
+    public var webSyncDriftMs: Double?
+    /// 가장 최근 PDT 비교 샘플의 web/app 절대 레이턴시 (ms)
+    public var webSyncWebLatencyMs: Double?
+    public var webSyncAppLatencyMs: Double?
+    /// 가장 오래된 쪽 sample age (ms) — 5_000 초과 시 hold 진입 기준
+    public var webSyncSampleAgeMs: Int64?
+    /// PDT 양쪽 가용 + 신선 여부
+    public var webSyncIsPrecisionEligible: Bool = false
+
+    // MARK: - 녹화 상태
+
+    public var isRecording: Bool = false
+    public var recordingDuration: TimeInterval = 0
+    public var recordingURL: URL?
+    var recordingTimerTask: Task<Void, Never>?
+
+    // MARK: - 스크린샷 설정
+
+    public var screenshotSavePath: String = "~/Pictures/CView Screenshots"
+    public var screenshotSaveFormat: ScreenshotFormat = .png
+
+    // MARK: - 스트림 메타정보
+
+    public var channelName: String = ""
+    public var liveTitle: String = ""
+    public var thumbnailURL: URL?
+    public var viewerCount: Int = 0
+    public var uptime: TimeInterval = 0
+    public private(set) var currentChannelId: String?
+
+    // MARK: - 의존성
+
+    var streamCoordinator: StreamCoordinator?
+    public private(set) var playerEngine: (any PlayerEngineProtocol)?
+    private var isPreallocated: Bool
+
+    // [P1 / 2026-04-25] PDT 정밀 동기화 — VLC 세션에서만 사용.
+    // `attachWebLatencyClient(metricsClient:channelId:)` 로 연결, `stopStream()` 에서 자동 해제.
+    private var webLatencyClient: WebLatencyClient?
+    /// 정밀 동기화 모니터링 폴링 태스크 — UI(@Observable) 상태 갱신용.
+    private var webSyncMonitorTask: Task<Void, Never>?
+    public var isMultiLive: Bool = false
+    var eventTask: Task<Void, Never>?
+    private var controlHideTask: Task<Void, Never>?
+    var uptimeTask: Task<Void, Never>?
+    /// VLC 버퍼링 디바운스: 재생 중 순간적인 버퍼링 상태 변경은 무시하고
+    /// 일정 시간 이상 지속될 때만 UI에 반영
+    var _bufferingDebounceTask: Task<Void, Never>?
+    /// 안티플리커: 마지막으로 .playing 전환된 시각 (쿨다운 기준)
+    /// playing 진입 후 일정 시간 동안은 버퍼링 전환을 억제하여 깜빡임 방지
+    var _lastPlayingTime: Date?
+    /// [Buffering Phase 1 / 2026-04-30] 통합 버퍼링 이벤트 추적용 — 동작 변화 없음, 로깅만.
+    /// `.buffering` 전환 시 새 UUID 발급하고 시작 시각/원인을 기록한다.
+    /// `.playing` 복귀 시 종료 로그 + duration 계산.
+    var _bufferingEventId: UUID?
+    var _bufferingStartedAt: Date?
+    var _bufferingCause: String?
+    /// [Freeze Fix] drawable 재바인딩 Task 추적
+    var _refreshDrawableTask: Task<Void, Never>?
+    let logger = AppLogger.player
+
+    public var onPlaybackStateChanged: (() -> Void)?
+    
+    /// 방송 종료 여부 확인 콜백 — 재연결 시 API 호출로 라이브 상태 확인
+    public var onCheckStreamEnded: (@Sendable () async -> Bool)?
+
+    /// [No-Proxy] VLC 가 chzzk CDN 응답을 처리하지 못해 35초 타임아웃이 발생했을 때 호출.
+    /// 단일 라이브에서는 PlayerViewModel 가 내부적으로 AVPlayer 로 재시작하지만,
+    /// 멀티라이브(엔진 풀 사용 — `isPreallocated == true`) 에서는 외부 컨테이너가
+    /// 엔진을 교체해야 하므로 본 콜백으로 통보만 한다.
+    public var onEngineFallbackRequested: (@Sendable (_ reason: String) -> Void)?
+
+    // [Persistence 2026-04-18] 볼륨/음소거 변경 알림 — AppDependencies 에서
+    // SettingsStore.player.volumeLevel / startMuted 영구 저장에 연결.
+    /// 사용자 볼륨 조절 시 호출 (0.0 ~ 1.0)
+    public var onVolumeChanged: ((Float) -> Void)?
+    /// 음소거 토글 시 호출
+    public var onMuteChanged: ((Bool) -> Void)?
+
+    // MARK: - 엔진 선택
+
+    public var preferredEngineType: PlayerEngineType = .avPlayer
+    public private(set) var currentEngineType: PlayerEngineType = .avPlayer
+
+    /// 현재 스트림 프록시 모드 rawValue (startStream 시 playerSettings 에서 반영)
+    public private(set) var currentProxyMode: String = StreamProxyMode.localProxy.rawValue
+
+    // MARK: - VLC 고급 설정 (Observable 상태)
+
+    public var isEqualizerEnabled: Bool = false
+    public var equalizerPresetName: String = ""
+    public var equalizerPreAmp: Float = 0
+    public var equalizerBands: [Float] = []
+
+    public var isVideoAdjustEnabled: Bool = false
+    public var videoBrightness: Float = 1.0
+    public var videoContrast: Float = 1.0
+    public var videoSaturation: Float = 1.0
+    public var videoHue: Float = 0
+    public var videoGamma: Float = 1.0
+
+    public var aspectRatio: String? = nil
+    public var audioStereoMode: UInt = 0
+    public var audioMixMode: UInt32 = 0
+    public var audioDelay: Int = 0
+
+    public var subtitleTracks: [(Int, String)] = []
+    public var selectedSubtitleTrack: Int = -1
+    public var subtitleDelay: Int = 0
+    public var subtitleFontScale: Float = 100
+
+    // MARK: - Init
+
+    public init(engineType: PlayerEngineType = .avPlayer, isPreallocated: Bool = false) {
+        self.preferredEngineType = engineType
+        self.currentEngineType = engineType
+        self.isPreallocated = isPreallocated
+    }
+
+    /// 외부에서 미리 생성된 엔진 주입 (멀티라이브 엔진 풀용)
+    public func injectEngine(_ engine: any PlayerEngineProtocol) {
+        self.playerEngine = engine
+        self.isPreallocated = true
+        if let vlc = engine as? VLCPlayerEngine {
+            self.currentEngineType = .vlc
+            vlc.streamingProfile = .multiLive
+        } else if let hlsjs = engine as? HLSJSPlayerEngine {
+            self.currentEngineType = .hlsjs
+            hlsjs.streamingProfile = .multiLive
+        } else {
+            self.currentEngineType = .avPlayer
+        }
+    }
+
+    /// 주입된 엔진 분리 (풀 반환용) — 엔진 참조만 해제, stop은 호출하지 않음
+    public func detachEngine() -> (any PlayerEngineProtocol)? {
+        let engine = playerEngine
+        playerEngine = nil
+        isPreallocated = false
+        return engine
+    }
+
+    /// 엔진 팩토리
+    private static func makeEngine(type: PlayerEngineType) -> any PlayerEngineProtocol {
+        switch type {
+        case .vlc:
+            let e = VLCPlayerEngine()
+            e.streamingProfile = .lowLatency
+            return e
+        case .avPlayer:
+            let e = AVPlayerEngine()
+            e.catchupConfig = .lowLatency
+            return e
+        case .hlsjs:
+            let e = HLSJSPlayerEngine()
+            e.streamingProfile = .lowLatency
+            return e
+        }
+    }
+
+    // MARK: - VLC 메트릭 콜백
+
+    public func setVLCMetricsCallback(_ callback: (@Sendable (VLCLiveMetrics) -> Void)?) {
+        guard let vlc = playerEngine as? VLCPlayerEngine else { return }
+        if let callback = callback {
+            let coordinator = self.streamCoordinator
+            // [Buffering Phase 1 / 2026-04-30] ABR sample duration 을 실제 statsTimer 주기로
+            //   보정 (고정 2.0s → multiLive 15s / 그 외 10s).
+            //   EWMA 가중치가 duration에 비례하므로, 실제 측정 주기로 넣어야
+            //   과민 한 다운시프트를 피한다.
+            vlc.onVLCMetrics = { [weak self, weak coordinator, weak vlc] metrics in
+                callback(metrics)
+                // [Stats fix / 2026-04-30] bufferUpdate 이벤트가 별도 경로로 발행되지 않아
+                //   PVM.bufferHealth 가 영구 nil 이던 문제 — VLC 메트릭 도착 시 직접 갱신.
+                Task { @MainActor in
+                    self?.bufferHealth = BufferHealth(
+                        currentLevel: metrics.bufferHealth,
+                        targetLevel: 1.0,
+                        isHealthy: metrics.bufferHealth >= 0.7,
+                        confidence: metrics.bufferHealthConfidence,
+                        isMeasurable: metrics.bufferHealthConfidence >= 0.5
+                    )
+                }
+                if metrics.networkBytesPerSec > 0 {
+                    let intervalSec: TimeInterval = (vlc?.streamingProfile == .multiLive) ? 15.0 : 10.0
+                    let bytes = Int(Double(metrics.networkBytesPerSec) * intervalSec)
+                    // [Phase 2.2] confidence < 0.5 면 bufferHealth 측정 불가 — ABR 갱신 보류
+                    let bh: Double? = metrics.bufferHealthConfidence >= 0.5 ? metrics.bufferHealth : nil
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: intervalSec, bufferHealth: bh) }
+                }
+            }
+        } else {
+            vlc.onVLCMetrics = nil
+        }
+    }
+
+    // MARK: - AVPlayer 메트릭 콜백
+
+    public func setAVPlayerMetricsCallback(_ callback: (@Sendable (AVPlayerLiveMetrics) -> Void)?) {
+        guard let avEngine = playerEngine as? AVPlayerEngine else { return }
+        if let callback = callback {
+            avEngine.onAVMetrics = { metrics in
+                callback(metrics)
+            }
+            avEngine.emitCurrentMetricsSnapshot()
+        } else {
+            avEngine.onAVMetrics = nil
+        }
+    }
+
+    // MARK: - HLS.js 메트릭 콜백
+
+    public func setHLSJSMetricsCallback(_ callback: (@Sendable (HLSJSLiveMetrics) -> Void)?) {
+        guard let hlsjs = playerEngine as? HLSJSPlayerEngine else { return }
+        if let callback = callback {
+            hlsjs.onHLSJSMetrics = { metrics in
+                callback(metrics)
+            }
+        } else {
+            hlsjs.onHLSJSMetrics = nil
+        }
+    }
+
+    /// 현재 엔진의 목표 레이턴시 묶음.
+    ///
+    /// [P0 / 2026-04-25] sync target / engine cache / tolerance 를 명시적으로 분리한다.
+    /// - VLC: syncTargetMs 는 LowLatencyController.webSync 와 일치(6_000ms),
+    ///        engineCacheMs 는 streamingProfile.liveCaching.
+    /// - AVPlayer: catchupConfig.targetLatency 를 sync 와 cache 모두에 사용(엔진 통합).
+    /// - HLS.js: 프로파일별 목표 — sync == cache.
+    public func currentLatencyTargets() -> LatencyTargets? {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            // VLC: LowLatencyController.webSync target(6.0s) 과 일치.
+            // 이 값은 LowLatencyController.Configuration.webSync.targetLatency 와
+            // 변경 시 함께 동기화되어야 한다.
+            return LatencyTargets(
+                syncTargetMs: 6_000,
+                engineCacheMs: Double(vlc.streamingProfile.liveCaching),
+                toleranceMs: 500
+            )
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            let ms = av.catchupConfig.targetLatency * 1000.0
+            return LatencyTargets(syncTargetMs: ms, engineCacheMs: ms, toleranceMs: 500)
+        }
+        if let hlsjs = playerEngine as? HLSJSPlayerEngine {
+            let ms: Double
+            switch hlsjs.streamingProfile {
+            case .ultraLow:    ms = 1_000
+            case .lowLatency:  ms = 2_000
+            case .multiLive:   ms = 3_000
+            // [P2-3 / 2026-04-25] mirror = hls.js 기본(liveSyncDurationCount=3 × ~2s segment ≈ 6s)
+            case .mirror:      ms = 6_000
+            }
+            return LatencyTargets(syncTargetMs: ms, engineCacheMs: ms, toleranceMs: 500)
+        }
+        return nil
+    }
+
+    /// 현재 엔진의 목표 레이턴시(sync 기준값)를 밀리초로 반환.
+    ///
+    /// [P0 / 2026-04-25] 의미를 통일했다 — 항상 `currentLatencyTargets().syncTargetMs`
+    /// 와 동일한 값을 반환한다(이전: VLC 의 경우 liveCaching 을 반환했으나 서버
+    /// `/api/metrics` payload `targetLatency` 의미와 불일치). 호출 측 5곳 모두
+    /// "서버 동기화 비교 기준값" 의미로 사용 중이라 호환된다.
+    @available(*, deprecated, message: "Use currentLatencyTargets() to access syncTargetMs / engineCacheMs / toleranceMs explicitly.")
+    public func currentTargetLatencyMs() -> Double? {
+        currentLatencyTargets()?.syncTargetMs
+    }
+
+    /// 싱글 플레이어 네트워크 탭용 자체 메트릭 수집 활성화
+    public func enableSelfMetrics(_ enabled: Bool) {
+        showNetworkMetrics = enabled
+        guard let vlc = playerEngine as? VLCPlayerEngine else { return }
+        if enabled {
+            let coordinator = self.streamCoordinator
+            vlc.onVLCMetrics = { [weak self, weak coordinator, weak vlc] metrics in
+                Task { @MainActor in
+                    self?.latestMetrics = metrics
+                    // [Stats fix / 2026-04-30] PVM.bufferHealth 직접 갱신 (위 setVLCMetricsCallback 동일).
+                    self?.bufferHealth = BufferHealth(
+                        currentLevel: metrics.bufferHealth,
+                        targetLevel: 1.0,
+                        isHealthy: metrics.bufferHealth >= 0.7,
+                        confidence: metrics.bufferHealthConfidence,
+                        isMeasurable: metrics.bufferHealthConfidence >= 0.5
+                    )
+                }
+                if metrics.networkBytesPerSec > 0 {
+                    let intervalSec: TimeInterval = (vlc?.streamingProfile == .multiLive) ? 15.0 : 10.0
+                    let bytes = Int(Double(metrics.networkBytesPerSec) * intervalSec)
+                    // [Phase 2.2] confidence < 0.5 면 bufferHealth 측정 불가 — ABR 갱신 보류
+                    let bh: Double? = metrics.bufferHealthConfidence >= 0.5 ? metrics.bufferHealth : nil
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: intervalSec, bufferHealth: bh) }
+                }
+            }
+        } else {
+            vlc.onVLCMetrics = nil
+            latestMetrics = nil
+        }
+    }
+
+    // MARK: - 설정 적용
+
+    /// 서버 동기화 추천에 따른 재생 속도 적용
+    /// MetricsForwarder 콜백에서 호출 (백그라운드 스레드 → Main Actor)
+    /// 
+    /// 속도 범위는 MetricsForwarder의 validateAndComputeSyncSpeed()에서 이미 계산되어
+    /// 델타 크기에 비례한 값이 넘어옴 (최대 ±0.05). 안전 하한/상한만 적용.
+    /// 버퍼 상태에 따라 가속을 제한하여 버퍼링을 방지합니다.
+    public func applySyncSpeed(_ speed: Float) {
+        Task { @MainActor [weak self] in
+            guard let self, let engine = self.playerEngine else { return }
+
+            // 버퍼 상태 기반 가속 제한 — 버퍼가 낮으면 가속을 억제
+            let bh = self.latestMetrics?.bufferHealth ?? 1.0
+            let maxAllowed: Float
+            if bh < 0.3 {
+                // 버퍼 위험 — 가속 금지, 감속만 허용
+                maxAllowed = 1.0
+            } else if bh < 0.6 {
+                // 버퍼 주의 — 미세 가속만 허용 (최대 1.02)
+                maxAllowed = 1.02
+            } else {
+                // 버퍼 정상 — 완화된 범위 허용 (최대 1.08)
+                maxAllowed = 1.08
+            }
+
+            let clamped = max(0.93, min(maxAllowed, speed))
+            engine.setRate(clamped)
+        }
+    }
+
+    public func applySettings(volume: Float, lowLatency: Bool, catchupRate: Double) {
+        self.volume = volume
+        playerEngine?.setVolume(isMuted ? 0 : volume)
+        // multiLive 프로파일은 MultiLiveManager가 injectEngine()으로 설정하므로
+        // lowLatency 설정이 활성화되어도 multiLive를 덮어쓰지 않는다.
+        // multiLive 세션에서 lowLatency로 변경하면 재연결 시 잘못된 VLC 옵션이 적용됨.
+        // [Quality 2026-04-18] multiLiveHQ 도 보호 대상에 포함 — isMultiLiveFamily 사용.
+        if lowLatency {
+            if let vlc = playerEngine as? VLCPlayerEngine,
+               !vlc.streamingProfile.isMultiLiveFamily {
+                vlc.streamingProfile = .lowLatency
+            }
+        }
+    }
+
+    /// [Quality Lock] 최고 화질 유지 설정 — 런타임 변경 시 모든 엔진에 즉시 반영
+    /// VLC: forceHighestQuality / maxAdaptiveHeight 0
+    /// AVPlayer: isQualityLocked + lockedPeakBitRate=8Mbps + lockedMaximumResolution=1920×1080
+    /// (잠금 해제 시 AVPlayer 는 시스템 자동 ABR 로 복귀)
+    public func applyForceHighestQuality(_ enabled: Bool) {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.forceHighestQuality = enabled
+            if enabled {
+                vlc.maxAdaptiveHeight = 0
+            }
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            if enabled {
+                // 잠금 활성 — 1080p60 / 8Mbps 명시 설정 (디폴트 동일)
+                av.lockedPeakBitRate = 8_000_000
+                av.lockedMaximumResolution = CGSize(width: 1920, height: 1080)
+            }
+            av.isQualityLocked = enabled
+        }
+    }
+
+    /// [백그라운드 화질 유지] macOS 앱 백그라운드/포그라운드/occlusion 전환 시 화질 ceiling을 즉시 재확인.
+    ///
+    /// 배경
+    /// - 앱이 백그라운드일 때 macOS가 렌더링/디코딩을 스로틀링하면 AVPlayer/VLC 내부 ABR이
+    ///   "소비 속도가 느림"으로 해석해 720p 이하 variant 로 다운시프트 후 고정될 수 있다.
+    /// - `isQualityLocked=true` 라도 AVPlayer 내부 ABR 은 ceiling 밑에서 자유롭게 움직이므로,
+    ///   한 번 저화질에 갇히면 `startHQRecoveryWatchdog` 의 18s/60s 쿨다운 없이 즉시 복구하려면
+    ///   외부에서 명시적으로 nudge 를 보내야 한다.
+    ///
+    /// 동작
+    /// - AVPlayer: `nudgeQualityCeiling` 호출 → 250ms 동안 ceiling 해제 후 복원,
+    ///   AVFoundation 내부 ABR 이 즉시 상위 variant 재평가.
+    /// - VLC: 미디어 옵션은 재생 시점 고정이므로 런타임 변경 불가. `forceHighestQuality` 플래그만
+    ///   재확인해 `StreamCoordinator+QualityABR` 의 downgrade 거부 로직이 유지되도록 한다.
+    public func reassertHighestQuality(reason: String) {
+        guard let engine = playerEngine else { return }
+        if let av = engine as? AVPlayerEngine {
+            av.nudgeQualityCeiling(reason: reason)
+        }
+        if let vlc = engine as? VLCPlayerEngine {
+            // 플래그 상태만 재확인 — false 로 떨어졌다면 그대로 둔다(사용자 설정 존중).
+            if vlc.forceHighestQuality {
+                vlc.maxAdaptiveHeight = 0
+            }
+        }
+    }
+
+    // MARK: - Phase D — 윈도우 가림 시 GPU 합성 정지/복원
+
+    /// 메인 윈도우가 완전히 가려졌을 때 비디오 레이어를 `.hidden` 으로 강등.
+    /// 디코딩/오디오는 영향 없음 — Metal 합성 패스만 정지.
+    public func engine_setGPURenderTier_hidden() {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.setGPURenderTier(.hidden)
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            av.setGPURenderTier(.hidden)
+        }
+    }
+
+    /// 윈도우 노출 복귀 시 비디오 레이어를 `.active` 로 복원.
+    public func engine_setGPURenderTier_active() {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.setGPURenderTier(.active)
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            av.setGPURenderTier(.active)
+        }
+    }
+
+    /// 선명한 화면(픽셀 샤프 스케일링) 설정 — VLC/AV 양쪽 엔진에 즉시 반영
+    public func applySharpPixelScaling(_ enabled: Bool) {
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.sharpPixelScaling = enabled
+        }
+        if let av = playerEngine as? AVPlayerEngine {
+            av.setSharpPixelScaling(enabled)
+        }
+    }
+
+    /// PlayerSettings의 레이턴시 필드 → LowLatencyController.Configuration 변환 후 StreamCoordinator에 적용
+    public func applyLatencySettings(_ ps: PlayerSettings) {
+        guard let coordinator = streamCoordinator else { return }
+        let config = Self.lowLatencyConfig(from: ps)
+        Task { await coordinator.updateLowLatencyConfig(config) }
+    }
+    
+    /// PlayerSettings → LowLatencyController.Configuration 변환
+    static func lowLatencyConfig(from ps: PlayerSettings) -> LowLatencyController.Configuration {
+        let preset = PlayerSettings.LatencyPreset(rawValue: ps.latencyPreset)
+        switch preset {
+        case .webSync:   return .webSync
+        case .standard:  return .default
+        case .ultraLow:  return .ultraLow
+        case .custom, .none:
+            return LowLatencyController.Configuration(
+                targetLatency: ps.latencyTarget,
+                maxLatency: ps.latencyMax,
+                minLatency: ps.latencyMin,
+                maxPlaybackRate: ps.latencyMaxRate,
+                minPlaybackRate: ps.latencyMinRate,
+                catchUpThreshold: ps.latencyCatchUpThreshold,
+                slowDownThreshold: ps.latencySlowDownThreshold,
+                pidKp: ps.latencyPidKp,
+                pidKi: ps.latencyPidKi,
+                pidKd: ps.latencyPidKd
+            )
+        }
+    }
+
+    // MARK: - Background Mode (멀티라이브 CPU 절약)
+    
+    /// 멀티라이브 비활성 세션의 CPU 사용 감소
+    /// AVPlayerEngine: catchupLoop + stallWatchdog 건너뜀
+    /// 멀티라이브 제약 조건 적용 (패인 수에 따라 CPU 최적화)
+    public func applyMultiLiveConstraints(paneCount: Int) {
+        // 패인이 2개 이상이면 배경 모드 최적화 적용
+        if paneCount > 1 {
+            if let vlcEngine = playerEngine as? VLCPlayerEngine {
+                vlcEngine.setTimeUpdateMode(background: false)
+            }
+        }
+    }
+
+    /// VLC 백그라운드 모드: statsTimer 주기 조절 (비디오 트랙은 유지)
+    ///
+    /// [VLC macOS 안정성] deselectAllVideoTracks() → selectTrack() 방식은
+    /// VLC vout 모듈을 파괴 후 재생성하는데, macOS layer-backed 뷰에서
+    /// 다중 인스턴스 vout 재생성 시 데드락이 발생하는 알려진 VLC 버그가 있다.
+    /// (VLC #19596: Multiple instances of macOS vouts hang using layer backing)
+    /// (VLC #28793: Video and UI deadlock when disabling and reenabling video track)
+    /// 따라서 비디오 트랙을 토글하지 않고 vout을 항상 살려두며,
+    /// SwiftUI opacity:0 로 화면 숨기기만 한다. (최대 4세션 → CPU 부하 수용 가능)
+    public func setBackgroundMode(_ enabled: Bool) {
+        if let avEngine = playerEngine as? AVPlayerEngine {
+            avEngine.isBackgroundMode = enabled
+        } else if let vlcEngine = playerEngine as? VLCPlayerEngine {
+            vlcEngine.setTimeUpdateMode(background: enabled)
+        }
+    }
+
+    // MARK: - 백그라운드 복귀 재생 복구
+
+    /// 앱이 백그라운드에서 포그라운드로 복귀 시 재생 상태를 확인하고 복구합니다.
+    /// - VLC: drawable 재설정 + 재생 정체 시 재연결
+    /// - AVPlayer: 재생 정체 시 재연결
+    public func recoverFromBackground() {
+        guard streamPhase == .playing || streamPhase == .buffering else { return }
+        guard let engine = playerEngine else { return }
+
+        // VLC: drawable 재바인딩이 필요한 경우는 PlayerContainerView.attachVideoView()에서 처리.
+        // vout은 항상 살아있으므로 (비디오 트랙 토글 없음) 여기서 drawable 리셋을 하면
+        // 불필요한 검은 프레임(플리커)이 발생한다. statsTimer 업데이트 모드만 복원.
+        if let vlcEngine = engine as? VLCPlayerEngine {
+            vlcEngine.setTimeUpdateMode(background: false)
+        }
+
+        // AVPlayer: 백그라운드에서 macOS가 자동 일시정지한 경우 재개
+        if let avEngine = engine as? AVPlayerEngine {
+            avEngine.isBackgroundMode = false
+            if !avEngine.isPlaying && !avEngine.isInErrorState {
+                avEngine.resume()
+            }
+        }
+
+        // HLS.js: 라이브 엣지로 seek (백그라운드 동안 쌓인 버퍼 스킵)
+        if let hlsEngine = engine as? HLSJSPlayerEngine {
+            hlsEngine.seekToLiveEdge()
+        }
+
+        // StreamCoordinator를 통한 재생 복구 (엔진 상태 체크 + 매니페스트 갱신)
+        if let coordinator = streamCoordinator {
+            Task { await coordinator.recoverFromBackground() }
+        }
+    }
+
+    // MARK: - 스트림 제어
+
+    public func startStream(
+        channelId: String,
+        streamUrl: URL,
+        channelName: String = "",
+        liveTitle: String = "",
+        thumbnailURL: URL? = nil,
+        prefetchedManifest: MasterPlaylist? = nil,
+        playerSettings: PlayerSettings? = nil
+    ) async {
+        self.channelName = channelName
+        self.liveTitle = liveTitle
+        self.thumbnailURL = thumbnailURL
+        self.currentChannelId = channelId
+
+        let lowLatencyConfig: LowLatencyController.Configuration = playerSettings.map { Self.lowLatencyConfig(from: $0) } ?? .webSync
+        // [Buffering Phase 1 / 2026-04-30] 자동 forceHighestQuality 강제 제거.
+        //   기존 거동: 단일 라이브에서 lowLatencyMode || catchupRate>1.0 이면 사용자가
+        //     forceHighestQuality 를 끄더라도 자동 ON → ABR 강등 경로를 모두 우회 →
+        //     CPU/GPU/네트워크 병목 누적으로 오히려 잦은 버퍼링을 유발했다.
+        //   변경: 단일/멀티 모두 사용자 명시 설정(forceHighestQuality)만 따른다.
+        //   레이턴시 동기화는 LowLatencyController(catchup PID) 가 단독으로 담당하고,
+        //   화질 잠금과는 분리한다.
+        let userForceMax = playerSettings?.forceHighestQuality ?? true
+        let forceMax = userForceMax
+        let proxyMode = playerSettings?.streamProxyMode ?? .localProxy
+        currentProxyMode = proxyMode.rawValue
+        // [Code Review 2026-04-24] 장문 한 줄 → 파라미터별 줄바꿈으로 가독성 개선
+        let config = StreamCoordinator.Configuration(
+            channelId: channelId,
+            enableLowLatency: !isMultiLive,
+            enableABR: true,
+            lowLatencyConfig: lowLatencyConfig,
+            abrConfig: isMultiLive ? .multiLive : .default,
+            forceHighestQuality: forceMax,
+            streamProxyMode: proxyMode
+        )
+        // [Fix 26B] 이전 coordinator를 ARC deinit에 의존하지 않고 명시적 정리
+        // — LocalStreamProxy NWConnection CLOSE_WAIT 방지
+        if let old = streamCoordinator {
+            await old.stopStream()
+        }
+        let coordinator = StreamCoordinator(configuration: config)
+        streamCoordinator = coordinator
+        
+        // 방송 종료 확인 콜백 연결
+        if let checkEnded = onCheckStreamEnded {
+            await coordinator.setCheckStreamEndedCallback(checkEnded)
+        }
+        
+        // [Opt: Single VLC] 프리페치 매니페스트가 있으면 coordinator에 주입
+        // startStream()에서 resolveHighestQualityVariant() 네트워크 요청 건너뜀 (~200-400ms)
+        if let manifest = prefetchedManifest {
+            await coordinator.setPrefetchedManifest(manifest)
+        }
+
+        let engine: any PlayerEngineProtocol
+        if isPreallocated, let existing = playerEngine {
+            engine = existing
+        } else {
+            playerEngine = nil
+            let newEngine = PlayerViewModel.makeEngine(type: preferredEngineType)
+            currentEngineType = preferredEngineType
+            playerEngine = newEngine
+            engine = newEngine
+            logger.info("PlayerViewModel: 엔진 생성 → \(self.preferredEngineType.rawValue)")
+        }
+        engine.setVolume(isMuted ? 0 : volume)
+        // [Quality Lock] 모든 엔진에 최고 화질 유지 플래그 전파 (1080p60 / 8Mbps)
+        if let vlc = engine as? VLCPlayerEngine {
+            vlc.forceHighestQuality = forceMax
+        }
+        if let av = engine as? AVPlayerEngine {
+            if forceMax {
+                av.lockedPeakBitRate = 8_000_000
+                av.lockedMaximumResolution = CGSize(width: 1920, height: 1080)
+            }
+            av.isQualityLocked = forceMax
+        }
+        await coordinator.setPlayerEngine(engine)
+
+        // VLC onStateChange 콜백 연결
+        if let vlc = engine as? VLCPlayerEngine {
+            vlc.onStateChange = { [weak self, weak coordinator] phase in
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
+                        self?._handleVLCPhase(phase, coordinator: coordinator)
+                    }
+                } else {
+                    Task { @MainActor [weak self, weak coordinator] in
+                        self?._handleVLCPhase(phase, coordinator: coordinator)
+                    }
+                }
+            }
+            // 재생 정체 감지 → StreamCoordinator 재연결 트리거
+            vlc.onPlaybackStalled = { [weak coordinator] in
+                guard let coordinator else { return }
+                Task { await coordinator.triggerReconnect(reason: "VLC decoded frames stall") }
+            }
+            // [No-Proxy] FIX14 35초 타임아웃 → AVPlayer 폴백 요청
+            vlc.onEngineFallbackRequested = { [weak self] reason in
+                Task { @MainActor [weak self] in
+                    await self?._handleVLCFallback(reason: reason)
+                }
+            }
+        }
+
+        // HLS.js onStateChange 콜백 연결
+        if let hlsjs = engine as? HLSJSPlayerEngine {
+            hlsjs.onStateChange = { [weak self] phase in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch phase {
+                    case .playing:
+                        self._bufferingDebounceTask?.cancel()
+                        self._bufferingDebounceTask = nil
+                        self._lastPlayingTime = Date()
+                        self.streamPhase = .playing
+                        self.errorMessage = nil
+                        self.onPlaybackStateChanged?()
+                    case .error:
+                        self.streamPhase = .error("HLS.js 재생 오류")
+                        self.errorMessage = "HLS.js 재생 오류"
+                    default:
+                        break
+                    }
+                }
+            }
+            hlsjs.onPlaybackStalled = { [weak coordinator] in
+                guard let coordinator else { return }
+                Task { await coordinator.triggerReconnect(reason: "HLS.js playback stall") }
+            }
+        }
+
+        startEventListening(coordinator)
+
+        do {
+            try await coordinator.startStream(url: streamUrl)
+            startUptimeTimer()
+        } catch {
+            // 스트림 시작 실패 시 VLC 콜백 정리 — zombie callback 방지
+            if let vlc = engine as? VLCPlayerEngine {
+                vlc.onStateChange = nil
+                vlc.onVLCMetrics = nil
+                vlc.onPlaybackStalled = nil
+                vlc.onEngineFallbackRequested = nil
+            }
+            if let hlsjs = engine as? HLSJSPlayerEngine {
+                hlsjs.onStateChange = nil
+                hlsjs.onHLSJSMetrics = nil
+                hlsjs.onPlaybackStalled = nil
+            }
+            // eventTask 정리 — coordinator 이벤트 리스닝 중단
+            eventTask?.cancel()
+            eventTask = nil
+            errorMessage = "스트림 시작 실패: \(error.localizedDescription)"
+            logger.error("스트림 시작 실패: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public func stopStream() async {
+        if isRecording { await stopRecording() }
+        // [Fix 25C] 녹화 타이머 방어적 정리 — isRecording 상태 불일치 시에도 누수 방지
+        recordingTimerTask?.cancel(); recordingTimerTask = nil
+
+        // [P1 / 2026-04-25] PDT 정밀 동기화 클라이언트 해제 (VLC 세션 한정).
+        await detachWebLatencyClient()
+
+        // VLC 콜백 정리 — 엔진 재사용(풀 반납) 시 이전 세션의 dangling callback 방지
+        if let vlc = playerEngine as? VLCPlayerEngine {
+            vlc.onStateChange = nil
+            vlc.onVLCMetrics = nil
+            vlc.onPlaybackStalled = nil
+            vlc.onEngineFallbackRequested = nil
+        }
+        // HLS.js 콜백 정리
+        if let hlsjs = playerEngine as? HLSJSPlayerEngine {
+            hlsjs.onStateChange = nil
+            hlsjs.onHLSJSMetrics = nil
+            hlsjs.onPlaybackStalled = nil
+        }
+        
+        uptimeTask?.cancel(); uptimeTask = nil
+        eventTask?.cancel(); eventTask = nil
+        controlHideTask?.cancel(); controlHideTask = nil
+        _bufferingDebounceTask?.cancel(); _bufferingDebounceTask = nil
+        _refreshDrawableTask?.cancel(); _refreshDrawableTask = nil
+        _lastPlayingTime = nil  // [플리커 방지] 다음 재생 시 초기 drawable refresh 보장
+
+        await streamCoordinator?.stopStream()
+        streamCoordinator = nil
+
+        if isPreallocated {
+            playerEngine?.stop()
+        } else {
+            let old = playerEngine
+            old?.stop()
+            playerEngine = nil
+            withExtendedLifetime(old) {}
+        }
+
+        uptime = 0
+        streamPhase = .idle
+        latencyHistory = []
+        onPlaybackStateChanged?()
+    }
+
+    public func togglePlayPause() async {
+        guard let coordinator = streamCoordinator else { return }
+        if streamPhase == .playing {
+            await coordinator.pause()
+        } else if streamPhase == .paused {
+            await coordinator.resume()
+        }
+    }
+
+    public func setVolume(_ newVolume: Float) {
+        volume = newVolume
+        playerEngine?.setVolume(isMuted ? 0 : newVolume)
+        onVolumeChanged?(newVolume)
+    }
+
+    public func toggleMute() {
+        isMuted.toggle()
+        playerEngine?.setVolume(isMuted ? 0 : volume)
+        onMuteChanged?(isMuted)
+    }
+
+    /// StreamCoordinator 내부 per-instance 프록시의 네트워크 통계 반환
+    public func proxyNetworkStats() -> ProxyNetworkStats? {
+        streamCoordinator?.proxyNetworkStats()
+    }
+
+    public func switchQuality(_ quality: StreamQualityInfo) async {
+        guard let coordinator = streamCoordinator else { return }
+        errorMessage = nil
+        do {
+            try await coordinator.switchQualityByBandwidth(quality.bandwidth)
+            currentQuality = quality
+        } catch {
+            errorMessage = "품질 전환 실패: \(error.localizedDescription)"
+        }
+    }
+
+    public func toggleFullscreen() {
+        isFullscreen.toggle()
+        (NSApp.keyWindow ?? NSApp.mainWindow)?.toggleFullScreen(nil)
+    }
+
+    public func toggleAudioOnly() {
+        isAudioOnly.toggle()
+        (playerEngine as? VLCPlayerEngine)?.setVideoTrackEnabled(!isAudioOnly)
+        (playerEngine as? AVPlayerEngine)?.setVideoLayerVisible(!isAudioOnly)
+    }
+
+    public func setPlaybackRate(_ rate: Double) async {
+        playbackRate = rate
+        playerEngine?.setRate(Float(rate))
+    }
+
+    public func showControlsTemporarily() {
+        showControls = true
+        controlHideTask?.cancel()
+        controlHideTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self.showControls = false }
+        }
+    }
+
+    public var currentVideoView: NSView? { playerEngine?.videoView }
+
+    public var mediaPlayer: VLCPlayerEngine? { playerEngine as? VLCPlayerEngine }
+
+    // MARK: - 포맷 헬퍼
+
+    public var formattedUptime: String {
+        let h = Int(uptime) / 3600, m = (Int(uptime) % 3600) / 60, s = Int(uptime) % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+    }
+
+    public var formattedLatency: String {
+        if let info = latencyInfo {
+            return String(format: "%.1f초", info.current)
+        }
+        // [Stats fix / 2026-04-30] LowLatencyController 의 첫 sync(≈수 초) 또는 PDT 안정화
+        //   이전에는 latencyInfo 가 nil — VLC 버퍼 길이(duration-currentTime) 로 폴백 표시.
+        if let engine = playerEngine, engine.isPlaying {
+            let d = engine.duration, c = engine.currentTime
+            let lat = d - c
+            if d > 0, c > 0, lat > 0, lat < 60 {
+                return String(format: "%.1f초", lat)
+            }
+        }
+        return "-"
+    }
+
+    public var formattedPlaybackRate: String {
+        abs(playbackRate - 1.0) < 0.01 ? "1.0x" : String(format: "%.2fx", playbackRate)
+    }
+
+    public var currentTime: TimeInterval { playerEngine?.currentTime ?? 0 }
+    public var duration: TimeInterval    { playerEngine?.duration ?? 0 }
+
+    public func seek(to position: TimeInterval) { playerEngine?.seek(to: position) }
+
+    public var formattedCurrentTime: String { Self.formatTimeInterval(currentTime) }
+    public var formattedDuration: String    { Self.formatTimeInterval(duration) }
+
+    public static func formatTimeInterval(_ t: TimeInterval) -> String {
+        guard t.isFinite && t >= 0 else { return "0:00" }
+        let total = Int(t)
+        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+
+    public func refreshDrawable() {
+        (playerEngine as? VLCPlayerEngine)?.refreshDrawable()
+    }
+
+    // MARK: - Web Sync (P1 / 2026-04-25)
+
+    /// VLC 세션 한정. PDT 비교 폴링 클라이언트를 만들어 LowLatencyController 의
+    /// drift 입력으로 연결한다. AVPlayer/HLS.js 세션은 호출자가 가드해야 한다
+    /// (현재는 `LiveStreamView+Logic.swift` 가 `currentEngineType == .vlc` 체크).
+    public func attachWebLatencyClient(metricsClient: MetricsAPIClient, channelId: String) async {
+        // 기존 인스턴스가 있으면 채널만 갱신
+        if let client = webLatencyClient {
+            await client.setChannel(channelId)
+        } else {
+            let client = WebLatencyClient(apiClient: metricsClient)
+            webLatencyClient = client
+            await client.setChannel(channelId)
+        }
+        guard let client = webLatencyClient,
+              let coord = streamCoordinator,
+              let controller = await coord.lowLatencyController else { return }
+
+        // LowLatencyController.driftSampleProvider 콜백 — sync loop tick 마다 호출.
+        await controller.setDriftSampleProvider { [weak client] in
+            guard let client else { return nil }
+            guard let snap = await client.latestSample() else { return nil }
+            // PDT drift 미존재 시 nil — fallback (기존 latencyProvider 경로) 사용.
+            guard let drift = snap.driftMs else { return nil }
+            return LowLatencyController.DriftSample(
+                driftMs: drift,
+                isFresh: snap.isPrecisionEligible,
+                hasPdt: snap.webHasPdt && snap.appHasPdt
+            )
+        }
+
+        // [P2 / 2026-04-25] 모니터링 폴링 — 1.5s 주기로 web sync 상태를 UI 에 반영.
+        // sync loop(actor 내부)와 분리해 @Observable 전파만 담당.
+        webSyncMonitorTask?.cancel()
+        webSyncMonitorTask = Task { [weak self, weak client, weak controller] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard !Task.isCancelled else { break }
+                let snap = await client?.latestSample()
+                let phase = await controller?.webPhase
+                let smoothed = await controller?.smoothedDriftMs
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if let phase {
+                        self.webSyncPhaseLabel = Self.describe(phase)
+                    } else {
+                        self.webSyncPhaseLabel = "-"
+                    }
+                    self.webSyncDriftMs = smoothed ?? snap?.driftMs
+                    self.webSyncWebLatencyMs = snap?.webLatencyMs
+                    self.webSyncAppLatencyMs = snap?.appLatencyMs
+                    self.webSyncIsPrecisionEligible = snap?.isPrecisionEligible ?? false
+                    if let w = snap?.webAgeMs, let a = snap?.appAgeMs {
+                        self.webSyncSampleAgeMs = max(w, a)
+                    } else {
+                        self.webSyncSampleAgeMs = snap?.webAgeMs ?? snap?.appAgeMs
+                    }
+                }
+            }
+        }
+    }
+
+    /// PDT 정밀 동기화 클라이언트 해제. `stopStream()` 에서 자동 호출됨.
+    public func detachWebLatencyClient() async {
+        webSyncMonitorTask?.cancel()
+        webSyncMonitorTask = nil
+        if let coord = streamCoordinator,
+           let controller = await coord.lowLatencyController {
+            await controller.setDriftSampleProvider(nil)
+        }
+        if let client = webLatencyClient {
+            await client.setChannel(nil)
+        }
+        webLatencyClient = nil
+        // UI 상태 초기화
+        webSyncPhaseLabel = "-"
+        webSyncDriftMs = nil
+        webSyncWebLatencyMs = nil
+        webSyncAppLatencyMs = nil
+        webSyncSampleAgeMs = nil
+        webSyncIsPrecisionEligible = false
+    }
+
+    /// WebSyncPhase → 짧은 문자열 라벨 (UI 표시용).
+    private static func describe(_ phase: LowLatencyController.WebSyncPhase) -> String {
+        switch phase {
+        case .idle: return "idle"
+        case .acquiring: return "acquiring"
+        case .snap: return "snap"
+        case .tracking: return "tracking"
+        case .hold(let reason): return "hold(\(reason))"
+        case .reacquire(let reason): return "reacquire(\(reason))"
+        }
+    }
+}

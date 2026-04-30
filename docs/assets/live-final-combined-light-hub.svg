@@ -1,0 +1,158 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#13251E"/>
+      <stop offset="0.48" stop-color="#20283A"/>
+      <stop offset="1" stop-color="#101114"/>
+    </linearGradient>
+    <linearGradient id="thumb" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#173029"/>
+      <stop offset="0.58" stop-color="#252C3D"/>
+      <stop offset="1" stop-color="#15171A"/>
+    </linearGradient>
+    <style>
+      .title { font: 700 25px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 650 16px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 13px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 500 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; }
+      .line { stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .panel { fill: #17181A; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .surface { fill: #1C1C1E; }
+      .elevated { fill: #242426; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#141416"/>
+  <rect x="24" y="22" width="1392" height="856" rx="22" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+
+  <!-- App sidebar -->
+  <rect x="24" y="22" width="228" height="856" rx="22" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <line x1="252" y1="22" x2="252" y2="878" class="line"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+  <text x="56" y="112" class="title">CView</text>
+  <rect x="46" y="176" width="182" height="34" rx="8" fill="#1C1C1E"/>
+  <text x="68" y="198" class="caption">홈</text>
+  <rect x="46" y="222" width="182" height="34" rx="8" fill="#00FFA3" fill-opacity="0.12" stroke="#00FFA3" stroke-opacity="0.32"/>
+  <text x="68" y="244" class="body">라이브</text>
+  <rect x="46" y="268" width="182" height="34" rx="8" fill="#1C1C1E"/>
+  <text x="68" y="290" class="caption">카테고리</text>
+  <rect x="46" y="314" width="182" height="34" rx="8" fill="#1C1C1E"/>
+  <text x="68" y="336" class="caption">검색</text>
+
+  <!-- Slim mode bar -->
+  <rect x="252" y="22" width="1164" height="58" fill="#17181A"/>
+  <line x1="252" y1="80" x2="1416" y2="80" class="line"/>
+  <text x="292" y="57" class="headline">Live Hub</text>
+  <rect x="575" y="34" width="290" height="34" rx="17" fill="#101113" stroke="rgba(255,255,255,0.10)"/>
+  <rect x="583" y="40" width="82" height="22" rx="11" fill="#1C1C1E"/>
+  <text x="609" y="55" class="caption">탐색</text>
+  <rect x="676" y="40" width="82" height="22" rx="11" fill="#00FFA3"/>
+  <text x="702" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="700" fill="#0A0A0A">시청</text>
+  <rect x="769" y="40" width="82" height="22" rx="11" fill="#1C1C1E"/>
+  <text x="795" y="55" class="caption">멀티</text>
+  <rect x="1068" y="36" width="108" height="28" rx="14" fill="#1C1C1E" stroke="rgba(255,255,255,0.08)"/>
+  <text x="1094" y="54" class="caption">채널 A</text>
+  <rect x="1186" y="36" width="86" height="28" rx="14" fill="#1C1C1E" stroke="rgba(255,255,255,0.08)"/>
+  <text x="1208" y="54" class="caption">멀티 2/4</text>
+  <rect x="1282" y="36" width="68" height="28" rx="14" fill="#1C1C1E" stroke="rgba(255,255,255,0.08)"/>
+  <text x="1304" y="54" class="caption">새로고침</text>
+
+  <!-- Content layout -->
+  <g transform="translate(292 112)">
+    <!-- Left lightweight explore column -->
+    <rect width="318" height="716" rx="16" class="panel"/>
+    <text x="20" y="38" class="headline">탐색</text>
+    <text x="20" y="62" class="caption">팔로잉 라이브를 빠르게 고르고 전환</text>
+    <rect x="20" y="88" width="278" height="34" rx="10" fill="#1C1C1E" stroke="rgba(255,255,255,0.08)"/>
+    <text x="40" y="110" class="caption">채널, 방송 제목, 카테고리 검색</text>
+    <rect x="20" y="144" width="66" height="24" rx="12" fill="#00FFA3" fill-opacity="0.14"/>
+    <text x="42" y="160" class="caption" fill="#00FFA3">전체</text>
+    <rect x="94" y="144" width="66" height="24" rx="12" fill="#1C1C1E"/>
+    <text x="116" y="160" class="caption">LIVE</text>
+    <rect x="168" y="144" width="82" height="24" rx="12" fill="#1C1C1E"/>
+    <text x="192" y="160" class="caption">정렬</text>
+
+    <g transform="translate(20 198)">
+      <rect width="278" height="60" rx="10" fill="#1C1C1E"/>
+      <circle cx="30" cy="30" r="16" fill="#00FFA3" fill-opacity="0.20"/>
+      <circle cx="43" cy="42" r="4" fill="#FF3B30"/>
+      <text x="60" y="27" class="body">채널 A</text>
+      <text x="60" y="44" class="caption">재생 중 · 8.2K</text>
+      <text x="230" y="36" class="micro">ON</text>
+    </g>
+    <g transform="translate(20 270)">
+      <rect width="278" height="60" rx="10" fill="#17181A" stroke="rgba(255,255,255,0.06)"/>
+      <circle cx="30" cy="30" r="16" fill="#5BA3FF" fill-opacity="0.18"/>
+      <circle cx="43" cy="42" r="4" fill="#FF3B30"/>
+      <text x="60" y="27" class="body">채널 B</text>
+      <text x="60" y="44" class="caption">토크 · 2.1K</text>
+      <text x="226" y="36" class="caption">+ 멀티</text>
+    </g>
+    <g transform="translate(20 342)">
+      <rect width="278" height="60" rx="10" fill="#17181A" stroke="rgba(255,255,255,0.06)"/>
+      <circle cx="30" cy="30" r="16" fill="#FF9F0A" fill-opacity="0.16"/>
+      <circle cx="43" cy="42" r="4" fill="#FF3B30"/>
+      <text x="60" y="27" class="body">채널 C</text>
+      <text x="60" y="44" class="caption">음악 · 934</text>
+      <text x="230" y="36" class="caption">채팅</text>
+    </g>
+    <g transform="translate(20 414)">
+      <rect width="278" height="60" rx="10" fill="#17181A" stroke="rgba(255,255,255,0.06)"/>
+      <circle cx="30" cy="30" r="16" fill="#BF5FFF" fill-opacity="0.16"/>
+      <text x="60" y="27" class="body">채널 D</text>
+      <text x="60" y="44" class="caption">오프라인 · 채널 상세</text>
+    </g>
+
+    <line x1="20" y1="532" x2="298" y2="532" class="line"/>
+    <text x="20" y="568" class="caption">카드 grid 대신 list 중심으로 가볍게 유지</text>
+    <text x="20" y="592" class="caption">선택하면 오른쪽 stage만 전환</text>
+
+    <!-- Center media-first stage -->
+    <g transform="translate(350 0)">
+      <rect width="674" height="716" rx="16" class="panel"/>
+      <rect x="22" y="22" width="630" height="438" rx="14" fill="url(#stage)"/>
+      <circle cx="174" cy="170" r="92" fill="#00FFA3" fill-opacity="0.08"/>
+      <circle cx="484" cy="130" r="118" fill="#5BA3FF" fill-opacity="0.07"/>
+      <path d="M22 338C112 296 212 360 316 308C440 246 520 316 652 260V460H22V338Z" fill="#050607" fill-opacity="0.48"/>
+      <rect x="44" y="394" width="54" height="22" rx="11" fill="#FF3B30"/>
+      <text x="57" y="409" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10" font-weight="700" fill="#FFFFFF">LIVE</text>
+      <text x="112" y="409" class="body">채널 A · 단일 시청</text>
+      <text x="112" y="430" class="caption">LiveStreamView 기반, 채팅은 drawer/overlay</text>
+
+      <line x1="22" y1="496" x2="652" y2="496" class="line"/>
+      <rect x="22" y="528" width="184" height="68" rx="12" fill="#1C1C1E"/>
+      <text x="42" y="556" class="body">탐색</text>
+      <text x="42" y="576" class="caption">왼쪽 list 유지</text>
+      <rect x="230" y="528" width="184" height="68" rx="12" fill="#1C1C1E"/>
+      <text x="250" y="556" class="body">시청</text>
+      <text x="250" y="576" class="caption">현재 stage</text>
+      <rect x="438" y="528" width="184" height="68" rx="12" fill="#1C1C1E"/>
+      <text x="458" y="556" class="body">멀티</text>
+      <text x="458" y="576" class="caption">2x2 grid 전환</text>
+
+      <rect x="22" y="630" width="630" height="42" rx="12" fill="#101113" stroke="rgba(255,255,255,0.08)"/>
+      <text x="44" y="656" class="caption">하나의 라이브 허브 안에서 탐색은 유지하고, 중앙 stage만 시청/멀티로 바뀌는 최종 조합안</text>
+    </g>
+
+    <!-- Right lightweight drawer -->
+    <g transform="translate(1050 0)">
+      <rect width="194" height="716" rx="16" class="panel"/>
+      <text x="18" y="38" class="headline">Drawer</text>
+      <text x="18" y="62" class="caption">필요할 때만 열림</text>
+      <rect x="18" y="94" width="158" height="34" rx="17" fill="#00FFA3" fill-opacity="0.12" stroke="#00FFA3" stroke-opacity="0.22"/>
+      <text x="62" y="116" class="caption" fill="#00FFA3">채팅</text>
+      <rect x="18" y="144" width="158" height="46" rx="12" fill="#1C1C1E"/>
+      <text x="34" y="171" class="body">채널 A</text>
+      <rect x="18" y="202" width="158" height="46" rx="12" fill="#17181A" stroke="rgba(255,255,255,0.06)"/>
+      <text x="34" y="229" class="body">채널 B</text>
+      <line x1="18" y1="288" x2="176" y2="288" class="line"/>
+      <text x="18" y="326" class="caption">멀티 모드에서는</text>
+      <text x="18" y="348" class="caption">세션 채팅 목록으로 전환</text>
+      <rect x="18" y="614" width="158" height="34" rx="17" fill="#1C1C1E"/>
+      <text x="54" y="636" class="caption">설정</text>
+    </g>
+  </g>
+</svg>

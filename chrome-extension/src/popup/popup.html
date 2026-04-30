@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>CView Metrics</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>CView Metrics <span id="ver"></span></h1>
+    <button id="open-options" title="설정 열기">⚙️</button>
+  </header>
+
+  <section id="auth" class="card">
+    <h2>인증</h2>
+    <div id="auth-line">App Secret 미설정</div>
+    <button id="btn-test-auth">인증 테스트</button>
+  </section>
+
+  <section id="apps" class="card">
+    <h2>앱 채널 / 백그라운드</h2>
+    <div id="bg-summary">대기 중…</div>
+    <div class="row">
+      <button id="btn-poll-now">지금 폴링</button>
+      <button id="btn-stop-all">모두 중지</button>
+    </div>
+  </section>
+
+  <section id="fg" class="card">
+    <h2>웹 (탭 수집)</h2>
+    <div id="fg-list">없음</div>
+  </section>
+
+  <section id="superset" class="card">
+    <h2>Analytics (Grafana)</h2>
+    <div id="superset-line">상태 미확인</div>
+    <div class="row" id="analytics-quicklinks"><!-- popup.js 가 CONFIG.ANALYTICS_DASHBOARDS 로 채움 --></div>
+    <div class="row">
+      <button id="btn-superset-dash" title="Grafana 대시보드 목록 열기">📂 목록</button>
+      <button id="btn-superset-sql" title="Grafana Explore 열기">🧪 Explore</button>
+      <button id="btn-superset-health" title="/api/health 호출">❤️ 체크</button>
+    </div>
+  </section>
+
+  <footer>
+    <a id="open-options-link" href="#">설정 / 진단</a>
+  </footer>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

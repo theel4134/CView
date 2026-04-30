@@ -1,0 +1,107 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141416"/>
+      <stop offset="1" stop-color="#101114"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00FFA3"/>
+      <stop offset="1" stop-color="#00A86B"/>
+    </linearGradient>
+    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1D3E36"/>
+      <stop offset="0.55" stop-color="#25354A"/>
+      <stop offset="1" stop-color="#14161B"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 700 18px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; }
+      .panel { fill: #1C1C1E; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+      .elevated { fill: #242426; stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="24" y="22" width="1392" height="856" rx="24" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="24" y="22" width="236" height="856" rx="24" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <rect x="24" y="68" width="1392" height="1" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+
+  <text x="58" y="116" class="title">CView</text>
+  <rect x="48" y="146" width="188" height="38" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="171" class="caption">홈</text>
+  <rect x="48" y="196" width="188" height="38" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.45"/>
+  <text x="70" y="221" class="body" fill="#F5F5F7">라이브</text>
+  <rect x="48" y="246" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="268" class="caption">카테고리</text>
+
+  <text x="300" y="116" class="title">좌측 모드 레일형 Live Workspace</text>
+  <text x="300" y="142" class="body">라이브 메뉴 안에 독립적인 mode rail을 두고 탐색, 시청, 멀티를 반복 전환하는 작업공간형 디자인</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="170" width="90" height="658" rx="24" class="panel"/>
+    <rect x="318" y="202" width="54" height="70" rx="18" fill="url(#green)"/>
+    <text x="333" y="234" class="micro" fill="#0A0A0A">탐색</text>
+    <text x="339" y="254" class="micro" fill="#0A0A0A">24</text>
+    <rect x="318" y="294" width="54" height="70" rx="18" class="elevated"/>
+    <text x="333" y="326" class="micro">시청</text>
+    <circle cx="358" cy="348" r="5" fill="#FF3B30"/>
+    <rect x="318" y="386" width="54" height="70" rx="18" class="elevated"/>
+    <text x="333" y="418" class="micro">멀티</text>
+    <text x="340" y="438" class="micro">2/4</text>
+    <rect x="340" y="786" width="10" height="10" rx="5" fill="#00FFA3"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="416" y="170" width="952" height="658" rx="24" class="panel"/>
+    <text x="446" y="210" class="headline">Mode Content: 탐색</text>
+    <text x="446" y="234" class="caption">mode rail은 유지하고 콘텐츠만 전환된다. 상단은 덜 복잡하고, 반복 작업에 적합하다.</text>
+
+    <rect x="446" y="268" width="420" height="40" rx="12" class="elevated"/>
+    <text x="472" y="293" class="caption">채널, 방송 제목, 카테고리 검색</text>
+    <rect x="884" y="268" width="160" height="40" rx="12" fill="#141416" stroke="rgba(255,255,255,0.08)"/>
+    <rect x="892" y="276" width="70" height="24" rx="12" fill="url(#green)"/>
+    <text x="912" y="292" class="micro" fill="#0A0A0A">전체</text>
+    <text x="986" y="292" class="caption">LIVE</text>
+    <rect x="1060" y="268" width="112" height="40" rx="12" class="elevated"/>
+    <text x="1090" y="293" class="caption">정렬</text>
+
+    <g transform="translate(446 342)">
+      <rect width="270" height="180" rx="18" class="elevated"/>
+      <rect x="16" y="16" width="238" height="100" rx="12" fill="url(#stage)"/>
+      <text x="16" y="146" class="body">채널 A</text>
+      <text x="16" y="166" class="caption">클릭 → 시청 rail 활성</text>
+    </g>
+    <g transform="translate(744 342)">
+      <rect width="270" height="180" rx="18" class="elevated"/>
+      <rect x="16" y="16" width="238" height="100" rx="12" fill="url(#stage)"/>
+      <text x="16" y="146" class="body">채널 B</text>
+      <text x="16" y="166" class="caption">+ 멀티 → 멀티 rail badge</text>
+    </g>
+    <g transform="translate(1042 342)">
+      <rect width="270" height="180" rx="18" class="elevated"/>
+      <rect x="16" y="16" width="238" height="100" rx="12" fill="url(#stage)"/>
+      <text x="16" y="146" class="body">채널 C</text>
+      <text x="16" y="166" class="caption">채팅/상세 액션</text>
+    </g>
+
+    <rect x="446" y="570" width="410" height="184" rx="20" fill="#15171B" stroke="rgba(255,255,255,0.08)"/>
+    <text x="474" y="610" class="headline">시청 모드 preview</text>
+    <text x="474" y="636" class="caption">단일 LiveStreamView를 같은 workspace에 embed</text>
+    <rect x="474" y="662" width="336" height="54" rx="14" class="elevated"/>
+    <text x="498" y="696" class="body">현재 채널: 채널 A</text>
+    <rect x="884" y="570" width="410" height="184" rx="20" fill="#15171B" stroke="rgba(255,255,255,0.08)"/>
+    <text x="912" y="610" class="headline">멀티 모드 preview</text>
+    <text x="912" y="636" class="caption">멀티라이브 stage + 멀티채팅 panel</text>
+    <rect x="912" y="662" width="336" height="54" rx="14" class="elevated"/>
+    <text x="936" y="696" class="body">세션 2/4 · 채팅 2개 연결</text>
+  </g>
+</svg>

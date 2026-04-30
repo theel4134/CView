@@ -1,0 +1,152 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141416"/>
+      <stop offset="1" stop-color="#0F1012"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00FFA3"/>
+      <stop offset="1" stop-color="#00A86B"/>
+    </linearGradient>
+    <linearGradient id="slot" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1D3E36"/>
+      <stop offset="0.55" stop-color="#273546"/>
+      <stop offset="1" stop-color="#17191F"/>
+    </linearGradient>
+    <linearGradient id="empty" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#242426"/>
+      <stop offset="1" stop-color="#1A1B1E"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.36"/>
+    </filter>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 700 18px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; letter-spacing: 0.4px; }
+      .panel { fill: #1C1C1E; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+      .elevated { fill: #242426; stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="24" y="22" width="1392" height="856" rx="24" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="24" y="22" width="236" height="856" rx="24" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <rect x="24" y="68" width="1392" height="1" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+
+  <text x="58" y="116" class="title">CView</text>
+  <rect x="48" y="148" width="188" height="38" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.45"/>
+  <text x="70" y="173" class="body" fill="#F5F5F7">홈</text>
+  <rect x="48" y="198" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="220" class="caption">멀티라이브</text>
+  <rect x="48" y="244" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="266" class="caption">라이브 후보</text>
+  <rect x="48" y="290" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="312" class="caption">채팅</text>
+
+  <text x="300" y="116" class="title">MultiLive Studio Home</text>
+  <text x="300" y="142" class="body">홈에서 멀티라이브 세션을 구성하고, 실제 재생 stage로 넘기는 고급 홈</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="170" width="1068" height="72" rx="18" class="panel"/>
+    <circle cx="328" cy="206" r="6" fill="#FF3B30"/>
+    <text x="346" y="210" class="micro" fill="#FF3B30">LIVE</text>
+    <text x="396" y="210" class="headline">현재 멀티라이브 3개 진행 중</text>
+    <rect x="860" y="188" width="150" height="36" rx="12" fill="url(#green)"/>
+    <text x="899" y="211" class="micro" fill="#0A0A0A">전체 보기</text>
+    <rect x="1022" y="188" width="112" height="36" rx="12" class="elevated"/>
+    <text x="1055" y="211" class="micro">PiP</text>
+    <rect x="1146" y="188" width="112" height="36" rx="12" class="elevated"/>
+    <text x="1173" y="211" class="micro">채팅</text>
+    <rect x="1270" y="188" width="68" height="36" rx="12" class="elevated"/>
+    <text x="1294" y="211" class="micro">편집</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="274" width="1068" height="298" rx="24" class="panel"/>
+    <text x="326" y="314" class="headline">MultiLive Builder</text>
+    <text x="326" y="338" class="caption">홈은 세션 구성만 담당하고, 실제 플레이어는 멀티라이브 stage로 이동</text>
+
+    <g transform="translate(326 366)">
+      <rect width="238" height="160" rx="18" fill="url(#slot)" stroke="#00FFA3" stroke-opacity="0.34"/>
+      <rect x="16" y="16" width="206" height="84" rx="12" fill="#070A0B" fill-opacity="0.34"/>
+      <circle cx="34" cy="120" r="13" fill="#00FFA3" fill-opacity="0.24"/>
+      <text x="58" y="118" class="body">채널 A</text>
+      <text x="58" y="138" class="caption">게임 · 8.2K</text>
+      <rect x="162" y="112" width="50" height="24" rx="12" fill="#00FFA3" fill-opacity="0.18"/>
+      <text x="176" y="128" class="micro">ON</text>
+    </g>
+    <g transform="translate(584 366)">
+      <rect width="238" height="160" rx="18" fill="url(#slot)" stroke="#00FFA3" stroke-opacity="0.34"/>
+      <rect x="16" y="16" width="206" height="84" rx="12" fill="#08100E" fill-opacity="0.36"/>
+      <circle cx="34" cy="120" r="13" fill="#FF3B30" fill-opacity="0.24"/>
+      <text x="58" y="118" class="body">채널 B</text>
+      <text x="58" y="138" class="caption">토크 · 2.1K</text>
+      <rect x="162" y="112" width="50" height="24" rx="12" fill="#00FFA3" fill-opacity="0.18"/>
+      <text x="176" y="128" class="micro">ON</text>
+    </g>
+    <g transform="translate(842 366)">
+      <rect width="238" height="160" rx="18" fill="url(#slot)" stroke="#00FFA3" stroke-opacity="0.34"/>
+      <rect x="16" y="16" width="206" height="84" rx="12" fill="#070A0B" fill-opacity="0.34"/>
+      <circle cx="34" cy="120" r="13" fill="#5BA3FF" fill-opacity="0.24"/>
+      <text x="58" y="118" class="body">채널 C</text>
+      <text x="58" y="138" class="caption">음악 · 934</text>
+      <rect x="162" y="112" width="50" height="24" rx="12" fill="#00FFA3" fill-opacity="0.18"/>
+      <text x="176" y="128" class="micro">ON</text>
+    </g>
+    <g transform="translate(1100 366)">
+      <rect width="238" height="160" rx="18" fill="url(#empty)" stroke="rgba(255,255,255,0.16)" stroke-dasharray="6 7"/>
+      <circle cx="119" cy="66" r="24" fill="#00FFA3" fill-opacity="0.12"/>
+      <text x="112" y="74" class="title" font-size="22">+</text>
+      <text x="70" y="120" class="body">추천 라이브 추가</text>
+      <text x="68" y="140" class="caption">빈 슬롯 CTA</text>
+    </g>
+  </g>
+
+  <g>
+    <text x="300" y="626" class="headline">Recommended Combos</text>
+    <text x="300" y="650" class="caption">팔로잉, 같은 카테고리, 최근 시청 기반으로 2~4개 조합을 제안</text>
+    <g transform="translate(300 674)">
+      <rect width="334" height="112" rx="18" class="elevated"/>
+      <text x="20" y="34" class="headline">팔로잉 3채널 조합</text>
+      <text x="20" y="58" class="caption">동시에 라이브 중인 팔로잉 우선</text>
+      <circle cx="26" cy="84" r="10" fill="#00FFA3" fill-opacity="0.32"/>
+      <circle cx="46" cy="84" r="10" fill="#FF3B30" fill-opacity="0.28"/>
+      <circle cx="66" cy="84" r="10" fill="#5BA3FF" fill-opacity="0.28"/>
+      <rect x="212" y="70" width="96" height="26" rx="13" fill="url(#green)"/>
+      <text x="229" y="87" class="micro" fill="#0A0A0A">시작</text>
+    </g>
+    <g transform="translate(668 674)">
+      <rect width="334" height="112" rx="18" class="elevated"/>
+      <text x="20" y="34" class="headline">같은 카테고리 조합</text>
+      <text x="20" y="58" class="caption">게임 카테고리 인기 방송 4개</text>
+      <circle cx="26" cy="84" r="10" fill="#BF5FFF" fill-opacity="0.28"/>
+      <circle cx="46" cy="84" r="10" fill="#00FFA3" fill-opacity="0.32"/>
+      <circle cx="66" cy="84" r="10" fill="#FFD700" fill-opacity="0.24"/>
+      <circle cx="86" cy="84" r="10" fill="#5BA3FF" fill-opacity="0.24"/>
+      <rect x="212" y="70" width="96" height="26" rx="13" fill="url(#green)"/>
+      <text x="229" y="87" class="micro" fill="#0A0A0A">시작</text>
+    </g>
+    <g transform="translate(1036 674)">
+      <rect width="332" height="112" rx="18" class="elevated"/>
+      <text x="20" y="34" class="headline">최근 시청 복귀</text>
+      <text x="20" y="58" class="caption">방금 보던 LIVE 채널 묶음</text>
+      <circle cx="26" cy="84" r="10" fill="#5BA3FF" fill-opacity="0.28"/>
+      <circle cx="46" cy="84" r="10" fill="#00FFA3" fill-opacity="0.32"/>
+      <rect x="210" y="70" width="96" height="26" rx="13" fill="url(#green)"/>
+      <text x="227" y="87" class="micro" fill="#0A0A0A">시작</text>
+    </g>
+  </g>
+
+  <g>
+    <text x="300" y="826" class="headline">Live Candidates</text>
+    <rect x="472" y="806" width="110" height="34" rx="17" fill="#00FFA3" fill-opacity="0.14" stroke="#00FFA3" stroke-opacity="0.28"/>
+    <text x="498" y="827" class="micro">+ 멀티 버튼</text>
+    <text x="610" y="827" class="caption">모든 카드 hover에서 재생, 멀티라이브 추가, 채팅만 열기 노출</text>
+  </g>
+</svg>

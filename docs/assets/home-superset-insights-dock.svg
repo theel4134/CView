@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Superset embedded analytics workspace concept</title>
+  <desc id="desc">A CView home screen with an analytics workspace and a Superset embedded preview panel.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6F8F7"/>
+      <stop offset="1" stop-color="#EAF0F2"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0B1014" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="32" y="28" width="88" height="844" rx="24" fill="#FFFFFF" stroke="#D8E1E3"/>
+  <circle cx="76" cy="78" r="18" fill="#00C985"/>
+  <rect x="55" y="140" width="42" height="42" rx="13" fill="#F0F4F5" stroke="#DAE4E6"/>
+  <rect x="55" y="198" width="42" height="42" rx="13" fill="#E6FAF2" stroke="#00C985"/>
+  <rect x="55" y="256" width="42" height="42" rx="13" fill="#F0F4F5" stroke="#DAE4E6"/>
+  <rect x="55" y="314" width="42" height="42" rx="13" fill="#F0F4F5" stroke="#DAE4E6"/>
+
+  <g transform="translate(156 48)">
+    <text x="0" y="28" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="30" font-weight="800">분석형 홈</text>
+    <text x="0" y="58" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="15">홈을 라이브 작업공간으로 두고, 중앙에서 Superset 대시보드를 미리 확인</text>
+    <rect x="0" y="92" width="1158" height="58" rx="18" fill="#FFFFFF" stroke="#D8E1E3"/>
+    <rect x="18" y="105" width="142" height="32" rx="12" fill="#122027"/>
+    <text x="50" y="126" fill="#FFFFFF" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13" font-weight="700">홈 요약</text>
+    <rect x="170" y="105" width="162" height="32" rx="12" fill="#E9F3F0"/>
+    <text x="203" y="126" fill="#1F4F43" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13" font-weight="700">Superset 분석</text>
+    <rect x="342" y="105" width="156" height="32" rx="12" fill="#F1F4F5"/>
+    <text x="377" y="126" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13" font-weight="700">알림/리포트</text>
+  </g>
+
+  <g transform="translate(156 226)" filter="url(#shadow)">
+    <rect width="418" height="578" rx="24" fill="#FFFFFF" stroke="#D8E1E3"/>
+    <text x="28" y="42" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="21" font-weight="800">라이브 컨트롤</text>
+    <text x="28" y="68" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">실행 액션은 기존 홈 흐름 유지</text>
+    <rect x="28" y="100" width="362" height="96" rx="20" fill="#122027"/>
+    <text x="54" y="136" fill="#FFFFFF" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="800">지금 볼 채널 12개</text>
+    <text x="54" y="166" fill="#9FB2B6" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">팔로잉 라이브와 최근 시청 기반</text>
+    <rect x="28" y="222" width="170" height="132" rx="18" fill="#F3F7F7" stroke="#D8E1E3"/>
+    <rect x="220" y="222" width="170" height="132" rx="18" fill="#F3F7F7" stroke="#D8E1E3"/>
+    <text x="54" y="260" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="800">탐색</text>
+    <text x="54" y="286" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">팔로잉 화면</text>
+    <text x="246" y="260" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="800">멀티</text>
+    <text x="246" y="286" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">4분할 추천</text>
+    <rect x="28" y="384" width="362" height="148" rx="18" fill="#F3F7F7" stroke="#D8E1E3"/>
+    <text x="54" y="420" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="17" font-weight="800">상태 요약</text>
+    <text x="54" y="456" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">Metrics Server 온라인</text>
+    <text x="54" y="486" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">WebSocket 실시간 연결</text>
+  </g>
+
+  <g transform="translate(604 226)" filter="url(#shadow)">
+    <rect width="710" height="578" rx="24" fill="#FFFFFF" stroke="#D8E1E3"/>
+    <g transform="translate(28 28)">
+      <text x="0" y="18" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="21" font-weight="800">Superset 미리보기</text>
+      <text x="0" y="44" fill="#65747B" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13">임베드 가능 시 WebView, 불가 시 썸네일/딥링크로 대체</text>
+      <rect x="492" y="0" width="144" height="38" rx="13" fill="#0EA876"/>
+      <text x="524" y="24" fill="#FFFFFF" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="13" font-weight="800">전체 열기</text>
+    </g>
+    <rect x="28" y="96" width="654" height="346" rx="20" fill="#111A20"/>
+    <rect x="54" y="128" width="160" height="72" rx="16" fill="#1C2930"/>
+    <rect x="234" y="128" width="160" height="72" rx="16" fill="#1C2930"/>
+    <rect x="414" y="128" width="242" height="72" rx="16" fill="#1C2930"/>
+    <text x="76" y="158" fill="#8EA2AA" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="12">APP LATENCY</text>
+    <text x="76" y="184" fill="#F4FBF8" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">2.1s</text>
+    <text x="256" y="158" fill="#8EA2AA" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="12">BUFFER ALERT</text>
+    <text x="256" y="184" fill="#F4FBF8" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">4</text>
+    <text x="436" y="158" fill="#8EA2AA" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="12">TOP CHANNEL</text>
+    <text x="436" y="184" fill="#F4FBF8" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">channel_a</text>
+    <polyline points="74,366 128,328 182,342 236,288 290,302 344,250 398,270 452,220 506,236 560,198 632,214" fill="none" stroke="#00F2A9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="74" y1="390" x2="632" y2="390" stroke="#34464F"/>
+    <line x1="74" y1="224" x2="632" y2="224" stroke="#24343D"/>
+    <line x1="74" y1="306" x2="632" y2="306" stroke="#24343D"/>
+    <rect x="28" y="466" width="206" height="76" rx="18" fill="#F3F7F7" stroke="#D8E1E3"/>
+    <rect x="252" y="466" width="206" height="76" rx="18" fill="#F3F7F7" stroke="#D8E1E3"/>
+    <rect x="476" y="466" width="206" height="76" rx="18" fill="#F3F7F7" stroke="#D8E1E3"/>
+    <text x="52" y="497" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="14" font-weight="800">레이턴시 보드</text>
+    <text x="276" y="497" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="14" font-weight="800">VLC 품질 보드</text>
+    <text x="500" y="497" fill="#122027" font-family="Inter, Apple SD Gothic Neo, sans-serif" font-size="14" font-weight="800">채널 랭킹</text>
+  </g>
+</svg>

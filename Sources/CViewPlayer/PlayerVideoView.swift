@@ -1,0 +1,251 @@
+// MARK: - PlayerVideoView.swift
+// CViewPlayer - VLC / AVPlayer 통합 비디오 렌더링 뷰
+
+import SwiftUI
+import AppKit
+import CViewCore
+import VLCKitSPM
+
+/// VLC / AVPlayer 모두 지원하는 통합 비디오 렌더링 SwiftUI 뷰.
+/// PlayerEngineProtocol의 `videoView: NSView` 를 컨테이너에 서브뷰로 삽입한다.
+/// - VLCPlayerEngine: `playerView` (VLCLayerHostView — NSView 컨테이너) 사용
+///   → VLC가 렌더링 서피스를 내부 생성하여 서브뷰로 추가
+/// - AVPlayerEngine: `AVPlayerLayerView` (AVPlayerLayer 호스팅 NSView) 사용
+///
+/// Usage:
+/// ```swift
+/// PlayerVideoView(videoView: playerVM?.currentVideoView)
+/// ```
+public struct PlayerVideoView: NSViewRepresentable {
+    /// 엔진에서 제공된 렌더링 NSView (PlayerViewModel.currentVideoView)
+    public let videoView: NSView?
+    /// true이면 aspect-fill (화면 꽉 채움, 가장자리 잘림 허용), false이면 aspect-fit (레터박스)
+    public let fill: Bool
+
+    public init(videoView: NSView?, fill: Bool = false) {
+        self.videoView = videoView
+        self.fill = fill
+    }
+
+    public func makeNSView(context: Context) -> PlayerContainerView {
+        let container = PlayerContainerView()
+        if let v = videoView {
+            container.setVideoView(v)
+        }
+        container.setFillMode(fill)
+        return container
+    }
+
+    public func updateNSView(_ nsView: PlayerContainerView, context: Context) {
+        // identity 동일하면 레이아웃 패스 완전 스킵 — SwiftUI re-render 시 GPU 불필요한 작업 방지
+        if let v = videoView {
+            nsView.setVideoView(v)
+        } else {
+            nsView.clearVideoView()
+        }
+        nsView.setFillMode(fill)
+    }
+
+    /// SwiftUI가 제안한 크기를 그대로 수용 — NSViewRepresentable 기본 동작을 명시하여
+    /// HStack 내에서 정확한 프레임을 보장한다.
+    public func sizeThatFits(_ proposal: ProposedViewSize, nsView: PlayerContainerView, context: Context) -> CGSize {
+        CGSize(
+            width: proposal.width ?? nsView.bounds.width,
+            height: proposal.height ?? nsView.bounds.height
+        )
+    }
+}
+
+// MARK: - Container NSView
+
+/// 엔진의 videoView를 서브뷰로 관리하는 컨테이너.
+///
+/// ## GPU 최적화 전략
+/// - **AVPlayer**: `AVPlayerLayerView`는 `layer = playerLayer`로 설정되어 playerLayer가
+///   뷰의 backing layer 자체. subview로 추가하면 container.layer → playerLayer 2단계만 됨.
+/// - **VLC**: VLCLayerHostView를 subview로 추가.
+///   VLC 렌더링 서피스가 VLCLayerHostView 내부에 임베딩.
+/// - 컨테이너 자체의 CA 암묵적 애니메이션 전면 비활성화.
+/// - `layerContentsRedrawPolicy = .never` — 이 NSView는 직접 그리지 않음.
+///
+/// [크래시 방지] layout() 중 subview 교체는 constraint 재진입 크래시를 유발한다.
+/// isLayingOut 플래그로 layout() 실행 중 setVideoView() 호출을 다음 RunLoop으로 지연시킨다.
+public final class PlayerContainerView: NSView {
+    private weak var currentSubview: NSView?
+    private var isFillMode: Bool = false
+    /// layout() 재진입 방지 플래그
+    private var isLayingOut: Bool = false
+    /// layout() 중 요청된 pending videoView 교체
+    private weak var pendingVideoView: NSView?
+
+    public override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never           // drawRect 완전 차단
+        canDrawSubviewsIntoLayer = false             // VLC 서브뷰가 독립 레이어를 사용하도록 하여 masksToBounds 클리핑 보장
+
+        // 컨테이너 자체 레이어 최적화
+        let l = layer!
+        l.backgroundColor = NSColor.black.cgColor
+        l.isOpaque        = true
+        l.drawsAsynchronously = false                // 컨테이너는 자체 콘텐츠 없음
+        l.shouldRasterize = false
+        l.allowsGroupOpacity = false
+        // Retina 대응 — 서브레이어 합성 시 올바른 스케일 적용
+        l.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        // 비디오 렌더링이 컨테이너 밖으로 넘치지 않도록 클리핑
+        // NavigationSplitView 사이드바 뒤로 영상이 보이는 현상 방지
+        l.masksToBounds = true
+        // 모든 암묵적 트랜지션 제거 — bounds/position 변경 시 즉시 적용
+        l.actions = [
+            "position": NSNull(), "bounds":  NSNull(),
+            "frame":    NSNull(), "opacity": NSNull(),
+            "sublayers": NSNull(), "backgroundColor": NSNull(),
+        ]
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    public func setVideoView(_ videoView: NSView) {
+        guard videoView !== currentSubview else { return }
+
+        // layout() 실행 중 subview 교체는 constraint 재진입 크래시를 유발한다.
+        // 다음 RunLoop 사이클로 지연시키되 즉시 async 처리하여 1프레임 블랙 화면 최소화.
+        if isLayingOut {
+            pendingVideoView = videoView
+            Task { @MainActor [weak self] in
+                guard let self, let pending = self.pendingVideoView else { return }
+                self.pendingVideoView = nil
+                self.attachVideoView(pending)
+            }
+            return
+        }
+
+        attachVideoView(videoView)
+    }
+
+    private func attachVideoView(_ videoView: NSView) {
+        guard videoView !== currentSubview else { return }
+
+        // [크리티컬] currentSubview가 이미 다른 컨테이너로 옮겨졌을 수 있음.
+        if let old = currentSubview, old.superview === self {
+            old.removeFromSuperview()
+        }
+        currentSubview = nil
+
+        addSubview(videoView)
+        videoView.frame = bounds
+        videoView.autoresizingMask = [.width, .height]
+
+        // VLCLayerHostView — masksToBounds로 오버플로 클리핑 보장
+        if let sublayer = videoView.layer {
+            sublayer.masksToBounds = true
+            sublayer.frame = bounds
+            // [플리커 방지] VLC 내부 렌더링 서브레이어/서브뷰의 frame은 VLC가 자체 관리.
+            // 외부에서 CAMetalLayer frame을 강제 설정하면 VLC Metal 렌더 스레드와
+            // 충돌하여 깜빡임을 유발. autoresizingMask가 자동 전파.
+        }
+
+        currentSubview = videoView
+        // 새 비디오 뷰에 현재 fill 모드 반영
+        applyFillMode(to: videoView)
+
+        // CA 암묵적 애니메이션 없이 레이아웃을 즉시 플러시하여
+        // VLC가 올바른 프레임 크기를 빠르게 인식하도록 한다.
+        // 멀티라이브 탭 전환 시 1프레임 블랙 화면 최소화.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.layoutSubtreeIfNeeded()
+        CATransaction.commit()
+
+        // [VLC vout 복구] SwiftUI가 뷰 계층을 재구성할 때(세션 추가로 그리드 레이아웃 변경 등)
+        // playerView가 새 PlayerContainerView에 마운트된다. VLC의 Metal 렌더링 서피스는
+        // 이전 레이어 계층에 바인딩되어 있으므로, drawable을 재설정하여 새 레이어 계층에서
+        // vout을 재생성시킨다.
+        // [플리커 방지] CATransaction 커밋 직후 동기 실행 — asyncAfter(.now()) 대비
+        // 1프레임 지연 동안 구 레이어에 렌더링되는 깜빡임 제거.
+        if let vlcView = videoView as? VLCLayerHostView,
+           let engine = vlcView.boundEngine {
+            guard engine.playerView.window != nil else { return }
+            let state = engine.mediaPlayer.state
+            guard state != .stopped && state != .stopping else { return }
+            engine.refreshDrawable(force: true)
+        }
+    }
+
+    public func clearVideoView() {
+        pendingVideoView = nil
+        let subview = currentSubview
+        currentSubview = nil
+        // [크리티컬] superview === self 체크: 그리드 재배치로 이미 다른 컨테이너에
+        // 옮겨진 VLC 뷰를 제거하지 않도록 보호
+        if let subview, subview.superview === self {
+            DispatchQueue.main.async {
+                // async 시점에도 아직 이 컨테이너에 있는지 재확인
+                if subview.superview === self {
+                    subview.removeFromSuperview()
+                }
+            }
+        }
+    }
+
+    /// 비디오 화면 채움 모드 설정 (true: aspect-fill, false: aspect-fit)
+    public func setFillMode(_ fill: Bool) {
+        guard isFillMode != fill else { return }
+        isFillMode = fill
+        guard let subview = currentSubview else { return }
+        applyFillMode(to: subview)
+    }
+
+    private func applyFillMode(to videoView: NSView) {
+        // AVVideoNSView인 경우 (AVPlayerLayer 기반)
+        if let avView = videoView as? AVVideoView.AVVideoNSView {
+            avView.setFillMode(isFillMode)
+        }
+        // VLC: 렌더링 서피스를 서브뷰로 생성하므로
+        // gravity 변경은 VLC API(mediaPlayer.videoAspectRatio 등)로 처리 필요
+    }
+
+    public override func layout() {
+        isLayingOut = true
+        super.layout()
+        // 리사이즈 중 CA 암묵적 애니메이션 비활성화 — 프레임 변경 즉시 반영
+        // layout()이 매 프레임 호출되면서 서브레이어 위치/크기 트랜지션이 누적되면
+        // GPU 합성 파이프라인이 병목이 되어 버벅거림 발생
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let b = bounds
+        currentSubview?.frame = b
+
+        // [클리핑 강제] 컨테이너 + 서브뷰 레이어에 masksToBounds 재적용
+        layer?.masksToBounds = true
+        if let subview = currentSubview {
+            subview.layer?.frame = b
+            subview.layer?.masksToBounds = true
+            // [플리커 방지] VLC 내부 서브뷰/서브레이어의 frame을 직접 조작하지 않음.
+            // VLC가 자체 Metal CAMetalLayer의 frame을 렌더 스레드에서 관리하므로,
+            // 메인 스레드에서 강제 설정하면 렌더 사이클과 충돌하여 깜빡임 발생.
+            // autoresizingMask [.width, .height]가 VLCLayerHostView → 내부 뷰 자동 전파.
+        }
+        CATransaction.commit()
+        isLayingOut = false
+
+        // layout() 중 요청된 videoView 교체를 안전하게 처리
+        if let pending = pendingVideoView {
+            pendingVideoView = nil
+            attachVideoView(pending)
+        }
+    }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // Retina ↔ 일반 디스플레이 전환 시 컨테이너 레이어 스케일 즉시 갱신
+        if let scale = window?.backingScaleFactor {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer?.contentsScale = scale
+            CATransaction.commit()
+        }
+    }
+}
+

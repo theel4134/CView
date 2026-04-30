@@ -1,0 +1,153 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141416"/>
+      <stop offset="1" stop-color="#101115"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00FFA3"/>
+      <stop offset="1" stop-color="#00875A"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#5BA3FF"/>
+      <stop offset="1" stop-color="#2E6BC6"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FF5FA0"/>
+      <stop offset="1" stop-color="#7B3FA6"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 700 18px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; letter-spacing: 0.4px; }
+      .panel { fill: #1C1C1E; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+      .elevated { fill: #242426; stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="24" y="22" width="1392" height="856" rx="24" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="24" y="22" width="236" height="856" rx="24" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <rect x="24" y="68" width="1392" height="1" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+
+  <text x="58" y="116" class="title">CView</text>
+  <rect x="48" y="148" width="188" height="38" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.45"/>
+  <text x="70" y="173" class="body" fill="#F5F5F7">홈</text>
+  <rect x="48" y="198" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="220" class="caption">라이브</text>
+  <rect x="48" y="244" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="266" class="caption">최근/즐겨찾기</text>
+  <rect x="48" y="290" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="312" class="caption">검색</text>
+
+  <text x="300" y="116" class="title">Personal Library Home</text>
+  <text x="300" y="142" class="body">팔로잉, 즐겨찾기, 최근 시청을 첫 화면 중심에 둔 재방문 사용자 홈</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="170" width="1068" height="64" rx="18" class="panel"/>
+    <text x="326" y="207" class="headline">내 라이브 라이브러리</text>
+    <rect x="846" y="184" width="300" height="36" rx="12" class="elevated"/>
+    <text x="872" y="207" class="caption">팔로잉, 채널, 클립 검색</text>
+    <rect x="1164" y="184" width="82" height="36" rx="12" fill="url(#green)" fill-opacity="0.18" stroke="#00FFA3" stroke-opacity="0.28"/>
+    <text x="1184" y="207" class="micro">새로고침</text>
+    <rect x="1256" y="184" width="82" height="36" rx="12" class="elevated"/>
+    <text x="1279" y="207" class="micro">편집</text>
+  </g>
+
+  <g>
+    <text x="300" y="282" class="headline">My Live Queue</text>
+    <text x="300" y="306" class="caption">내가 자주 보는 항목을 상태별로 압축 표시</text>
+    <g transform="translate(300 326)">
+      <rect width="254" height="108" rx="18" class="elevated"/>
+      <rect x="18" y="18" width="46" height="46" rx="14" fill="url(#green)" fill-opacity="0.25"/>
+      <text x="82" y="43" class="headline">팔로잉 LIVE</text>
+      <text x="82" y="67" class="caption">6명 방송 중 · 42%</text>
+      <rect x="18" y="78" width="84" height="18" rx="9" fill="#00FFA3" fill-opacity="0.14"/>
+      <text x="33" y="91" class="micro">바로보기</text>
+    </g>
+    <g transform="translate(572 326)">
+      <rect width="254" height="108" rx="18" class="elevated"/>
+      <rect x="18" y="18" width="46" height="46" rx="14" fill="#FFD700" fill-opacity="0.18"/>
+      <text x="82" y="43" class="headline">즐겨찾기 LIVE</text>
+      <text x="82" y="67" class="caption">4개 채널 온라인</text>
+      <rect x="18" y="78" width="84" height="18" rx="9" fill="#FFD700" fill-opacity="0.14"/>
+      <text x="33" y="91" class="micro" fill="#FFD700">우선정렬</text>
+    </g>
+    <g transform="translate(844 326)">
+      <rect width="254" height="108" rx="18" class="elevated"/>
+      <rect x="18" y="18" width="46" height="46" rx="14" fill="url(#blue)" fill-opacity="0.20"/>
+      <text x="82" y="43" class="headline">최근 보던 채널</text>
+      <text x="82" y="67" class="caption">LIVE 복귀 3개</text>
+      <rect x="18" y="78" width="84" height="18" rx="9" fill="#5BA3FF" fill-opacity="0.14"/>
+      <text x="33" y="91" class="micro" fill="#5BA3FF">이어보기</text>
+    </g>
+    <g transform="translate(1116 326)">
+      <rect width="252" height="108" rx="18" class="elevated"/>
+      <rect x="18" y="18" width="46" height="46" rx="14" fill="url(#pink)" fill-opacity="0.20"/>
+      <text x="82" y="43" class="headline">관심 카테고리</text>
+      <text x="82" y="67" class="caption">게임 · 토크 · 음악</text>
+      <rect x="18" y="78" width="84" height="18" rx="9" fill="#FF5FA0" fill-opacity="0.14"/>
+      <text x="33" y="91" class="micro" fill="#FF5FA0">개인화</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="468" width="690" height="324" rx="22" class="panel"/>
+    <text x="326" y="506" class="headline">Live Library</text>
+    <rect x="326" y="526" width="350" height="36" rx="18" fill="#141416" stroke="rgba(255,255,255,0.08)"/>
+    <rect x="330" y="530" width="112" height="28" rx="14" fill="url(#green)"/>
+    <text x="358" y="548" class="micro" fill="#0A0A0A">팔로잉</text>
+    <text x="470" y="548" class="caption">즐겨찾기</text>
+    <text x="586" y="548" class="caption">최근 시청</text>
+
+    <g transform="translate(326 586)">
+      <rect width="616" height="52" rx="14" class="elevated"/>
+      <circle cx="28" cy="26" r="17" fill="#00FFA3" fill-opacity="0.26"/>
+      <circle cx="48" cy="38" r="5" fill="#FF3B30"/>
+      <text x="68" y="23" class="body">채널 A · 오늘의 메인 방송</text>
+      <text x="68" y="40" class="caption">게임 · 8.2K · 팔로잉</text>
+      <rect x="498" y="14" width="88" height="24" rx="12" fill="#00FFA3" fill-opacity="0.16"/>
+      <text x="523" y="30" class="micro">재생</text>
+    </g>
+    <g transform="translate(326 650)">
+      <rect width="616" height="52" rx="14" class="elevated"/>
+      <circle cx="28" cy="26" r="17" fill="#FFD700" fill-opacity="0.22"/>
+      <circle cx="48" cy="38" r="5" fill="#FF3B30"/>
+      <text x="68" y="23" class="body">즐겨찾기 채널 B</text>
+      <text x="68" y="40" class="caption">토크 · 1.4K · 즐겨찾기</text>
+      <rect x="498" y="14" width="88" height="24" rx="12" fill="#00FFA3" fill-opacity="0.16"/>
+      <text x="517" y="30" class="micro">+ 멀티</text>
+    </g>
+    <g transform="translate(326 714)">
+      <rect width="616" height="52" rx="14" class="elevated"/>
+      <circle cx="28" cy="26" r="17" fill="#5BA3FF" fill-opacity="0.22"/>
+      <text x="68" y="23" class="body">최근 보던 채널 C</text>
+      <text x="68" y="40" class="caption">오프라인 · 채널 상세로 이동</text>
+      <rect x="498" y="14" width="88" height="24" rx="12" fill="#242426" stroke="rgba(255,255,255,0.12)"/>
+      <text x="518" y="30" class="micro">상세</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="1014" y="468" width="354" height="324" rx="22" class="panel"/>
+    <text x="1038" y="506" class="headline">Status / Insights</text>
+    <text x="1038" y="532" class="caption">로그인, 쿠키, 캐시, 메트릭을 작게 정리</text>
+    <rect x="1038" y="560" width="306" height="54" rx="14" fill="#2A2215" stroke="#FFAA00" stroke-opacity="0.3"/>
+    <text x="1058" y="584" class="body">네이버 쿠키 로그인 필요</text>
+    <text x="1058" y="602" class="caption">팔로잉 라이브 조회 정확도 개선</text>
+    <rect x="1038" y="632" width="306" height="54" rx="14" class="elevated"/>
+    <text x="1058" y="657" class="body">캐시 복원 완료</text>
+    <text x="1058" y="675" class="caption">첫 화면 placeholder 최소화</text>
+    <rect x="1038" y="704" width="306" height="54" rx="14" class="elevated"/>
+    <text x="1058" y="729" class="body">간이 통계</text>
+    <text x="1058" y="747" class="caption">라이브 1,284 · 팔로잉 6 · 카테고리 38</text>
+  </g>
+</svg>

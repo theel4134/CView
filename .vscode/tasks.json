@@ -1,0 +1,228 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ━━━ Build ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+      "label": "Build (Debug)",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-scheme", "CView_v2",
+        "-configuration", "Debug",
+        "-derivedDataPath", "/Volumes/app-work/build",
+        "build"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "xcodebuild",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Build & Run",
+      "type": "shell",
+      "command": "pkill -x CView_v2 2>/dev/null; sleep 0.3; xcodebuild -scheme CView_v2 -configuration Debug -derivedDataPath /Volumes/app-work/build build && open '/Volumes/app-work/build/Build/Products/Debug/CView_v2.app'",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "xcodebuild",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Clean Build",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-scheme", "CView_v2",
+        "-configuration", "Debug",
+        "-derivedDataPath", "/Volumes/app-work/build",
+        "clean", "build"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "xcodebuild",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Build Release (.app)",
+      "type": "shell",
+      "command": "${workspaceFolder}/build_release.sh",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+
+    // ━━━ Server ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+      "label": "Server: Status",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["status"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Pull Sources",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["pull"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Push Sources",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["push"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Deploy Collector",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["deploy", "collector"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Deploy Stats Web",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["deploy", "statsweb"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Superset Sync",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["superset-sync"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Logs (Metrics)",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["logs", "chzzk-metrics", "100"],
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: Logs (Stats Web)",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["logs", "cview-stats-web", "100"],
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Server: SSH Shell",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/server.sh",
+      "args": ["ssh"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true }
+    },
+
+    // ━━━ Swift Remote ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+      "label": "Swift Remote: Sync → Server",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/swift-remote.sh",
+      "args": ["sync"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Swift Remote: Pull ← Server",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/swift-remote.sh",
+      "args": ["pull"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Swift Remote: Diff",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/swift-remote.sh",
+      "args": ["diff"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Swift Remote: Code Stats",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/swift-remote.sh",
+      "args": ["stats"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Swift Remote: REPL",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/swift-remote.sh",
+      "args": ["repl"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true }
+    },
+    {
+      "label": "Swift Remote: Version Info",
+      "type": "shell",
+      "command": "${workspaceFolder}/server-dev/swift-remote.sh",
+      "args": ["version"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>CView Metrics — 설정</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<main>
+  <h1>CView Chzzk Metrics — 설정</h1>
+  <p class="version">v<span id="ver"></span> · MV3 Chrome Extension</p>
+
+  <section class="card">
+    <h2>인증</h2>
+    <label>
+      App Secret
+      <input id="app-secret" type="password" autocomplete="off" placeholder="서버에서 발급받은 비밀키">
+    </label>
+    <p class="hint">
+      평문 비밀키. 저장 시 chrome.storage.local에 저장됩니다.<br>
+      <b>확인 방법:</b> CView macOS 앱 → 설정(⚙) → <b>메트릭</b> 탭 → <b>App Secret (인증 키)</b> 섹션에서 현재 값을 확인하고 복사 버튼(📄)으로 붙여넣으세요.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>서버</h2>
+    <label>
+      Server URL
+      <input id="server-url" type="url" placeholder="https://cv.dododo.app:8443">
+    </label>
+    <p class="hint">허용 호스트: cv.dododo.app, localhost, 127.0.0.1 (HTTPS 필수, localhost는 HTTP 허용)</p>
+  </section>
+
+  <section class="card">
+    <h2>Analytics (Grafana 대시보드)</h2>
+    <label>
+      Analytics URL
+      <input id="superset-url" type="url" placeholder="자동 도출 (https://cv.dododo.app)">
+    </label>
+    <p class="hint">비워두면 Server URL의 호스트에서 자동 도출됩니다 (cv.dododo.app:8443 → cv.dododo.app). API(:8443)와 Analytics(:443)는 다른 포트에서 reverse-proxy 됩니다.</p>
+    <div class="row" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <button id="btn-superset-health">헬스 체크</button>
+      <button id="btn-superset-open">대시보드 열기</button>
+      <button id="btn-superset-sqllab">Explore 열기</button>
+      <span id="superset-status" class="status"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>옵션</h2>
+    <label class="checkbox">
+      <input id="debug" type="checkbox"> Debug 로그 출력
+    </label>
+  </section>
+
+  <section class="actions">
+    <button id="btn-save" class="primary">저장</button>
+    <button id="btn-test">인증 테스트</button>
+    <button id="btn-reset" class="danger">전체 설정 초기화</button>
+    <span id="status" class="status"></span>
+  </section>
+
+  <section class="card">
+    <h2>진단</h2>
+    <button id="btn-diag">진단 정보 갱신</button>
+    <pre id="diag">—</pre>
+  </section>
+</main>
+<script src="options.js" type="module"></script>
+</body>
+</html>

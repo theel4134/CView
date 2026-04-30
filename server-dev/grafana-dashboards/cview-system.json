@@ -1,0 +1,66 @@
+{
+  "title": "CView System",
+  "uid": "cview-system",
+  "timezone": "Asia/Seoul",
+  "editable": true,
+  "schemaVersion": 39,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1, "title": "HTTP 요청 (rpm)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (path) (rate(cview_http_requests_total[1m])) * 60", "legendFormat": "{{path}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 2, "title": "HTTP p95 latency (s)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, path) (rate(cview_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{path}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 3, "title": "nginx connections", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "nginx_connections_active", "legendFormat": "active" },
+        { "refId": "B", "expr": "nginx_connections_reading", "legendFormat": "reading" },
+        { "refId": "C", "expr": "nginx_connections_writing", "legendFormat": "writing" },
+        { "refId": "D", "expr": "nginx_connections_waiting", "legendFormat": "waiting" }
+      ]
+    },
+    {
+      "id": 4, "title": "PostgreSQL 연결 수", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (datname) (pg_stat_database_numbackends)", "legendFormat": "{{datname}}" }
+      ]
+    },
+    {
+      "id": 5, "title": "Redis memory (MB)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "redis_memory_used_bytes/1024/1024", "legendFormat": "used MB" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decmbytes" }, "overrides": [] }
+    },
+    {
+      "id": 6, "title": "server uptime", "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "cview_server_uptime_seconds" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    }
+  ]
+}

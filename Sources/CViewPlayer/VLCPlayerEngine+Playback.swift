@@ -1,0 +1,351 @@
+// MARK: - VLCPlayerEngine+Playback.swift
+// CViewPlayer — 미디어 전환 + 초기 재생 모니터링
+
+import Foundation
+import CViewCore
+@preconcurrency import VLCKitSPM
+
+extension VLCPlayerEngine {
+    
+    /// [P0: 채널 전환 최적화] 미디어 URL만 교체하여 vout 재생성 없이 빠른 채널 전환.
+    /// 기존 VLC 엔진/drawable을 유지하면서 미디어만 스왑하므로:
+    /// - FIQCA 큐 재생성 없음 (기존 vout 유지)
+    /// - 전환 시간 1~3초 → 0.3~0.5초로 단축
+    /// - 프레임 드롭 최소화 (초기화 비용 제거)
+    @MainActor
+    public func switchMedia(to url: URL) async {
+        guard !Task.isCancelled else { return }
+        let profile = streamingProfile
+
+        // 현재 재생 중이면 stop → 짧은 대기 → 새 미디어 설정
+        player.stop()
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms — 최소 flush
+        guard !Task.isCancelled else { return }
+
+        guard let media = VLCMedia(url: url) else {
+            _setPhase(.error(.streamNotFound))
+            return
+        }
+
+        applyMediaOptions(media, profile: profile)
+        player.media = media
+        player.play()
+    }
+
+    @MainActor
+    func _startPlay(url: URL, profile: VLCStreamingProfile, retryAttempt: Int = 0) async {
+        guard !Task.isCancelled else { return }
+
+        // 기존 재생 중이면 안전하게 정리
+        if player.isPlaying || player.media != nil {
+            Log.player.debug("[DIAG] _startPlay: stopping existing playback — isPlaying=\(self.player.isPlaying) hasMedia=\(self.player.media != nil)")
+            player.stop()
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms — VLC flush 대기
+            guard !Task.isCancelled else { return }
+        }
+
+        // drawable 설정
+        player.drawable = playerView
+
+        // 뷰가 윈도우에 붙을 때까지 대기 (최대 5초, 100회 × 0.05초)
+        if playerView.window == nil {
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                guard !Task.isCancelled else { return }
+                if playerView.window != nil { break }
+            }
+            if playerView.window == nil {
+                Log.player.warning("VLCPlayerEngine: 5초 대기 후에도 playerView.window == nil — play() 계속 진행")
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+
+        guard let media = VLCMedia(url: url) else {
+            _setPhase(.error(.streamNotFound))
+            return
+        }
+        applyMediaOptions(media, profile: profile)
+
+        player.media = media
+        // [Opt-A1/A2] VLC 내부 타이밍 이벤트 빈도 감소 — 멀티라이브 CPU 절감
+        // minimalTimePeriod: VLC 내부 타이머 최소 주기 (µs). 기본 500,000(0.5s)
+        // timeChangeUpdateInterval: delegate 시간 변경 콜백 간격 (초). 기본 1.0s
+        // [Phase C] 시스템 부하(열 상태) 고조 시 비선택 세션은 추가 ×2 throttle
+        if profile.isMultiLiveFamily {
+            if profile == .multiLiveHQ || isSelectedSession {
+                // 선택 HQ: 표준 타이밍 유지 (레이턴시/PDT 동기화 정확도 보장)
+                player.minimalTimePeriod = 500_000
+                player.timeChangeUpdateInterval = 1.0
+            } else {
+                // 비선택 멀티라이브: CPU 절감 우선 + thermal 고조 시 추가 throttle
+                let isHot = SystemLoadMonitor.shared.currentMode == .hot
+                player.minimalTimePeriod = isHot ? 2_000_000 : 1_000_000
+                player.timeChangeUpdateInterval = isHot ? 10.0 : 5.0
+            }
+        }
+        player.play()
+        Log.player.debug("[DIAG] player.play() called — state=\(self.player.state.rawValue) media=\(url.lastPathComponent, privacy: .public) retry=\(retryAttempt)")
+        startStatsTimer()
+
+        // 선명한 화면(픽셀 샤프) 설정은 VLC 서브레이어가 생성된 뒤 재적용해야 반영된다.
+        if sharpPixelScaling {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                self?.playerView.setSharpScaling(true)
+            }
+        }
+        Log.player.debug("[DIAG] _startPlay: profile=\(String(describing: profile)) isSelected=\(self.isSelectedSession) window=\(self.playerView.window != nil ? "attached" : "NIL") playerState=\(self.player.state.rawValue) url=\(url.lastPathComponent, privacy: .public)")
+        
+        // [Fix 14] VLC 4.0 초기 재생 모니터링
+        _startPlayRetryTask?.cancel()
+        if retryAttempt < 1 {
+            let capturedUrl = url
+            let capturedProfile = profile
+            let pid = String(url.lastPathComponent.prefix(8))
+            _startPlayRetryTask = Task { [weak self] in
+                // Phase 1: 5초 안정화 대기
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                
+                let (initState, initSize, initDecoded) = await MainActor.run {
+                    (self.player.state, self.player.videoSize, self.player.media?.statistics.decodedVideo ?? 0)
+                }
+                Log.player.debug("[FIX14] [\(pid, privacy: .public)] initial: state=\(initState.rawValue)(0=stop,1=stopping,2=open,3=buf,4=err,5=play,6=pause) vSz=\(Int(initSize.width))x\(Int(initSize.height)) decoded=\(initDecoded)")
+                
+                // 즉시 성공
+                if initState == .playing && initSize.width > 0 {
+                    Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ 5초 내 재생 확인")
+                    return
+                }
+                if initState == .buffering && initSize.width > 0 && initDecoded > 0 {
+                    Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ 5초 내 buffering이지만 디코딩 활성 (decoded=\(initDecoded)) — 정상")
+                    return
+                }
+                
+                // 명확한 실패: stopped/stopping/error → 1회 재시도
+                if initState == .stopped || initState == .stopping || initState == .error {
+                    Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 즉시 실패 (state=\(initState.rawValue)) — retry")
+                    await MainActor.run { self.player.stop() }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled else { return }
+                    await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
+                    return
+                }
+                
+                // Phase 2: 장기 폴링 (최대 30초 추가)
+                Log.player.info("[FIX14] [\(pid, privacy: .public)] 장기 대기 시작 (최대 30초)")
+                var lastPolledDecoded: Int32 = await MainActor.run { self.player.media?.statistics.decodedVideo ?? 0 }
+                for pollIdx in 0..<10 {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    
+                    let (state, size, decoded) = await MainActor.run {
+                        (self.player.state, self.player.videoSize, self.player.media?.statistics.decodedVideo ?? 0)
+                    }
+                    let decodedDelta = decoded - lastPolledDecoded
+                    lastPolledDecoded = decoded
+                    Log.player.debug("[FIX14] [\(pid, privacy: .public)] poll=\(pollIdx)/10: state=\(state.rawValue) vSz=\(Int(size.width))x\(Int(size.height)) decoded=\(decoded) Δ=\(decodedDelta)")
+                    
+                    if state == .playing && size.width > 0 {
+                        Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ 폴링 중 재생 확인")
+                        return
+                    }
+                    if state == .buffering && size.width > 0 && decodedDelta > 0 {
+                        Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ buffering이지만 프레임 디코딩 중 (Δ=\(decodedDelta)) — 정상")
+                        return
+                    }
+                    if state == .stopped || state == .stopping || state == .error {
+                        Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 폴링 중 실패 (state=\(state.rawValue)) — retry")
+                        await MainActor.run { self.player.stop() }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
+                        await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
+                        return
+                    }
+                    if state == .playing && size.width == 0 && pollIdx >= 3 {
+                        Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ playing+noVideo 15s+ — retry")
+                        await MainActor.run { self.player.stop() }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
+                        await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
+                        return
+                    }
+                    if state == .paused && pollIdx >= 3 {
+                        Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ paused 15s+ — retry")
+                        await MainActor.run { self.player.stop() }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard !Task.isCancelled else { return }
+                        await self._startPlay(url: capturedUrl, profile: capturedProfile, retryAttempt: 1)
+                        return
+                    }
+                }
+                
+                // 35초 경과 — 최종 확인
+                guard !Task.isCancelled else { return }
+                let (finalState, finalSize, finalDecoded) = await MainActor.run {
+                    (self.player.state, self.player.videoSize, self.player.media?.statistics.decodedVideo ?? 0)
+                }
+                if finalState == .playing && finalSize.width > 0 {
+                    Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ 35초 후 재생 확인")
+                    return
+                }
+                if finalState == .buffering && finalSize.width > 0 && finalDecoded > 0 {
+                    Log.player.info("[FIX14] [\(pid, privacy: .public)] ✓ 35초 후 buffering이지만 디코딩 활성 (decoded=\(finalDecoded)) — 정상")
+                    return
+                }
+                Log.player.warning("[FIX14] [\(pid, privacy: .public)] ✗ 35초 타임아웃 — 에러 전환 (state=\(finalState.rawValue) decoded=\(finalDecoded))")
+                // [No-Proxy] 프록시 제거 환경에서 VLC 가 chzzk CDN 응답을 못 다룰 수 있으므로
+                // 상위 콜백이 등록돼 있으면 AVPlayer 로 자동 전환을 요청하고 종료.
+                if let fallback = await MainActor.run(body: { self.onEngineFallbackRequested }) {
+                    Log.player.warning("[FIX14] [\(pid, privacy: .public)] → AVPlayer 엔진 폴백 요청")
+                    fallback("VLC 35초 타임아웃")
+                    return
+                }
+                await MainActor.run { self._setPhase(.error(.networkTimeout)) }
+            }
+        }
+    }
+    
+    // MARK: - 미디어 옵션 헬퍼
+    
+    /// VLCStreamingProfile에 따른 미디어 옵션 일괄 적용
+    func applyMediaOptions(_ media: VLCMedia, profile: VLCStreamingProfile) {
+        // [Quality Lock] 항상 최고 화질 유지 모드 — 멀티라이브에서도 1080p 고정
+        let forceMax = forceHighestQuality
+
+        // [Codec Tune 2026-04-23] 비선택 멀티라이브 + thermal .hot 일 때 캐싱 +500ms.
+        // 디코더 출력 jitter 흡수 마진을 늘려 frame-skip(=2)로 인한 일시적 픽 부하를
+        // 더 평탄화한다 (선택 세션은 영향 없음).
+        let isNonSelectedMulti = (profile == .multiLive && !isSelectedSession)
+        let hot = (SystemLoadMonitor.shared.currentMode == .hot)
+        let netCache = (isNonSelectedMulti && hot) ? max(profile.networkCaching, 2000) : profile.networkCaching
+        let liveCache = (isNonSelectedMulti && hot) ? max(profile.liveCaching, 2000) : profile.liveCaching
+
+        media.addOption(":network-caching=\(netCache)")
+        media.addOption(":live-caching=\(liveCache)")
+        media.addOption(":file-caching=0")
+        media.addOption(":disc-caching=0")
+        media.addOption(":cr-average=\(profile.crAverage)")
+        // 디코더 스레드 결정:
+        //   - forceMax(싱글 스트림 화질 잠금): 활성 코어 수 기반 최대 6 (P+E 코어 적극 활용)
+        //   - 일반: profile.decoderThreads
+        // SystemLoadMonitor로 thermal/lowPower 시 동적 throttle (warm→2/3, hot→1/3)
+        let baseThreads: Int
+        if forceMax {
+            // [Opt-V-B] 멀티라이브 계열은 N개 엔진이 동시 디코딩 — 싱글 캡(6)을 그대로 쓰면
+            // 4세션 × 6스레드 = 24 스레드로 P/E 코어 포화. 프로파일 의도(decoderThreads=1)
+            // 와 화질 잠금 사이에서 per-engine 상한을 낮게 유지한다.
+            if profile.isMultiLiveFamily {
+                baseThreads = (profile == .multiLiveHQ)
+                    ? min(SystemLoadMonitor.shared.activeProcessorCount, 3) // 선택 HQ
+                    : 2                                                    // 비선택
+            } else {
+                // 싱글 스트림: Apple Silicon P+E 적극 활용 (H.264/HEVC sweet spot=6)
+                baseThreads = min(SystemLoadMonitor.shared.activeProcessorCount, 6)
+            }
+        } else {
+            baseThreads = profile.decoderThreads
+        }
+        let decoderThreads = SystemLoadMonitor.shared.currentMode.adjustedDecoderThreads(base: baseThreads)
+        media.addOption(":avcodec-threads=\(decoderThreads)")
+        // [Quality] avcodec-fast: 싱글 스트림에서는 비활성 (디블로킹 완전 적용으로 원본 화질 유지)
+        if profile.avcodecFast && !forceMax {
+            media.addOption(":avcodec-fast=1")
+        }
+        media.addOption(":http-reconnect")
+        // [Quality Lock] forceMax면 해상도 캡핑/대역폭 코디네이터 캡 무시 (무제한)
+        // [Buffering Phase 1 / 2026-04-30] 단, 비선택 멀티라이브 세션은 사용자가 보지 않는
+        //   상태이므로 forceMax 라도 720p 캡을 강제 적용해 디코딩 부하를 절감한다.
+        //   사용자가 비선택 세션을 선택으로 전환하면 multiLiveHQ 프로파일로 즉시 승격되어
+        //   1080p 가 자동 복원된다 (MultiLiveManager.selectSession 경로).
+        let isNonSelectedMultiCap = profile.isMultiLiveFamily && !isSelectedSession
+        let maxW: Int
+        let maxH: Int
+        if forceMax && !isNonSelectedMultiCap {
+            maxW = 0
+            maxH = 0
+        } else {
+            maxW = profile.adaptiveMaxWidth(isSelected: isSelectedSession)
+            var h = profile.adaptiveMaxHeight(isSelected: isSelectedSession)
+            if maxAdaptiveHeight > 0 {
+                h = min(h, maxAdaptiveHeight)
+            }
+            maxH = h
+        }
+        // [Quality] 0 = 무제한 (VLC가 소스 원본 해상도 사용) — 싱글 스트림용
+        if maxW > 0 { media.addOption(":adaptive-maxwidth=\(maxW)") }
+        if maxH > 0 { media.addOption(":adaptive-maxheight=\(maxH)") }
+        // [Quality Lock] forceMax면 항상 highest. 기존: 멀티라이브 비선택만 predictive
+        if forceMax {
+            media.addOption(":adaptive-logic=highest")
+        } else if profile == .multiLive && !isSelectedSession {
+            // 비선택 멀티라이브만 predictive — HQ/선택 세션은 위 분기에서 highest 유지
+            media.addOption(":adaptive-logic=predictive")
+        } else {
+            media.addOption(":adaptive-logic=highest")
+        }
+        media.addOption(":deinterlace=0")
+        media.addOption(":postproc-q=0")
+        media.addOption(":clock-jitter=\(profile.clockJitter)")
+        media.addOption(":clock-synchro=0")
+        media.addOption(":codec=videotoolbox,avcodec")
+        media.addOption(":avcodec-hw=videotoolbox")
+        media.addOption(":http-referrer=\(CommonHeaders.chzzkReferer)")
+        media.addOption(":http-user-agent=\(CommonHeaders.safariUserAgent)")
+
+        // [Stream Proxy Mode] .directVLCAdaptive — 잘못된 Content-Type 을 무시하고
+        // adaptive(HLS) 데모서를 강제 지정. 로컬 프록시 없이 chzzk CDN 직접 재생 시도.
+        if streamProxyMode == .directVLCAdaptive {
+            media.addOption(":demux=adaptive,hls")
+            media.addOption(":adaptive-use-access")
+            // ffmpeg/avformat 옵션도 강제 (videotoolbox 디코더 진입 보장)
+            media.addOption(":no-avcodec-hurry-up")
+            media.addOption(":avformat-format=hls")
+        }
+        if profile.dropLateFrames { media.addOption(":drop-late-frames=1") }
+        // [Quality Lock] skip-frames/hurry-up/skiploopfilter/skip-idct/B-frame skip은
+        // forceMax일 때 모두 비활성 — 원본 품질 유지 (GPU/CPU 사용량 증가 감수)
+        if profile.skipFrames && !forceMax { media.addOption(":skip-frames=1") }
+        if profile.hurryUp && !forceMax { media.addOption(":avcodec-hurry-up=1") }
+        // prefetch-buffer-size: 선택 HQ는 저지연 표준값, 비선택 멀티라이브는 상향
+        if profile == .multiLive {
+            media.addOption(":prefetch-buffer-size=786432")
+        } else {
+            media.addOption(":prefetch-buffer-size=393216")
+        }
+        if profile.skipLoopFilter > 0 && !forceMax {
+            media.addOption(":avcodec-skiploopfilter=\(profile.skipLoopFilter)")
+        }
+        if profile == .multiLive && !forceMax {
+            media.addOption(":avcodec-skip-idct=4")
+        }
+        if profile == .multiLive && !isSelectedSession && !forceMax {
+            // [Phase C] B/P 비참조 프레임 스킵 (=2 = AVDISCARD_NONREF) — 비선택 멀티라이브 전용
+            // 기존 =1 (B-frames만) → =2 (비참조 프레임 전체) 로 강화.
+            // 비선택 세션은 이미 0.75× 다운스케일 + 저지연 프로파일로 사용자 체감 영향 극소.
+            media.addOption(":avcodec-skip-frame=2")
+        }
+
+        // [Codec Tune 2026-04-23] 사용하지 않는 렌더 패스 일괄 비활성화.
+        // 모두 라이브 스트림 시청 시 호출되지 않는 부가 기능 — VLC 내부에서 핸들러 등록/이벤트 디스패치 비용을 제거한다.
+        // 화질·반응성에 무영향, 설정 변경 시 부작용 없음.
+        media.addOption(":no-osd")                    // OSD(볼륨/시간 오버레이) 렌더 패스 제거
+        media.addOption(":no-spu")                    // 자막 픽처 렌더 패스 제거 (라이브에 자막 없음)
+        media.addOption(":no-sub-autodetect-file")    // 디스크 자막 파일 스캔 스킵
+        media.addOption(":no-snapshot-preview")       // 스냅샷 프리뷰 합성 스킵
+        media.addOption(":no-video-title-show")       // 시작 시 파일명 오버레이 스킵
+        // [Phase 2 fix / 2026-04-30] :no-stats 제거.
+        //   VLCPlayerEngine.collectMetrics() 가 player.media?.statistics 를 직접 읽어
+        //   FPS / bufferHealth / displayedPictures 등을 계산하므로, :no-stats 가 켜지면
+        //   해당 카운터가 영구 0 으로 보고되어 ABR/PID 모두 거짓 신호를 받는다.
+        //   (네트워크 모니터에서 FPS/버퍼가 영구 "-" 로 표시되던 원인.)
+
+        // [Codec Tune 2026-04-23] 비선택 멀티라이브: 오디오 타임 스트레치 비활성화
+        // — LowLatencyController 의 rate 기반 catchup 은 선택 세션에만 적용되므로
+        //   비선택은 1.0× 고정. 타임 스트레치 처리 비용을 완전히 제거한다.
+        if isNonSelectedMulti {
+            media.addOption(":no-audio-time-stretch")
+        }
+    }
+}

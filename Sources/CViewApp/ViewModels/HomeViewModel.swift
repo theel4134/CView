@@ -1,0 +1,904 @@
+// MARK: - HomeViewModel.swift
+// CViewApp - Home screen ViewModel
+// Dashboard 통계 데이터 포함
+
+import Foundation
+import SwiftUI
+import CViewCore
+import CViewNetworking
+import CViewPersistence
+
+// MARK: - Home ViewModel
+
+@Observable
+@MainActor
+public final class HomeViewModel {
+    
+    // MARK: - State
+    
+    public var liveChannels: [LiveChannelItem] = []     // UI 표시용 (페이지 단위 로드)
+    public var allStatChannels: [LiveChannelItem] = []  // 통계 집계용 (전체 채널)
+    public var recommendedChannels: [LiveChannelItem] = []
+    public var followingChannels: [LiveChannelItem] = []
+    
+    public var isLoading = false
+    public var isLoadingStats = false  // 전체 통계 수집 중 여부
+    public var isLoadingFollowing = false
+    public var errorMessage: String?
+    public var searchQuery = ""
+
+    /// 전체 통계 수집 실패 시 마지막 에러 메시지 (C6: 에러 상태 UI)
+    public var statsLoadError: String?
+    /// 전체 통계 마지막 수집 시각 (C5: stale 판별용)
+    public var allStatLastLoadedAt: Date?
+    
+    // 통계 수집 진행률
+    public var statsCollectionProgress: Double = 0
+    public var statsCollectedCount: Int = 0
+    public var statsEstimatedTotal: Int? = nil
+    
+    /// 팔로잉 조회 시 NID 쿠키 부재로 인증 실패했을 때 true
+    public var needsCookieLogin = false
+    
+    // Pagination (UI용) — 커서 기반 (concurrentUserCount + liveId)
+    public var hasMoreChannels = true
+    private var nextLiveCursor: LivePageCursor? = nil
+    private let pageSize = 20
+    
+    // Dashboard stats
+    public var viewerHistory: [ViewerHistoryEntry] = []
+    private var lastSnapshotTime: Date?
+    
+    // MARK: - Metrics Server State
+    
+    /// 서버 전체 통계
+    public var serverStats: MetricsServerStats?
+    /// 서버 연결 상태
+    public var isMetricsServerOnline = false
+    /// 서버 채널별 통계
+    public var serverChannelStats: [ChannelStatsItem] = []
+    /// 레이턴시 이력 (차트용)
+    public var latencyHistory: [LatencyHistoryEntry] = []
+    /// 서버 업타임 (초)
+    public var serverUptime: Double = 0
+    /// 서버에서 수신한 총 메트릭 수
+    public var serverTotalReceived: Int = 0
+    /// 활성 앱 채널 수
+    public var activeAppChannelCount: Int = 0
+    /// 서버 마지막 갱신 시각
+    public var serverLastUpdate: Date?
+    /// 서버 시스템 상태 (DB, 레코드 수)
+    public var systemStats: MetricsSystemData?
+    /// WebSocket 연결 상태
+    public var isWebSocketConnected = false
+    /// WebSocket 실시간 수신 카운터 (세션 내)
+    public var wsMessageCount: Int = 0
+    @ObservationIgnored private var _wsMessageCountRaw: Int = 0
+    @ObservationIgnored private var _lastWsCountFlush: Date = .distantPast
+    
+    private var lastLatencySnapshotTime: Date?
+    private var metricsPollingTask: Task<Void, Never>?
+    private var wsStreamTask: Task<Void, Never>?
+    private var autoRefreshTask: Task<Void, Never>?
+    private var statsAutoRefreshTask: Task<Void, Never>?
+
+    /// 백그라운드 자동 통계 갱신 중 여부 (초기 로딩과 구분 — 캐시 데이터 표시 유지용)
+    public var isAutoRefreshingStats: Bool = false
+    
+    // MARK: - Cached Stats (데이터 변경 시 1회 계산, body 접근 시 O(1))
+    
+    /// 카테고리 탐색용: 통계 수집 완료 시 allStatChannels, 아직이면 liveChannels
+    public var categoryChannels: [LiveChannelItem] {
+        allStatChannels.isEmpty ? liveChannels : allStatChannels
+    }
+    
+    public private(set) var totalViewers: Int = 0
+    public private(set) var averageViewers: Int = 0
+    public private(set) var categoryCount: Int = 0
+    public private(set) var totalLiveChannelCount: Int = 0
+    public private(set) var topCategories: [CategoryStat] = []
+    public private(set) var followingLiveCount: Int = 0
+    public private(set) var recentLiveFollowing: [LiveChannelItem] = []
+    public private(set) var topChannels: [LiveChannelItem] = []
+    public private(set) var categoryTypeDistribution: [CategoryTypeStat] = []
+    public private(set) var viewerBuckets: [ViewerBucket] = []
+    public private(set) var medianViewers: Int = 0
+    public private(set) var followingLiveRate: Int = 0
+    public private(set) var followingTotalViewers: Int = 0
+    public private(set) var topThreeChannels: [LiveChannelItem] = []
+
+    /// 서버 채널 중 평균 웹 레이턴시 (samples > 0인 채널만)
+    public var avgWebLatency: Double? {
+        let vals = serverChannelStats.compactMap { ch -> Double? in
+            guard let web = ch.web, (web.samples ?? 0) > 0, let avg = web.avg else { return nil }
+            return avg
+        }
+        guard !vals.isEmpty else { return nil }
+        return vals.reduce(0, +) / Double(vals.count)
+    }
+    
+    /// 서버 채널 중 평균 앱 레이턴시 (samples > 0인 채널만)
+    public var avgAppLatency: Double? {
+        let vals = serverChannelStats.compactMap { ch -> Double? in
+            guard let app = ch.app, (app.samples ?? 0) > 0, let avg = app.avg else { return nil }
+            return avg
+        }
+        guard !vals.isEmpty else { return nil }
+        return vals.reduce(0, +) / Double(vals.count)
+    }
+    
+    /// CView 전체 통계 집계 (품질 등급, 동기화율 등)
+    public var cviewAggregate: CViewAggregate? {
+        serverStats?.cviewSummary?.aggregate
+    }
+    
+    /// CView 연결 클라이언트 수
+    public var cviewConnectedClients: Int {
+        serverStats?.cviewSummary?.connectedClients ?? 0
+    }
+    
+    /// CView 동기화 채널 목록
+    public var cviewSyncChannels: [CViewStatsSyncChannel] {
+        serverStats?.cviewSummary?.syncChannels ?? []
+    }
+
+    /// 서버 버전
+    public var serverVersion: String? {
+        serverStats?.serverVersion
+    }
+    
+    /// 서버 포맷 업타임
+    public var formattedUptime: String {
+        let hours = Int(serverUptime) / 3600
+        let mins = (Int(serverUptime) % 3600) / 60
+        if hours > 0 { return "\(hours)h \(mins)m" }
+        return "\(mins)m"
+    }
+
+    /// statsSource 변경 시 1회 호출 — O(N log N) 연산을 백그라운드 스레드에서 수행
+    @ObservationIgnored private var _recomputeStatsTask: Task<Void, Never>?
+
+    private func recomputeStats() {
+        _recomputeStatsTask?.cancel()
+        let statChannels = allStatChannels
+        let live = liveChannels
+        // [Fix 32] PowerAware: AC=.userInitiated(P-core), Battery=.utility(E-core)로 통계 재계산
+        _recomputeStatsTask = Task.detached(priority: PowerAwareTaskPriority.userVisible) { [weak self] in
+            let result = Self.computeChannelStats(
+                allStatChannels: statChannels,
+                liveChannels: live
+            )
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.totalLiveChannelCount = result.totalLiveChannelCount
+                self.totalViewers = result.totalViewers
+                self.averageViewers = result.averageViewers
+                self.categoryCount = result.categoryCount
+                self.topCategories = result.topCategories
+                self.topThreeChannels = result.topThreeChannels
+                self.topChannels = result.topChannels
+                self.categoryTypeDistribution = result.categoryTypeDistribution
+                self.viewerBuckets = result.viewerBuckets
+                self.medianViewers = result.medianViewers
+            }
+        }
+    }
+
+    private struct ComputedChannelStats: Sendable {
+        let totalLiveChannelCount: Int
+        let totalViewers: Int
+        let averageViewers: Int
+        let categoryCount: Int
+        let topCategories: [CategoryStat]
+        let topThreeChannels: [LiveChannelItem]
+        let topChannels: [LiveChannelItem]
+        let categoryTypeDistribution: [CategoryTypeStat]
+        let viewerBuckets: [ViewerBucket]
+        let medianViewers: Int
+    }
+
+    /// O(N log N) 통계 연산을 MainActor 격리 밖에서 수행
+    private nonisolated static func computeChannelStats(
+        allStatChannels: [LiveChannelItem],
+        liveChannels: [LiveChannelItem]
+    ) -> ComputedChannelStats {
+        let raw = allStatChannels.isEmpty ? liveChannels : allStatChannels
+
+        // 방어적 channelId 중복 제거
+        var seen = Set<String>()
+        let source = raw.filter { seen.insert($0.id).inserted }
+
+        let totalCount = source.count
+        let totalViewers = source.reduce(0) { $0 + $1.viewerCount }
+        let averageViewers = source.isEmpty ? 0 : totalViewers / totalCount
+
+        let categories = Set(source.compactMap { $0.categoryName })
+
+        let grouped = Dictionary(grouping: source) { $0.categoryName ?? "기타" }
+        let topCats = grouped.map { name, channels in
+            CategoryStat(
+                id: name,
+                name: name,
+                channelCount: channels.count,
+                totalViewers: channels.reduce(0) { $0 + $1.viewerCount }
+            )
+        }
+        .sorted { $0.totalViewers > $1.totalViewers }
+        .prefix(5)
+        .map { $0 }
+
+        let sorted = source.sorted { $0.viewerCount > $1.viewerCount }
+        let top3 = Array(sorted.prefix(3))
+        let top6 = Array(liveChannels.sorted { $0.viewerCount > $1.viewerCount }.prefix(6))
+
+        // 카테고리 타입별 분포
+        let typeDist: [CategoryTypeStat]
+        if !source.isEmpty {
+            let typeGrouped = Dictionary(grouping: source) { $0.categoryType ?? "ETC" }
+            typeDist = typeGrouped.map { type, channels in
+                CategoryTypeStat(
+                    id: type,
+                    type: type,
+                    displayName: CategoryTypeStat.displayName(for: type),
+                    channelCount: channels.count,
+                    totalViewers: channels.reduce(0) { $0 + $1.viewerCount },
+                    percentage: Double(channels.count) / Double(totalCount) * 100
+                )
+            }
+            .sorted { $0.channelCount > $1.channelCount }
+        } else {
+            typeDist = []
+        }
+
+        // 시청자 구간별 분포 — O(N)
+        let defs: [(label: String, min: Int, max: Int)] = [
+            ("0~100", 0, 100), ("100~1K", 100, 1_000),
+            ("1K~1만", 1_000, 10_000), ("1만+", 10_000, Int.max)
+        ]
+        var counts = Array(repeating: 0, count: defs.count)
+        for item in source {
+            let v = item.viewerCount
+            if v < 100 { counts[0] += 1 }
+            else if v < 1_000 { counts[1] += 1 }
+            else if v < 10_000 { counts[2] += 1 }
+            else { counts[3] += 1 }
+        }
+        let buckets = defs.enumerated().map { idx, d in
+            ViewerBucket(id: d.label, label: d.label, count: counts[idx], minViewers: d.min, maxViewers: d.max)
+        }
+
+        // 중앙값 — O(N log N)
+        let viewersSorted = source.map { $0.viewerCount }.sorted()
+        let median: Int
+        if viewersSorted.isEmpty {
+            median = 0
+        } else {
+            let mid = viewersSorted.count / 2
+            median = viewersSorted.count % 2 == 0 ? (viewersSorted[mid - 1] + viewersSorted[mid]) / 2 : viewersSorted[mid]
+        }
+
+        return ComputedChannelStats(
+            totalLiveChannelCount: totalCount,
+            totalViewers: totalViewers,
+            averageViewers: averageViewers,
+            categoryCount: categories.count,
+            topCategories: topCats,
+            topThreeChannels: top3,
+            topChannels: top6,
+            categoryTypeDistribution: typeDist,
+            viewerBuckets: buckets,
+            medianViewers: median
+        )
+    }
+
+    /// followingChannels 통계를 MainActor 외부에서 계산
+    private struct FollowingStats: Sendable {
+        let liveCount: Int
+        let recentLive: [LiveChannelItem]
+        let totalViewers: Int
+        let liveRate: Int
+    }
+
+    private nonisolated static func computeFollowingStats(from channels: [LiveChannelItem]) -> FollowingStats {
+        let live = channels.filter { $0.isLive }
+        return FollowingStats(
+            liveCount: live.count,
+            recentLive: Array(live.prefix(6)),
+            totalViewers: live.reduce(0) { $0 + $1.viewerCount },
+            liveRate: channels.isEmpty ? 0 : live.count * 100 / channels.count
+        )
+    }
+    
+    // MARK: - Dependencies
+    
+    private let apiClient: ChzzkAPIClient
+    private var metricsClient: MetricsAPIClient?
+    private var wsClient: MetricsWebSocketClient?
+    private let logger = AppLogger.app
+
+    // MARK: - Cache
+
+    /// 로컬 캐시 저장소 (설정 후 자동으로 캐시 복원)
+    public var dataStore: DataStore? {
+        didSet { Task { await loadFromCache() } }
+    }
+
+    public var liveChannelsCachedAt: Date?
+    public var allStatCachedAt: Date?
+    public var followingCachedAt: Date?
+
+    private enum CacheKey {
+        static let liveChannels      = "cache.liveChannels"
+        static let allStatChannels   = "cache.allStatChannels"
+        static let followingChannels = "cache.followingChannels"
+        static let liveChannelsCachedAt      = "cache.liveChannels.ts"
+        static let allStatCachedAt           = "cache.allStatChannels.ts"
+        static let followingCachedAt         = "cache.followingChannels.ts"
+    }
+
+    /// 캐시에서 데이터 복원 (앱 재실행 시 즉시 표시용)
+    public func loadFromCache() async {
+        guard let store = dataStore else { return }
+        do {
+            if let cached = try await store.loadSetting(key: CacheKey.liveChannels, as: [LiveChannelItem].self), !cached.isEmpty {
+                if liveChannels.isEmpty { liveChannels = cached }
+            }
+            if let cached = try await store.loadSetting(key: CacheKey.allStatChannels, as: [LiveChannelItem].self), !cached.isEmpty {
+                if allStatChannels.isEmpty { allStatChannels = cached }
+            }
+            if let cached = try await store.loadSetting(key: CacheKey.followingChannels, as: [LiveChannelItem].self), !cached.isEmpty {
+                if followingChannels.isEmpty { followingChannels = cached }
+            }
+            liveChannelsCachedAt      = try await store.loadSetting(key: CacheKey.liveChannelsCachedAt, as: Date.self)
+            allStatCachedAt           = try await store.loadSetting(key: CacheKey.allStatCachedAt, as: Date.self)
+            followingCachedAt         = try await store.loadSetting(key: CacheKey.followingCachedAt, as: Date.self)
+            let lc = liveChannels.count, sc = allStatChannels.count, fc = followingChannels.count
+            logger.info("캐시 복원: 라이브 \(lc)개, 전체통계 \(sc)개, 팔로잉 \(fc)개")
+            recomputeStats()
+            let fStats = Self.computeFollowingStats(from: followingChannels)
+            followingLiveCount = fStats.liveCount
+            recentLiveFollowing = fStats.recentLive
+            followingTotalViewers = fStats.totalViewers
+            followingLiveRate = fStats.liveRate
+        } catch {
+            logger.error("캐시 로드 실패: \(error)")
+        }
+    }
+    
+    // MARK: - Initialization
+    
+    public init(apiClient: ChzzkAPIClient, metricsClient: MetricsAPIClient? = nil, wsClient: MetricsWebSocketClient? = nil) {
+        self.apiClient = apiClient
+        self.metricsClient = metricsClient
+        self.wsClient = wsClient
+    }
+    
+    /// 메트릭 서비스 설정 (앱 초기화 후 호출)
+    public func configureMetrics(client: MetricsAPIClient, wsClient: MetricsWebSocketClient) {
+        self.metricsClient = client
+        self.wsClient = wsClient
+        startMetricsPolling()
+        startWebSocketStream()
+    }
+    
+    // MARK: - Auto Refresh (홈 화면 표시 중 90초 주기)
+    
+    /// 홈 화면 표시 시 90초 주기 경량 자동 갱신 시작
+    /// - 라이브 채널 첫 페이지 + 팔로잉만 갱신 (가벼운 API 2회)
+    /// - 전체 통계(allStatsChannels)는 수동 새로고침 시에만 수행 (무거운 전체 페이지 순회)
+    /// - 메트릭 서버는 별도 30초 폴링으로 관리
+    public func startAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = Task { [weak self] in
+            // [Fix N-2] PowerAware: AC 90s / Battery 135s — idle 시 폴링 비용 33% 감소
+            let intervalSec = PowerAwareInterval.scaled(90)
+            for await _ in AsyncTimerSequence(interval: .seconds(intervalSec), tolerance: .seconds(10)) {
+                guard !Task.isCancelled else { break }
+                await self?.lightRefresh()
+            }
+        }
+
+        // 치지직 전체 통계(allStatChannels) 자동 갱신 — 300s(AC) / 450s(Battery)
+        statsAutoRefreshTask?.cancel()
+        statsAutoRefreshTask = Task { [weak self] in
+            let statsIntervalSec = PowerAwareInterval.scaled(300)
+            for await _ in AsyncTimerSequence(interval: .seconds(statsIntervalSec), tolerance: .seconds(30)) {
+                guard !Task.isCancelled else { break }
+                await self?.autoRefreshStats()
+            }
+        }
+    }
+    
+    /// 홈 화면 이탈 시 자동 갱신 중지
+    public func stopAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+        statsAutoRefreshTask?.cancel()
+        statsAutoRefreshTask = nil
+    }
+
+    /// 백그라운드에서 치지직 통계만 갱신 (기존 캐시 데이터는 유지, "자동업데이트 중" 플래그 사용)
+    public func autoRefreshStats() async {
+        guard !isLoadingStats else { return }
+        isAutoRefreshingStats = true
+        await loadAllStatsChannels()
+        isAutoRefreshingStats = false
+    }
+    
+    /// 메트릭 폴링 중지
+    public func stopMetrics() {
+        metricsPollingTask?.cancel()
+        metricsPollingTask = nil
+        wsStreamTask?.cancel()
+        wsStreamTask = nil
+        Task { await wsClient?.disconnect() }
+    }
+
+    /// 메트릭 폴링 일시 완속화 — 앱 비활성 시 120s 간격으로 전환
+    public func pauseMetricsPolling() {
+        guard metricsClient != nil else { return }
+        metricsPollingTask?.cancel()
+        metricsPollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(120))
+                guard !Task.isCancelled else { break }
+                await self?.loadServerStats()
+            }
+        }
+    }
+
+    /// [Tune] 장기 비활성(5분+) 시 메트릭 WebSocket 완전 단절 — idle keep-alive 트래픽 제거
+    /// AppState의 5분 타이머에서 호출됨.
+    public func suspendMetricsForLongIdle() {
+        wsStreamTask?.cancel()
+        wsStreamTask = nil
+        let ws = wsClient
+        Task { await ws?.disconnect() }
+        isWebSocketConnected = false
+        logger.info("메트릭 WebSocket 장기 idle 주기로 인해 단절")
+    }
+
+    /// [Tune] 앱 포그라운드 복귀 시 메트릭 WebSocket 재연결
+    public func resumeMetricsAfterIdle() {
+        guard wsStreamTask == nil, wsClient != nil else { return }
+        startWebSocketStream()
+        logger.info("메트릭 WebSocket 재연결")
+    }
+
+    /// 메트릭 폴링 재개 — 앱 활성화 시 즉시 1회 갱신 후 30s 간격 복구
+    public func resumeMetricsPolling() {
+        guard metricsClient != nil else { return }
+        metricsPollingTask?.cancel()
+        metricsPollingTask = Task { [weak self] in
+            await self?.loadServerStats()  // 즉시 1회 갱신
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { break }
+                await self?.loadServerStats()
+            }
+        }
+    }
+    
+    // MARK: - Data Loading
+    
+    /// UI용 첫 페이지 로드 (pageSize개, 빠른 표시용)
+    public func loadLiveChannels() async {
+        guard !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        nextLiveCursor = nil  // 커서 초기화
+        
+        do {
+            let response = try await apiClient.topLives(size: pageSize)
+            let items = response.data.map { info in
+                LiveChannelItem(
+                    id: info.channel?.channelId ?? "\(info.liveId)",
+                    channelName: info.channel?.channelName ?? "Unknown",
+                    channelImageUrl: info.channel?.channelImageURL?.absoluteString,
+                    liveTitle: info.liveTitle,
+                    viewerCount: info.concurrentUserCount,
+                    categoryName: info.liveCategoryValue,
+                    categoryType: info.categoryType,
+                    thumbnailUrl: info.resolvedLiveImageURL?.absoluteString,
+                    channelId: info.channel?.channelId ?? ""
+                )
+            }
+            liveChannels = items
+            nextLiveCursor = response.page?.next
+            hasMoreChannels = nextLiveCursor != nil
+            recomputeStats()
+            recordViewerSnapshot()
+            logger.info("Loaded \(items.count) live channels")
+            // 캐시 저장
+            let now = Date()
+            liveChannelsCachedAt = now
+            Task { [store = dataStore, channels = items, ts = now] in
+                guard let store else { return }
+                try? await store.saveSetting(key: CacheKey.liveChannels, value: channels)
+                try? await store.saveSetting(key: CacheKey.liveChannelsCachedAt, value: ts)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            logger.error("Failed to load live channels: \(error)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// 통계 집계용 전체 라이브 채널 수집 (진행률 + 중복 제거 + 에러 탄력성)
+    public func loadAllStatsChannels() async {
+        guard !isLoadingStats else { return }
+        isLoadingStats = true
+        statsLoadError = nil
+        statsCollectionProgress = 0
+        statsCollectedCount = 0
+        statsEstimatedTotal = nil
+        
+        do {
+            let all = try await apiClient.allLiveChannelsProgressive(batchSize: 50) { [weak self] progress in
+                guard let self else { return }
+                self.statsCollectedCount = progress.currentCount
+                self.statsEstimatedTotal = progress.estimatedTotal
+                if let total = progress.estimatedTotal, total > 0 {
+                    self.statsCollectionProgress = min(Double(progress.currentCount) / Double(total), 1.0)
+                }
+                // 매 5페이지마다 중간 통계 갱신
+                if progress.currentPage % 5 == 0 {
+                    self.updateStatsFromPartial(all: nil)
+                }
+            }
+            let items = all.map { info in
+                LiveChannelItem(
+                    id: info.channel?.channelId ?? "\(info.liveId)",
+                    channelName: info.channel?.channelName ?? "Unknown",
+                    channelImageUrl: info.channel?.channelImageURL?.absoluteString,
+                    liveTitle: info.liveTitle,
+                    viewerCount: info.concurrentUserCount,
+                    categoryName: info.liveCategoryValue,
+                    categoryType: info.categoryType,
+                    thumbnailUrl: info.liveImageURL?.absoluteString,
+                    channelId: info.channel?.channelId ?? ""
+                )
+            }
+            allStatChannels = items
+            allStatLastLoadedAt = Date()
+            statsCollectionProgress = 1.0
+            statsCollectedCount = items.count
+            recomputeStats()
+            recordViewerSnapshot()
+            logger.info("» 전체 라이브 통계 수집 완료: \(items.count)개 채널, 총 \(items.reduce(0) { $0 + $1.viewerCount })명")
+            // 캐시 저장
+            let now = Date()
+            allStatCachedAt = now
+            Task { [store = dataStore, stat = items, ts = now] in
+                guard let store else { return }
+                try? await store.saveSetting(key: CacheKey.allStatChannels, value: stat)
+                try? await store.saveSetting(key: CacheKey.allStatCachedAt, value: ts)
+            }
+        } catch {
+            logger.error("전체 통계 수집 실패: \(error)")
+            // [C6] UI에 노출할 에러 메시지 (기존 allStatChannels 는 보존 — C2)
+            statsLoadError = (error as NSError).localizedDescription
+        }
+        
+        isLoadingStats = false
+    }
+
+    /// [C5] 전체 통계가 stale 이면 재수집. 아니면 no-op.
+    /// - Parameter ttlSeconds: 허용 신선도 (기본 600초 = 10분)
+    public func loadAllStatsChannelsIfStale(ttlSeconds: TimeInterval = 600) async {
+        if allStatChannels.isEmpty {
+            await loadAllStatsChannels()
+            return
+        }
+        if let last = allStatLastLoadedAt,
+           Date().timeIntervalSince(last) < ttlSeconds {
+            return  // fresh
+        }
+        await loadAllStatsChannels()
+    }
+    
+    /// 부분 수집 중 중간 통계 갱신
+    private func updateStatsFromPartial(all: [LiveChannelItem]?) {
+        if let all {
+            allStatChannels = all
+        }
+        recomputeStats()
+    }
+    
+    /// Load more channels (커서 기반 페이지네이션)
+    public func loadMoreChannels() async {
+        guard hasMoreChannels, !isLoading else { return }
+        isLoading = true
+
+        do {
+            let response = try await apiClient.topLives(
+                size: pageSize,
+                concurrentUserCount: nextLiveCursor?.concurrentUserCount,
+                liveId: nextLiveCursor?.liveId
+            )
+            let items = response.data.map { info in
+                LiveChannelItem(
+                    id: info.channel?.channelId ?? "\(info.liveId)",
+                    channelName: info.channel?.channelName ?? "Unknown",
+                    channelImageUrl: info.channel?.channelImageURL?.absoluteString,
+                    liveTitle: info.liveTitle,
+                    viewerCount: info.concurrentUserCount,
+                    categoryName: info.liveCategoryValue,
+                    categoryType: info.categoryType,
+                    thumbnailUrl: info.resolvedLiveImageURL?.absoluteString,
+                    channelId: info.channel?.channelId ?? ""
+                )
+            }
+            liveChannels.append(contentsOf: items)
+            nextLiveCursor = response.page?.next
+            hasMoreChannels = nextLiveCursor != nil
+            recomputeStats()
+        } catch {
+            logger.error("Failed to load more channels: \(error)")
+        }
+
+        isLoading = false
+    }
+    
+    /// Load following channels
+    public func loadFollowingChannels() async {
+        await loadFollowingChannels(invalidateThumbnails: false)
+    }
+
+    /// Load following channels (썸네일 강제 재다운로드 옵션 포함)
+    /// - Parameter invalidateThumbnails: true이면 라이브 썸네일 + 프로필 이미지 캐시를 만료시켜 즉시 새 이미지 표시
+    public func loadFollowingChannels(invalidateThumbnails: Bool) async {
+        // [Fix] 중복 호출 가드 — 이미 로딩 중이면 무시 (무한 새로고침 방지)
+        guard !isLoadingFollowing else {
+            logger.debug("loadFollowingChannels 중복 호출 무시 (이미 로딩 중)")
+            return
+        }
+        isLoadingFollowing = true
+        defer { isLoadingFollowing = false }
+
+        // 썸네일 강제 무효화 — 새로고침 시 즉시 새 이미지 표시
+        if invalidateThumbnails {
+            await LiveThumbnailService.shared.invalidateAll()
+            // 프로필 이미지도 재로드를 유도하기 위해 현재 팔로잉 채널들의 channelImageUrl 무효화
+            let profileURLs = followingChannels.compactMap { URL(string: $0.channelImageUrl ?? "") }
+            await ImageCacheService.shared.invalidate(urls: profileURLs)
+        }
+
+        do {
+            let response = try await apiClient.fetchFollowingChannels()
+            // 통계를 백그라운드에서 미리 계산 → MainActor 차단 최소화
+            let stats = Self.computeFollowingStats(from: response)
+            followingChannels = response
+            needsCookieLogin = false
+            followingLiveCount = stats.liveCount
+            recentLiveFollowing = stats.recentLive
+            followingTotalViewers = stats.totalViewers
+            followingLiveRate = stats.liveRate
+            logger.info("팔로잉 채널 로드 완료: \(response.count)개, 라이브=\(stats.liveCount)")
+            // 캐시 저장
+            let now = Date()
+            followingCachedAt = now
+            Task { [store = dataStore, following = response, ts = now] in
+                guard let store else { return }
+                try? await store.saveSetting(key: CacheKey.followingChannels, value: following)
+                try? await store.saveSetting(key: CacheKey.followingCachedAt, value: ts)
+            }
+        } catch let error as APIError where error == .unauthorized {
+            needsCookieLogin = true
+            logger.warning("팔로잉 조회 실패: 쿠키 인증 필요 — 네이버 로그인으로 NID 쿠키를 획득하세요")
+        } catch {
+            logger.error("팔로잉 채널 로드 실패: \(error)")
+        }
+    }
+    
+    /// 전체 새로고침 (수동 새로고침 시 사용)
+    public func refresh() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadLiveChannels() }       // UI용 첫 페이지 (빠름)
+            group.addTask { await self.loadAllStatsChannels() }   // 통계용 전체 (백그라운드)
+            group.addTask { await self.loadFollowingChannels(invalidateThumbnails: true) }
+            group.addTask { await self.loadServerStats() }
+            group.addTask { await self.loadSystemStats() }
+        }
+    }
+    
+    /// 경량 갱신 (자동 갱신용 — 무거운 전체 통계 제외)
+    public func lightRefresh() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadLiveChannels() }
+            group.addTask { await self.loadFollowingChannels() }
+            group.addTask { await self.loadSystemStats() }
+        }
+    }
+    
+    // MARK: - Metrics Server Data Loading
+    
+    /// 서버 통계 로드
+    public func loadServerStats() async {
+        guard let client = metricsClient else { return }
+        do {
+            // v4.5 overview API 우선 시도
+            let overview = try await client.fetchOverview()
+            isMetricsServerOnline = true
+            serverTotalReceived = overview.data?.totalMetrics ?? 0
+            activeAppChannelCount = overview.data?.activeChannels ?? 0
+            serverLastUpdate = Date()
+            
+            // health에서 uptime 보완
+            do {
+                let health = try await client.fetchHealth()
+                serverUptime = health.uptime ?? 0
+            } catch {
+                logger.debug("Health fetch failed (non-critical): \(error.localizedDescription)")
+            }
+            
+            // legacy /api/stats에서 채널 상세·CView 요약 등 대시보드 전용 데이터 로드
+            do {
+                let stats = try await client.fetchStats()
+                serverStats = stats
+                serverChannelStats = stats.channelStats ?? []
+            } catch {
+                logger.debug("Stats fetch failed (non-critical): \(error.localizedDescription)")
+            }
+            
+            recordLatencySnapshot(force: true)
+            logger.info("메트릭 서버 통계 로드 (v4.5): 활성 \(overview.data?.activeChannels ?? 0)채널, 라이브 \(overview.data?.liveCount ?? 0)")
+        } catch {
+            // v4.5 실패 시 legacy /api/stats 폴백
+            do {
+                let stats = try await client.fetchStats()
+                serverStats = stats
+                isMetricsServerOnline = true
+                serverChannelStats = stats.channelStats ?? []
+                serverUptime = stats.resolvedUptime
+                serverTotalReceived = stats.resolvedTotalReceived
+                serverLastUpdate = Date()
+                recordLatencySnapshot(force: true)
+                logger.info("메트릭 서버 통계 로드 (legacy): \(self.serverChannelStats.count) 채널")
+            } catch {
+                isMetricsServerOnline = false
+                logger.debug("메트릭 서버 연결 실패: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// 서버 시스템 상태 로드 (DB, 레코드 수)
+    public func loadSystemStats() async {
+        guard let client = metricsClient else { return }
+        do {
+            let response = try await client.fetchSystem()
+            systemStats = response.data
+        } catch {
+            logger.debug("시스템 상태 로드 실패: \(error.localizedDescription)")
+        }
+    }
+    
+    /// 30초 주기 메트릭 폴링 시작 (WebSocket 연결 시 90초로 자동 완속)
+    private func startMetricsPolling() {
+        metricsPollingTask?.cancel()
+        metricsPollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.loadServerStats()
+                // WebSocket 연결 시 실시간 데이터가 오므로 폴링 간격 증가
+                let interval: Duration = (self?.isWebSocketConnected == true) ? .seconds(90) : .seconds(30)
+                try? await Task.sleep(for: interval)
+            }
+        }
+    }
+    
+    /// WebSocket 실시간 스트림 구독
+    private func startWebSocketStream() {
+        guard let ws = wsClient else { return }
+        wsStreamTask?.cancel()
+        wsStreamTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let ws = self?.wsClient else { break }
+                self?.isWebSocketConnected = true
+                let stream = await ws.connect()
+                for await message in stream {
+                    guard !Task.isCancelled else { return }
+                    self?._wsMessageCountRaw += 1
+                    // 5초마다 UI 카운터 갱신 (매 메시지 렌더링 방지)
+                    let now = Date()
+                    if let s = self, now.timeIntervalSince(s._lastWsCountFlush) >= 5 {
+                        s.wsMessageCount = s._wsMessageCountRaw
+                        s.serverLastUpdate = now
+                        s._lastWsCountFlush = now
+                    }
+                    self?.handleWebSocketMessage(message)
+                }
+                self?.isWebSocketConnected = false
+                guard !Task.isCancelled else { return }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+    
+    /// WebSocket 메시지 처리
+    @MainActor
+    private func handleWebSocketMessage(_ msg: MetricsWebSocketMessage) {
+        switch msg.type {
+        case "stats":
+            if let total = msg.totalReceived {
+                serverTotalReceived = total
+            }
+            // serverLastUpdate는 WS 카운터 플러시 시에만 갱신하여 렌더링 절약
+            
+        case "metric":
+            // 실시간 메트릭 → 채널 통계 즉시 반영
+            applyRealtimeMetric(msg)
+            
+        case "app_active_channels":
+            activeAppChannelCount = msg.channels?.count ?? 0
+            
+        default:
+            break
+        }
+    }
+    
+    /// WebSocket metric 메시지 → 채널 통계 실시간 업데이트
+    @MainActor
+    private func applyRealtimeMetric(_ msg: MetricsWebSocketMessage) {
+        // data 필드 또는 최상위에서 채널 정보 추출
+        let channelId = msg.data?.channelId ?? msg.channelId
+        let latency = msg.data?.latency ?? msg.latency
+        let platform = msg.data?.platform ?? msg.platform
+        let channelName = msg.data?.channelName ?? msg.channelName
+        
+        guard let channelId, let latency else { return }
+        
+        // 기존 채널 찾기 또는 새로 추가
+        if let idx = serverChannelStats.firstIndex(where: { $0.channelId == channelId }) {
+            var stat = serverChannelStats[idx]
+            // 플랫폼별 레이턴시 업데이트
+            if platform == "web" || msg.source == "web" {
+                stat = stat.withUpdatedWebLatency(latency)
+            } else {
+                stat = stat.withUpdatedAppLatency(latency)
+            }
+            serverChannelStats[idx] = stat
+        } else if let channelName {
+            // 새 채널 — 최소 데이터로 항목 추가
+            let isWeb = platform == "web" || msg.source == "web"
+            let newStat = ChannelStatsItem.makeMinimal(
+                channelId: channelId,
+                channelName: channelName,
+                latency: latency,
+                isWeb: isWeb
+            )
+            serverChannelStats.append(newStat)
+        }
+        
+        recordLatencySnapshot()
+    }
+    
+    /// 레이턴시 스냅샷 기록 (최소 10초 간격으로 쓰로틀링)
+    private func recordLatencySnapshot(force: Bool = false) {
+        let now = Date()
+        if !force, let last = lastLatencySnapshotTime, now.timeIntervalSince(last) < 10 { return }
+        let web = avgWebLatency
+        let app = avgAppLatency
+        guard web != nil || app != nil else { return }
+        lastLatencySnapshotTime = now
+        latencyHistory.append(LatencyHistoryEntry(timestamp: now, webLatency: web, appLatency: app))
+        if latencyHistory.count > 30 {
+            latencyHistory.removeFirst(latencyHistory.count - 30)
+        }
+    }
+    
+    // MARK: - Viewer History
+    
+    private func recordViewerSnapshot() {
+        let now = Date()
+        // 최소 30초 간격으로 스냅샷
+        if let last = lastSnapshotTime, now.timeIntervalSince(last) < 30 { return }
+        lastSnapshotTime = now
+        viewerHistory.append(ViewerHistoryEntry(timestamp: now, totalViewers: totalViewers))
+        // 최근 30개만 유지
+        if viewerHistory.count > 30 {
+            viewerHistory.removeFirst(viewerHistory.count - 30)
+        }
+    }
+}

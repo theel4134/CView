@@ -1,0 +1,148 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141416"/>
+      <stop offset="1" stop-color="#101114"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00FFA3"/>
+      <stop offset="1" stop-color="#00A86B"/>
+    </linearGradient>
+    <linearGradient id="thumb1" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#203D35"/>
+      <stop offset="0.5" stop-color="#25354A"/>
+      <stop offset="1" stop-color="#181A1E"/>
+    </linearGradient>
+    <linearGradient id="thumb2" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#332145"/>
+      <stop offset="0.5" stop-color="#193B37"/>
+      <stop offset="1" stop-color="#15171B"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .headline { font: 700 18px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; fill: #F5F5F7; }
+      .body { font: 500 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #C8C8CD; }
+      .caption { font: 600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #8E8E93; }
+      .micro { font: 700 10px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; fill: #00FFA3; }
+      .panel { fill: #1C1C1E; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+      .elevated { fill: #242426; stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="24" y="22" width="1392" height="856" rx="24" fill="#17181A" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="24" y="22" width="236" height="856" rx="24" fill="#151618" stroke="rgba(255,255,255,0.06)"/>
+  <rect x="24" y="68" width="1392" height="1" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="52" cy="45" r="6" fill="#FF5F57"/>
+  <circle cx="74" cy="45" r="6" fill="#FFBD2E"/>
+  <circle cx="96" cy="45" r="6" fill="#28C840"/>
+
+  <text x="58" y="116" class="title">CView</text>
+  <rect x="48" y="146" width="188" height="38" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="171" class="caption">홈</text>
+  <rect x="48" y="196" width="188" height="38" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.45"/>
+  <text x="70" y="221" class="body" fill="#F5F5F7">라이브</text>
+  <rect x="48" y="246" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="268" class="caption">카테고리</text>
+  <rect x="48" y="292" width="188" height="34" rx="10" fill="#1C1C1E"/>
+  <text x="70" y="314" class="caption">검색</text>
+
+  <text x="300" y="116" class="title">Live Command Board</text>
+  <text x="300" y="142" class="body">팔로잉 라이브를 빠르게 고르고 재생 또는 멀티라이브에 추가하는 기본 라이브 메뉴</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="170" width="1068" height="118" rx="20" class="panel"/>
+    <text x="326" y="207" class="headline">라이브</text>
+    <rect x="392" y="186" width="82" height="30" rx="15" fill="#FF3B30" fill-opacity="0.16" stroke="#FF3B30" stroke-opacity="0.28"/>
+    <text x="416" y="206" class="micro" fill="#FF3B30">6 LIVE</text>
+    <rect x="486" y="186" width="78" height="30" rx="15" fill="#5BA3FF" fill-opacity="0.14"/>
+    <text x="508" y="206" class="micro" fill="#5BA3FF">12.4K</text>
+    <rect x="1004" y="184" width="106" height="32" rx="10" class="elevated"/>
+    <text x="1028" y="205" class="micro">새로고침</text>
+    <rect x="1120" y="184" width="106" height="32" rx="10" fill="url(#green)" fill-opacity="0.16" stroke="#00FFA3" stroke-opacity="0.3"/>
+    <text x="1140" y="205" class="micro">멀티라이브</text>
+    <rect x="1236" y="184" width="102" height="32" rx="10" class="elevated"/>
+    <text x="1258" y="205" class="micro">멀티채팅</text>
+
+    <rect x="326" y="232" width="370" height="36" rx="12" class="elevated"/>
+    <text x="352" y="255" class="caption">채널, 방송 제목, 카테고리 검색</text>
+    <rect x="712" y="232" width="168" height="36" rx="12" fill="#141416" stroke="rgba(255,255,255,0.08)"/>
+    <rect x="718" y="238" width="76" height="24" rx="12" fill="url(#green)"/>
+    <text x="742" y="254" class="micro" fill="#0A0A0A">전체</text>
+    <text x="820" y="254" class="caption">라이브</text>
+    <rect x="894" y="232" width="104" height="36" rx="12" class="elevated"/>
+    <text x="922" y="255" class="caption">정렬</text>
+    <rect x="1012" y="232" width="120" height="36" rx="12" fill="#FFAA00" fill-opacity="0.12" stroke="#FFAA00" stroke-opacity="0.28"/>
+    <text x="1040" y="255" class="micro" fill="#FFAA00">필터 2개</text>
+  </g>
+
+  <g>
+    <rect x="300" y="314" width="1068" height="46" rx="14" class="panel"/>
+    <rect x="322" y="324" width="72" height="26" rx="13" fill="url(#green)"/>
+    <text x="345" y="341" class="micro" fill="#0A0A0A">전체</text>
+    <rect x="404" y="324" width="82" height="26" rx="13" class="elevated"/>
+    <text x="428" y="341" class="caption">게임 3</text>
+    <rect x="496" y="324" width="82" height="26" rx="13" class="elevated"/>
+    <text x="520" y="341" class="caption">토크 2</text>
+    <rect x="588" y="324" width="82" height="26" rx="13" class="elevated"/>
+    <text x="612" y="341" class="caption">음악 1</text>
+    <rect x="680" y="324" width="64" height="26" rx="13" class="elevated"/>
+    <text x="701" y="341" class="caption">+5</text>
+  </g>
+
+  <g>
+    <text x="300" y="404" class="headline">Quick Live Strip</text>
+    <g transform="translate(300 426)">
+      <circle cx="34" cy="34" r="31" fill="#141416" stroke="#00FFA3" stroke-width="3"/>
+      <circle cx="54" cy="54" r="7" fill="#FF3B30"/>
+      <text x="0" y="84" class="caption">채널 A</text>
+    </g>
+    <g transform="translate(390 426)">
+      <circle cx="34" cy="34" r="31" fill="#141416" stroke="#00FFA3" stroke-width="3"/>
+      <circle cx="54" cy="54" r="7" fill="#FF3B30"/>
+      <text x="0" y="84" class="caption">채널 B</text>
+    </g>
+    <g transform="translate(480 426)">
+      <circle cx="34" cy="34" r="31" fill="#141416" stroke="#00FFA3" stroke-width="3"/>
+      <circle cx="54" cy="54" r="7" fill="#FF3B30"/>
+      <text x="0" y="84" class="caption">채널 C</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="542" width="1068" height="286" rx="22" class="panel"/>
+    <text x="326" y="580" class="headline">라이브 중</text>
+    <rect x="326" y="606" width="238" height="166" rx="18" class="elevated"/>
+    <rect x="340" y="620" width="210" height="90" rx="12" fill="url(#thumb1)"/>
+    <rect x="352" y="632" width="46" height="20" rx="10" fill="#FF3B30"/>
+    <text x="363" y="646" class="micro" fill="#FFFFFF">LIVE</text>
+    <text x="340" y="738" class="body">채널 A</text>
+    <text x="340" y="756" class="caption">방송 제목 · 8.2K</text>
+    <rect x="456" y="730" width="82" height="28" rx="14" fill="url(#green)"/>
+    <text x="476" y="748" class="micro" fill="#0A0A0A">재생</text>
+
+    <rect x="584" y="606" width="238" height="166" rx="18" class="elevated"/>
+    <rect x="598" y="620" width="210" height="90" rx="12" fill="url(#thumb2)"/>
+    <text x="598" y="738" class="body">채널 B</text>
+    <text x="598" y="756" class="caption">토크 · 2.1K</text>
+    <rect x="704" y="730" width="90" height="28" rx="14" fill="#5BA3FF" fill-opacity="0.20" stroke="#5BA3FF" stroke-opacity="0.35"/>
+    <text x="722" y="748" class="micro" fill="#5BA3FF">+ 멀티</text>
+
+    <rect x="842" y="606" width="238" height="166" rx="18" class="elevated"/>
+    <rect x="856" y="620" width="210" height="90" rx="12" fill="url(#thumb1)"/>
+    <text x="856" y="738" class="body">채널 C</text>
+    <text x="856" y="756" class="caption">음악 · 934</text>
+    <rect x="970" y="730" width="82" height="28" rx="14" fill="#FF9F0A" fill-opacity="0.18" stroke="#FF9F0A" stroke-opacity="0.34"/>
+    <text x="994" y="748" class="micro" fill="#FF9F0A">채팅</text>
+
+    <rect x="1100" y="606" width="238" height="166" rx="18" class="elevated"/>
+    <rect x="1114" y="620" width="210" height="90" rx="12" fill="url(#thumb2)"/>
+    <text x="1114" y="738" class="body">채널 D</text>
+    <text x="1114" y="756" class="caption">게임 · 721</text>
+    <rect x="1224" y="730" width="82" height="28" rx="14" class="elevated"/>
+    <text x="1248" y="748" class="micro">상세</text>
+  </g>
+</svg>
