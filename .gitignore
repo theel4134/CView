@@ -24,3 +24,6 @@ __pycache__/
 *.pyc
 default.profraw
 server-dev/mirror/
+
+# Local DerivedData (lowercase variant)
+.derivedData/
