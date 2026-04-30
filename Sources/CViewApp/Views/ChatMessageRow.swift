@@ -331,10 +331,28 @@ struct ChatMessageRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // [Light Mode Visibility 2026-04-30] 라이트 모드에서 후원 카드가 흰 배경에 묻혀
+        //   거의 식별되지 않던 문제를 해결: 배경 불투명도 0.10 → 0.18 상향, 티어 컬러
+        //   stroke 추가, 좌측 3pt accent bar 로 일반 메시지와 시각적으로 분명히 구분.
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                .fill(tierColor.opacity(0.10))
+                .fill(tierColor.opacity(0.18))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                .strokeBorder(tierColor.opacity(0.45), lineWidth: 1)
+        )
+        .overlay(alignment: .leading) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: DesignTokens.Radius.sm,
+                bottomLeadingRadius: DesignTokens.Radius.sm,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
+            .fill(tierColor)
+            .frame(width: 3)
+        }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
@@ -443,10 +461,28 @@ struct ChatMessageRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // [Light Mode Visibility 2026-04-30] 라이트 모드에서 구독 카드가 0.08 불투명도로
+        //   사실상 안 보였던 문제 해결: 0.08 → 0.16 상향, 구독 컬러 stroke 와 좌측
+        //   3pt accent bar 추가로 일반 채팅과 명확히 구분되게 한다.
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
-                .fill(subColor.opacity(0.08))
+                .fill(subColor.opacity(0.16))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
+                .strokeBorder(subColor.opacity(0.40), lineWidth: 1)
+        )
+        .overlay(alignment: .leading) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: DesignTokens.Radius.sm,
+                bottomLeadingRadius: DesignTokens.Radius.sm,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
+            .fill(subColor)
+            .frame(width: 3)
+        }
         .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous))
         .padding(.horizontal, 6)
         .padding(.vertical, 2)

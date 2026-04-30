@@ -147,8 +147,11 @@ public enum DesignTokens {
         // ── Semantic (양 모드 동일) ──
         public static let live         = Color(hex: 0xFF3B30)
         public static let liveGlow     = Color(hex: 0xFF3B30).opacity(0.3)
-        public static let donation     = Color(hex: 0xFFD700)
-        public static let donationEnd  = Color(hex: 0xFFA500)
+        // 후원(도네이션) — 라이트 모드는 금색이 흰 배경에서 거의 안 보이므로
+        // 대비가 충분한 짙은 호박색(amber)으로 대체. 다크는 기존 골드 유지.
+        // (라이트 0xB45309 = WCAG AA 5.1:1 vs #FFFFFF)
+        public static let donation     = adaptive(dark: 0xFFD700, light: 0xB45309)
+        public static let donationEnd  = adaptive(dark: 0xFFA500, light: 0x92400E)
         public static let error        = Color(hex: 0xFF453A)
         public static let success      = adaptive(dark: 0x00FFA3, light: 0x00875A)
         public static let warning      = Color(hex: 0xFFAA00)
