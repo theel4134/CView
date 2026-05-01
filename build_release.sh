@@ -31,10 +31,16 @@ echo "📦 버전: ${VERSION} (${BUILD_NUMBER})"
 SCRIPT_DIR="${0:A:h}"
 cd "$SCRIPT_DIR"
 
-# ── SPM scratch 경로: Xcode DerivedData와 동일 루트(/Volumes/hdd/app-work/build) 하위 SPM/ ──
-# 로컬 디스크의 .build 대신 외장 SSD를 사용 (VS Code swift.buildPath 와 동일 경로)
-SPM_SCRATCH_PATH="/Volumes/hdd/app-work/build/SPM"
-mkdir -p "$SPM_SCRATCH_PATH"
+# ── SPM scratch 경로 ────────────────────────────────────────────────
+# 기본은 프로젝트 루트의 build/SPM (쓰기 가능 보장).
+# 외장 디스크 등 다른 경로를 쓰려면 환경 변수 SPM_SCRATCH_PATH 로 오버라이드.
+SPM_SCRATCH_PATH="${SPM_SCRATCH_PATH:-$SCRIPT_DIR/build/SPM}"
+if ! mkdir -p "$SPM_SCRATCH_PATH" 2>/dev/null; then
+    echo "⚠️  $SPM_SCRATCH_PATH 생성 실패 — 프로젝트 내부 build/SPM 으로 폴백"
+    SPM_SCRATCH_PATH="$SCRIPT_DIR/build/SPM"
+    mkdir -p "$SPM_SCRATCH_PATH"
+fi
+echo "   SPM scratch: $SPM_SCRATCH_PATH"
 
 RELEASE_DIR="$SCRIPT_DIR/Release"
 APP_BUNDLE="$RELEASE_DIR/${APP_NAME}.app"

@@ -374,14 +374,14 @@ struct MLTabChip: View {
     // MARK: - Chip Content
 
     private var chipContent: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             avatarView
             channelInfo
             closeButton
         }
-        .padding(.leading, 6)
-        .padding(.trailing, closeButtonVisible ? 4 : 12)
-        .padding(.vertical, 5)
+        .padding(.leading, 5)
+        .padding(.trailing, closeButtonVisible ? 3 : 10)
+        .padding(.vertical, 3)
         .frame(minWidth: MSTokens.tabChipMinWidth, maxWidth: MSTokens.tabChipMaxWidth, alignment: .leading)
         .background(chipBackground)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -445,10 +445,10 @@ struct MLTabChip: View {
     // MARK: - Channel Info (premium 2-line)
 
     private var channelInfo: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
                 Text(tabTitle)
-                    .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .medium))
+                    .font(DesignTokens.Typography.custom(size: 12, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(
                         isSelected ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary
                     )
@@ -458,10 +458,10 @@ struct MLTabChip: View {
                 // 라이브 뱃지 (playing 상태일 때만, 아주 작게)
                 if case .playing = session.loadState {
                     Text("LIVE")
-                        .font(DesignTokens.Typography.custom(size: 8, weight: .heavy, design: .rounded))
+                        .font(DesignTokens.Typography.custom(size: 7, weight: .heavy, design: .rounded))
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 0.5)
                         .background(
                             Capsule(style: .continuous).fill(DesignTokens.Colors.error)
                         )
@@ -472,7 +472,7 @@ struct MLTabChip: View {
 
             // 2번째 줄: 라이브 제목 (playing) / 상태 텍스트 (그 외)
             Text(chipSubtitle)
-                .font(DesignTokens.Typography.custom(size: 10.5, weight: .regular))
+                .font(DesignTokens.Typography.custom(size: 9.5, weight: .regular))
                 .foregroundStyle(chipSubtitleColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -565,11 +565,11 @@ struct MLTabChip: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(DesignTokens.Typography.custom(size: 8, weight: .bold))
+                .font(DesignTokens.Typography.custom(size: 7, weight: .bold))
                 .foregroundStyle(
                     isCloseHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary
                 )
-                .frame(width: 16, height: 16)
+                .frame(width: 14, height: 14)
                 .contentShape(Circle())
                 .background {
                     Circle().fill(
@@ -593,10 +593,10 @@ struct MLTabChip: View {
         ZStack(alignment: .bottomTrailing) {
             Circle()
                 .fill(avatarColor.opacity(0.92))
-                .frame(width: 28, height: 28)
+                .frame(width: 22, height: 22)
                 .overlay(
                     Text(String(tabTitle.prefix(1)).uppercased())
-                        .font(DesignTokens.Typography.custom(size: 12, weight: .bold))
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
                         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
                         .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
                 )
@@ -649,11 +649,11 @@ struct MLTabChip: View {
     private func statusDotShape(fill: Color, glow: Color) -> some View {
         Circle()
             .fill(fill)
-            .frame(width: 9, height: 9)
+            .frame(width: 7, height: 7)
             .overlay(
-                Circle().stroke(DesignTokens.Colors.surfaceBase, lineWidth: 1.6)
+                Circle().stroke(DesignTokens.Colors.surfaceBase, lineWidth: 1.2)
             )
-            .shadow(color: glow, radius: 2.5)
+            .shadow(color: glow, radius: 2)
             .offset(x: 1, y: 1)
     }
 
