@@ -7,7 +7,7 @@
 
 ## 최종안: Light Live Hub
 
-![Light Live Hub 최종 종합안](assets/live-final-combined-light-hub.svg)
+![Light Live Hub 최종 종합안](../../assets/live-final-combined-light-hub.svg)
 
 ## 핵심 조합
 

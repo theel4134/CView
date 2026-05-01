@@ -11,6 +11,8 @@ import CViewUI
 
 enum CommandCategory: String, CaseIterable, Sendable {
     case navigation = "탐색"
+    case workspace = "워크스페이스"
+    case session = "세션"
     case action = "액션"
     case settings = "설정"
     case channel = "최근 채널"
@@ -18,6 +20,8 @@ enum CommandCategory: String, CaseIterable, Sendable {
     var icon: String {
         switch self {
         case .navigation: "arrow.triangle.turn.up.right.diamond.fill"
+        case .workspace: "rectangle.3.group.bubble"
+        case .session: "rectangle.stack.badge.play"
         case .action: "bolt.fill"
         case .settings: "gearshape.fill"
         case .channel: "play.tv.fill"
@@ -27,6 +31,8 @@ enum CommandCategory: String, CaseIterable, Sendable {
     var tintColor: Color {
         switch self {
         case .navigation: DesignTokens.Colors.chzzkGreen
+        case .workspace: DesignTokens.Colors.accentBlue
+        case .session: DesignTokens.Colors.accentOrange
         case .action: DesignTokens.Colors.accentBlue
         case .settings: DesignTokens.Colors.accentPurple
         case .channel: DesignTokens.Colors.accentOrange
@@ -98,6 +104,7 @@ struct CommandPaletteView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
+    @Environment(\.openWindow) private var openWindow
     @Binding var isPresented: Bool
 
     @State private var searchText = ""
@@ -145,6 +152,7 @@ struct CommandPaletteView: View {
             CommandItem(id: "act-refresh", title: "새로고침", subtitle: "현재 데이터 새로고침", icon: "arrow.clockwise", category: .action, shortcut: "⌘R") { [appState] in
                 Task { await appState.homeViewModel?.refresh() }
             },
+            // [Removed 2026-04-28] Native/Floating/Control Room 레이아웃 프리셋 전체 폐기 — 라이브 메뉴는 단일 디자인.
             CommandItem(id: "act-chat-clear", title: "채팅 지우기", subtitle: "채팅 메시지 모두 삭제", icon: "trash", category: .action, shortcut: "⌘⇧K") { [appState] in
                 appState.chatViewModel?.clearMessages()
             },
@@ -169,6 +177,55 @@ struct CommandPaletteView: View {
             CommandItem(id: "act-mute", title: "음소거 토글", subtitle: "소리 켜기/끄기", icon: "speaker.slash.fill", category: .action, shortcut: "M") { [appState] in
                 appState.playerViewModel?.toggleMute()
             },
+            CommandItem(id: "ws-mode-explore", title: "모드: 탐색", subtitle: "팔로잉 종합 정보 + Stage", icon: "safari", category: .workspace, shortcut: "⌥⌘1") { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.applyHubModePreset(.explore, multiLiveManager: appState.multiLiveManager)
+            },
+            CommandItem(id: "ws-mode-watch", title: "모드: 시청", subtitle: "단일 채널 + 싱글 채팅", icon: "play.rectangle", category: .workspace, shortcut: "⌥⌘2") { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.applyHubModePreset(.watch, multiLiveManager: appState.multiLiveManager)
+            },
+            CommandItem(id: "ws-mode-multi", title: "모드: 멀티", subtitle: "그리드 + 멀티채팅", icon: "square.grid.2x2", category: .workspace, shortcut: "⌥⌘3") { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.applyHubModePreset(.multi, multiLiveManager: appState.multiLiveManager)
+                appState.followingViewState.showMultiChat = true
+            },
+            CommandItem(id: "ws-sheet-toggle", title: "팔로잉 시트 토글", subtitle: "Collapsed → Peek → Expanded", icon: "rectangle.bottomthird.inset.filled", category: .workspace, shortcut: "⌥⌘P") { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.followingSheetState = appState.followingViewState.followingSheetState.next
+            },
+            CommandItem(id: "stage-tool-quality", title: "Stage: 화질", subtitle: "Stage Tool Popover — 화질 설정", icon: "gearshape", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.stageToolPopover = appState.followingViewState.stageToolPopover == .quality ? .none : .quality
+            },
+            CommandItem(id: "stage-tool-tools", title: "Stage: 도구", subtitle: "Stage Tool Popover — 세션 도구", icon: "slider.horizontal.3", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.stageToolPopover = appState.followingViewState.stageToolPopover == .tools ? .none : .tools
+            },
+            CommandItem(id: "stage-tool-network", title: "Stage: 네트워크", subtitle: "Stage Tool Popover — 네트워크", icon: "network", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.stageToolPopover = appState.followingViewState.stageToolPopover == .network ? .none : .network
+            },
+            CommandItem(id: "stage-tool-metrics", title: "Stage: 메트릭", subtitle: "Stage Tool Popover — 메트릭", icon: "waveform.path.ecg", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.stageToolPopover = appState.followingViewState.stageToolPopover == .metrics ? .none : .metrics
+            },
+            CommandItem(id: "stage-tool-layout", title: "Stage: 레이아웃", subtitle: "Stage Tool Popover — 그리드/싱글 전환", icon: "square.grid.2x2", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.stageToolPopover = appState.followingViewState.stageToolPopover == .layout ? .none : .layout
+            },
+            CommandItem(id: "stage-tool-reconnect", title: "Stage: 재연결", subtitle: "Stage Tool Popover — 스트림/채팅 재연결", icon: "arrow.triangle.2.circlepath", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.stageToolPopover = appState.followingViewState.stageToolPopover == .reconnect ? .none : .reconnect
+            },
+            CommandItem(id: "ws-chat-sync-toggle", title: "정책: 멀티→채팅 자동 동기화", subtitle: "멀티라이브 추가 시 멀티채팅 자동 추가 토글", icon: "link", category: .workspace) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.autoSyncChatOnMultiLiveAdd.toggle()
+            },
+            CommandItem(id: "session-clear-queue", title: "세션: Smart Queue 초기화", subtitle: "큐에 모은 채널을 비웁니다", icon: "trash", category: .session) { [appState, router] in
+                router.selectSidebar(.following)
+                appState.followingViewState.smartQueueChannelIds.removeAll()
+            },
         ])
 
         // ── Settings Quick Toggle ──
@@ -183,6 +240,18 @@ struct CommandPaletteView: View {
             CommandItem(id: "set-compact", title: "컴팩트 모드 토글", subtitle: appState.settingsStore.appearance.compactMode ? "현재: 켜짐" : "현재: 꺼짐", icon: "rectangle.compress.vertical", category: .settings) { [appState] in
                 appState.settingsStore.appearance.compactMode.toggle()
                 Task { await appState.settingsStore.save() }
+            },
+            CommandItem(id: "set-open-chat-window", title: "보조 창: 채팅", subtitle: "독립 채팅 창 열기", icon: "bubble.left.and.bubble.right.fill", category: .settings) { [openWindow] in
+                openWindow(id: "chat-window")
+            },
+            CommandItem(id: "set-open-multichat-window", title: "보조 창: 멀티채팅", subtitle: "멀티채팅 창 열기", icon: "rectangle.3.group.bubble.left", category: .settings) { [openWindow] in
+                openWindow(id: "multi-chat-window")
+            },
+            CommandItem(id: "set-open-network-window", title: "보조 창: 네트워크 모니터", subtitle: "ML 네트워크 상태 창 열기", icon: "waveform.path.ecg", category: .settings) { [openWindow] in
+                openWindow(id: "ml-network-window")
+            },
+            CommandItem(id: "set-open-metrics-window", title: "보조 창: 메트릭 전송", subtitle: "메트릭 포워딩 창 열기", icon: "chart.xyaxis.line", category: .settings) { [openWindow] in
+                openWindow(id: "ml-metrics-window")
             },
         ])
 
@@ -340,7 +409,12 @@ struct CommandPaletteView: View {
                 isPresented = false
                 return .handled
             }
-            .onKeyPress(.return) {
+            .onKeyPress(keys: [.return]) { press in
+                // [Redesign 2026-04-29] ⌘Enter → 검색 메뉴에서 전체 결과 보기
+                if press.modifiers.contains(.command) {
+                    openFullSearch()
+                    return .handled
+                }
                 executeSelected()
                 return .handled
             }
@@ -350,12 +424,55 @@ struct CommandPaletteView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        EmptyStateView(icon: "magnifyingglass", title: "일치하는 명령이 없습니다", style: .inline)
-            .frame(minHeight: 120)
-            .onKeyPress(.escape) {
-                isPresented = false
+        VStack(spacing: DesignTokens.Spacing.sm) {
+            EmptyStateView(icon: "magnifyingglass", title: "일치하는 명령이 없습니다", style: .inline)
+            // [Redesign 2026-04-29] 명령이 없을 때도 입력한 query로 검색 메뉴 진입을 유도
+            if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button {
+                    openFullSearch()
+                } label: {
+                    HStack(spacing: DesignTokens.Spacing.xs) {
+                        Image(systemName: "magnifyingglass")
+                        Text("전체 검색: \"\(searchText)\"")
+                            .font(DesignTokens.Typography.captionMedium)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text("⌘↩")
+                            .font(DesignTokens.Typography.micro)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    }
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.xs)
+                    .frame(maxWidth: .infinity)
+                    .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, DesignTokens.Spacing.md)
+            }
+        }
+        .frame(minHeight: 120)
+        .onKeyPress(.escape) {
+            isPresented = false
+            return .handled
+        }
+        .onKeyPress(keys: [.return]) { press in
+            if press.modifiers.contains(.command) {
+                openFullSearch()
                 return .handled
             }
+            return .ignored
+        }
+    }
+
+    /// [Redesign 2026-04-29] Command Palette에서 입력한 query로 검색 메뉴 진입.
+    private func openFullSearch() {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        isPresented = false
+        if trimmed.isEmpty {
+            router.selectSidebar(.search)
+        } else {
+            router.navigate(to: .search(query: trimmed))
+        }
     }
 
     // MARK: - Category Header

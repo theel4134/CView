@@ -473,10 +473,18 @@ public struct BufferHealth: Sendable {
     public let currentLevel: Double
     public let targetLevel: Double
     public let isHealthy: Bool
-    
-    public init(currentLevel: Double, targetLevel: Double, isHealthy: Bool) {
+    /// [Phase 2.2 / 2026-04-30] 측정 신뢰도 0.0~1.0
+    /// VLC stats 사용 불가 / HW=0 고착 등 측정 불가능 상황에서 < 1.0.
+    /// ABR/PID 등 의사결정 시 confidence < 0.5 면 안전쪽(downgrade 보류 등) 으로 처리.
+    public let confidence: Double
+    /// 측정값이 신뢰할 수 있는지(stats 정상 + 디코더 진행 중).
+    public let isMeasurable: Bool
+
+    public init(currentLevel: Double, targetLevel: Double, isHealthy: Bool, confidence: Double = 1.0, isMeasurable: Bool = true) {
         self.currentLevel = currentLevel
         self.targetLevel = targetLevel
         self.isHealthy = isHealthy
+        self.confidence = confidence
+        self.isMeasurable = isMeasurable
     }
 }

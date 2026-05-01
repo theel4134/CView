@@ -5,7 +5,8 @@ import Foundation
 
 // MARK: - Channel Stats Item
 
-public struct ChannelStatsItem: Codable, Sendable, Identifiable {
+// [Fix M-3] Equatable conformance — ForEach diff, onChange(of:) 타입 체크 가능
+public struct ChannelStatsItem: Codable, Sendable, Identifiable, Equatable {
     public var id: String { channelId }
     public let channelId: String
     public let channelName: String?
@@ -73,7 +74,7 @@ public struct ChannelStatsItem: Codable, Sendable, Identifiable {
     }
 }
 
-public struct LatencyStats: Codable, Sendable {
+public struct LatencyStats: Codable, Sendable, Equatable {
     public let avg: Double?
     public let min: Double?
     public let max: Double?
@@ -84,14 +85,14 @@ public struct LatencyStats: Codable, Sendable {
     public let lastLatencySource: String?
 }
 
-public struct DeltaStats: Codable, Sendable {
+public struct DeltaStats: Codable, Sendable, Equatable {
     public let current: Double?
     public let avg: Double?
     public let webAvg: Double?
     public let appAvg: Double?
 }
 
-public struct BroadcastStats: Codable, Sendable {
+public struct BroadcastStats: Codable, Sendable, Equatable {
     public let title: String?
     public let category: String?
     public let concurrentUsers: Int?

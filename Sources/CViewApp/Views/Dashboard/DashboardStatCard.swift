@@ -81,6 +81,9 @@ struct MiniChannelCard: View {
     /// - 외부에서 `.onHover`를 추가하면 카드당 NSTrackingArea 와 cursor push가 이중 등록되므로
     ///   반드시 이 콜백을 사용할 것.
     var onHoverChange: ((Bool) -> Void)? = nil
+    /// [Lightweight 2026-04-28] 한 화면에 여러 카드가 동시에 떠 있는 컨텍스트에서는
+    /// `.once` 를 권장 — 45s liveLoop 타이머가 N개 누적되며 windowserver 합성 비용 증가.
+    var thumbnailRefreshPolicy: LiveThumbnailView.RefreshPolicy = .liveLoop
     @Environment(AppState.self) private var appState
     @State private var isHovered = false
 
@@ -90,9 +93,12 @@ struct MiniChannelCard: View {
             ZStack(alignment: .bottomLeading) {
                 LiveThumbnailView(
                     channelId: channel.channelId,
-                    thumbnailUrl: URL(string: channel.thumbnailUrl ?? "")
+                    thumbnailUrl: URL(string: channel.thumbnailUrl ?? ""),
+                    refreshPolicy: thumbnailRefreshPolicy
                 )
-                .aspectRatio(16/9, contentMode: .fill)
+                .aspectRatio(16/9, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .clipped()
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: DesignTokens.Radius.sm, topTrailingRadius: DesignTokens.Radius.sm))
 
                 VStack {
@@ -178,13 +184,15 @@ struct MiniChannelCard: View {
         }
         .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                .strokeBorder(
-                    isHovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : DesignTokens.Glass.borderColor,
-                    lineWidth: isHovered ? 1.0 : 0.5
-                )
+            // [Perf 2026-04-28] 비호버 시 strokeBorder 자체를 생략 → WindowServer 합성 layer 1개 절약× 그리드 카드 수만큼.
+            if isHovered {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 1.0)
+            }
         }
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        // [Perf 2026-04-28] 상시 shadow 제거 — 그리드 카드 N개 × shadow backing store 누적을 제거.
+        // 호버 시에만 명확한 시각 피드백 제공.
+        .modifier(ConditionalShadowModifier(active: isHovered, color: .black.opacity(0.18), radius: 6, y: 2))
         .animation(DesignTokens.Animation.fast, value: isHovered)
         .onHover { hovering in
             isHovered = hovering

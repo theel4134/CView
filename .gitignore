@@ -23,3 +23,7 @@ default.profraw
 server-dev/mirror/
 # Xcode pbxproj backups
 *.pbxproj.bak
+
+# Local DerivedData / build outputs (lowercase variants used in this workspace)
+.derivedData/
+build/

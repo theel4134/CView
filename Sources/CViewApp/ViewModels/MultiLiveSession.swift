@@ -58,8 +58,51 @@ final class MultiLiveSession: Identifiable {
     var latestHLSJSMetrics: HLSJSLiveMetrics?
     var latestProxyStats: ProxyNetworkStats?
     var showStats: Bool = false
-    var showNetworkMetrics: Bool = false
+    var showNetworkMetrics: Bool = false {
+        didSet {
+            // [Fix 2026-04-30] oldValue 변화가 없으면 task 를 그대로 둔다.
+            // SwiftUI 가 view 재구성 중 onAppear/onDisappear 를 자주 트리거하면
+            // task 가 매번 cancel & restart 되어 lastProxyBytesReceived 가 reset →
+            // 첫 폴(2s) 까지는 항상 0 으로 보이는 문제를 야기했음.
+            guard oldValue != showNetworkMetrics else { return }
+            if showNetworkMetrics {
+                startProxyMonitorTask()
+            } else {
+                stopProxyMonitorTask()
+            }
+        }
+    }
     var isMuted: Bool { playerViewModel.isMuted }
+
+    // MARK: - 네트워크 모니터링 보조 상태
+    /// 프록시 누적 바이트 변화량으로 계산한 "최근 구간 평균 대역폭" (Bytes/sec).
+    /// VLC 통계 stall 시 fallback. 0 이면 미측정.
+    var proxyBandwidthBytesPerSec: Double = 0
+    /// MLNetworkTab/MLNetworkAggregateTab 표시용 통합 대역폭 — 프록시 우선.
+    /// 우선순위: 슬라이딩 평균(5s) > 직전 측정 > VLC networkBytes > VLC inputBitrate > AV/HLS bitrate.
+    var displayBandwidthBytesPerSec: Double {
+        if proxyBandwidthBytesPerSec > 0 { return proxyBandwidthBytesPerSec }
+        if let m = latestMetrics {
+            if m.networkBytesPerSec > 0 { return Double(m.networkBytesPerSec) }
+            // [Fix] inputBitrateKbps fallback — proxy 폴이 아직 시드 전이거나 stall 시.
+            if m.inputBitrateKbps > 0 { return m.inputBitrateKbps * 1000.0 / 8.0 }
+        }
+        if let av = latestAVMetrics, av.bitrateKbps > 0 { return av.bitrateKbps * 1000.0 / 8.0 }
+        if let hls = latestHLSJSMetrics, hls.bitrateKbps > 0 { return hls.bitrateKbps * 1000.0 / 8.0 }
+        return 0
+    }
+    /// 60-샘플 링버퍼 — 스파크라인/CSV 출력용.
+    let networkHistory = NetworkMonitorHistory()
+    private var lastProxyBytesReceived: Int64 = 0
+    private var lastProxyBytesTimestamp: Date?
+    private var proxyMonitorTask: Task<Void, Never>?
+    /// [정밀화] 누적 바이트 30초 윈도우 — 세그먼트 burst (4-6s마다 1회 큰 증가) ÷ 시간으로
+    /// 안정적인 평균 대역폭 산출. 단발 delta + slidingAvg 보다 burst 워크로드에 훨씬 강건.
+    private var byteHistory: [(Date, Int64)] = []
+    /// [정밀화] VLC stat HW-decode 경로에서 fps/displayed/buffer 가 0으로 고착되는
+    /// 현상 대응 — 최근 유효 값을 캡쳐해 표시 시 fallback.
+    private(set) var lastNonZeroFps: Double = 0
+    private(set) var lastNonZeroBufferHealth: Double = 0
 
     /// 시청자 수 포맷 (3곳에서 중복 사용하던 로직 통합)
     var formattedViewerCount: String {
@@ -108,7 +151,114 @@ final class MultiLiveSession: Identifiable {
             refreshTask?.cancel()
             offlineRetryTask?.cancel()
             chatConnectionTask?.cancel()
+            proxyMonitorTask?.cancel()
         }
+    }
+
+    // MARK: - 네트워크 모니터링 보조 (프록시 폴링 / 히스토리)
+
+    /// 프록시 누적 바이트 30초 윈도우로 안정된 "평균 대역폭" 을 계산하고 60-샘플 링버퍼에 추가.
+    /// 호출자: showNetworkMetrics didSet, 메트릭 콜백, proxyMonitorTask.
+    func recordNetworkSample() {
+        let now = Date()
+        // [정밀화] 누적 바이트 링버퍼 관리 — burst 도착 패턴에 관계없이
+        // (latest_bytes - oldest_bytes) / (latest_ts - oldest_ts) 로 정확한 평균 산출.
+        var avgBps: Double = 0
+        if let proxy = playerViewModel.proxyNetworkStats() {
+            latestProxyStats = proxy
+            byteHistory.append((now, proxy.totalBytesReceived))
+            let cutoff = now.addingTimeInterval(-30.0)
+            byteHistory.removeAll { $0.0 < cutoff }
+            // 최소 2개 샘플 + 1초 이상 경과 해야 신뢰 가능한 평균
+            if let first = byteHistory.first, let last = byteHistory.last,
+               last.0.timeIntervalSince(first.0) >= 1.0 {
+                let elapsed = last.0.timeIntervalSince(first.0)
+                let deltaBytes = max(0, last.1 - first.1)
+                avgBps = Double(deltaBytes) / elapsed
+            }
+            // 하위 호환성 — 기존 lastProxyBytes 필드도 유지 (다른 로직에서 참조 가능성).
+            lastProxyBytesReceived = proxy.totalBytesReceived
+            lastProxyBytesTimestamp = now
+        }
+        // 시드 직후 또는 stall 시 VLC 통계로 보강 (하위 우선순위)
+        if avgBps == 0, let m = latestMetrics {
+            if m.networkBytesPerSec > 0 {
+                avgBps = Double(m.networkBytesPerSec)
+            } else if m.inputBitrateKbps > 0 {
+                avgBps = m.inputBitrateKbps * 1000.0 / 8.0
+            } else if m.demuxBitrateKbps > 0 {
+                avgBps = m.demuxBitrateKbps * 1000.0 / 8.0
+            }
+        }
+        proxyBandwidthBytesPerSec = avgBps
+
+        // [정밀화] VLC stat HW-decode 경로에서 0으로 고착되는 값 캡쳐
+        if let m = latestMetrics {
+            if m.fps > 0 { lastNonZeroFps = m.fps }
+            if m.bufferHealth > 0 { lastNonZeroBufferHealth = m.bufferHealth }
+        } else if let m = latestHLSJSMetrics {
+            if m.fps > 0 { lastNonZeroFps = m.fps }
+            if m.bufferHealth > 0 { lastNonZeroBufferHealth = m.bufferHealth }
+        } else if let m = latestAVMetrics {
+            if m.bufferHealth > 0 { lastNonZeroBufferHealth = m.bufferHealth }
+        }
+
+        // 통합 표시용 health/fps/buffer 도 함께 링버퍼에 적재
+        let (health, fps, buffer, drops, late): (Double, Double, Double, Int, Int) = {
+            if let m = latestMetrics {
+                return (m.healthScore, m.fps, m.bufferHealth, m.droppedFramesDelta, m.latePicturesDelta)
+            }
+            if let m = latestAVMetrics {
+                return (m.healthScore, 0, m.bufferHealth, m.droppedFramesDelta, 0)
+            }
+            if let m = latestHLSJSMetrics {
+                return (m.healthScore, m.fps, m.bufferHealth, m.droppedFramesDelta, 0)
+            }
+            return (0, 0, 0, 0, 0)
+        }()
+        networkHistory.append(NetworkMonitorHistory.Sample(
+            timestamp: now,
+            bandwidthBytesPerSec: avgBps,
+            fps: fps,
+            healthScore: health,
+            bufferHealth: buffer,
+            dropsDelta: drops,
+            lateDelta: late))
+    }
+
+    fileprivate func startProxyMonitorTask() {
+        proxyMonitorTask?.cancel()
+        // 리셋 후 시작 — 이전 세션 데이터가 그래프에 섞이지 않도록.
+        lastProxyBytesReceived = 0
+        lastProxyBytesTimestamp = nil
+        proxyBandwidthBytesPerSec = 0
+        byteHistory.removeAll()
+        networkHistory.clear()
+        // [Fix 정밀화] 즉시 시드(seed) — 현재 누적 바이트/타임스탬프를 채워두면
+        // 첫 폴(1s 후) 부터 정상적인 delta 계산이 가능.
+        if let proxy = playerViewModel.proxyNetworkStats() {
+            latestProxyStats = proxy
+            lastProxyBytesReceived = proxy.totalBytesReceived
+            lastProxyBytesTimestamp = Date()
+            byteHistory.append((Date(), proxy.totalBytesReceived))
+        }
+        proxyMonitorTask = Task { [weak self] in
+            // 1초 폴 — 빠른 첫 표시 + 60샘플로 1분 분량 추세.
+            let interval: UInt64 = 1_000_000_000
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: interval) } catch { break }
+                guard let self else { break }
+                await MainActor.run {
+                    self.recordNetworkSample()
+                }
+            }
+        }
+    }
+
+    fileprivate func stopProxyMonitorTask() {
+        proxyMonitorTask?.cancel()
+        proxyMonitorTask = nil
+        byteHistory.removeAll()
     }
 
     /// MultiLiveManager용 convenience init — liveInfo/apiClient/사용자 정보 포함
@@ -535,6 +685,7 @@ final class MultiLiveSession: Identifiable {
         refreshTask?.cancel(); refreshTask = nil
         offlineRetryTask?.cancel(); offlineRetryTask = nil
         chatConnectionTask?.cancel(); chatConnectionTask = nil
+        proxyMonitorTask?.cancel(); proxyMonitorTask = nil
         // [장시간 안정성] 메트릭 콜백 해제 — 해제된 세션에서 fire-and-forget Task 생성 방지
         playerViewModel.setVLCMetricsCallback(nil)
         playerViewModel.setAVPlayerMetricsCallback(nil)
@@ -552,6 +703,13 @@ final class MultiLiveSession: Identifiable {
         latestAVMetrics = nil
         latestHLSJSMetrics = nil
         latestProxyStats = nil
+        proxyBandwidthBytesPerSec = 0
+        networkHistory.clear()
+        lastProxyBytesReceived = 0
+        lastProxyBytesTimestamp = nil
+        byteHistory.removeAll()
+        lastNonZeroFps = 0
+        lastNonZeroBufferHealth = 0
     }
 
     func retry(using apiClient: ChzzkAPIClient, appState: AppState) async {

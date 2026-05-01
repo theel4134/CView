@@ -1,0 +1,72 @@
+{
+  "title": "CView VLC Quality",
+  "uid": "cview-vlc-quality",
+  "timezone": "Asia/Seoul",
+  "editable": true,
+  "schemaVersion": 39,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "channel",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+        "query": "SELECT DISTINCT channel_name AS __text, channel_id AS __value FROM v_vlc_bitrate WHERE time > now() - interval '24 hours' ORDER BY 1",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "title": "Input / Demux bitrate", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time, channel_name || ' ' || field AS metric, bitrate AS value FROM v_vlc_bitrate WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' ORDER BY 1",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 2, "title": "Frame drop rate (%)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time, channel_name AS metric, frame_drop_rate FROM v_vlc_frame_drop_rate WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' ORDER BY 1"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 3, "title": "Video frames (decoded / displayed / lost) per sec", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time, channel_name || ' ' || field AS metric, frames_per_second FROM v_vlc_video_frames WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4, "title": "VLC raw fields (inspect)", "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time, channel_id, field, value_num FROM metric_influx_samples WHERE measurement = 'vlc_metrics' AND $__timeFilter(time) ORDER BY time DESC LIMIT 200",
+          "format": "table"
+        }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,8 @@ struct MLVideoArea: View {
     let session: MultiLiveSession
     let appState: AppState
     let settingsStore: SettingsStore
+    /// false이면 hover 컨트롤 오버레이를 표시하지 않음 (싱글 시청 전용 컨트롤 바가 별도로 있을 때)
+    var showHoverControls: Bool = true
 
     @State private var showControls = false
     @State private var hideTask: Task<Void, Never>?
@@ -20,7 +22,7 @@ struct MLVideoArea: View {
                 .background(Color.black)
                 .clipped()
 
-            if showControls {
+            if showHoverControls && showControls {
                 MLControlOverlay(session: session, appState: appState)
                     .transition(.opacity.animation(DesignTokens.Animation.fast))
             }
@@ -38,6 +40,7 @@ struct MLVideoArea: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onHover { hovering in
+            guard showHoverControls else { return }
             hideTask?.cancel()
             if hovering {
                 withAnimation(DesignTokens.Animation.fast) { showControls = true }
@@ -175,7 +178,7 @@ struct MLControlOverlay: View {
                     Capsule(style: .continuous)
                         .stroke(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                 )
-                .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+                .shadow(DesignTokens.Shadow.md)
         )
         .environment(\.colorScheme, .dark)
         .animation(DesignTokens.Animation.fast, value: session.isMuted)
@@ -227,7 +230,7 @@ struct MLGridControlOverlay: View {
                 .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textOnDarkMedia)
                 .lineLimit(1)
-                .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                .shadow(DesignTokens.Shadow.textOnMedia)
             Spacer(minLength: 0)
             if !session.isMuted {
                 Image(systemName: "speaker.wave.2.fill")
@@ -312,6 +315,7 @@ struct MLGridControlOverlay: View {
 struct MLEmptyState: View {
     let onAdd: () -> Void
     @State private var isAddHovered = false
+    @State private var appeared = false
 
     var body: some View {
         VStack(spacing: DesignTokens.Spacing.xl) {
@@ -329,10 +333,17 @@ struct MLEmptyState: View {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.lg, style: .continuous)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
                 )
-                .shadow(color: .black.opacity(0.15), radius: 6, y: 8)
+                .shadow(DesignTokens.Shadow.control)
         )
+        .opacity(appeared ? 1 : 0)
+        .scaleEffect(appeared ? 1 : 0.96)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DesignTokens.Colors.background)
+        .onAppear {
+            withAnimation(DesignTokens.Animation.motionSafe(DesignTokens.Animation.spring)) {
+                appeared = true
+            }
+        }
     }
 
     private var emptyGridPreview: some View {
@@ -537,7 +548,7 @@ struct MLStatsOverlay: View {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm, style: .continuous)
                         .strokeBorder(DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
                 )
-                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                .shadow(DesignTokens.Shadow.card)
         )
     }
 

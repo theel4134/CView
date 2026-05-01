@@ -75,33 +75,35 @@ struct HomeV2StatusPill: View {
     }
 }
 
-// MARK: - Superset Insight Dock (Design A)
+// MARK: - Analytics Insight Dock (Design A)
+// 2026-04-29: Superset → Grafana 전환 계획에 따라 호칭 일반화.
+// AppStorage key(`home.v2.show.supersetDock`)는 호환성을 위해 그대로 유지.
 
-struct HomeSupersetInsightDock: View {
+struct HomeAnalyticsInsightDock: View {
     let metricsOnline: Bool
-    let supersetReachable: Bool?
-    let checkingSuperset: Bool
-    let supersetURL: URL
+    let analyticsReachable: Bool?
+    let checkingAnalytics: Bool
+    let analyticsURL: URL
     let p95LatencyMs: Double?
     let bufferWarnings: Int
     let vlcSamples: Int?
     let viewerHistory: [ViewerHistoryEntry]
-    let onRetrySupersetCheck: () -> Void
+    let onRetryAnalyticsCheck: () -> Void
 
     @Environment(\.openURL) private var openURL
 
-    private var supersetLabel: String {
-        if checkingSuperset { return "확인 중" }
-        switch supersetReachable {
+    private var analyticsLabel: String {
+        if checkingAnalytics { return "확인 중" }
+        switch analyticsReachable {
         case .some(true): return "연결 가능"
         case .some(false): return "연결 실패"
         case .none: return "미확인"
         }
     }
 
-    private var supersetTint: Color {
-        if checkingSuperset { return DesignTokens.Colors.textSecondary }
-        switch supersetReachable {
+    private var analyticsTint: Color {
+        if checkingAnalytics { return DesignTokens.Colors.textSecondary }
+        switch analyticsReachable {
         case .some(true): return DesignTokens.Colors.chzzkGreen
         case .some(false): return DesignTokens.Colors.warning
         case .none: return DesignTokens.Colors.textSecondary
@@ -120,10 +122,10 @@ struct HomeSupersetInsightDock: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             HStack(alignment: .top, spacing: DesignTokens.Spacing.xs) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Superset Insight Dock")
+                    Text("Analytics Insight Dock")
                         .font(DesignTokens.Typography.captionSemibold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    Text("요약은 홈에서, 상세는 Superset")
+                    Text("요약은 홈에서, 상세는 분석 대시보드")
                         .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
@@ -131,14 +133,14 @@ struct HomeSupersetInsightDock: View {
                 Spacer(minLength: 0)
 
                 Button {
-                    onRetrySupersetCheck()
+                    onRetryAnalyticsCheck()
                 } label: {
-                    Image(systemName: checkingSuperset ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
+                    Image(systemName: checkingAnalytics ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("Superset 연결 상태 다시 확인")
+                .help("분석 대시보드 연결 상태 다시 확인")
             }
 
             HStack(spacing: DesignTokens.Spacing.xs) {
@@ -151,9 +153,9 @@ struct HomeSupersetInsightDock: View {
 
                 HomeV2StatusPill(
                     icon: "chart.xyaxis.line",
-                    title: "Superset",
-                    value: supersetLabel,
-                    tint: supersetTint
+                    title: "Analytics",
+                    value: analyticsLabel,
+                    tint: analyticsTint
                 )
             }
 
@@ -181,12 +183,12 @@ struct HomeSupersetInsightDock: View {
             viewerTrendPanel
 
             Button {
-                openURL(supersetURL)
+                openURL(analyticsURL)
             } label: {
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     Image(systemName: "safari")
                         .font(.system(size: 11, weight: .semibold))
-                    Text("Superset 상세 열기")
+                    Text("분석 대시보드 열기")
                         .font(DesignTokens.Typography.captionSemibold)
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.right")
@@ -205,7 +207,7 @@ struct HomeSupersetInsightDock: View {
                 )
             }
             .buttonStyle(.plain)
-            .help("\(supersetURL.absoluteString)")
+            .help("\(analyticsURL.absoluteString)")
         }
         .padding(DesignTokens.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -334,6 +336,7 @@ struct HomeCommandBar: View {
     let greeting: String
     let isRefreshing: Bool
     let monitorEnabled: Bool
+    var followingLiveCount: Int = 0
     let onToggleMonitor: () -> Void
     let onRefresh: () -> Void
 
@@ -345,9 +348,22 @@ struct HomeCommandBar: View {
                     font: DesignTokens.Typography.titleSemibold,
                     animate: false
                 )
-                Text("오늘의 라이브를 한눈에 둘러보세요")
-                    .font(DesignTokens.Typography.footnote)
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                HStack(spacing: 6) {
+                    Text("오늘의 라이브를 한눈에 둘러보세요")
+                        .font(DesignTokens.Typography.footnote)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                    if followingLiveCount > 0 {
+                        Text("팔로잉 \(followingLiveCount)개 라이브 중")
+                            .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.live)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(DesignTokens.Colors.live.opacity(0.12), in: Capsule())
+                            .overlay(Capsule().strokeBorder(DesignTokens.Colors.live.opacity(0.35), lineWidth: 0.5))
+                            .contentTransition(.numericText())
+                            .animation(DesignTokens.Animation.smooth, value: followingLiveCount)
+                    }
+                }
             }
 
             Spacer()
@@ -386,6 +402,11 @@ struct HomeCommandBar: View {
                 }                .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))            }
             .buttonStyle(.plain)
             .help("검색 (⌘K)")
+
+            // [Redesign 2026-04-29] 검색 메뉴 직접 진입 (overlay 우회)
+            iconButton(systemName: "magnifyingglass.circle", help: "검색 메뉴 열기 (⌘F)") {
+                router.selectSidebar(.search)
+            }
 
             // Multilive shortcut
             //   1) FollowingView 의 멀티라이브 패널을 강제로 on (이전에 숨겼던 경우 대비)
@@ -547,14 +568,14 @@ struct HomeHeroLiveCard: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .scaleEffect(hovered ? 1.012 : 1.0, anchor: .center)
-        // [Perf 2026-04-24] shadow radius 는 Gaussian blur 커널이라 값이 바뀌면
-        // 매 프레임 재계산. 대형 카드(320pt)에서 14↔24 진행은 비용이 큼 → 14 고정,
-        // color/y 만 hover 에 따라 보간.
-        .shadow(
-            color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .black.opacity(0.18),
+        // [Perf 2026-04-28] hero 카드 상시 shadow 제거 (radius 9 이었음) → 호버 시에만 emit.
+        // hero 는 한 개라도 backing store 크기(넓은 면적)가 커서 WindowServer 합성 비용 으뜰.
+        .modifier(ConditionalShadowModifier(
+            active: hovered,
+            color: DesignTokens.Colors.chzzkGreen.opacity(0.35),
             radius: 9,
-            y: hovered ? 7 : 4
-        )
+            y: 7
+        ))
         .animation(DesignTokens.Animation.smooth, value: hovered)
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
         .onTapGesture {
@@ -751,13 +772,13 @@ struct HomeRecommendedCard: View {
                 )
         }
         .scaleEffect(hovered ? 1.015 : 1.0, anchor: .center)
-        // [Perf 2026-04-27] offset 제거 — scaleEffect 와 동시 적용 시 추가 pass 발생.
-        // [Perf 2026-04-24] radius 고정 (Gaussian blur 재계산 방지). 색/y 만 보간.
-        .shadow(
-            color: hovered ? DesignTokens.Colors.chzzkGreen.opacity(0.20) : .black.opacity(0.07),
+        // [Perf 2026-04-28] 비호버 시 shadow 생략 — ContinueWatching/Discover 그리드 12+ 카드 × layer = WindowServer 누적.
+        .modifier(ConditionalShadowModifier(
+            active: hovered,
+            color: DesignTokens.Colors.chzzkGreen.opacity(0.20),
             radius: 5,
-            y: hovered ? 4 : 1
-        )
+            y: 4
+        ))
         .contentShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         .onTapGesture {
             router.navigate(to: .live(channelId: item.channel.channelId))
@@ -867,17 +888,29 @@ struct HomeContinueWatchingStrip: View {
     private var emptyState: some View {
         HStack {
             Spacer()
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(DesignTokens.Typography.subhead)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text("아직 기록이 없어요")
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
+                Button {
+                    router.selectSidebar(.category)
+                } label: {
+                    Text("채널 탐색")
+                        .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(DesignTokens.Colors.chzzkGreen.opacity(0.12), in: Capsule())
+                        .overlay(Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
             }
             Spacer()
         }
-        .padding(.vertical, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.lg)
         .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
     }
 

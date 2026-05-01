@@ -5,6 +5,9 @@
 import SwiftUI
 import CViewCore
 import CViewUI
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Search View
 
@@ -22,6 +25,10 @@ struct SearchView: View {
                             vm.followingChannelNames = homeVM.followingChannels.map(\.channelName)
                         }
                     }
+                    // [Redesign 2026-04-29] router에서 들어온 pending query 소비
+                    .task(id: router.pendingSearchQuery) {
+                        await consumePendingQuery(vm: vm)
+                    }
             } else {
                 ProgressView()
                     .onAppear {
@@ -32,20 +39,37 @@ struct SearchView: View {
                                 vm.followingChannelNames = homeVM.followingChannels.map(\.channelName)
                             }
                             viewModel = vm
+                            // VM 생성 직후에도 pending query 즉시 적용
+                            Task { await consumePendingQuery(vm: vm) }
                         }
                     }
             }
         }
         .contentBackground()
     }
+
+    /// router.pendingSearchQuery를 검색 VM에 적용하고 비운다.
+    @MainActor
+    private func consumePendingQuery(vm: SearchViewModel) async {
+        guard let pending = router.pendingSearchQuery, !pending.isEmpty else { return }
+        // 동일 query면 재검색 생략
+        if vm.query.trimmingCharacters(in: .whitespaces) != pending {
+            vm.query = pending
+        }
+        router.pendingSearchQuery = nil
+    }
 }
 
 struct SearchContentView: View {
     @Bindable var viewModel: SearchViewModel
     @Environment(AppRouter.self) private var router
+    @Environment(AppState.self) private var appState
     @State private var isSearchBarFocused = false
     @State private var selectedClip: ClipInfo?
     @State private var selectedChannelId: String?
+    /// [Redesign 2026-04-29] 빠른 액션 결과 toast/오류 메시지
+    @State private var actionMessage: String?
+    @State private var actionMessageId = UUID()
     
     var body: some View {
         HStack(spacing: 0) {
@@ -63,6 +87,147 @@ struct SearchContentView: View {
             }
         }
         .animation(DesignTokens.Animation.contentTransition, value: selectedChannelId)
+        .overlay(alignment: .bottom) {
+            // [Redesign 2026-04-29] 빠른 액션 결과 toast
+            if let actionMessage {
+                Text(actionMessage)
+                    .font(DesignTokens.Typography.captionMedium)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.sm)
+                    .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                    }
+                    .shadow(DesignTokens.Shadow.control)
+                    .padding(.bottom, DesignTokens.Spacing.lg)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .id(actionMessageId)
+            }
+        }
+        .animation(DesignTokens.Animation.fast, value: actionMessage)
+    }
+
+    // MARK: - Live Row Builder (with quick actions)
+
+    /// [Redesign 2026-04-29] 라이브 결과 행을 빠른 액션과 함께 생성한다.
+    @ViewBuilder
+    private func liveResultRow(_ live: LiveInfo) -> some View {
+        let channelId = live.channel?.channelId
+        let isInMultiLive = channelId.map { id in
+            appState.multiLiveManager.sessions.contains(where: { $0.channelId == id })
+        } ?? false
+        let isInMultiChat = channelId.map { id in
+            appState.followingViewState.chatSessionManager.sessions.contains(where: { $0.id == id })
+        } ?? false
+
+        EquatableSearchLiveRow(
+            live: live,
+            onAddMultiLive: channelId.map { id in
+                { Task { await addLiveToMultiLive(channelId: id, channelName: live.channel?.channelName) } }
+            },
+            onAddMultiChat: channelId.map { id in
+                { Task { await addLiveToMultiChat(channelId: id, channelName: live.channel?.channelName) } }
+            },
+            onOpenChannel: channelId.map { id in
+                { selectedChannelId = id }
+            },
+            onCopyLink: channelId.map { id in
+                {
+                    #if canImport(AppKit)
+                    let url = "https://chzzk.naver.com/live/\(id)"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                    showActionMessage("링크 복사됨")
+                    #endif
+                }
+            },
+            isAlreadyInMultiLive: isInMultiLive,
+            isAlreadyInMultiChat: isInMultiChat
+        )
+        .equatable()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if let chId = channelId {
+                router.navigate(to: .live(channelId: chId))
+            }
+        }
+    }
+
+    // MARK: - Quick Action Handlers
+
+    private func addLiveToMultiLive(channelId: String, channelName: String?) async {
+        let mlm = appState.multiLiveManager
+        if mlm.sessions.contains(where: { $0.channelId == channelId }) {
+            showActionMessage("이미 멀티라이브에 추가됨")
+            return
+        }
+        guard mlm.canAddSession else {
+            showActionMessage("멀티라이브 최대 세션 수에 도달했습니다")
+            return
+        }
+        await mlm.addSession(channelId: channelId, presentationOverride: .embedded)
+        showActionMessage("멀티라이브에 \(channelName ?? channelId) 추가됨")
+    }
+
+    private func addLiveToMultiChat(channelId: String, channelName: String?) async {
+        let manager = appState.followingViewState.chatSessionManager
+        if manager.sessions.contains(where: { $0.id == channelId }) {
+            showActionMessage("이미 멀티채팅에 추가됨")
+            return
+        }
+        guard manager.canAddSession else {
+            showActionMessage("멀티채팅 최대 세션 수에 도달했습니다")
+            return
+        }
+        guard let apiClient = appState.apiClient else { return }
+        do {
+            let liveDetail = try await apiClient.liveDetail(channelId: channelId)
+            guard let chatChannelId = liveDetail.chatChannelId else {
+                showActionMessage("\(channelName ?? channelId)은(는) 현재 방송 중이 아닙니다")
+                return
+            }
+            let tokenInfo = try await apiClient.chatAccessToken(chatChannelId: chatChannelId)
+            let resolvedName = liveDetail.channel?.channelName ?? channelName ?? channelId
+            let chatUid: String?
+            if appState.isLoggedIn,
+               let userInfo = try? await apiClient.userStatus() {
+                chatUid = userInfo.userIdHash ?? appState.userChannelId
+            } else {
+                chatUid = appState.userChannelId
+            }
+            let result = await manager.addSession(
+                channelId: channelId,
+                channelName: resolvedName,
+                chatChannelId: chatChannelId,
+                accessToken: tokenInfo.accessToken,
+                extraToken: tokenInfo.extraToken,
+                uid: chatUid,
+                nickname: appState.userNickname
+            )
+            switch result {
+            case .alreadyExists:
+                showActionMessage("이미 멀티채팅에 추가됨")
+            case .maxSessionsReached:
+                showActionMessage("멀티채팅 최대 세션 수에 도달했습니다")
+            case .success, .connectionFailed:
+                showActionMessage("멀티채팅에 \(resolvedName) 추가됨")
+            }
+        } catch {
+            showActionMessage("멀티채팅 추가 실패: \(error.localizedDescription)")
+        }
+    }
+
+    private func showActionMessage(_ message: String) {
+        actionMessage = message
+        actionMessageId = UUID()
+        let id = actionMessageId
+        Task {
+            try? await Task.sleep(for: .seconds(2.4))
+            if id == actionMessageId {
+                actionMessage = nil
+            }
+        }
     }
     
     // MARK: - Search List Content
@@ -271,21 +436,36 @@ struct SearchContentView: View {
     
     private var tabPicker: some View {
         HStack(spacing: 0) {
-            ForEach([SearchType.channel, .live, .video, .clip], id: \.self) { tab in
+            // [Redesign 2026-04-29] `전체`(통합 결과) scope 추가
+            ForEach(SearchScope.allCases) { scope in
                 SearchTabButton(
-                    title: tabTitle(for: tab),
-                    icon: tabIcon(for: tab),
-                    isSelected: viewModel.selectedTab == tab,
-                    count: tabCount(for: tab)
+                    title: scope.title,
+                    icon: scope.icon,
+                    isSelected: viewModel.selectedScope == scope,
+                    count: tabCount(for: scope)
                 ) {
-                    Task { await viewModel.onTabChanged(tab) }
+                    Task { await viewModel.onScopeChanged(scope) }
                 }
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.bottom, DesignTokens.Spacing.sm)
     }
-    
+
+    private func tabCount(for scope: SearchScope) -> Int {
+        switch scope {
+        case .all:
+            return viewModel.channelResults.count
+                + viewModel.liveResults.count
+                + viewModel.videoResults.count
+                + viewModel.clipResults.count
+        case .channel: return viewModel.channelResults.count
+        case .live: return viewModel.liveResults.count
+        case .video: return viewModel.videoResults.count
+        case .clip: return viewModel.clipResults.count
+        }
+    }
+
     private func tabTitle(for tab: SearchType) -> String {
         switch tab {
         case .channel: "채널"
@@ -301,15 +481,6 @@ struct SearchContentView: View {
         case .live: "play.tv"
         case .video: "film"
         case .clip: "film.stack"
-        }
-    }
-    
-    private func tabCount(for tab: SearchType) -> Int {
-        switch tab {
-        case .channel: viewModel.channelResults.count
-        case .live: viewModel.liveResults.count
-        case .video: viewModel.videoResults.count
-        case .clip: viewModel.clipResults.count
         }
     }
     
@@ -397,7 +568,9 @@ struct SearchContentView: View {
     private var searchResultsList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                switch viewModel.selectedTab {
+                switch viewModel.selectedScope {
+                case .all:
+                    topResultsContent
                 case .channel:
                     if viewModel.channelResults.isEmpty && !viewModel.query.isEmpty {
                         if viewModel.isSearchingChannels {
@@ -454,14 +627,7 @@ struct SearchContentView: View {
                             }
                         }
                         ForEach(viewModel.liveResults) { live in
-                            EquatableSearchLiveRow(live: live)
-                                .equatable()
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    if let chId = live.channel?.channelId {
-                                        router.navigate(to: .live(channelId: chId))
-                                    }
-                                }
+                            liveResultRow(live)
                                 .onAppear {
                                     if live.id == viewModel.liveResults.last?.id {
                                         Task { await viewModel.loadMore() }
@@ -571,6 +737,188 @@ struct SearchContentView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
+    }
+
+    // MARK: - Top Results (전체 scope)
+
+    /// [Redesign 2026-04-29] `전체` scope에서 보여주는 통합 결과 화면.
+    /// 각 bucket의 상위 N개를 section별로 표시하고, 더보기로 해당 scope로 전환된다.
+    @ViewBuilder
+    private var topResultsContent: some View {
+        let allEmpty = viewModel.channelResults.isEmpty
+            && viewModel.liveResults.isEmpty
+            && viewModel.videoResults.isEmpty
+            && viewModel.clipResults.isEmpty
+        let anySearching = viewModel.isSearchingChannels
+            || viewModel.isSearchingLives
+            || viewModel.isSearchingVideos
+            || viewModel.isSearchingClips
+
+        if allEmpty && anySearching {
+            tabLoadingView
+        } else if allEmpty && !viewModel.query.isEmpty {
+            searchEmptyState("통합")
+        } else {
+            // 라이브 (가장 시급한 결과 → 상단)
+            topResultsSection(
+                title: "라이브",
+                icon: "play.tv",
+                count: viewModel.liveResults.count,
+                isLoading: viewModel.isSearchingLives,
+                error: viewModel.bucketErrors[.live],
+                jumpScope: .live
+            ) {
+                ForEach(viewModel.liveResults.prefix(3)) { live in
+                    liveResultRow(live)
+                }
+            }
+
+            // 채널
+            topResultsSection(
+                title: "채널",
+                icon: "person.2",
+                count: viewModel.channelResults.count,
+                isLoading: viewModel.isSearchingChannels,
+                error: viewModel.bucketErrors[.channel],
+                jumpScope: .channel
+            ) {
+                ForEach(viewModel.channelResults.prefix(3)) { channel in
+                    EquatableSearchChannelRow(channel: channel)
+                        .equatable()
+                        .contentShape(Rectangle())
+                        .background(
+                            selectedChannelId == channel.channelId
+                                ? DesignTokens.Colors.chzzkGreen.opacity(0.08)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                        )
+                        .onTapGesture {
+                            if selectedChannelId == channel.channelId {
+                                selectedChannelId = nil
+                            } else {
+                                selectedChannelId = channel.channelId
+                            }
+                        }
+                }
+            }
+
+            // 비디오
+            topResultsSection(
+                title: "비디오",
+                icon: "film",
+                count: viewModel.videoResults.count,
+                isLoading: viewModel.isSearchingVideos,
+                error: viewModel.bucketErrors[.video],
+                jumpScope: .video
+            ) {
+                ForEach(viewModel.videoResults.prefix(3)) { video in
+                    EquatableSearchVideoRow(video: video)
+                        .equatable()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            router.navigate(to: .vod(videoNo: video.videoNo))
+                        }
+                }
+            }
+
+            // 클립 (전역 검색 API 부재 — 관련 채널 클립 한정)
+            topResultsSection(
+                title: "관련 채널 클립",
+                icon: "film.stack",
+                count: viewModel.clipResults.count,
+                isLoading: viewModel.isSearchingClips,
+                error: viewModel.bucketErrors[.clip],
+                jumpScope: .clip,
+                footnote: "Chzzk에 전역 클립 검색 API가 없어 상위 채널 클립을 제목으로 필터링합니다."
+            ) {
+                ForEach(viewModel.clipResults.prefix(3)) { clip in
+                    EquatableSearchClipRow(clip: clip)
+                        .equatable()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedClip = clip
+                        }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func topResultsSection<Content: View>(
+        title: String,
+        icon: String,
+        count: Int,
+        isLoading: Bool,
+        error: String?,
+        jumpScope: SearchScope,
+        footnote: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        // 모든 bucket이 비어 있고 로딩도 아닌 경우 section 자체를 숨겨 화면을 깔끔하게
+        if count > 0 || isLoading || error != nil {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    Image(systemName: icon)
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                    Text(title)
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(DesignTokens.Typography.microSemibold)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .padding(.horizontal, DesignTokens.Spacing.xs)
+                            .padding(.vertical, 1)
+                            .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                    }
+                    if isLoading {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
+                    Spacer()
+                    if count > 3 {
+                        Button("더보기") {
+                            Task { await viewModel.onScopeChanged(jumpScope) }
+                        }
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.top, DesignTokens.Spacing.md)
+                .padding(.bottom, DesignTokens.Spacing.xs)
+
+                if let error {
+                    HStack(spacing: DesignTokens.Spacing.xs) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .lineLimit(2)
+                        Spacer()
+                    }
+                    .padding(.horizontal, DesignTokens.Spacing.sm)
+                    .padding(.vertical, DesignTokens.Spacing.xs)
+                }
+
+                content()
+
+                if let footnote, count > 0 {
+                    Text(footnote)
+                        .font(DesignTokens.Typography.micro)
+                        .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        .padding(.horizontal, DesignTokens.Spacing.sm)
+                        .padding(.bottom, DesignTokens.Spacing.xs)
+                }
+
+                Divider()
+                    .padding(.top, DesignTokens.Spacing.xs)
+            }
+        }
     }
 }
 

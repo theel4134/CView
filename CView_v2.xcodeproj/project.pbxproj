@@ -12,7 +12,9 @@
 		181653DAF0FD0A95B8C6EA5E /* HomeView_v2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */; };
 		18A71DB566A7C6A727A5AFC3 /* HomeV2Extras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */; };
 		1FFA8590CFC902B7376F16A8 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF161D8919053B290B75B5EB /* HomeViewModel.swift */; };
+		22C84C5219AFE15518B0E580 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08025B58F77316132943F7D8 /* StatisticsView.swift */; };
 		23302727FE83731000625271 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29DFCF37AFC447A104B9AC1A /* ChatViewModel.swift */; };
+		4E66E8CCCE1D8E1147362F5D /* GrafanaDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E849D9444DA3727DFAA7993 /* GrafanaDashboardView.swift */; };
 		5B952B8DF0B37E3B6234205C /* WidgetCommon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 898F750DC9DD2957FA0BF33A /* WidgetCommon.swift */; };
 		5DD2BCCAA933D7EF198B1AA0 /* NowWatchingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A99A6CE4FD3E9ACBDA71025 /* NowWatchingWidget.swift */; };
 		64F42BE19BA1F44629D7615C /* HomeV2Effects.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */; };
@@ -22,11 +24,14 @@
 		863203EE11F375A60C649C79 /* HomeV2Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731DE311037F0BF2A7D8889B /* HomeV2Components.swift */; };
 		87E42B5E301C19045AE1EC00 /* DeepLinkRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E200C928B248E62767BD27A /* DeepLinkRouter.swift */; };
 		8B29154E9851BE504310D14B /* LiveCountWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5036F3011DB6CA1FDF07546E /* LiveCountWidget.swift */; };
+		8CF5D4305505960C25D99E18 /* StatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25C71ACE10EC7BE7A2B64A5 /* StatCard.swift */; };
 		8E3298E000AF57284B57F035 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E3862D7E778FCBA02E0FBB /* PlayerViewModel.swift */; };
 		915BCA520DBB4A0AD16721C1 /* CViewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C6DD518EFF58FB380A26ED /* CViewApp.swift */; };
 		916F8A801C6669F9CF439B43 /* FollowingLiveListWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1903D51ACC1B74A7955D5B35 /* FollowingLiveListWidget.swift */; };
 		93A45A2F1B5428A96F6BAEA5 /* CViewUI in Frameworks */ = {isa = PBXBuildFile; productRef = FABB040F6E63F6039AC923FD /* CViewUI */; };
 		9427E70309498CDBF08B3846 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD59E0EB71DC1D5B631D2753 /* SettingsView.swift */; };
+		977EA3BFCBFE84FBCCA76BD7 /* EmptyStatePlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC3A4F506C2572405EBFDBB /* EmptyStatePlaceholder.swift */; };
+		9BA15B509A88AD7DBBF5958C /* KPICard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED9888B6FE83502188CEAC3 /* KPICard.swift */; };
 		A1B2C3D4E5F60001BB110001 /* SettingsSharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110001 /* SettingsSharedComponents.swift */; };
 		A1B2C3D4E5F60001BB110002 /* GeneralSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110002 /* GeneralSettingsTab.swift */; };
 		A1B2C3D4E5F60001BB110003 /* PlayerSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110003 /* PlayerSettingsTab.swift */; };
@@ -37,6 +42,8 @@
 		A1B2C3D4E5F60001BB110008 /* MultiLiveSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110008 /* MultiLiveSettingsTab.swift */; };
 		A1B2C3D4E5F60001BB110009 /* MetricsForwardingStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110009 /* MetricsForwardingStatusView.swift */; };
 		A1B2C3D4E5F60001BB110010 /* LatencySettingsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110010 /* LatencySettingsContent.swift */; };
+		A1B2C3D4E5F60001BB110011 /* SettingsWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110011 /* SettingsWorkspace.swift */; };
+		A1B2C3D4E5F60001BB110012 /* SettingsOverviewContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001AA110012 /* SettingsOverviewContent.swift */; };
 		A1B2C3D4E5F60002BB220001 /* FollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220001 /* FollowingView.swift */; };
 		A1B2C3D4E5F60002BB220002 /* FollowingCardViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220002 /* FollowingCardViews.swift */; };
 		A1B2C3D4E5F60002BB220003 /* SharedEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002AA220003 /* SharedEffects.swift */; };
@@ -56,8 +63,9 @@
 		A1B2C3D4E5F60004BB440098 /* AppState+Metrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60004AA440098 /* AppState+Metrics.swift */; };
 		A1B2C3D4E5F60004BB440099 /* AppState+Auth.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60004AA440099 /* AppState+Auth.swift */; };
 		A1B2C3D4E5F60005BB550001 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550001 /* CommandPaletteView.swift */; };
-		A1B2C3D4E5F60005BB550004 /* StatisticsDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60005AA550004 /* StatisticsDetailViews.swift */; };
+		A3219AE41AF3E90E06C5A0D7 /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F3AF259E222CBEE52DB7C27 /* SectionHeader.swift */; };
 		A5A18BAD6416A63196D65D4D /* HomeMonitorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */; };
+		A7168F186C39EEF76AC82BBA /* WatchHistoryStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C9151B21F8E0D0B364A369 /* WatchHistoryStatsView.swift */; };
 		AA00112233445566AABB0001 /* MLNetworkWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0001 /* MLNetworkWindowView.swift */; };
 		AA00112233445566AABB0002 /* MLMetricsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0002 /* MLMetricsWindowView.swift */; };
 		AA00112233445566AABB0003 /* KeyboardShortcutsHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00112233445566CCDD0003 /* KeyboardShortcutsHelpView.swift */; };
@@ -72,8 +80,11 @@
 		AA22334455667788AABB0042 /* BlockedUsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA22334455667788CCDD0042 /* BlockedUsersView.swift */; };
 		AA99887766554433AABB0095 /* PlayerAdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA99887766554433CCDD0095 /* PlayerAdvancedSettingsView.swift */; };
 		AFB1AFC2C5D5DF83A72BD74E /* WidgetSnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2ABED977A4C581BDD8B93 /* WidgetSnapshotWriter.swift */; };
+		B241BD8BB07B06AC12C72657 /* ServerSyncStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F575D30E917229C488F0DB40 /* ServerSyncStatsView.swift */; };
+		B366AC766A0CA61EE2D1E0A0 /* ChatStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA30F5E02B259AB005A1C30 /* ChatStatsView.swift */; };
 		B3D3AC5A438794CA2FA7ABB8 /* CViewPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = 7A292BAE5A2BCAC04740FA8C /* CViewPersistence */; };
 		B7E559AD471E2074D2FC2779 /* CViewWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F62BD3A9B33094018E0EDE2 /* CViewWidgetsBundle.swift */; };
+		B9AC382FF506CCC6D542D042 /* FollowingView+Redesign2026.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB89A7A65353AAB4E8DA469C /* FollowingView+Redesign2026.swift */; };
 		BB11223344556677AABB0004 /* VODPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677CCDD0004 /* VODPlayerViewModel.swift */; };
 		BB11223344556677AABB0005 /* ClipPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677CCDD0005 /* ClipPlayerViewModel.swift */; };
 		BB11223344556677AABB0006 /* VODPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677CCDD0006 /* VODPlayerView.swift */; };
@@ -87,9 +98,10 @@
 		BB44551166770004AA440010 /* MLProcessIsolatedListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB44551166770004AA440011 /* MLProcessIsolatedListView.swift */; };
 		BB44551166770005AA440010 /* MLEmbeddedProcessStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB44551166770005AA440011 /* MLEmbeddedProcessStage.swift */; };
 		BB44551166770006AA440010 /* ChildWindowChromeApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB44551166770006AA440011 /* ChildWindowChromeApplier.swift */; };
+		BC63E0170F647D794BC6BE2B /* PerformanceStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87DE30596B19C0D48F80A7EC /* PerformanceStatsView.swift */; };
 		C41EE09A73689BEA4DBA52B9 /* WidgetSnapshotLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751A509963E594B1C4B5A76B /* WidgetSnapshotLoader.swift */; };
+		C786B1C57D2CB38EFEDC4A28 /* StreamingStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C151C8ED231D630D23EB7C46 /* StreamingStatsView.swift */; };
 		C7902F82DC1A15B2A923DBB2 /* CViewWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A0D493301D019016720BFD8E /* CViewWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		CC11223344556677AABB0008 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11223344556677CCDD0008 /* StatisticsView.swift */; };
 		CC11223344556677AABB0009 /* ErrorRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11223344556677CCDD0009 /* ErrorRecoveryView.swift */; };
 		CC44556677889900AABB0060 /* LiveThumbnailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC44556677889900CCDD0060 /* LiveThumbnailView.swift */; };
 		CC99887766554433AABB0090 /* ChatAutocompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC99887766554433CCDD0090 /* ChatAutocompleteView.swift */; };
@@ -110,26 +122,37 @@
 		DD11223344556677AABB0098 /* PopularClipCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD11223344556677CCDD0098 /* PopularClipCards.swift */; };
 		DD11223344556677AABB0099 /* SearchResultRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD11223344556677CCDD0099 /* SearchResultRows.swift */; };
 		DD11223344556677AABB00A0 /* ChatConnectionStatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD11223344556677CCDD00A0 /* ChatConnectionStatusBadge.swift */; };
+		DD11223344556677AABB0501 /* ClipFilmstripDock.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD11223344556677CCDD0501 /* ClipFilmstripDock.swift */; };
 		E11726D467A26987BA7ECAE6 /* CViewMonitoring in Frameworks */ = {isa = PBXBuildFile; productRef = 3819C05641FE14AD7869CF32 /* CViewMonitoring */; };
 		E7E8DFDC2042D2EC09C09553 /* HomeRecommendationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2FD4E132AE0375587B49F5 /* HomeRecommendationEngine.swift */; };
 		EC2A5455CDC2A049885E941D /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396CDE2664A7DC5449A29E2E /* AppRouter.swift */; };
+		AC710001000000000000ACT1 /* CViewAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC710002000000000000ACT1 /* CViewAction.swift */; };
+		AC710003000000000000ACT1 /* CViewActionRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC710004000000000000ACT1 /* CViewActionRegistry.swift */; };
+		AC720001000000000000ACT3 /* CViewIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC720002000000000000ACT3 /* CViewIntents.swift */; };
+		AC730001000000000000SES1 /* WorkspaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC730002000000000000SES1 /* WorkspaceSnapshot.swift */; };
+		AC740001000000000000PLY1 /* PlaybackGuardrail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC740002000000000000PLY1 /* PlaybackGuardrail.swift */; };
+		AC750001000000000000MOM1 /* MomentMarkerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC750002000000000000MOM1 /* MomentMarkerStore.swift */; };
 		EE11223344556677AABB0017 /* BackgroundUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0017 /* BackgroundUpdateService.swift */; };
 		EE11223344556677AABB0018 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0018 /* NotificationService.swift */; };
-		EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */; };
-		EE11223344556677AABB0101 /* LiveWindowResizeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */; };
-		EE11223344556677AABB0102 /* MenuTransitionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0102 /* MenuTransitionGate.swift */; };
-		EE11223344556677AABB0103 /* HomeRecommendationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */; };
 		EE11223344556677AABB0019 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0019 /* MenuBarView.swift */; };
 		EE11223344556677AABB0020 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0020 /* PlayerControlsView.swift */; };
 		EE11223344556677AABB0021 /* ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0021 /* ChatPanelView.swift */; };
 		EE11223344556677AABB0022 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0022 /* UpdateService.swift */; };
 		EE11223344556677AABB0023 /* UpdateSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0023 /* UpdateSheetView.swift */; };
 		EE11223344556677AABB0099 /* ChatOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0099 /* ChatOverlayView.swift */; };
+		EE11223344556677AABB0100 /* HomeThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */; };
+		EE11223344556677AABB0101 /* LiveWindowResizeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */; };
+		EE11223344556677AABB0102 /* MenuTransitionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0102 /* MenuTransitionGate.swift */; };
+		EE11223344556677AABB0103 /* HomeRecommendationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */; };
 		EE11223344556677AABB0150 /* ChatResizeHandle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE11223344556677CCDD0150 /* ChatResizeHandle.swift */; };
 		EE6D96E875945AE62F7DC3E6 /* CViewAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 14CD73D506FE4B4592AF3E0A /* CViewAuth */; };
 		F2D063FE109ED88F00000001 /* StreamLoadingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDCB3FCE46E4EDB00000001 /* StreamLoadingOverlay.swift */; };
 		F2D063FE109ED88FD428F817 /* LiveStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDCB3FCE46E4EDBF596E295 /* LiveStreamView.swift */; };
+		AA11BB22CC33DD44EE550046 /* ClipPreviewInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550047 /* ClipPreviewInspector.swift */; };
+		AA11BB22CC33DD44EE550044 /* SpotlightClipCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550045 /* SpotlightClipCard.swift */; };
+		AA11BB22CC33DD44EE550042 /* LiveResponsiveBreakpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550043 /* LiveResponsiveBreakpoints.swift */; };
 		F5B9BDB2CEA728995652BB4B /* SingleChannelWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47A05391825A89B1EC46346 /* SingleChannelWidget.swift */; };
+		F5F2CCB735574114ACE9A33B /* SessionStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE1BC9F5682549D704E82D8 /* SessionStatsView.swift */; };
 		FCF3FA88A8DED6C48D5A8B4A /* AppState+Widget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9676F2CC6F8F0C6A878BEE /* AppState+Widget.swift */; };
 		FDF40C1A2D801D341C3EFED2 /* MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B08923024BC3E319ABAF23 /* MainContentView.swift */; };
 		FF11223344556677AABB0030 /* MultiChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0030 /* MultiChatView.swift */; };
@@ -168,6 +191,7 @@
 		FF11223344556677AABB0060 /* FollowingViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0060 /* FollowingViewState.swift */; };
 		FF11223344556677AABB0070 /* MergedChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0070 /* MergedChatView.swift */; };
 		FF11223344556677AABB0071 /* ChatChannelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0071 /* ChatChannelPickerView.swift */; };
+		FF11223344556677AABB0142 /* MLNetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677CCDD0142 /* MLNetworkMonitor.swift */; };
 		FF22334455667788AABB0100 /* StreamAlertOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF22334455667788CCDD0100 /* StreamAlertOverlayView.swift */; };
 		FF33445566778899AABB0200 /* PlayerEngineBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF33445566778899CCDD0200 /* PlayerEngineBadge.swift */; };
 		FF33445566778899AABB0201 /* LiveStreamView+Logic.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF33445566778899CCDD0201 /* LiveStreamView+Logic.swift */; };
@@ -204,13 +228,21 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		08025B58F77316132943F7D8 /* StatisticsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatisticsView.swift; path = Sources/CViewApp/Views/Statistics/StatisticsView.swift; sourceTree = SOURCE_ROOT; };
 		1903D51ACC1B74A7955D5B35 /* FollowingLiveListWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FollowingLiveListWidget.swift; sourceTree = "<group>"; };
 		21F5508BFB114CDFF6AE5493 /* HomeV2Layout.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Layout.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Layout.swift; sourceTree = SOURCE_ROOT; };
 		29DFCF37AFC447A104B9AC1A /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ChatViewModel.swift; sourceTree = SOURCE_ROOT; };
 		2A99A6CE4FD3E9ACBDA71025 /* NowWatchingWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NowWatchingWidget.swift; sourceTree = "<group>"; };
+		2E849D9444DA3727DFAA7993 /* GrafanaDashboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GrafanaDashboardView.swift; path = Sources/CViewApp/Views/Statistics/Components/GrafanaDashboardView.swift; sourceTree = SOURCE_ROOT; };
 		2FE8F901A0136070800AC560 /* CView_v2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CView_v2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		31C6DD518EFF58FB380A26ED /* CViewApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/CViewApp.swift; sourceTree = SOURCE_ROOT; };
 		396CDE2664A7DC5449A29E2E /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Navigation/AppRouter.swift; sourceTree = SOURCE_ROOT; };
+		AC710002000000000000ACT1 /* CViewAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Actions/CViewAction.swift; sourceTree = SOURCE_ROOT; };
+		AC710004000000000000ACT1 /* CViewActionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Actions/CViewActionRegistry.swift; sourceTree = SOURCE_ROOT; };
+		AC720002000000000000ACT3 /* CViewIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Intents/CViewIntents.swift; sourceTree = SOURCE_ROOT; };
+		AC730002000000000000SES1 /* WorkspaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Persistence/WorkspaceSnapshot.swift; sourceTree = SOURCE_ROOT; };
+		AC740002000000000000PLY1 /* PlaybackGuardrail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Playback/PlaybackGuardrail.swift; sourceTree = SOURCE_ROOT; };
+		AC750002000000000000MOM1 /* MomentMarkerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Moments/MomentMarkerStore.swift; sourceTree = SOURCE_ROOT; };
 		447BA75BCCBEC31888890E33 /* CView_v2.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SupportFiles/CView_v2.entitlements; sourceTree = SOURCE_ROOT; };
 		5036F3011DB6CA1FDF07546E /* LiveCountWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveCountWidget.swift; sourceTree = "<group>"; };
 		5A4940F750F7A8D3188FC8FC /* HomeMonitorPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeMonitorPanel.swift; path = Sources/CViewApp/Views/HomeV2/HomeMonitorPanel.swift; sourceTree = SOURCE_ROOT; };
@@ -223,11 +255,17 @@
 		67D3A14B0B8340BB86AA7943 /* CViewWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = CViewWidgets.entitlements; sourceTree = "<group>"; };
 		6FDCB3FCE46E4EDB00000001 /* StreamLoadingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamLoadingOverlay.swift; sourceTree = SOURCE_ROOT; };
 		6FDCB3FCE46E4EDBF596E295 /* LiveStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LiveStreamView.swift; sourceTree = SOURCE_ROOT; };
+		AA11BB22CC33DD44EE550047 /* ClipPreviewInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/Clips/ClipPreviewInspector.swift; sourceTree = SOURCE_ROOT; };
+		AA11BB22CC33DD44EE550045 /* SpotlightClipCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/Clips/SpotlightClipCard.swift; sourceTree = SOURCE_ROOT; };
+		AA11BB22CC33DD44EE550043 /* LiveResponsiveBreakpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LiveResponsiveBreakpoints.swift; sourceTree = SOURCE_ROOT; };
 		731DE311037F0BF2A7D8889B /* HomeV2Components.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Components.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Components.swift; sourceTree = SOURCE_ROOT; };
 		751A509963E594B1C4B5A76B /* WidgetSnapshotLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotLoader.swift; sourceTree = "<group>"; };
+		7F3AF259E222CBEE52DB7C27 /* SectionHeader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SectionHeader.swift; path = Sources/CViewApp/Views/Statistics/Components/SectionHeader.swift; sourceTree = SOURCE_ROOT; };
+		87DE30596B19C0D48F80A7EC /* PerformanceStatsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PerformanceStatsView.swift; path = Sources/CViewApp/Views/Statistics/Tabs/PerformanceStatsView.swift; sourceTree = SOURCE_ROOT; };
 		898F750DC9DD2957FA0BF33A /* WidgetCommon.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetCommon.swift; sourceTree = "<group>"; };
 		8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Extras.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Extras.swift; sourceTree = SOURCE_ROOT; };
 		90F19FB24A3D4E0CECCBB391 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SupportFiles/Info.plist; sourceTree = SOURCE_ROOT; };
+		9ED9888B6FE83502188CEAC3 /* KPICard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KPICard.swift; path = Sources/CViewApp/Views/Statistics/Components/KPICard.swift; sourceTree = SOURCE_ROOT; };
 		A0D493301D019016720BFD8E /* CViewWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CViewWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60001AA110001 /* SettingsSharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SettingsSharedComponents.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110002 /* GeneralSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/GeneralSettingsTab.swift; sourceTree = SOURCE_ROOT; };
@@ -239,6 +277,8 @@
 		A1B2C3D4E5F60001AA110008 /* MultiLiveSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiLiveSettingsTab.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110009 /* MetricsForwardingStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MetricsForwardingStatusView.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60001AA110010 /* LatencySettingsContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/LatencySettingsContent.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60001AA110011 /* SettingsWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SettingsWorkspace.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60001AA110012 /* SettingsOverviewContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SettingsOverviewContent.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220001 /* FollowingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingView.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220002 /* FollowingCardViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/FollowingCardViews.swift; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60002AA220003 /* SharedEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SharedEffects.swift; sourceTree = SOURCE_ROOT; };
@@ -258,7 +298,6 @@
 		A1B2C3D4E5F60004AA440098 /* AppState+Metrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/AppState+Metrics.swift"; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60004AA440099 /* AppState+Auth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/AppState+Auth.swift"; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60005AA550001 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/CommandPaletteView.swift; sourceTree = SOURCE_ROOT; };
-		A1B2C3D4E5F60005AA550004 /* StatisticsDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StatisticsDetailViews.swift; sourceTree = SOURCE_ROOT; };
 		AA00112233445566CCDD0001 /* MLNetworkWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLNetworkWindowView.swift; sourceTree = SOURCE_ROOT; };
 		AA00112233445566CCDD0002 /* MLMetricsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLMetricsWindowView.swift; sourceTree = SOURCE_ROOT; };
 		AA00112233445566CCDD0003 /* KeyboardShortcutsHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/KeyboardShortcutsHelpView.swift; sourceTree = SOURCE_ROOT; };
@@ -273,6 +312,8 @@
 		AA22334455667788CCDD0042 /* BlockedUsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/BlockedUsersView.swift; sourceTree = SOURCE_ROOT; };
 		AA99887766554433CCDD0095 /* PlayerAdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerAdvancedSettingsView.swift; sourceTree = SOURCE_ROOT; };
 		ABB2ABED977A4C581BDD8B93 /* WidgetSnapshotWriter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WidgetSnapshotWriter.swift; path = Sources/CViewApp/Services/WidgetSnapshotWriter.swift; sourceTree = SOURCE_ROOT; };
+		AEE1BC9F5682549D704E82D8 /* SessionStatsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SessionStatsView.swift; path = Sources/CViewApp/Views/Statistics/Tabs/SessionStatsView.swift; sourceTree = SOURCE_ROOT; };
+		B6C9151B21F8E0D0B364A369 /* WatchHistoryStatsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WatchHistoryStatsView.swift; path = Sources/CViewApp/Views/Statistics/Tabs/WatchHistoryStatsView.swift; sourceTree = SOURCE_ROOT; };
 		BB11223344556677CCDD0004 /* VODPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/VODPlayerViewModel.swift; sourceTree = SOURCE_ROOT; };
 		BB11223344556677CCDD0005 /* ClipPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/ClipPlayerViewModel.swift; sourceTree = SOURCE_ROOT; };
 		BB11223344556677CCDD0006 /* VODPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/VODPlayerView.swift; sourceTree = SOURCE_ROOT; };
@@ -287,13 +328,14 @@
 		BB44551166770005AA440011 /* MLEmbeddedProcessStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLEmbeddedProcessStage.swift; sourceTree = SOURCE_ROOT; };
 		BB44551166770006AA440011 /* ChildWindowChromeApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ChildWindowChromeApplier.swift; sourceTree = SOURCE_ROOT; };
 		BF2FD4E132AE0375587B49F5 /* HomeRecommendationEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeRecommendationEngine.swift; path = Sources/CViewApp/Views/HomeV2/HomeRecommendationEngine.swift; sourceTree = SOURCE_ROOT; };
+		C151C8ED231D630D23EB7C46 /* StreamingStatsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamingStatsView.swift; path = Sources/CViewApp/Views/Statistics/Tabs/StreamingStatsView.swift; sourceTree = SOURCE_ROOT; };
 		CA9676F2CC6F8F0C6A878BEE /* AppState+Widget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "AppState+Widget.swift"; path = "Sources/CViewApp/AppState+Widget.swift"; sourceTree = SOURCE_ROOT; };
-		CC11223344556677CCDD0008 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StatisticsView.swift; sourceTree = SOURCE_ROOT; };
 		CC11223344556677CCDD0009 /* ErrorRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ErrorRecoveryView.swift; sourceTree = SOURCE_ROOT; };
 		CC44556677889900CCDD0060 /* LiveThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/Components/LiveThumbnailView.swift; sourceTree = SOURCE_ROOT; };
 		CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeV2Effects.swift; path = Sources/CViewApp/Views/HomeV2/HomeV2Effects.swift; sourceTree = SOURCE_ROOT; };
 		CC99887766554433CCDD0090 /* ChatAutocompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatAutocompleteView.swift; sourceTree = SOURCE_ROOT; };
 		CD59E0EB71DC1D5B631D2753 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SettingsView.swift; sourceTree = SOURCE_ROOT; };
+		CFC3A4F506C2572405EBFDBB /* EmptyStatePlaceholder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EmptyStatePlaceholder.swift; path = Sources/CViewApp/Views/Statistics/Components/EmptyStatePlaceholder.swift; sourceTree = SOURCE_ROOT; };
 		D3FC53DFA291B634C4B1B92F /* HomeView_v2.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeView_v2.swift; path = Sources/CViewApp/Views/HomeV2/HomeView_v2.swift; sourceTree = SOURCE_ROOT; };
 		DD11223344556677CCDD0010 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/HomeView.swift; sourceTree = SOURCE_ROOT; };
 		DD11223344556677CCDD0011 /* SearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SearchViews.swift; sourceTree = SOURCE_ROOT; };
@@ -309,23 +351,28 @@
 		DD11223344556677CCDD0098 /* PopularClipCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PopularClipCards.swift; sourceTree = SOURCE_ROOT; };
 		DD11223344556677CCDD0099 /* SearchResultRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/SearchResultRows.swift; sourceTree = SOURCE_ROOT; };
 		DD11223344556677CCDD00A0 /* ChatConnectionStatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatConnectionStatusBadge.swift; sourceTree = SOURCE_ROOT; };
+		DD11223344556677CCDD0501 /* ClipFilmstripDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ClipFilmstripDock.swift; sourceTree = SOURCE_ROOT; };
+		E25C71ACE10EC7BE7A2B64A5 /* StatCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatCard.swift; path = Sources/CViewApp/Views/Statistics/Components/StatCard.swift; sourceTree = SOURCE_ROOT; };
 		E47A05391825A89B1EC46346 /* SingleChannelWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SingleChannelWidget.swift; sourceTree = "<group>"; };
 		E9B08923024BC3E319ABAF23 /* MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MainContentView.swift; sourceTree = SOURCE_ROOT; };
+		EAA30F5E02B259AB005A1C30 /* ChatStatsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ChatStatsView.swift; path = Sources/CViewApp/Views/Statistics/Tabs/ChatStatsView.swift; sourceTree = SOURCE_ROOT; };
+		EB89A7A65353AAB4E8DA469C /* FollowingView+Redesign2026.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "FollowingView+Redesign2026.swift"; path = "Sources/CViewApp/Views/FollowingView+Redesign2026.swift"; sourceTree = SOURCE_ROOT; };
 		EC74E418620E4937A8DF3434 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EE11223344556677CCDD0017 /* BackgroundUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/BackgroundUpdateService.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0018 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/NotificationService.swift; sourceTree = SOURCE_ROOT; };
-		EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/HomeThumbnailPrefetcher.swift; sourceTree = SOURCE_ROOT; };
-		EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/LiveWindowResizeMonitor.swift; sourceTree = SOURCE_ROOT; };
-		EE11223344556677CCDD0102 /* MenuTransitionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MenuTransitionGate.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0019 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0020 /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerControlsView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0021 /* ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatPanelView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0022 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/UpdateService.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0023 /* UpdateSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/UpdateSheetView.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0099 /* ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatOverlayView.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0100 /* HomeThumbnailPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/HomeThumbnailPrefetcher.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0101 /* LiveWindowResizeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/LiveWindowResizeMonitor.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0102 /* MenuTransitionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MenuTransitionGate.swift; sourceTree = SOURCE_ROOT; };
+		EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeRecommendationCache.swift; path = Sources/CViewApp/ViewModels/HomeRecommendationCache.swift; sourceTree = SOURCE_ROOT; };
 		EE11223344556677CCDD0150 /* ChatResizeHandle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatResizeHandle.swift; sourceTree = SOURCE_ROOT; };
 		EF161D8919053B290B75B5EB /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/HomeViewModel.swift; sourceTree = SOURCE_ROOT; };
-		EE11223344556677CCDD0103 /* HomeRecommendationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeRecommendationCache.swift; path = Sources/CViewApp/ViewModels/HomeRecommendationCache.swift; sourceTree = SOURCE_ROOT; };
+		F575D30E917229C488F0DB40 /* ServerSyncStatsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ServerSyncStatsView.swift; path = Sources/CViewApp/Views/Statistics/Tabs/ServerSyncStatsView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0030 /* MultiChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MultiChatView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0031 /* ChatUserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatUserProfileSheet.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0032 /* MultiChatSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Services/MultiChatSessionManager.swift; sourceTree = SOURCE_ROOT; };
@@ -362,6 +409,7 @@
 		FF11223344556677CCDD0060 /* FollowingViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/ViewModels/FollowingViewState.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0070 /* MergedChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MergedChatView.swift; sourceTree = SOURCE_ROOT; };
 		FF11223344556677CCDD0071 /* ChatChannelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/ChatChannelPickerView.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677CCDD0142 /* MLNetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/MLNetworkMonitor.swift; sourceTree = SOURCE_ROOT; };
 		FF22334455667788CCDD0100 /* StreamAlertOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/StreamAlertOverlayView.swift; sourceTree = SOURCE_ROOT; };
 		FF33445566778899CCDD0200 /* PlayerEngineBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CViewApp/Views/PlayerEngineBadge.swift; sourceTree = SOURCE_ROOT; };
 		FF33445566778899CCDD0201 /* LiveStreamView+Logic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/CViewApp/Views/LiveStreamView+Logic.swift"; sourceTree = SOURCE_ROOT; };
@@ -423,6 +471,11 @@
 				BB44551166770002AA440011 /* MultiLiveChildScene.swift */,
 				BB44551166770003AA440011 /* MultiLiveProcessLauncher.swift */,
 				5E1F699AAEB81F741F75C611 /* Navigation */,
+				AC710005000000000000ACT1 /* Actions */,
+				AC720005000000000000ACT3 /* Intents */,
+				AC730005000000000000SES1 /* Persistence */,
+				AC740005000000000000PLY1 /* Playback */,
+				AC750005000000000000MOM1 /* Moments */,
 				EE1E649591DBDF61DE2E4396 /* ViewModels */,
 				9F58BDF7D4F04F6C4DC3CB6C /* Views */,
 				FF11223344556677CCDD0022 /* Services */,
@@ -452,6 +505,47 @@
 				396CDE2664A7DC5449A29E2E /* AppRouter.swift */,
 			);
 			name = Navigation;
+			sourceTree = "<group>";
+		};
+		AC710005000000000000ACT1 /* Actions */ = {
+			isa = PBXGroup;
+			children = (
+				AC710002000000000000ACT1 /* CViewAction.swift */,
+				AC710004000000000000ACT1 /* CViewActionRegistry.swift */,
+			);
+			name = Actions;
+			sourceTree = "<group>";
+		};
+		AC720005000000000000ACT3 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				AC720002000000000000ACT3 /* CViewIntents.swift */,
+			);
+			name = Intents;
+			sourceTree = "<group>";
+		};
+		AC730005000000000000SES1 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				AC730002000000000000SES1 /* WorkspaceSnapshot.swift */,
+			);
+			name = Persistence;
+			sourceTree = "<group>";
+		};
+		AC740005000000000000PLY1 /* Playback */ = {
+			isa = PBXGroup;
+			children = (
+				AC740002000000000000PLY1 /* PlaybackGuardrail.swift */,
+			);
+			name = Playback;
+			sourceTree = "<group>";
+		};
+		AC750005000000000000MOM1 /* Moments */ = {
+			isa = PBXGroup;
+			children = (
+				AC750002000000000000MOM1 /* MomentMarkerStore.swift */,
+			);
+			name = Moments;
 			sourceTree = "<group>";
 		};
 		613FF327577C38D88CCD342F /* SupportFiles */ = {
@@ -493,6 +587,9 @@
 				BB33445566778899EEEE0052 /* Dashboard */,
 				CC44556677889900EEEE0061 /* Components */,
 				6FDCB3FCE46E4EDBF596E295 /* LiveStreamView.swift */,
+				AA11BB22CC33DD44EE550047 /* ClipPreviewInspector.swift */,
+				AA11BB22CC33DD44EE550045 /* SpotlightClipCard.swift */,
+				AA11BB22CC33DD44EE550043 /* LiveResponsiveBreakpoints.swift */,
 				FF33445566778899CCDD0200 /* PlayerEngineBadge.swift */,
 				FF33445566778899CCDD0201 /* LiveStreamView+Logic.swift */,
 				FF33445566778899CCDD0210 /* LiveStreamHeader.swift */,
@@ -505,7 +602,6 @@
 				AA11223344556677CCDD0003 /* RecentFavoritesView.swift */,
 				BB11223344556677CCDD0006 /* VODPlayerView.swift */,
 				BB11223344556677CCDD0007 /* ClipPlayerView.swift */,
-				CC11223344556677CCDD0008 /* StatisticsView.swift */,
 				CC11223344556677CCDD0009 /* ErrorRecoveryView.swift */,
 				DD11223344556677CCDD0010 /* HomeView.swift */,
 				FF33445566778899CCDD0202 /* HomeView+Dashboard.swift */,
@@ -518,6 +614,7 @@
 				DD11223344556677CCDD0015 /* KeywordFilterView.swift */,
 				DD11223344556677CCDD0016 /* PopularClipsView.swift */,
 				DD11223344556677CCDD0098 /* PopularClipCards.swift */,
+				DD11223344556677CCDD0501 /* ClipFilmstripDock.swift */,
 				EE11223344556677CCDD0019 /* MenuBarView.swift */,
 				EE11223344556677CCDD0020 /* PlayerControlsView.swift */,
 				AA99887766554433CCDD0095 /* PlayerAdvancedSettingsView.swift */,
@@ -552,6 +649,7 @@
 				FF11223344556677CCDD0040 /* MLPlaybackTab.swift */,
 				FF11223344556677CCDD0041 /* MLToolsTab.swift */,
 				FF11223344556677CCDD0042 /* MLNetworkTab.swift */,
+				FF11223344556677CCDD0142 /* MLNetworkMonitor.swift */,
 				FF11223344556677CCDD0043 /* MLSettingsSharedComponents.swift */,
 				AA22334455667788CCDD0040 /* CategoryBrowseView.swift */,
 				AA22334455667788CCDD0041 /* ChatOnlyView.swift */,
@@ -566,6 +664,8 @@
 				A1B2C3D4E5F60001AA110008 /* MultiLiveSettingsTab.swift */,
 				A1B2C3D4E5F60001AA110009 /* MetricsForwardingStatusView.swift */,
 				A1B2C3D4E5F60001AA110010 /* LatencySettingsContent.swift */,
+				A1B2C3D4E5F60001AA110011 /* SettingsWorkspace.swift */,
+				A1B2C3D4E5F60001AA110012 /* SettingsOverviewContent.swift */,
 				A1B2C3D4E5F60002AA220001 /* FollowingView.swift */,
 				A1B2C3D4E5F60002AA220097 /* FollowingSortOrder.swift */,
 				A1B2C3D4E5F60002AA220098 /* LiveGridHeightKey.swift */,
@@ -582,7 +682,6 @@
 				A1B2C3D4E5F60003AA330004 /* ChannelMediaCards.swift */,
 				A1B2C3D4E5F60003AA330005 /* ChannelMemoSheet.swift */,
 				A1B2C3D4E5F60005AA550001 /* CommandPaletteView.swift */,
-				A1B2C3D4E5F60005AA550004 /* StatisticsDetailViews.swift */,
 				FF22334455667788CCDD0100 /* StreamAlertOverlayView.swift */,
 				AA00112233445566CCDD0001 /* MLNetworkWindowView.swift */,
 				AA00112233445566CCDD0002 /* MLMetricsWindowView.swift */,
@@ -597,6 +696,19 @@
 				CC83EEF8C4094D8A23AC9679 /* HomeV2Effects.swift */,
 				8F6D87E13914F4B6762C19FA /* HomeV2Extras.swift */,
 				21F5508BFB114CDFF6AE5493 /* HomeV2Layout.swift */,
+				EB89A7A65353AAB4E8DA469C /* FollowingView+Redesign2026.swift */,
+				08025B58F77316132943F7D8 /* StatisticsView.swift */,
+				7F3AF259E222CBEE52DB7C27 /* SectionHeader.swift */,
+				CFC3A4F506C2572405EBFDBB /* EmptyStatePlaceholder.swift */,
+				9ED9888B6FE83502188CEAC3 /* KPICard.swift */,
+				E25C71ACE10EC7BE7A2B64A5 /* StatCard.swift */,
+				2E849D9444DA3727DFAA7993 /* GrafanaDashboardView.swift */,
+				AEE1BC9F5682549D704E82D8 /* SessionStatsView.swift */,
+				C151C8ED231D630D23EB7C46 /* StreamingStatsView.swift */,
+				87DE30596B19C0D48F80A7EC /* PerformanceStatsView.swift */,
+				EAA30F5E02B259AB005A1C30 /* ChatStatsView.swift */,
+				B6C9151B21F8E0D0B364A369 /* WatchHistoryStatsView.swift */,
+				F575D30E917229C488F0DB40 /* ServerSyncStatsView.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -868,6 +980,12 @@
 			files = (
 				915BCA520DBB4A0AD16721C1 /* CViewApp.swift in Sources */,
 				EC2A5455CDC2A049885E941D /* AppRouter.swift in Sources */,
+				AC710001000000000000ACT1 /* CViewAction.swift in Sources */,
+				AC710003000000000000ACT1 /* CViewActionRegistry.swift in Sources */,
+				AC720001000000000000ACT3 /* CViewIntents.swift in Sources */,
+				AC730001000000000000SES1 /* WorkspaceSnapshot.swift in Sources */,
+				AC740001000000000000PLY1 /* PlaybackGuardrail.swift in Sources */,
+				AC750001000000000000MOM1 /* MomentMarkerStore.swift in Sources */,
 				23302727FE83731000625271 /* ChatViewModel.swift in Sources */,
 				FF11223344556677AABB0048 /* ChatTTSService.swift in Sources */,
 				FF11223344556677AABB0049 /* ChatViewModel+Autocomplete.swift in Sources */,
@@ -878,6 +996,9 @@
 				FF11223344556677AABB0055 /* PlayerViewModel+VLCAdvanced.swift in Sources */,
 				FF11223344556677AABB0056 /* PlayerViewModel+EventHandling.swift in Sources */,
 				F2D063FE109ED88FD428F817 /* LiveStreamView.swift in Sources */,
+				AA11BB22CC33DD44EE550046 /* ClipPreviewInspector.swift in Sources */,
+				AA11BB22CC33DD44EE550044 /* SpotlightClipCard.swift in Sources */,
+				AA11BB22CC33DD44EE550042 /* LiveResponsiveBreakpoints.swift in Sources */,
 				FF33445566778899AABB0200 /* PlayerEngineBadge.swift in Sources */,
 				FF33445566778899AABB0201 /* LiveStreamView+Logic.swift in Sources */,
 				FF33445566778899AABB0210 /* LiveStreamHeader.swift in Sources */,
@@ -892,7 +1013,6 @@
 				BB11223344556677AABB0005 /* ClipPlayerViewModel.swift in Sources */,
 				BB11223344556677AABB0006 /* VODPlayerView.swift in Sources */,
 				BB11223344556677AABB0007 /* ClipPlayerView.swift in Sources */,
-				CC11223344556677AABB0008 /* StatisticsView.swift in Sources */,
 				CC11223344556677AABB0009 /* ErrorRecoveryView.swift in Sources */,
 				DD11223344556677AABB0010 /* HomeView.swift in Sources */,
 				FF33445566778899AABB0202 /* HomeView+Dashboard.swift in Sources */,
@@ -905,6 +1025,7 @@
 				DD11223344556677AABB0015 /* KeywordFilterView.swift in Sources */,
 				DD11223344556677AABB0016 /* PopularClipsView.swift in Sources */,
 				DD11223344556677AABB0098 /* PopularClipCards.swift in Sources */,
+				DD11223344556677AABB0501 /* ClipFilmstripDock.swift in Sources */,
 				AA22334455667788AABB0040 /* CategoryBrowseView.swift in Sources */,
 				AA22334455667788AABB0041 /* ChatOnlyView.swift in Sources */,
 				EE11223344556677AABB0017 /* BackgroundUpdateService.swift in Sources */,
@@ -952,6 +1073,7 @@
 				FF11223344556677AABB0040 /* MLPlaybackTab.swift in Sources */,
 				FF11223344556677AABB0041 /* MLToolsTab.swift in Sources */,
 				FF11223344556677AABB0042 /* MLNetworkTab.swift in Sources */,
+				FF11223344556677AABB0142 /* MLNetworkMonitor.swift in Sources */,
 				FF11223344556677AABB0043 /* MLSettingsSharedComponents.swift in Sources */,
 				FF11223344556677AABB0044 /* FollowingView+Header.swift in Sources */,
 				FF11223344556677AABB0045 /* FollowingView+List.swift in Sources */,
@@ -974,6 +1096,8 @@
 				A1B2C3D4E5F60001BB110008 /* MultiLiveSettingsTab.swift in Sources */,
 				A1B2C3D4E5F60001BB110009 /* MetricsForwardingStatusView.swift in Sources */,
 				A1B2C3D4E5F60001BB110010 /* LatencySettingsContent.swift in Sources */,
+				A1B2C3D4E5F60001BB110011 /* SettingsWorkspace.swift in Sources */,
+				A1B2C3D4E5F60001BB110012 /* SettingsOverviewContent.swift in Sources */,
 				A1B2C3D4E5F60002BB220001 /* FollowingView.swift in Sources */,
 				A1B2C3D4E5F60002BB220097 /* FollowingSortOrder.swift in Sources */,
 				A1B2C3D4E5F60002BB220098 /* LiveGridHeightKey.swift in Sources */,
@@ -999,7 +1123,6 @@
 				BB44551166770005AA440010 /* MLEmbeddedProcessStage.swift in Sources */,
 				BB44551166770006AA440010 /* ChildWindowChromeApplier.swift in Sources */,
 				A1B2C3D4E5F60005BB550001 /* CommandPaletteView.swift in Sources */,
-				A1B2C3D4E5F60005BB550004 /* StatisticsDetailViews.swift in Sources */,
 				FF22334455667788AABB0100 /* StreamAlertOverlayView.swift in Sources */,
 				AA00112233445566AABB0001 /* MLNetworkWindowView.swift in Sources */,
 				AA00112233445566AABB0002 /* MLMetricsWindowView.swift in Sources */,
@@ -1017,6 +1140,19 @@
 				64F42BE19BA1F44629D7615C /* HomeV2Effects.swift in Sources */,
 				18A71DB566A7C6A727A5AFC3 /* HomeV2Extras.swift in Sources */,
 				0B51DB9BDCB9752C5E4DE96F /* HomeV2Layout.swift in Sources */,
+				B9AC382FF506CCC6D542D042 /* FollowingView+Redesign2026.swift in Sources */,
+				22C84C5219AFE15518B0E580 /* StatisticsView.swift in Sources */,
+				A3219AE41AF3E90E06C5A0D7 /* SectionHeader.swift in Sources */,
+				977EA3BFCBFE84FBCCA76BD7 /* EmptyStatePlaceholder.swift in Sources */,
+				9BA15B509A88AD7DBBF5958C /* KPICard.swift in Sources */,
+				8CF5D4305505960C25D99E18 /* StatCard.swift in Sources */,
+				4E66E8CCCE1D8E1147362F5D /* GrafanaDashboardView.swift in Sources */,
+				F5F2CCB735574114ACE9A33B /* SessionStatsView.swift in Sources */,
+				C786B1C57D2CB38EFEDC4A28 /* StreamingStatsView.swift in Sources */,
+				BC63E0170F647D794BC6BE2B /* PerformanceStatsView.swift in Sources */,
+				B366AC766A0CA61EE2D1E0A0 /* ChatStatsView.swift in Sources */,
+				A7168F186C39EEF76AC82BBA /* WatchHistoryStatsView.swift in Sources */,
+				B241BD8BB07B06AC12C72657 /* ServerSyncStatsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

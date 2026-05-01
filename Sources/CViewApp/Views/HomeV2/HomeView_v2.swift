@@ -38,8 +38,8 @@ struct HomeView_v2: View {
 
     /// 간이 성능 모니터 패널 표시 여부 (CommandBar 의 ⌥M 버튼으로 토글, AppStorage 영속)
     @AppStorage("home.monitor.enabled") private var monitorEnabled: Bool = false
-    @State private var supersetReachable: Bool? = nil
-    @State private var checkingSuperset: Bool = false
+    @State private var analyticsReachable: Bool? = nil
+    @State private var checkingAnalytics: Bool = false
 
     /// 캐시된 추천 결과 — 입력 시그니처가 바뀌는 때며 재계산 (매 렌더 O(N log N) 회피)
     @State private var cachedRecommendations: [HomeRecommendationEngine.ScoredChannel] = []
@@ -62,10 +62,18 @@ struct HomeView_v2: View {
     @AppStorage("home.v2.show.continue")    private var prefShowContinue: Bool = true
     @AppStorage("home.v2.show.discover")    private var prefShowDiscover: Bool = true
     @AppStorage("home.v2.show.top")         private var prefShowTop: Bool = true
-    @AppStorage("home.v2.show.insights")    private var prefShowInsights: Bool = true
+    // [Lightweight 2026-04-28] 기본 홈은 가벼워야 한다는 디자인 사료 결론에 따라
+    // Compact Insights / Analytics Insight Dock 는 접힘(off) 기본값.
+    // 사용자가 Home Layout Menu 에서 명시적으로 켤 때만 노출.
+    // [2026-04-29] AppStorage key `home.v2.show.supersetDock` 는 호환을 위해 그대로 둔다.
+    @AppStorage("home.v2.show.insights")    private var prefShowInsights: Bool = false
     @AppStorage("home.v2.show.activeMulti") private var prefShowActiveMulti: Bool = true
-    @AppStorage("home.v2.show.supersetDock") private var prefShowSupersetDock: Bool = true
+    @AppStorage("home.v2.show.supersetDock") private var prefShowAnalyticsDock: Bool = false
     @AppStorage("home.v2.density")          private var densityRaw: String = HomeCardDensity.comfortable.rawValue
+
+    /// [Lightweight 2026-04-28] Analytics 가용성 probe 캐시 TTL (60s).
+    /// 짧은 메뉴 왕복마다 HEAD 요청을 반복하지 않도록 유지.
+    @State private var lastAnalyticsProbeAt: Date? = nil
 
     // MARK: - Derived
 
@@ -146,20 +154,30 @@ struct HomeView_v2: View {
         }
     }
 
-    private var supersetURL: URL {
+    /// [2026-04-29] Grafana 전환 후: 홈 dock 은 `cview-overview` 대시보드를
+    /// 직접 연다. nginx 가 root 에 Grafana 를 mount → `/d/<uid>` 경로 사용.
+    /// settings 의 metrics serverURL host 만 활용.
+    private var analyticsDashboardURL: URL {
+        analyticsURL(path: "/d/cview-overview")
+    }
+
+    /// Grafana `/api/health` probe URL — `/` HEAD 는 302 redirect 라 목적 불명확.
+    private var analyticsHealthURL: URL {
+        analyticsURL(path: "/api/health")
+    }
+
+    private func analyticsURL(path: String) -> URL {
         let raw = MetricsSettings.normalizeServerURL(appState.settingsStore.metrics.serverURL)
         if var components = URLComponents(string: raw), let host = components.host {
             components.scheme = "https"
             components.host = host
-            components.port = 9443
-            components.path = "/"
+            components.port = nil
+            components.path = path
             components.query = nil
             components.fragment = nil
-            if let url = components.url {
-                return url
-            }
+            if let url = components.url { return url }
         }
-        return URL(string: "https://cv.dododo.app:9443/")!
+        return URL(string: "https://cv.dododo.app\(path)")!
     }
 
     private var p95LatencyMs: Double? {
@@ -198,38 +216,37 @@ struct HomeView_v2: View {
         var id: String { rawValue }
     }
 
-    private var upNextItemsBySegment: [UpNextSegment: [UpNextItem]] {
-        var map: [UpNextSegment: [UpNextItem]] = [:]
-
-        map[.following] = Array(
-            viewModel.recentLiveFollowing
-                .prefix(queueLimit)
-                .map { .init(id: $0.channelId, channel: $0, source: "팔로잉 LIVE") }
-        )
-
-        var favorites: [UpNextItem] = []
-        for item in favoriteItems {
-            if let live = cachedLiveLookup[item.channelId] {
-                favorites.append(.init(id: live.channelId, channel: live, source: "즐겨찾기"))
-            }
-            if favorites.count >= queueLimit { break }
-        }
-        map[.favorites] = favorites
-
-        var recents: [UpNextItem] = []
-        for item in recentItems {
-            if let live = cachedLiveLookup[item.channelId] {
-                recents.append(.init(id: live.channelId, channel: live, source: "최근 시청"))
-            }
-            if recents.count >= queueLimit { break }
-        }
-        map[.recent] = recents
-
-        return map
-    }
-
+    /// [Perf 2026-04-28] 이전엔 3개 세그먼트를 항상 계산해 dictionary 로 담았으나
+    /// 실제로는 한 개 세그먼트만 렌더되므로 활성 세그먼트 하나만 계산한다.
     private var currentUpNextItems: [UpNextItem] {
-        upNextItemsBySegment[upNextSegment] ?? []
+        switch upNextSegment {
+        case .following:
+            return Array(
+                viewModel.recentLiveFollowing
+                    .prefix(queueLimit)
+                    .map { .init(id: $0.channelId, channel: $0, source: "팔로잉 LIVE") }
+            )
+        case .favorites:
+            var out: [UpNextItem] = []
+            out.reserveCapacity(queueLimit)
+            for item in favoriteItems {
+                if let live = cachedLiveLookup[item.channelId] {
+                    out.append(.init(id: live.channelId, channel: live, source: "즐겨찾기"))
+                }
+                if out.count >= queueLimit { break }
+            }
+            return out
+        case .recent:
+            var out: [UpNextItem] = []
+            out.reserveCapacity(queueLimit)
+            for item in recentItems {
+                if let live = cachedLiveLookup[item.channelId] {
+                    out.append(.init(id: live.channelId, channel: live, source: "최근 시청"))
+                }
+                if out.count >= queueLimit { break }
+            }
+            return out
+        }
     }
 
     private enum HomeDataHealth {
@@ -384,75 +401,178 @@ struct HomeView_v2: View {
         return formatter
     }()
 
+    // [Lightweight 2026-04-28] Status chip 우선순위 (narrow window 대비):
+    //   1. 로그인         — 사용자 행동 진입점, 항상 노출
+    //   2. 쿠키           — 재로그인 경고 시 즉시 보여야 함, 항상 노출
+    //   3. 데이터         — 데이터 헬스 (popover)
+    //   4. 업데이트       — 마지막 갱신 시간 (정보성)
+    //   5. 추천 캐시      — 디버깅성 정보, 가장 먼저 숨김
+    @ViewBuilder
+    private var loginStatusChip: some View {
+        Button {
+            if !appState.isLoggedIn {
+                router.presentSheet(.login)
+            }
+        } label: {
+            HomeV2StatusPill(
+                icon: appState.isLoggedIn ? "person.fill.checkmark" : "person.badge.key",
+                title: "로그인",
+                value: appState.isLoggedIn ? "연결됨" : "필요",
+                tint: appState.isLoggedIn ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.warning
+            )
+        }
+        .buttonStyle(.plain)
+        .help(appState.isLoggedIn ? "로그인 상태" : "로그인 열기")
+    }
+
+    @ViewBuilder
+    private var cookieStatusChip: some View {
+        Button {
+            if viewModel.needsCookieLogin {
+                router.presentSheet(.login)
+            }
+        } label: {
+            HomeV2StatusPill(
+                icon: "key.fill",
+                title: "쿠키",
+                value: viewModel.needsCookieLogin ? "재로그인 필요" : "정상",
+                tint: viewModel.needsCookieLogin ? DesignTokens.Colors.warning : DesignTokens.Colors.chzzkGreen
+            )
+        }
+        .buttonStyle(.plain)
+        .help(viewModel.needsCookieLogin ? "쿠키 로그인 열기" : "쿠키 상태 정상")
+    }
+
+    @ViewBuilder
+    private var dataHealthChip: some View {
+        Button {
+            showDataHealthDetail.toggle()
+        } label: {
+            HomeV2StatusPill(
+                icon: dataHealth.icon,
+                title: "데이터",
+                value: dataHealth.label,
+                tint: dataHealth.tint
+            )
+        }
+        .buttonStyle(.plain)
+        .help(dataHealth.help)
+        .popover(isPresented: $showDataHealthDetail, arrowEdge: .bottom) {
+            dataHealthPopoverContent
+        }
+    }
+
+    @ViewBuilder
+    private var updatedAtChip: some View {
+        if let cachedAt = viewModel.liveChannelsCachedAt {
+            HomeV2StatusPill(
+                icon: "clock",
+                title: "업데이트",
+                value: relativeTime(cachedAt),
+                tint: DesignTokens.Colors.textSecondary
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var recommendationCacheChip: some View {
+        Button {
+            triggerRefresh()
+        } label: {
+            HomeV2StatusPill(
+                icon: "arrow.clockwise",
+                title: "추천 캐시",
+                value: cachedRecommendations.isEmpty ? "비어있음" : "준비됨",
+                tint: cachedRecommendations.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen
+            )
+        }
+        .buttonStyle(.plain)
+        .help("라이브/추천 데이터 새로고침")
+    }
+
+    /// [2026-04-30] Grafana 분석 대시보드 간략 표시 — 홈 status panel 에 항상 노출.
+    /// 클릭 시 브라우저로 대시보드 열기. 상세 dock 은 Layout 메뉴에서 토글.
+    @ViewBuilder
+    private var grafanaStatusChip: some View {
+        let value: String = {
+            if checkingAnalytics { return "확인 중" }
+            switch analyticsReachable {
+            case .some(true):  return "연결됨"
+            case .some(false): return "오프라인"
+            case .none:        return "미확인"
+            }
+        }()
+        let tint: Color = {
+            if checkingAnalytics { return DesignTokens.Colors.textSecondary }
+            switch analyticsReachable {
+            case .some(true):  return DesignTokens.Colors.chzzkGreen
+            case .some(false): return DesignTokens.Colors.warning
+            case .none:        return DesignTokens.Colors.textSecondary
+            }
+        }()
+        let helpText: String = {
+            var parts: [String] = ["Grafana 대시보드 열기 — \(analyticsDashboardURL.absoluteString)"]
+            if let p95 = p95LatencyMs { parts.append(String(format: "P95 %.0fms", p95)) }
+            if bufferWarnings > 0 { parts.append("버퍼 경고 \(bufferWarnings)") }
+            return parts.joined(separator: " · ")
+        }()
+
+        Button {
+            NSWorkspace.shared.open(analyticsDashboardURL)
+        } label: {
+            HomeV2StatusPill(
+                icon: "chart.xyaxis.line",
+                title: "Grafana",
+                value: value,
+                tint: tint
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("대시보드 열기") { NSWorkspace.shared.open(analyticsDashboardURL) }
+            Button(checkingAnalytics ? "확인 중…" : "연결 다시 확인") {
+                Task { await probeAnalyticsAvailability(force: true) }
+            }
+            .disabled(checkingAnalytics)
+        }
+        .help(helpText)
+    }
+
     private var statusPanelSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ViewThatFits(in: .horizontal) {
+            // Wide: 모든 chip 노출 (우선순위대로)
             HStack(spacing: DesignTokens.Spacing.sm) {
-                Button {
-                    if !appState.isLoggedIn {
-                        router.presentSheet(.login)
-                    }
-                } label: {
-                    HomeV2StatusPill(
-                        icon: appState.isLoggedIn ? "person.fill.checkmark" : "person.badge.key",
-                        title: "로그인",
-                        value: appState.isLoggedIn ? "연결됨" : "필요",
-                        tint: appState.isLoggedIn ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.warning
-                    )
-                }
-                .buttonStyle(.plain)
-                .help(appState.isLoggedIn ? "로그인 상태" : "로그인 열기")
-
-                Button {
-                    if viewModel.needsCookieLogin {
-                        router.presentSheet(.login)
-                    }
-                } label: {
-                    HomeV2StatusPill(
-                        icon: "key.fill",
-                        title: "쿠키",
-                        value: viewModel.needsCookieLogin ? "재로그인 필요" : "정상",
-                        tint: viewModel.needsCookieLogin ? DesignTokens.Colors.warning : DesignTokens.Colors.chzzkGreen
-                    )
-                }
-                .buttonStyle(.plain)
-                .help(viewModel.needsCookieLogin ? "쿠키 로그인 열기" : "쿠키 상태 정상")
-
-                Button {
-                    triggerRefresh()
-                } label: {
-                    HomeV2StatusPill(
-                        icon: "arrow.clockwise",
-                        title: "추천 캐시",
-                        value: cachedRecommendations.isEmpty ? "비어있음" : "준비됨",
-                        tint: cachedRecommendations.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("라이브/추천 데이터 새로고침")
-
-                Button {
-                    showDataHealthDetail.toggle()
-                } label: {
-                    HomeV2StatusPill(
-                        icon: dataHealth.icon,
-                        title: "데이터",
-                        value: dataHealth.label,
-                        tint: dataHealth.tint
-                    )
-                }
-                .buttonStyle(.plain)
-                .help(dataHealth.help)
-                .popover(isPresented: $showDataHealthDetail, arrowEdge: .bottom) {
-                    dataHealthPopoverContent
-                }
-
-                if let cachedAt = viewModel.liveChannelsCachedAt {
-                    HomeV2StatusPill(
-                        icon: "clock",
-                        title: "업데이트",
-                        value: relativeTime(cachedAt),
-                        tint: DesignTokens.Colors.textSecondary
-                    )
+                loginStatusChip
+                cookieStatusChip
+                dataHealthChip
+                grafanaStatusChip
+                updatedAtChip
+                recommendationCacheChip
+            }
+            // Mid: 추천 캐시 chip 생략
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                loginStatusChip
+                cookieStatusChip
+                dataHealthChip
+                grafanaStatusChip
+                updatedAtChip
+            }
+            // Narrow: 업데이트 chip 도 생략 (로그인/쿠키/데이터/Grafana)
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                loginStatusChip
+                cookieStatusChip
+                dataHealthChip
+                grafanaStatusChip
+            }
+            // Very narrow: 가로 스크롤 fallback
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    loginStatusChip
+                    cookieStatusChip
+                    dataHealthChip
+                    grafanaStatusChip
+                    updatedAtChip
+                    recommendationCacheChip
                 }
             }
         }
@@ -523,24 +643,43 @@ struct HomeView_v2: View {
         return sorted[rank]
     }
 
-    private func probeSupersetAvailability() async {
-        if checkingSuperset { return }
-        checkingSuperset = true
-        defer { checkingSuperset = false }
+    private func probeAnalyticsAvailability(force: Bool = false) async {
+        if checkingAnalytics { return }
+        // [Lightweight 2026-04-28] 60s TTL — 메뉴 왕복·재마운트마다 HEAD 요청을
+        // 보내면 홈 첫 프레임 렌더와 겹쳐 부하. force=true 는 사용자가
+        // dock 의 재시도 버튼을 눌렀을 때만.
+        if !force, let last = lastAnalyticsProbeAt,
+           Date().timeIntervalSince(last) < 60 {
+            return
+        }
+        checkingAnalytics = true
+        defer {
+            checkingAnalytics = false
+            lastAnalyticsProbeAt = Date()
+        }
 
-        var request = URLRequest(url: supersetURL)
-        request.httpMethod = "HEAD"
+        // [2026-04-29] Grafana `/api/health` 200 + body `{"database":"ok"}` 확인.
+        // 이전 구현은 `/` HEAD 였으나 Grafana 가 302→/login 으로 응답해 의미가
+        // 모호했다.
+        var request = URLRequest(url: analyticsHealthURL)
+        request.httpMethod = "GET"
         request.timeoutInterval = 2.5
+        request.cachePolicy = .reloadIgnoringLocalCacheData
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse {
-                supersetReachable = (200...399).contains(http.statusCode) || http.statusCode == 401 || http.statusCode == 403
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                if let body = String(data: data, encoding: .utf8),
+                   body.lowercased().contains("\"database\":\"ok\"") || body.uppercased().contains("OK") {
+                    analyticsReachable = true
+                } else {
+                    analyticsReachable = true // 200 이면 일단 reachable
+                }
             } else {
-                supersetReachable = true
+                analyticsReachable = false
             }
         } catch {
-            supersetReachable = false
+            analyticsReachable = false
         }
     }
 
@@ -563,6 +702,7 @@ struct HomeView_v2: View {
                     greeting: greeting,
                     isRefreshing: refreshing,
                     monitorEnabled: monitorEnabled,
+                    followingLiveCount: viewModel.followingLiveCount,
                     onToggleMonitor: { monitorEnabled.toggle() },
                     onRefresh: { triggerRefresh() }
                 )
@@ -572,17 +712,12 @@ struct HomeView_v2: View {
             .padding(.top, DesignTokens.Spacing.xl + 32)   // 타이틀바(28) 보정 포함
             .padding(.bottom, DesignTokens.Spacing.sm)
             .background {
-                ZStack {
-                    DesignTokens.Colors.background.opacity(0.96)
-                    LinearGradient(
-                        colors: [
-                            DesignTokens.Colors.surfaceElevated.opacity(0.78),
-                            DesignTokens.Colors.background.opacity(0.92)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
+                // [Perf 2026-04-28] WindowServer 합성 비용 절감.
+                //   기존: opacity(0.96) + LinearGradient(opacity 0.78~0.92) — 두 반투명 레이어가
+                //         ScrollView 위에 떠 있으면 macOS WindowServer 가 스크롤마다 alpha
+                //         compositing pass 수행.
+                //   수정: 완전 불투명 단색 (background) — backing store 1개로 합성 패스 0.
+                DesignTokens.Colors.background
             }
 
             ScrollView {
@@ -603,9 +738,18 @@ struct HomeView_v2: View {
                     }
 
                     // 3. Hero + Personal Queue
-                    if prefShowHero, let hero = cachedRecommendations.first {
-                        topFocusSection(hero: hero)
-                            .homeSectionAppear(index: 2)
+                    // [Lightweight 2026-04-28] 추천 셈과 마운트·웨임 동안·비로그인 상태에서도
+                    // hero 영역은 항상 자리를 차지해야 한다 (홈 첨단에 광태릴이 생기면
+                    // 레이아웃 도다김이 커져 첫 시선이 흐려짐). hero 가 없으면 fallback CTA.
+                    if prefShowHero {
+                        Group {
+                            if let hero = cachedRecommendations.first {
+                                topFocusSection(hero: hero)
+                            } else {
+                                heroFallbackSection
+                            }
+                        }
+                        .homeSectionAppear(index: 2)
                     }
 
                     // 4. Personal Live (인라인 재구현)
@@ -733,7 +877,9 @@ struct HomeView_v2: View {
             }
 
             Task { @MainActor in
-                await probeSupersetAvailability()
+                // [2026-04-30] Grafana 상태 chip 이 항상 status panel 에 노출되므로
+                // dock 토글과 무관하게 1회 probe (60s TTL 캐시).
+                await probeAnalyticsAvailability()
             }
         }
         .onDisappear {
@@ -901,17 +1047,44 @@ struct HomeView_v2: View {
             if viewModel.recentLiveFollowing.isEmpty {
                 HStack {
                     Spacer()
-                    VStack(spacing: 6) {
+                    VStack(spacing: 8) {
                         Image(systemName: "heart")
                             .font(DesignTokens.Typography.subhead)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                         Text("라이브 중인 팔로잉 채널이 없어요")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
+                        HStack(spacing: DesignTokens.Spacing.xs) {
+                            Button {
+                                router.selectSidebar(.following)
+                            } label: {
+                                Text("팔로잉 탭 열기")
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(DesignTokens.Colors.chzzkGreen.opacity(0.12), in: Capsule())
+                                    .overlay(Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 0.5))
+                            }
+                            .buttonStyle(.plain)
+                            Button {
+                                triggerRefresh()
+                            } label: {
+                                Text("새로고침")
+                                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(refreshing)
+                        }
                     }
                     Spacer()
                 }
-                .padding(.vertical, DesignTokens.Spacing.lg)
+                .padding(.vertical, DesignTokens.Spacing.xl)
                 .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
             } else {
                 LazyVGrid(
@@ -963,9 +1136,16 @@ struct HomeView_v2: View {
                 spacing: DesignTokens.Spacing.sm
             ) {
                 ForEach(filteredTopChannels) { channel in
-                    MiniChannelCard(channel: channel, onHoverChange: { hovering in
-                        if hovering { triggerPrefetch(channel.channelId) }
-                    })
+                    MiniChannelCard(
+                        channel: channel,
+                        onHoverChange: { hovering in
+                            if hovering { triggerPrefetch(channel.channelId) }
+                        },
+                        // [Lightweight 2026-04-28] 인기 채널 그리드는 N개 카드 동시 노출 —
+                        // .liveLoop 사용 시 45s 타이머 다수 + 동시 fade-in 으로
+                        // windowserver 합성 부하. 새로고침 버튼에서만 갱신.
+                        thumbnailRefreshPolicy: .once
+                    )
                     .onTapGesture {
                         router.navigate(to: .live(channelId: channel.channelId))
                     }
@@ -985,6 +1165,101 @@ struct HomeView_v2: View {
         return viewModel.topChannels.filter { $0.categoryName == cat }
     }
 
+    // MARK: - Hero Fallback (랜딩/추천 없을 때 공간 유지 + CTA)
+
+    /// [Lightweight 2026-04-28] cachedRecommendations 가 비어있을 때 hero 자리를
+    /// 유지해 주는 fallback. 홈 레이아웃이 위로 당겨올라오는 경험을 막고,
+    /// 사용자가 첫제 명령 (새로고침/검색/팔로잉)으로 이동하도록 안내한다.
+    private var heroFallbackSection: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: sectionSpacing) {
+                heroFallbackCard
+                    .frame(maxWidth: .infinity)
+                upNextQueuePanel
+                    .frame(width: 340)
+            }
+            VStack(alignment: .leading, spacing: sectionSpacing) {
+                heroFallbackCard
+                upNextQueuePanel
+            }
+        }
+    }
+
+    private var heroFallbackCard: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Image(systemName: "sparkles.tv")
+                    .font(DesignTokens.Typography.headline)
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.liveChannels.isEmpty ? "라이브 데이터를 불러오는 중" : "소개할 대표 라이브를 조합하는 중")
+                        .font(DesignTokens.Typography.headline)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    Text(viewModel.liveChannels.isEmpty
+                         ? "네트워크·로그인 상태를 확인하고 새로고침해 보세요."
+                         : "팔로잉 / 즐겨찾기 데이터를 따르면 추천이 표시됩니다.")
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Button {
+                    triggerRefresh()
+                } label: {
+                    Label(refreshing ? "불러오는 중…" : "새로고침", systemImage: "arrow.clockwise")
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, DesignTokens.Spacing.xs)
+                        .background(DesignTokens.Colors.chzzkGreen, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(refreshing)
+
+                Button {
+                    router.navigate(to: .search(query: nil))
+                } label: {
+                    Label("검색", systemImage: "magnifyingglass")
+                        .font(DesignTokens.Typography.captionSemibold)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, DesignTokens.Spacing.xs)
+                        .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                        .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.4), lineWidth: 0.6))
+                }
+                .buttonStyle(.plain)
+
+                if !appState.isLoggedIn {
+                    Button {
+                        router.presentSheet(.login)
+                    } label: {
+                        Label("로그인", systemImage: "person.crop.circle")
+                            .font(DesignTokens.Typography.captionSemibold)
+                            .foregroundStyle(DesignTokens.Colors.textPrimary)
+                            .padding(.horizontal, DesignTokens.Spacing.md)
+                            .padding(.vertical, DesignTokens.Spacing.xs)
+                            .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
+                            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.4), lineWidth: 0.6))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(DesignTokens.Spacing.lg)
+        .frame(maxWidth: .infinity, minHeight: heroHeight, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.35), lineWidth: 0.6)
+        )
+    }
+
     // MARK: - Refresh
 
     @ViewBuilder
@@ -997,18 +1272,18 @@ struct HomeView_v2: View {
                 upNextQueuePanel
                     .frame(width: 340)
 
-                if prefShowSupersetDock {
-                    HomeSupersetInsightDock(
+                if prefShowAnalyticsDock {
+                    HomeAnalyticsInsightDock(
                         metricsOnline: viewModel.isMetricsServerOnline,
-                        supersetReachable: supersetReachable,
-                        checkingSuperset: checkingSuperset,
-                        supersetURL: supersetURL,
+                        analyticsReachable: analyticsReachable,
+                        checkingAnalytics: checkingAnalytics,
+                        analyticsURL: analyticsDashboardURL,
                         p95LatencyMs: p95LatencyMs,
                         bufferWarnings: bufferWarnings,
                         vlcSamples: vlcSampleCount,
                         viewerHistory: viewModel.viewerHistory,
-                        onRetrySupersetCheck: {
-                            Task { await probeSupersetAvailability() }
+                        onRetryAnalyticsCheck: {
+                            Task { await probeAnalyticsAvailability(force: true) }
                         }
                     )
                     .frame(width: 300)
@@ -1017,21 +1292,21 @@ struct HomeView_v2: View {
 
             VStack(alignment: .leading, spacing: sectionSpacing) {
                 HomeHeroLiveCard(item: hero, height: heroHeight)
-                if prefShowSupersetDock {
+                if prefShowAnalyticsDock {
                     HStack(alignment: .top, spacing: sectionSpacing) {
                         upNextQueuePanel
                             .frame(maxWidth: .infinity)
-                        HomeSupersetInsightDock(
+                        HomeAnalyticsInsightDock(
                             metricsOnline: viewModel.isMetricsServerOnline,
-                            supersetReachable: supersetReachable,
-                            checkingSuperset: checkingSuperset,
-                            supersetURL: supersetURL,
+                            analyticsReachable: analyticsReachable,
+                            checkingAnalytics: checkingAnalytics,
+                            analyticsURL: analyticsDashboardURL,
                             p95LatencyMs: p95LatencyMs,
                             bufferWarnings: bufferWarnings,
                             vlcSamples: vlcSampleCount,
                             viewerHistory: viewModel.viewerHistory,
-                            onRetrySupersetCheck: {
-                                Task { await probeSupersetAvailability() }
+                            onRetryAnalyticsCheck: {
+                                Task { await probeAnalyticsAvailability(force: true) }
                             }
                         )
                         .frame(width: 320)
@@ -1044,18 +1319,18 @@ struct HomeView_v2: View {
             VStack(alignment: .leading, spacing: sectionSpacing) {
                 HomeHeroLiveCard(item: hero, height: heroHeight)
                 upNextQueuePanel
-                if prefShowSupersetDock {
-                    HomeSupersetInsightDock(
+                if prefShowAnalyticsDock {
+                    HomeAnalyticsInsightDock(
                         metricsOnline: viewModel.isMetricsServerOnline,
-                        supersetReachable: supersetReachable,
-                        checkingSuperset: checkingSuperset,
-                        supersetURL: supersetURL,
+                        analyticsReachable: analyticsReachable,
+                        checkingAnalytics: checkingAnalytics,
+                        analyticsURL: analyticsDashboardURL,
                         p95LatencyMs: p95LatencyMs,
                         bufferWarnings: bufferWarnings,
                         vlcSamples: vlcSampleCount,
                         viewerHistory: viewModel.viewerHistory,
-                        onRetrySupersetCheck: {
-                            Task { await probeSupersetAvailability() }
+                        onRetryAnalyticsCheck: {
+                            Task { await probeAnalyticsAvailability(force: true) }
                         }
                     )
                 }
@@ -1096,14 +1371,42 @@ struct HomeView_v2: View {
                     }
                     .transition(.opacity)
                 } else if currentUpNextItems.isEmpty {
-                    HStack {
-                        Spacer()
+                    // [Lightweight 2026-04-28] empty state 는 CTA 를 갖는다 — 다음 행동이
+                    // 막힌 상태가 되지 않도록 Discover/검색 진입점 제공.
+                    VStack(spacing: DesignTokens.Spacing.xs) {
                         Text(upNextEmptyMessage)
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        Spacer()
+                            .multilineTextAlignment(.center)
+                        HStack(spacing: DesignTokens.Spacing.xs) {
+                            Button {
+                                triggerRefresh()
+                            } label: {
+                                Label("새로고침", systemImage: "arrow.clockwise")
+                                    .font(DesignTokens.Typography.custom(size: 10.5, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(DesignTokens.Colors.chzzkGreen.opacity(0.12), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(refreshing)
+
+                            Button {
+                                router.navigate(to: .search(query: nil))
+                            } label: {
+                                Label("검색", systemImage: "magnifyingglass")
+                                    .font(DesignTokens.Typography.custom(size: 10.5, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(DesignTokens.Colors.surfaceBase.opacity(0.7), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .padding(.vertical, DesignTokens.Spacing.lg)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DesignTokens.Spacing.md)
                     .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
                     .transition(.opacity)
                 } else {
@@ -1128,10 +1431,19 @@ struct HomeView_v2: View {
                                                 .font(DesignTokens.Typography.captionSemibold)
                                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                                                 .lineLimit(1)
-                                            Text(entry.source)
-                                                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
-                                                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                                                .lineLimit(1)
+                                            if !entry.channel.liveTitle.isEmpty {
+                                                Text(entry.channel.liveTitle)
+                                                    .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
+                                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                                    .lineLimit(1)
+                                            }
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 8))
+                                                Text(entry.channel.formattedViewerCount)
+                                                    .font(DesignTokens.Typography.custom(size: 9, weight: .semibold))
+                                            }
+                                            .foregroundStyle(DesignTokens.Colors.textTertiary)
                                         }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1268,7 +1580,7 @@ struct HomeView_v2: View {
         Task { @MainActor in
             await viewModel.refresh()
             await reloadStore()
-            await probeSupersetAvailability()
+            await probeAnalyticsAvailability()
             refreshing = false
         }
     }

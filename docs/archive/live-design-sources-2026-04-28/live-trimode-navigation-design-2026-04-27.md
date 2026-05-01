@@ -30,17 +30,17 @@
 
 아래 이미지는 실제 구현 캡처가 아니라, 현재 코드 구조와 `DesignTokens` 톤을 기준으로 만든 디자인 방향 mockup이다.
 
-![상단 세그먼트형 Live Hub 예시](assets/live-trimode-segmented-hub.svg)
+![상단 세그먼트형 Live Hub 예시](../../assets/live-trimode-segmented-hub.svg)
 
-![좌측 모드 레일형 Live Workspace 예시](assets/live-trimode-mode-rail.svg)
+![좌측 모드 레일형 Live Workspace 예시](../../assets/live-trimode-mode-rail.svg)
 
-![플레이어 중심 Live Cockpit 예시](assets/live-trimode-cockpit.svg)
+![플레이어 중심 Live Cockpit 예시](../../assets/live-trimode-cockpit.svg)
 
 ---
 
 ## 1. 추천안 1: 상단 세그먼트형 Live Hub
 
-![상단 세그먼트형 Live Hub 예시](assets/live-trimode-segmented-hub.svg)
+![상단 세그먼트형 Live Hub 예시](../../assets/live-trimode-segmented-hub.svg)
 
 ### 핵심 컨셉
 
@@ -95,7 +95,7 @@
 
 ## 2. 추천안 2: 좌측 모드 레일형 Live Workspace
 
-![좌측 모드 레일형 Live Workspace 예시](assets/live-trimode-mode-rail.svg)
+![좌측 모드 레일형 Live Workspace 예시](../../assets/live-trimode-mode-rail.svg)
 
 ### 핵심 컨셉
 
@@ -142,7 +142,7 @@
 
 ## 3. 추천안 3: 플레이어 중심 Live Cockpit
 
-![플레이어 중심 Live Cockpit 예시](assets/live-trimode-cockpit.svg)
+![플레이어 중심 Live Cockpit 예시](../../assets/live-trimode-cockpit.svg)
 
 ### 핵심 컨셉
 

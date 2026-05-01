@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1480" viewBox="0 0 1320 1480" role="img" aria-labelledby="title desc">
+  <title id="title">CView Settings Menu Redesign Candidates</title>
+  <desc id="desc">Three proposed settings menu redesign concepts for CView macOS app.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f5f7f8; }
+      .panel { fill: #ffffff; stroke: #d9e0e5; stroke-width: 1; }
+      .soft { fill: #f8fafb; stroke: #e1e7eb; stroke-width: 1; }
+      .rail { fill: #edf2f3; stroke: #d8e1e4; stroke-width: 1; }
+      .ink { fill: #172126; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .muted { fill: #6b777d; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .tiny { font-size: 13px; }
+      .micro { font-size: 11px; }
+      .label { font-size: 15px; font-weight: 650; }
+      .title { font-size: 24px; font-weight: 750; }
+      .section { font-size: 18px; font-weight: 720; }
+      .accentGreen { fill: #20c997; }
+      .accentBlue { fill: #2f7cf6; }
+      .accentOrange { fill: #ff9f43; }
+      .accentRed { fill: #ef476f; }
+      .accentTeal { fill: #00a6a6; }
+      .accentPurple { fill: #7c5cff; }
+      .greenSoft { fill: #dff8ef; stroke: #9ee8cf; stroke-width: 1; }
+      .blueSoft { fill: #e7f0ff; stroke: #aac8ff; stroke-width: 1; }
+      .orangeSoft { fill: #fff1df; stroke: #ffd39a; stroke-width: 1; }
+      .redSoft { fill: #ffe8ee; stroke: #ffb3c6; stroke-width: 1; }
+      .tealSoft { fill: #def7f4; stroke: #9de7df; stroke-width: 1; }
+      .purpleSoft { fill: #eeeaff; stroke: #c6bbff; stroke-width: 1; }
+      .shadow { filter: drop-shadow(0 10px 22px rgba(27, 39, 45, 0.08)); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1320" height="1480"/>
+  <text class="ink title" x="56" y="58">CView Settings Menu Redesign Candidates</text>
+  <text class="muted tiny" x="56" y="84">Current shell preserved. Settings information architecture redesigned around search, intent, and runtime impact.</text>
+
+  <!-- Option A -->
+  <g transform="translate(56 120)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option A. Settings Command Center</text>
+    <text class="muted tiny" x="26" y="62">Recommended baseline: search, overview, quick controls, and dense sections in one shared workspace.</text>
+
+    <rect class="rail" x="26" y="88" width="178" height="258" rx="12"/>
+    <text class="muted micro" x="48" y="116">SETTINGS</text>
+    <rect class="greenSoft" x="42" y="132" width="130" height="30" rx="8"/>
+    <circle class="accentGreen" cx="58" cy="147" r="5"/>
+    <text class="ink tiny" x="72" y="152">Overview</text>
+    <text class="muted tiny" x="48" y="190">Viewing</text>
+    <text class="muted tiny" x="48" y="222">Chat</text>
+    <text class="muted tiny" x="48" y="254">Multi</text>
+    <text class="muted tiny" x="48" y="286">Integrations</text>
+    <text class="muted tiny" x="48" y="318">Advanced</text>
+
+    <rect class="soft" x="224" y="88" width="944" height="54" rx="12"/>
+    <circle class="accentBlue" cx="250" cy="115" r="7"/>
+    <text class="muted tiny" x="270" y="120">Search settings, actions, and current values</text>
+    <rect class="greenSoft" x="840" y="101" width="90" height="28" rx="14"/>
+    <text class="muted micro" x="862" y="119">Saved</text>
+    <rect class="orangeSoft" x="940" y="101" width="118" height="28" rx="14"/>
+    <text class="muted micro" x="962" y="119">2 changed</text>
+
+    <rect class="greenSoft" x="224" y="162" width="218" height="76" rx="12"/>
+    <text class="muted micro" x="246" y="188">THEME</text>
+    <text class="ink label" x="246" y="214">System mode</text>
+    <rect class="blueSoft" x="462" y="162" width="218" height="76" rx="12"/>
+    <text class="muted micro" x="484" y="188">PLAYER</text>
+    <text class="ink label" x="484" y="214">AVPlayer · Web Sync</text>
+    <rect class="tealSoft" x="700" y="162" width="218" height="76" rx="12"/>
+    <text class="muted micro" x="722" y="188">NETWORK</text>
+    <text class="ink label" x="722" y="214">Balanced preset</text>
+    <rect class="purpleSoft" x="938" y="162" width="230" height="76" rx="12"/>
+    <text class="muted micro" x="960" y="188">METRICS</text>
+    <text class="ink label" x="960" y="214">Connected · 5 sec</text>
+
+    <rect class="soft" x="224" y="258" width="446" height="88" rx="12"/>
+    <text class="ink label" x="246" y="286">Quick Controls</text>
+    <rect class="greenSoft" x="246" y="304" width="76" height="22" rx="11"/>
+    <text class="muted micro" x="266" y="319">Theme</text>
+    <rect class="blueSoft" x="334" y="304" width="82" height="22" rx="11"/>
+    <text class="muted micro" x="356" y="319">Engine</text>
+    <rect class="orangeSoft" x="428" y="304" width="94" height="22" rx="11"/>
+    <text class="muted micro" x="448" y="319">Latency</text>
+    <rect class="tealSoft" x="534" y="304" width="104" height="22" rx="11"/>
+    <text class="muted micro" x="552" y="319">Multi slots</text>
+
+    <rect class="soft" x="690" y="258" width="478" height="88" rx="12"/>
+    <text class="ink label" x="712" y="286">Risk and Sensitive Settings</text>
+    <rect class="redSoft" x="712" y="304" width="132" height="22" rx="11"/>
+    <text class="muted micro" x="730" y="319">Highest quality</text>
+    <rect class="orangeSoft" x="856" y="304" width="112" height="22" rx="11"/>
+    <text class="muted micro" x="874" y="319">Debug mode</text>
+    <rect class="blueSoft" x="980" y="304" width="114" height="22" rx="11"/>
+    <text class="muted micro" x="998" y="319">App Secret</text>
+  </g>
+
+  <!-- Option B -->
+  <g transform="translate(56 550)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option B. Scenario Preset Studio</text>
+    <text class="muted tiny" x="26" y="62">Purpose-first settings: choose a viewing scenario, preview changed values, then apply safely.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="86" rx="14"/>
+    <text class="muted micro" x="50" y="116">SCENARIOS</text>
+    <rect class="greenSoft" x="50" y="130" width="190" height="28" rx="14"/>
+    <text class="ink tiny" x="76" y="149">Normal viewing</text>
+    <rect class="blueSoft" x="258" y="130" width="178" height="28" rx="14"/>
+    <text class="ink tiny" x="288" y="149">Low latency</text>
+    <rect class="orangeSoft" x="454" y="130" width="206" height="28" rx="14"/>
+    <text class="ink tiny" x="480" y="149">Multi-live stable</text>
+    <rect class="tealSoft" x="678" y="130" width="176" height="28" rx="14"/>
+    <text class="ink tiny" x="708" y="149">Chat focus</text>
+    <rect class="purpleSoft" x="872" y="130" width="188" height="28" rx="14"/>
+    <text class="ink tiny" x="896" y="149">Metrics debug</text>
+
+    <rect class="orangeSoft" x="26" y="200" width="354" height="146" rx="14"/>
+    <text class="muted micro" x="50" y="228">SELECTED SCENARIO</text>
+    <text class="ink label" x="50" y="256">Multi-live stable</text>
+    <text class="muted tiny" x="50" y="286">Goal: reduce stalls and keep inactive sessions cheaper.</text>
+    <rect class="panel" x="50" y="304" width="98" height="24" rx="12"/>
+    <text class="muted micro" x="70" y="320">Preview</text>
+    <rect class="panel" x="158" y="304" width="92" height="24" rx="12"/>
+    <text class="muted micro" x="180" y="320">Apply</text>
+
+    <rect class="soft" x="404" y="200" width="368" height="146" rx="14"/>
+    <text class="ink label" x="428" y="228">Changed Settings</text>
+    <line x1="428" y1="246" x2="744" y2="246" stroke="#d9e0e5"/>
+    <text class="muted tiny" x="428" y="272">Separate processes</text>
+    <text class="ink tiny" x="654" y="272">On</text>
+    <text class="muted tiny" x="428" y="300">Bandwidth coordination</text>
+    <text class="ink tiny" x="654" y="300">On</text>
+    <text class="muted tiny" x="428" y="328">Background quality</text>
+    <text class="ink tiny" x="654" y="328">Reduce</text>
+
+    <rect class="soft" x="796" y="200" width="380" height="146" rx="14"/>
+    <text class="ink label" x="820" y="228">Impact Preview</text>
+    <rect class="greenSoft" x="820" y="252" width="142" height="24" rx="12"/>
+    <text class="muted micro" x="842" y="268">Stability higher</text>
+    <rect class="blueSoft" x="974" y="252" width="140" height="24" rx="12"/>
+    <text class="muted micro" x="996" y="268">CPU lower</text>
+    <rect class="orangeSoft" x="820" y="292" width="174" height="24" rx="12"/>
+    <text class="muted micro" x="842" y="308">Latency slightly higher</text>
+    <rect class="redSoft" x="1006" y="292" width="126" height="24" rx="12"/>
+    <text class="muted micro" x="1028" y="308">May restart</text>
+  </g>
+
+  <!-- Option C -->
+  <g transform="translate(56 980)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option C. Inspector Split Settings</text>
+    <text class="muted tiny" x="26" y="62">Expert mode: list, detail rows, and an impact inspector for runtime behavior and rollback.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="48" rx="12"/>
+    <circle class="accentBlue" cx="52" cy="112" r="7"/>
+    <text class="muted tiny" x="72" y="117">Search · changed only · compare with defaults · show runtime impact</text>
+    <rect class="blueSoft" x="952" y="99" width="140" height="26" rx="13"/>
+    <text class="muted micro" x="982" y="116">Changed only</text>
+
+    <rect class="rail" x="26" y="158" width="230" height="188" rx="12"/>
+    <text class="muted micro" x="48" y="186">SETTING LIST</text>
+    <rect class="blueSoft" x="46" y="202" width="168" height="28" rx="8"/>
+    <text class="ink tiny" x="66" y="221">Player · Latency</text>
+    <text class="muted tiny" x="50" y="258">Network</text>
+    <text class="muted tiny" x="50" y="290">Metrics</text>
+    <text class="muted tiny" x="50" y="322">Maintenance</text>
+
+    <rect class="soft" x="280" y="158" width="540" height="188" rx="12"/>
+    <text class="ink label" x="306" y="188">Detail Rows</text>
+    <line x1="306" y1="206" x2="792" y2="206" stroke="#d9e0e5"/>
+    <text class="muted tiny" x="306" y="235">Stream correction mode</text>
+    <rect class="blueSoft" x="648" y="218" width="118" height="24" rx="12"/>
+    <text class="muted micro" x="672" y="234">Local proxy</text>
+    <text class="muted tiny" x="306" y="272">Latency preset</text>
+    <rect class="greenSoft" x="648" y="255" width="118" height="24" rx="12"/>
+    <text class="muted micro" x="674" y="271">Web sync</text>
+    <text class="muted tiny" x="306" y="309">Force highest quality</text>
+    <rect class="redSoft" x="648" y="292" width="118" height="24" rx="12"/>
+    <text class="muted micro" x="682" y="308">On</text>
+
+    <rect class="soft" x="844" y="158" width="332" height="188" rx="12"/>
+    <text class="ink label" x="868" y="188">Impact Inspector</text>
+    <text class="muted tiny" x="868" y="220">Applies: next stream restart</text>
+    <text class="muted tiny" x="868" y="250">Runtime: StreamCoordinator</text>
+    <text class="muted tiny" x="868" y="280">Risk: bypasses ABR in multi-live</text>
+    <rect class="orangeSoft" x="868" y="306" width="102" height="24" rx="12"/>
+    <text class="muted micro" x="890" y="322">Revert</text>
+    <rect class="greenSoft" x="982" y="306" width="124" height="24" rx="12"/>
+    <text class="muted micro" x="1004" y="322">View default</text>
+  </g>
+
+  <text class="muted micro" x="56" y="1418">Recommendation: ship Option A as the base, add Option B presets inside Overview, and expose Option C as Advanced Inspector.</text>
+</svg>

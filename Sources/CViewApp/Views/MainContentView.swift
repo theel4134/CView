@@ -16,6 +16,12 @@ struct MainContentView: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppState.self) private var appState
     @State private var showSplash = true
+    /// [Perf 2026-04-28] 스플래시 동안 메인 컨텐츠 마운트 지연 게이트.
+    /// ZStack 하단에서 NavigationSplitView + HomeView_v2 (7개 섹션, 다수 AsyncImage,
+    /// LazyVStack 측정, gradient/blur 합성)가 즉시 마운트되면 windowserver 가
+    /// 스플래시 + 메인 두 풀스크린 레이어를 1.5s 동안 동시 합성하느라 부하 급증.
+    /// 700ms 지연 → 스플래시 페이드아웃 시작 직전에 메인 마운트 시작 → 합성 1레이어 유지.
+    @State private var mountMainContent: Bool = false
 
     /// 신규 홈 V2 토글 (P1+P2+P3 정보구조 개편). Settings 또는 ⌘⇧H 로 변경 가능.
     @AppStorage("home.useV2") private var useHomeV2: Bool = true
@@ -24,7 +30,13 @@ struct MainContentView: View {
         @Bindable var router = router
 
         ZStack {
-            mainContent(router: router)
+            if mountMainContent {
+                mainContent(router: router)
+            } else {
+                // 스플래시 단독 표시 동안 빈 배경 (NSWindow 가 비어 보이지 않도록)
+                DesignTokens.Colors.background
+                    .ignoresSafeArea()
+            }
 
             if showSplash {
                 SplashView {
@@ -33,8 +45,18 @@ struct MainContentView: View {
                     }
                 }
                 .zIndex(10)
-                .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                // [Perf 2026-04-28] 디미스 시 scale 제거 — mainContent 가 이미 마운트된
+                // 상태에서 풀스크린 splash 가 scale 애니메이션을 하면 windowserver 가
+                // 매 프레임 양쪽 레이어를 재합성. opacity 전이만으로 충분.
+                .transition(.opacity)
             }
+        }
+        .task {
+            // 스플래시 시작 후 ~700ms 후 메인 컨텐츠 마운트 시작.
+            // 스플래시 fadeOut 은 1.1s 부터 시작하므로 약 400ms 동안 두 레이어가
+            // 겹치지만 그 시간엔 스플래시가 점점 투명해지므로 합성 비용은 낮다.
+            try? await Task.sleep(for: .milliseconds(700))
+            mountMainContent = true
         }
         .commandPaletteOverlay(isPresented: Binding(
             get: { appState.showCommandPalette },
@@ -221,7 +243,7 @@ struct SidebarView: View {
     @State private var isLoginHovered = false
     @State private var isSettingsBackHovered = false
     @State private var hoveredItem: AppRouter.SidebarItem?
-    @State private var hoveredSettingsTab: AppRouter.SettingsTab?
+    @State private var hoveredSettingsTab: AppRouter.SettingsGroup?
     @Namespace private var sidebarNS
     @Namespace private var settingsNS
 
@@ -296,9 +318,9 @@ struct SidebarView: View {
                     .padding(.top, DesignTokens.Spacing.sm)
                     .padding(.bottom, DesignTokens.Spacing.xs)
 
-                // 설정 탭 목록
-                ForEach(AppRouter.SettingsTab.allCases) { tab in
-                    settingsTabRow(tab)
+                // 설정 그룹 목록 (작업 중심 6개 그룹)
+                ForEach(AppRouter.SettingsGroup.allCases) { group in
+                    settingsGroupRow(group)
                 }
 
                 // 버전 정보
@@ -348,27 +370,33 @@ struct SidebarView: View {
         .customCursor(.pointingHand)
     }
 
-    // MARK: - Settings Tab Row
+    // MARK: - Settings Group Row
 
     @ViewBuilder
-    private func settingsTabRow(_ tab: AppRouter.SettingsTab) -> some View {
-        let isSelected = router.selectedSettingsTab == tab
-        let isHovered = hoveredSettingsTab == tab
+    private func settingsGroupRow(_ group: AppRouter.SettingsGroup) -> some View {
+        let isSelected = router.selectedSettingsGroup == group
+        let isHovered = hoveredSettingsTab == group
 
         Button {
             withAnimation(DesignTokens.Animation.snappy) {
-                router.selectSettingsTab(tab)
+                router.selectSettingsGroup(group)
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: tab.icon)
+                Image(systemName: group.icon)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isSelected ? .white : tab.color)
+                    .foregroundStyle(isSelected ? .white : group.color)
                     .frame(width: 20)
 
-                Text(tab.rawValue)
-                    .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .white : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(group.rawValue)
+                        .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
+                        .foregroundStyle(isSelected ? .white : (isHovered ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary))
+                    Text(group.subtitle)
+                        .font(DesignTokens.Typography.custom(size: 10))
+                        .foregroundStyle(isSelected ? .white.opacity(0.75) : DesignTokens.Colors.textTertiary)
+                        .lineLimit(1)
+                }
 
                 Spacer()
             }
@@ -390,12 +418,12 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(DesignTokens.Animation.micro) {
-                hoveredSettingsTab = hovering ? tab : nil
+                hoveredSettingsTab = hovering ? group : nil
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
-        .animation(DesignTokens.Animation.indicator, value: router.selectedSettingsTab)
+        .animation(DesignTokens.Animation.indicator, value: router.selectedSettingsGroup)
     }
 
     // MARK: - Settings Footer (Version)

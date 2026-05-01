@@ -48,6 +48,10 @@ public struct VLCLiveMetrics: Sendable {
     /// 버퍼 건강도 0.0~1.0 (1.0 = 완전 건강)
     public let bufferHealth: Double
 
+    /// [Phase 2.2 / 2026-04-30] bufferHealth 측정 신뢰도 0.0~1.0.
+    /// VLC stats 측정 불가 / HW 디코드 0 고착 시 < 1.0 — ABR 등 의사결정 시 가중 처리.
+    public let bufferHealthConfidence: Double
+
     // MARK: - 오디오
 
     /// 해당 구간에서 손실된 오디오 버퍼 수
@@ -125,6 +129,7 @@ public struct VLCLiveMetrics: Sendable {
         videoHeight: Double,
         playbackRate: Float,
         bufferHealth: Double,
+        bufferHealthConfidence: Double = 1.0,
         lostAudioBuffersDelta: Int,
         decodedAudioDelta: Int = 0,
         playedAudioBuffersDelta: Int = 0,
@@ -147,6 +152,7 @@ public struct VLCLiveMetrics: Sendable {
         self.videoHeight = videoHeight
         self.playbackRate = playbackRate
         self.bufferHealth = bufferHealth
+        self.bufferHealthConfidence = bufferHealthConfidence
         self.lostAudioBuffersDelta = lostAudioBuffersDelta
         self.decodedAudioDelta = decodedAudioDelta
         self.playedAudioBuffersDelta = playedAudioBuffersDelta

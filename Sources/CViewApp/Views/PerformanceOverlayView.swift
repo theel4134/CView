@@ -48,6 +48,16 @@ struct PerformanceOverlayView: View {
             MetricLine(label: "DROP", value: "\(m.droppedFrames)",                                color: m.droppedFrames > 0 ? .red : .green),
             MetricLine(label: "THML", value: m.thermalState.uppercased(),                         color: thermalColor(m.thermalState)),
         ]
+        // [P-1/P-2 telemetry / 2026-04-30] LowLatencyController 관측치 — sync phase 가 idle 이 아닐 때만 표시
+        if m.syncPhaseLabel != "-" && m.syncPhaseLabel != "idle" {
+            lines += [
+                MetricLine(label: "PHSE", value: m.syncPhaseLabel.uppercased(),                                color: phaseColor(m.syncPhaseLabel)),
+                MetricLine(label: "RATE", value: String(format: "%.3fx",  m.playbackRate),                     color: rateColor(m.playbackRate)),
+                MetricLine(label: "PID",  value: String(format: "%+0.3f", m.pidOutput),                        color: .green.opacity(0.85)),
+                MetricLine(label: "OSC",  value: m.isOscillationCapped ? "\(m.oscillationCount)*" : "\(m.oscillationCount)", color: m.isOscillationCapped ? .red : (m.oscillationCount > 0 ? .yellow : .green)),
+                MetricLine(label: "SEEK", value: String(format: "%.1f/m", m.seeksPerMinute),                   color: m.seeksPerMinute > 2 ? .red : (m.seeksPerMinute > 0 ? .yellow : .green)),
+            ]
+        }
         return lines
     }
 
@@ -190,6 +200,20 @@ struct PerformanceOverlayView: View {
     private func bitrateColor(_ kbps: Double) -> Color {
         if kbps >= 3_000 { return .green }
         if kbps >= 1_000 { return .yellow }
+        return .red
+    }
+
+    private func phaseColor(_ phase: String) -> Color {
+        if phase.hasPrefix("tracking") { return .green }
+        if phase.hasPrefix("acquiring") || phase.hasPrefix("snap") { return .yellow }
+        if phase.hasPrefix("hold") || phase.hasPrefix("reacquire") { return .orange }
+        return .gray
+    }
+
+    private func rateColor(_ rate: Double) -> Color {
+        let dev = abs(rate - 1.0)
+        if dev < 0.005 { return .green }
+        if dev < 0.025 { return .yellow }
         return .red
     }
     

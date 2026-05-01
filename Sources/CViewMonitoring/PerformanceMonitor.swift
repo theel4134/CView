@@ -29,6 +29,13 @@ public actor PerformanceMonitor {
         public let inputBitrateKbps: Double      // 입력 비트레이트 (kbps)
         public let networkSpeedBytesPerSec: Int  // 실시간 네트워크 수신 속도 (bytes/sec)
         public let thermalState: String          // 시스템 열 상태 (nominal/fair/serious/critical)
+        // [P-1/P-2 telemetry / 2026-04-30] LowLatencyController 관측치
+        public let pidOutput: Double             // PID 컨트롤러 출력 (-1.0~+1.0, rate 보정량)
+        public let playbackRate: Double          // 현재 재생 속도 (0.95~1.05)
+        public let syncPhaseLabel: String        // WebSyncPhase ("idle"/"tracking"/...)
+        public let oscillationCount: Int         // 최근 60초 내 buffering 진입 횟수
+        public let seeksPerMinute: Double        // 최근 60초 기준 seek 빈도
+        public let isOscillationCapped: Bool     // 가속↔버퍼링 진동 감지 활성 여부
         public let timestamp: Date
         
         public init(
@@ -46,6 +53,12 @@ public actor PerformanceMonitor {
             inputBitrateKbps: Double = 0,
             networkSpeedBytesPerSec: Int = 0,
             thermalState: String = "nominal",
+            pidOutput: Double = 0,
+            playbackRate: Double = 1.0,
+            syncPhaseLabel: String = "-",
+            oscillationCount: Int = 0,
+            seeksPerMinute: Double = 0,
+            isOscillationCapped: Bool = false,
             timestamp: Date = Date()
         ) {
             self.fps = fps
@@ -62,6 +75,12 @@ public actor PerformanceMonitor {
             self.inputBitrateKbps = inputBitrateKbps
             self.networkSpeedBytesPerSec = networkSpeedBytesPerSec
             self.thermalState = thermalState
+            self.pidOutput = pidOutput
+            self.playbackRate = playbackRate
+            self.syncPhaseLabel = syncPhaseLabel
+            self.oscillationCount = oscillationCount
+            self.seeksPerMinute = seeksPerMinute
+            self.isOscillationCapped = isOscillationCapped
             self.timestamp = timestamp
         }
     }
@@ -86,6 +105,14 @@ public actor PerformanceMonitor {
     private var _resolution: String?
     private var _inputBitrateKbps: Double = 0
     private var _networkSpeedBytesPerSec: Int = 0
+    
+    // [P-1/P-2 telemetry / 2026-04-30]
+    private var _pidOutput: Double = 0
+    private var _playbackRate: Double = 1.0
+    private var _syncPhaseLabel: String = "-"
+    private var _oscillationCount: Int = 0
+    private var _seeksPerMinute: Double = 0
+    private var _isOscillationCapped: Bool = false
     
     // 메모리 압력 감시 — 장시간 재생 시 메모리 누수 대응
     private var memoryPressureSource: DispatchSourceMemoryPressure?
@@ -201,6 +228,23 @@ public actor PerformanceMonitor {
         _networkSpeedBytesPerSec = bytesPerSec
     }
 
+    /// [P-1/P-2 telemetry / 2026-04-30] LowLatencyController 관측치 일괄 업데이트
+    public func updateLowLatencyTelemetry(
+        pidOutput: Double,
+        playbackRate: Double,
+        syncPhaseLabel: String,
+        oscillationCount: Int,
+        seeksPerMinute: Double,
+        isOscillationCapped: Bool
+    ) {
+        _pidOutput = pidOutput
+        _playbackRate = playbackRate
+        _syncPhaseLabel = syncPhaseLabel
+        _oscillationCount = oscillationCount
+        _seeksPerMinute = seeksPerMinute
+        _isOscillationCapped = isOscillationCapped
+    }
+
     /// VLC 메트릭 일괄 업데이트 — 7개 개별 actor hop → 1회 호출로 통합
     /// MetricsForwarder.updateVLCMetrics() 에서 단일 호출로 사용.
     public func updateVLCMetricsBatch(
@@ -266,6 +310,12 @@ public actor PerformanceMonitor {
             inputBitrateKbps: _inputBitrateKbps,
             networkSpeedBytesPerSec: _networkSpeedBytesPerSec,
             thermalState: thermal,
+            pidOutput: _pidOutput,
+            playbackRate: _playbackRate,
+            syncPhaseLabel: _syncPhaseLabel,
+            oscillationCount: _oscillationCount,
+            seeksPerMinute: _seeksPerMinute,
+            isOscillationCapped: _isOscillationCapped,
             timestamp: Date()
         )
         

@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1040" viewBox="0 0 1680 1040" role="img" aria-labelledby="title desc">
+  <title id="title">CView Clip Menu Precision Redesign Board</title>
+  <desc id="desc">A Korean redesign specification board for the CView clip menu showing current issues, target layout, responsive rules, and development phases.</desc>
+  <defs>
+    <linearGradient id="topLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff5f8f" stop-opacity="0.35"/>
+      <stop offset="48%" stop-color="#00c47a" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#00c47a" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-12%" y="-12%" width="124%" height="124%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .bg { fill: #f7f8fa; }
+      .panel { fill: #ffffff; stroke: #e6e9ee; stroke-width: 1; }
+      .panel2 { fill: #fdfefe; stroke: #e6e9ee; stroke-width: 1; }
+      .muted { fill: #64748b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 18px; }
+      .small { fill: #64748b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; }
+      .tiny { fill: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; }
+      .title { fill: #111827; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 34px; font-weight: 800; }
+      .h2 { fill: #111827; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 22px; font-weight: 760; }
+      .h3 { fill: #111827; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 17px; font-weight: 720; }
+      .label { fill: #111827; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; font-weight: 680; }
+      .green { fill: #00a66a; }
+      .red { fill: #ef4444; }
+      .orange { fill: #f97316; }
+      .blue { fill: #3b82f6; }
+      .chip { fill: #ecfdf5; stroke: #b8ead7; stroke-width: 1; }
+      .chipText { fill: #047857; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; font-weight: 700; }
+      .darkCard { fill: #111827; }
+      .thumb1 { fill: #1f2937; }
+      .thumb2 { fill: #2d394d; }
+      .thumb3 { fill: #233044; }
+      .accentStroke { stroke: #00b878; stroke-width: 2; fill: none; }
+      .line { stroke: #e6e9ee; stroke-width: 1; }
+      .dash { stroke: #cbd5e1; stroke-width: 1.4; stroke-dasharray: 7 7; fill: none; }
+      .phase { fill: #f8fafc; stroke: #dbe3ec; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1680" height="1040"/>
+  <rect x="48" y="38" width="1584" height="964" rx="28" fill="#ffffff" filter="url(#softShadow)"/>
+  <rect x="48" y="38" width="1584" height="964" rx="28" class="panel"/>
+
+  <text x="82" y="92" class="title">클립 메뉴 정밀 재설계: Clip Reel Desk 2.0</text>
+  <text x="82" y="124" class="muted">현재 클립 그리드를 macOS용 클립 탐색/미리보기/큐 작업대로 재구성</text>
+  <rect x="82" y="148" width="1516" height="5" rx="2.5" fill="url(#topLine)"/>
+
+  <g transform="translate(82 184)">
+    <text x="0" y="0" class="h2">1. 현재 화면에서 보이는 핵심 문제</text>
+    <rect x="0" y="22" width="450" height="275" rx="16" class="panel2"/>
+    <rect x="22" y="48" width="406" height="44" rx="12" fill="#f8fafc" stroke="#e5e7eb"/>
+    <text x="42" y="75" class="label">전체 인기클립 30</text>
+    <text x="270" y="75" class="small">채널별 클립</text>
+    <rect x="22" y="116" width="250" height="92" rx="12" class="darkCard"/>
+    <path d="M35 188 C78 136 116 178 154 142 C191 108 222 143 260 122 L260 208 L35 208 Z" fill="#204d3b"/>
+    <text x="42" y="186" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="760">Spotlight 카드</text>
+    <rect x="286" y="116" width="142" height="92" rx="12" fill="#f1f5f9" stroke="#e2e8f0" stroke-dasharray="6 6"/>
+    <text x="309" y="163" class="tiny">빈 우측 공간</text>
+    <g transform="translate(22 226)">
+      <rect width="74" height="44" rx="8" class="thumb1"/>
+      <rect x="84" width="74" height="44" rx="8" class="thumb2"/>
+      <rect x="168" width="74" height="44" rx="8" class="thumb3"/>
+      <rect x="252" width="74" height="44" rx="8" class="thumb1"/>
+      <rect x="336" width="70" height="44" rx="8" class="thumb2"/>
+    </g>
+    <text x="0" y="332" class="small">진단: 목록은 풍부하지만 선택, 프리뷰, 큐 흐름이 화면 구조로 드러나지 않음</text>
+  </g>
+
+  <g transform="translate(572 184)">
+    <text x="0" y="0" class="h2">2. 목표 화면 구조</text>
+    <rect x="0" y="22" width="1026" height="510" rx="18" class="panel"/>
+    <rect x="22" y="44" width="982" height="58" rx="14" fill="#fbfdff" stroke="#e6e9ee"/>
+    <circle cx="48" cy="73" r="8" fill="#00b878"/>
+    <text x="66" y="79" class="h3">ClipTopCommandBar</text>
+    <rect x="250" y="58" width="166" height="30" rx="15" class="chip"/>
+    <text x="274" y="78" class="chipText">전체 인기클립</text>
+    <rect x="424" y="58" width="128" height="30" rx="15" fill="#f8fafc" stroke="#dbe3ec"/>
+    <text x="448" y="78" class="small">채널별</text>
+    <rect x="688" y="58" width="92" height="30" rx="10" fill="#fff7ed" stroke="#fed7aa"/>
+    <text x="711" y="78" fill="#c2410c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700">큐 4</text>
+    <rect x="790" y="58" width="104" height="30" rx="10" fill="#fff1f2" stroke="#fecdd3"/>
+    <text x="812" y="78" fill="#be123c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700">저장 12</text>
+
+    <rect x="22" y="120" width="146" height="314" rx="14" fill="#fbfdff" stroke="#e6e9ee"/>
+    <text x="42" y="150" class="h3">Source Rail</text>
+    <rect x="42" y="170" width="106" height="30" rx="9" class="chip"/>
+    <text x="56" y="190" class="chipText">인기 클립</text>
+    <text x="42" y="229" class="small">채널 클립</text>
+    <text x="42" y="268" class="small">재생 큐</text>
+    <text x="42" y="307" class="small">나중에 보기</text>
+    <text x="42" y="346" class="small">최근 본 클립</text>
+
+    <rect x="190" y="120" width="530" height="218" rx="16" class="darkCard"/>
+    <path d="M214 294 C270 225 322 280 374 220 C438 145 497 242 560 184 C616 133 663 168 696 138 L696 338 L214 338 Z" fill="#214c3e"/>
+    <rect x="212" y="142" width="112" height="30" rx="15" fill="#ff4d6d"/>
+    <text x="238" y="162" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800">#1</text>
+    <text x="338" y="162" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700">Spotlight</text>
+    <text x="214" y="294" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="820">선택 클립 스테이지</text>
+    <rect x="588" y="283" width="98" height="34" rx="17" fill="#00b878"/>
+    <text x="620" y="305" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800">재생</text>
+
+    <rect x="738" y="120" width="266" height="314" rx="14" fill="#fbfdff" stroke="#dbe3ec"/>
+    <text x="760" y="150" class="h3">ClipInspector</text>
+    <rect x="760" y="170" width="222" height="126" rx="12" class="thumb2"/>
+    <text x="760" y="325" class="label">제목, 채널, 조회수</text>
+    <rect x="760" y="344" width="94" height="30" rx="10" class="chip"/>
+    <text x="784" y="364" class="chipText">저장</text>
+    <rect x="864" y="344" width="94" height="30" rx="10" fill="#fff7ed" stroke="#fed7aa"/>
+    <text x="890" y="364" fill="#c2410c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700">큐</text>
+    <rect x="760" y="388" width="198" height="28" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+    <text x="783" y="407" class="small">채널 클립 보기</text>
+
+    <rect x="190" y="354" width="530" height="80" rx="14" fill="#fbfdff" stroke="#e6e9ee"/>
+    <text x="212" y="383" class="h3">ClipResultsPanel</text>
+    <g transform="translate(212 398)">
+      <rect width="70" height="24" rx="6" class="thumb1"/>
+      <rect x="82" width="70" height="24" rx="6" class="thumb2"/>
+      <rect x="164" width="70" height="24" rx="6" class="thumb3"/>
+      <rect x="246" width="70" height="24" rx="6" class="thumb1"/>
+      <rect x="328" width="70" height="24" rx="6" class="thumb2"/>
+      <rect x="410" width="70" height="24" rx="6" class="thumb3"/>
+    </g>
+
+    <rect x="22" y="452" width="982" height="38" rx="13" fill="#fffdf8" stroke="#fde68a"/>
+    <text x="44" y="476" class="label">Filmstrip Dock</text>
+    <text x="180" y="476" class="small">지금 선택한 클립 / 재생 큐 / 나중에 보기</text>
+  </g>
+
+  <g transform="translate(82 585)">
+    <text x="0" y="0" class="h2">3. 현재 코드에서 바로 연결할 지점</text>
+    <rect x="0" y="24" width="480" height="250" rx="16" class="panel"/>
+    <g transform="translate(24 54)">
+      <circle cx="8" cy="8" r="7" class="green"/>
+      <text x="28" y="14" class="label">ClipBrowserViewModel</text>
+      <text x="28" y="38" class="small">탭, 보기 모드, 인기/채널 요청, 선택 상태 보유</text>
+      <circle cx="8" cy="72" r="7" class="green"/>
+      <text x="28" y="78" class="label">ChannelResolver</text>
+      <text x="28" y="102" class="small">채널 URL/ID 정규화 기반 유지</text>
+      <circle cx="8" cy="136" r="7" class="orange"/>
+      <text x="28" y="142" class="label">inspectorAvailable: false</text>
+      <text x="28" y="166" class="small">현재 가장 먼저 풀어야 할 비활성 경로</text>
+    </g>
+    <rect x="512" y="24" width="480" height="250" rx="16" class="panel"/>
+    <g transform="translate(536 54)">
+      <circle cx="8" cy="8" r="7" class="green"/>
+      <text x="28" y="14" class="label">SpotlightClipCard</text>
+      <text x="28" y="38" class="small">StagePanel의 시각 재료로 재사용</text>
+      <circle cx="8" cy="72" r="7" class="green"/>
+      <text x="28" y="78" class="label">ClipPreviewInspector</text>
+      <text x="28" y="102" class="small">우측 고정 패널로 활성화</text>
+      <circle cx="8" cy="136" r="7" class="orange"/>
+      <text x="28" y="142" class="label">watchLaterUIDs only</text>
+      <text x="28" y="166" class="small">저장 클립 snapshot 도입 필요</text>
+    </g>
+    <rect x="1024" y="24" width="492" height="250" rx="16" class="panel"/>
+    <g transform="translate(1048 54)">
+      <circle cx="8" cy="8" r="7" class="green"/>
+      <text x="28" y="14" class="label">ClipPlayerView / ClipLookupView</text>
+      <text x="28" y="38" class="small">UID 기반 재생 경로를 stage와 연결 가능</text>
+      <circle cx="8" cy="72" r="7" class="orange"/>
+      <text x="28" y="78" class="label">queueClips memory only</text>
+      <text x="28" y="102" class="small">1차는 유지, 2차에서 persistent queue 검토</text>
+      <circle cx="8" cy="136" r="7" class="blue"/>
+      <text x="28" y="142" class="label">PopularClipsView 분리</text>
+      <text x="28" y="166" class="small">Clips/ 하위 컴포넌트로 책임 축소</text>
+    </g>
+  </g>
+
+  <g transform="translate(82 900)">
+    <text x="0" y="0" class="h2">4. 개발 순서</text>
+    <g transform="translate(0 24)">
+      <rect width="228" height="76" rx="14" class="phase"/>
+      <text x="18" y="30" class="label">P0 레이아웃</text>
+      <text x="18" y="54" class="small">인스펙터 활성화</text>
+    </g>
+    <path d="M238 62 L282 62" class="dash"/>
+    <g transform="translate(292 24)">
+      <rect width="228" height="76" rx="14" class="phase"/>
+      <text x="18" y="30" class="label">P0 커맨드바</text>
+      <text x="18" y="54" class="small">탭/필터/상태 통합</text>
+    </g>
+    <path d="M530 62 L574 62" class="dash"/>
+    <g transform="translate(584 24)">
+      <rect width="228" height="76" rx="14" class="phase"/>
+      <text x="18" y="30" class="label">P1 Stage/Results</text>
+      <text x="18" y="54" class="small">선택 흐름 정리</text>
+    </g>
+    <path d="M822 62 L866 62" class="dash"/>
+    <g transform="translate(876 24)">
+      <rect width="228" height="76" rx="14" class="phase"/>
+      <text x="18" y="30" class="label">P1 Filmstrip</text>
+      <text x="18" y="54" class="small">큐/저장 노출</text>
+    </g>
+    <path d="M1114 62 L1158 62" class="dash"/>
+    <g transform="translate(1168 24)">
+      <rect width="228" height="76" rx="14" class="phase"/>
+      <text x="18" y="30" class="label">P1 Snapshot</text>
+      <text x="18" y="54" class="small">저장 복원 강화</text>
+    </g>
+    <path d="M1406 62 L1450 62" class="dash"/>
+    <g transform="translate(1460 24)">
+      <rect width="56" height="76" rx="14" fill="#ecfdf5" stroke="#bbf7d0"/>
+      <text x="18" y="48" class="green" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="900">✓</text>
+    </g>
+  </g>
+</svg>

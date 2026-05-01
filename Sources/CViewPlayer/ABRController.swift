@@ -27,6 +27,10 @@ public actor ABRController {
         public let switchUpThreshold: Double
         public let switchDownThreshold: Double
         public let minSwitchInterval: TimeInterval
+        /// [Fix L-4] 업그레이드 전용 쿨다운 — 복귀 지연 (기본: minSwitchInterval과 동일)
+        public let minSwitchUpInterval: TimeInterval
+        /// [Fix L-4] 다운그레이드 전용 쿨다운 — 위기 시 즉각 반응 (기본: 3s)
+        public let minSwitchDownInterval: TimeInterval
         public let initialBandwidthEstimate: Int
         
         public static let `default` = Configuration(
@@ -35,7 +39,9 @@ public actor ABRController {
             bandwidthSafetyFactor: 0.9,  // [Fix 23A] 0.7→0.9: 1080p(~8Mbps) 유지 위해 BW 활용률 향상
             switchUpThreshold: 1.15,     // [Fix 23A] 1.2→1.15: 1080p 업그레이드 더 적극적
             switchDownThreshold: 0.65,   // [Fix 23A] 0.7→0.65: 다운그레이드 더 보수적 (1080p 유지)
-            minSwitchInterval: 8.0,      // [Fix 19] 5→8초: 대역폭 추정 안정화
+            minSwitchInterval: 8.0,      // [Fix 19] 5→8초: 대역폭 추정 안정화 (legacy fallback)
+            minSwitchUpInterval: 8.0,    // [Fix L-4] 업그레이드 8s 유지 — 불안정 BW에서 yo-yo 방지
+            minSwitchDownInterval: 3.0,  // [Fix L-4] 다운그레이드 3s — 버퍼 위기 즉각 대응
             initialBandwidthEstimate: 8_000_000  // [Fix 23A] 5→8Mbps: 1080p 기준 초기값
         )
 
@@ -51,6 +57,8 @@ public actor ABRController {
             switchUpThreshold: 1.2,      // [Fix 23A] 1.3→1.2: 1080p 복귀 촉진
             switchDownThreshold: 0.65,   // [Fix 23A] 0.7→0.65: 다운그레이드 보수적
             minSwitchInterval: 3.0,
+            minSwitchUpInterval: 5.0,    // [Fix L-4] 멀티라이브 업그레이드 5s
+            minSwitchDownInterval: 2.0,  // [Fix L-4] 멀티라이브 다운그레이드 2s (빠른 강등)
             initialBandwidthEstimate: 2_500_000
         )
         
@@ -61,6 +69,8 @@ public actor ABRController {
             switchUpThreshold: Double = 1.2,
             switchDownThreshold: Double = 0.7,
             minSwitchInterval: TimeInterval = 8.0,
+            minSwitchUpInterval: TimeInterval? = nil,
+            minSwitchDownInterval: TimeInterval? = nil,
             initialBandwidthEstimate: Int = 5_000_000
         ) {
             self.minBandwidthBps = minBandwidthBps
@@ -69,6 +79,8 @@ public actor ABRController {
             self.switchUpThreshold = switchUpThreshold
             self.switchDownThreshold = switchDownThreshold
             self.minSwitchInterval = minSwitchInterval
+            self.minSwitchUpInterval = minSwitchUpInterval ?? minSwitchInterval
+            self.minSwitchDownInterval = minSwitchDownInterval ?? min(3.0, minSwitchInterval)
             self.initialBandwidthEstimate = initialBandwidthEstimate
         }
     }
@@ -127,6 +139,9 @@ public actor ABRController {
     private var currentLevelIndex: Int = 0
     private var availableLevels: [MasterPlaylist.Variant] = []
     private var lastSwitchTime: Date?
+    /// [Fix L-4] 업/다운 방향별 쿨다운 추적
+    private var lastSwitchUpTime: Date?
+    private var lastSwitchDownTime: Date?
     private var sampleCount: Int = 0
 
     /// 대역폭 코디네이터가 설정하는 최대 허용 비트레이트 (bps, 0 = 제한 없음)
@@ -201,9 +216,11 @@ public actor ABRController {
     public func recommendLevel(context: PlaybackContext?) -> ABRDecision {
         guard !availableLevels.isEmpty else { return .maintain }
         
-        // Minimum interval between switches
+        // [Fix L-4] 방향별 쿨다운 — 각 분기(bandwidthOnly / bufferAware)에서 각각 적용
+        // legacy 단일 체크: 양방향 최솟값보다 짧은 간격이면 조기 종료
+        let now = Date()
         if let lastSwitch = lastSwitchTime,
-           Date().timeIntervalSince(lastSwitch) < config.minSwitchInterval {
+           now.timeIntervalSince(lastSwitch) < min(config.minSwitchUpInterval, config.minSwitchDownInterval) {
             return .maintain
         }
         
@@ -295,8 +312,11 @@ public actor ABRController {
     /// Force a specific quality level
     public func forceLevelIndex(_ index: Int) {
         guard index >= 0, index < availableLevels.count else { return }
+        let wasHigher = index > currentLevelIndex
         currentLevelIndex = index
-        lastSwitchTime = Date()
+        let ts = Date()
+        lastSwitchTime = ts
+        if wasHigher { lastSwitchUpTime = ts } else { lastSwitchDownTime = ts }
         logger.info("ABR: Forced to level \(index)")
     }
 
@@ -310,7 +330,8 @@ public actor ABRController {
             if currentBps > maxBps {
                 if let safeLevel = availableLevels.lastIndex(where: { Double($0.bandwidth) <= maxBps }) {
                     currentLevelIndex = safeLevel
-                    lastSwitchTime = Date()
+                    let ts = Date()
+                    lastSwitchTime = ts; lastSwitchDownTime = ts
                     logger.info("ABR: maxAllowedBitrate=\(Int(maxBps / 1000))kbps → forced to level \(safeLevel)")
                 }
             }
@@ -332,6 +353,8 @@ public actor ABRController {
         slowEWMA = EWMACalculator(alpha: 0.1)
         currentLevelIndex = 0
         lastSwitchTime = nil
+        lastSwitchUpTime = nil
+        lastSwitchDownTime = nil
         sampleCount = 0
         bandwidthHistory = []
         dynamicSwitchUp = []
@@ -354,8 +377,9 @@ public actor ABRController {
         if bandwidthHistory.count > bandwidthHistoryMaxSize {
             bandwidthHistory.removeFirst()
         }
-        // minSwitchInterval 리셋으로 즉시 전환 허용
+        // 업그레이드 쿨다운 리셋으로 즉시 전환 허용 (다운그레이드 쿨다운은 유지)
         lastSwitchTime = nil
+        lastSwitchUpTime = nil
         logger.info("ABR: 합성 샘플 주입 target=\(Int(targetBitrate / 1000))kbps synthetic=\(Int(syntheticBps / 1000))kbps")
     }
 
@@ -450,7 +474,8 @@ public actor ABRController {
                 if Double(availableLevels[nextLevel].bandwidth) <= safeBandwidth {
                     let oldLevel = currentLevelIndex
                     currentLevelIndex = nextLevel
-                    lastSwitchTime = Date()
+                    let ts = Date()
+                    lastSwitchTime = ts; lastSwitchUpTime = ts
                     let reason = "sftm=\(String(format: "%.2f", sftm)) buf=\(String(format: "%.1f", context.bufferLength))s"
                     logger.info("ABR: Buffer-aware UP \(oldLevel) → \(nextLevel) (\(reason))")
                     return .switchUp(toBandwidth: availableLevels[nextLevel].bandwidth, reason: reason)
@@ -466,7 +491,8 @@ public actor ABRController {
             if targetLevel < currentLevelIndex {
                 let oldLevel = currentLevelIndex
                 currentLevelIndex = targetLevel
-                lastSwitchTime = Date()
+                let ts = Date()
+                lastSwitchTime = ts; lastSwitchDownTime = ts
                 let reason = "sftm=\(String(format: "%.2f", sftm)) buf=\(String(format: "%.1f", context.bufferLength))s"
                 logger.info("ABR: Buffer-aware DOWN \(oldLevel) → \(targetLevel) (\(reason))")
                 return .switchDown(toBandwidth: availableLevels[targetLevel].bandwidth, reason: reason)
@@ -485,7 +511,8 @@ public actor ABRController {
             if emergencyLevel < currentLevelIndex {
                 let oldLevel = currentLevelIndex
                 currentLevelIndex = emergencyLevel
-                lastSwitchTime = Date()
+                let ts = Date()
+                lastSwitchTime = ts; lastSwitchDownTime = ts
                 let reason = "EMERGENCY bufRatio=\(String(format: "%.2f", bufferRatio))"
                 logger.warning("ABR: Emergency DROP \(oldLevel) → \(emergencyLevel) (\(reason))")
                 return .switchDown(toBandwidth: availableLevels[emergencyLevel].bandwidth, reason: reason)
@@ -528,9 +555,18 @@ public actor ABRController {
         
         let oldLevel = currentLevelIndex
         let newLevel = bestLevel
+
+        // [Fix L-4] 방향별 쿨다운 — bandwidthOnlyDecision 경로에서도 동일 적용
+        let now = Date()
+        let sinceLastUp = lastSwitchUpTime.map { now.timeIntervalSince($0) } ?? .infinity
+        let sinceLastDown = lastSwitchDownTime.map { now.timeIntervalSince($0) } ?? .infinity
         
         // Apply hysteresis (동적 임계값 사용)
         if newLevel > currentLevelIndex {
+            // [Fix L-4] 업그레이드 쿨다운 체크
+            if sinceLastUp < config.minSwitchUpInterval {
+                return .maintain
+            }
             let threshold = dynamicSwitchUp.indices.contains(currentLevelIndex)
                 ? 1.0 + dynamicSwitchUp[currentLevelIndex]
                 : config.switchUpThreshold
@@ -540,12 +576,18 @@ public actor ABRController {
             }
             
             currentLevelIndex = newLevel
-            lastSwitchTime = Date()
+            let ts = Date()
+            lastSwitchTime = ts
+            lastSwitchUpTime = ts
             let reason = "BW: \(formatBps(estimatedBandwidth)) > \(formatBps(requiredBandwidth))"
             logger.info("ABR: Switch UP \(oldLevel) → \(newLevel) (\(reason))")
             return .switchUp(toBandwidth: availableLevels[newLevel].bandwidth, reason: reason)
             
         } else {
+            // [Fix L-4] 다운그레이드 쿨다운 체크 (더 짧음 — 위기 즉각 대응)
+            if sinceLastDown < config.minSwitchDownInterval {
+                return .maintain
+            }
             let threshold = dynamicSwitchDown.indices.contains(currentLevelIndex)
                 ? 1.0 - dynamicSwitchDown[currentLevelIndex]
                 : config.switchDownThreshold
@@ -555,7 +597,9 @@ public actor ABRController {
             }
             
             currentLevelIndex = newLevel
-            lastSwitchTime = Date()
+            let ts = Date()
+            lastSwitchTime = ts
+            lastSwitchDownTime = ts
             let reason = "BW: \(formatBps(estimatedBandwidth)) < \(formatBps(requiredBandwidth))"
             logger.info("ABR: Switch DOWN \(oldLevel) → \(newLevel) (\(reason))")
             return .switchDown(toBandwidth: availableLevels[newLevel].bandwidth, reason: reason)

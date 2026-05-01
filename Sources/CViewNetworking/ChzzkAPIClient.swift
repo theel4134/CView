@@ -169,14 +169,16 @@ public actor ChzzkAPIClient: APIClientProtocol {
                 case 401:
                     // soft auth(requiresAuth=false)에서 만료 쿠키로 인한 401 →
                     // 쿠키 제거 후 1회 재시도 (인증 불필요 엔드포인트이므로 비인증으로도 동작)
+                    // 주의: 재시도 전에 세션 만료 알림을 발송하면 요청이 성공하더라도
+                    //       handleLogout()이 비동기로 호출되어 멀티채팅 uid가 nil로 초기화된다.
+                    //       → soft auth 401은 세션 만료 알림 없이 조용히 재시도한다.
                     if usedSoftAuth {
                         Log.network.info("Soft auth 401 on \(endpoint.path, privacy: .public) — 쿠키 제거 후 재시도")
                         request.setValue(nil, forHTTPHeaderField: "Cookie")
                         usedSoftAuth = false  // 다음 401에서는 세션 만료 처리
-                        NotificationCenter.default.post(name: .chzzkSessionExpired, object: nil)
                         continue
                     }
-                    // requiresAuth=true 또는 이미 재시도한 경우 → 세션 만료
+                    // requiresAuth=true 또는 soft auth 재시도 후에도 401 → 세션 만료
                     NotificationCenter.default.post(name: .chzzkSessionExpired, object: nil)
                     throw APIError.unauthorized
                 case 429:

@@ -18,6 +18,8 @@ public struct MultiLiveChildInstance: Identifiable, Sendable, Equatable {
     public var pid: Int32          // 0 == 아직 미확정
     public var launchedAt: Date
     public var initialFrame: CGRect?
+    /// [Fix A-1] 크래시 재시작 횟수 (최대 3회, exponential backoff)
+    public var respawnCount: Int = 0
 }
 
 @MainActor
@@ -30,6 +32,13 @@ public final class MultiLiveProcessLauncher {
     public var embeddedHostFrame: CGRect?
 
     private var ipcObservers: [NSObjectProtocol] = []
+    // [Fix A-1] 의도적 종료 추적 — terminateChild 호출 시 기록, respawn 억제
+    private var intentionallyTerminated: Set<String> = []
+    // [Fix A-1] respawn 대기 Task 추적 (취소용)
+    private var pendingRespawnTasks: [String: Task<Void, Never>] = [:]
+    // [Fix A-1] respawn 최대 횟수 / 초기 backoff
+    private static let maxRespawnAttempts = 3
+    private static let respawnBaseDelay: TimeInterval = 2.0
 
     public init() {
         installIPCObservers()
@@ -116,6 +125,10 @@ public final class MultiLiveProcessLauncher {
 
     /// 지정 인스턴스를 종료 요청 (DistributedNotification → 자식이 자체 종료)
     public func terminateChild(instanceId: String) {
+        // [Fix A-1] 의도적 종료 기록 → childDidExit 핸들러가 respawn 생략
+        intentionallyTerminated.insert(instanceId)
+        pendingRespawnTasks[instanceId]?.cancel()
+        pendingRespawnTasks.removeValue(forKey: instanceId)
         DistributedNotificationCenter.default().postNotificationName(
             MultiLiveIPC.requestQuit,
             object: instanceId,
@@ -141,6 +154,9 @@ public final class MultiLiveProcessLauncher {
         for id in Array(instances.keys) {
             terminateChild(instanceId: id)
         }
+        // [Fix A-1] 대기 중인 respawn 작업도 전부 취소
+        for task in pendingRespawnTasks.values { task.cancel() }
+        pendingRespawnTasks.removeAll()
     }
 
     /// 특정 채널의 자식이 떠 있다면 instanceId 반환
@@ -380,7 +396,36 @@ public final class MultiLiveProcessLauncher {
             guard let self,
                   let id = note.userInfo?["instanceId"] as? String else { return }
             Task { @MainActor in
-                self.instances.removeValue(forKey: id)
+                guard let inst = self.instances.removeValue(forKey: id) else { return }
+                // [Fix A-1] 의도적 종료이거나 respawn 한도 초과 시 무시
+                if self.intentionallyTerminated.contains(id) {
+                    self.intentionallyTerminated.remove(id)
+                    return
+                }
+                guard inst.respawnCount < Self.maxRespawnAttempts else {
+                    NSLog("[MultiLiveProcessLauncher] \(inst.channelName) respawn 한도(\(Self.maxRespawnAttempts)회) 초과 — 포기")
+                    return
+                }
+                // exponential backoff: 2, 4, 8 초
+                let delay = Self.respawnBaseDelay * pow(2.0, Double(inst.respawnCount))
+                NSLog("[MultiLiveProcessLauncher] \(inst.channelName) 비정상 종료 → \(Int(delay))s 후 respawn (attempt \(inst.respawnCount + 1))")
+                let task = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(delay))
+                    guard !Task.isCancelled, let self else { return }
+                    self.pendingRespawnTasks.removeValue(forKey: id)
+                    if let newId = await self.launchChild(
+                        channelId: inst.channelId,
+                        channelName: inst.channelName,
+                        initialFrame: inst.initialFrame
+                    ) {
+                        // 새 instanceId에 respawnCount 인계
+                        if var newInst = self.instances[newId] {
+                            newInst.respawnCount = inst.respawnCount + 1
+                            self.instances[newId] = newInst
+                        }
+                    }
+                }
+                self.pendingRespawnTasks[id] = task
             }
         }
 

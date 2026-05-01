@@ -69,18 +69,12 @@ struct HomeHoverLift: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scaleEffect(hovered && !reduceMotion ? scale : 1.0, anchor: .center)
-            // [Perf 2026-04-27] offset 제거 — scaleEffect 와 동시 적용 시 추가 geometry pass
-            // 발생. scale 만으로 시각적 들어올림 효과 충분.
-            // [Perf 2026-04-24] shadow radius 애니메이션 제거.
-            //   이전: radius 가 5 ↔ 14 로 애니메이션 되면 SwiftUI 가 중간값마다
-            //   가우시안 블러 커널을 재생성 → 호버 시 0.18s 동안 매 프레임 GPU 스파이크
-            //   (클래식 stutter 원인). 수정: radius 고정 + opacity 만 애니메이션
-            //   (CALayer 는 opacity 변화는 블러 재생성 없이 합성—비용 거의 0).
-            .shadow(
-                color: (hovered ? accent.opacity(0.22) : .black.opacity(0.08)),
-                radius: 8,
-                y: hovered ? 4 : 2
-            )
+            // [Perf 2026-04-28] WindowServer 합성 비용 절감.
+            //   기존: hover 와 무관하게 .shadow(...) 가 항상 적용 → 카드마다 shadow backing
+            //         store 가 상시 존재. Discover/Top/ContinueWatching 12+ 카드 × shadow
+            //         layer = WindowServer compositing pass 누적.
+            //   수정: hover 시에만 shadow 발급. 비호버 시엔 modifier 자체 미적용.
+            .modifier(ConditionalShadowModifier(active: hovered, color: accent.opacity(0.22), radius: 8, y: 4))
             // [Perf 2026-04-27] overlay 조건부 렌더링 — opacity:0 상태에서도 strokeBorder
             // overlay 가 합성 레이어로 상시 존재하던 문제 수정. HomeContinueWatchingStrip
             // 12개 항목 × 1 레이어 절약 → WindowServer 합성 비용 감소.
@@ -105,6 +99,25 @@ extension View {
         cornerRadius: CGFloat = DesignTokens.Radius.md
     ) -> some View {
         modifier(HomeHoverLift(lift: lift, scale: scale, accent: accent, cornerRadius: cornerRadius))
+    }
+}
+
+// MARK: - Conditional Shadow (WindowServer 합성 비용 절감)
+
+/// hover 등 활성 상태에서만 .shadow 를 emit. 비활성 시 modifier 자체를 적용하지 않아
+/// SwiftUI 가 shadow backing layer 를 생성하지 않도록 한다.
+struct ConditionalShadowModifier: ViewModifier {
+    let active: Bool
+    var color: Color
+    var radius: CGFloat
+    var y: CGFloat
+
+    func body(content: Content) -> some View {
+        if active {
+            content.shadow(color: color, radius: radius, y: y)
+        } else {
+            content
+        }
     }
 }
 

@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1480" viewBox="0 0 1320 1480" role="img" aria-labelledby="title desc">
+  <title id="title">CView Clip Distinctive Design Candidates</title>
+  <desc id="desc">Three more distinctive clip menu redesign concepts for CView macOS app.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f5f7f8; }
+      .panel { fill: #ffffff; stroke: #d9e0e5; stroke-width: 1; }
+      .soft { fill: #f8fafb; stroke: #e1e7eb; stroke-width: 1; }
+      .rail { fill: #edf2f3; stroke: #d8e1e4; stroke-width: 1; }
+      .media { fill: #172126; }
+      .ink { fill: #172126; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .muted { fill: #6b777d; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .onMedia { fill: #f8fafb; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .tiny { font-size: 13px; }
+      .micro { font-size: 11px; }
+      .label { font-size: 15px; font-weight: 650; }
+      .title { font-size: 24px; font-weight: 750; }
+      .section { font-size: 18px; font-weight: 720; }
+      .accentGreen { fill: #20c997; }
+      .accentBlue { fill: #2f7cf6; }
+      .accentOrange { fill: #ff9f43; }
+      .accentPink { fill: #ef5da8; }
+      .accentTeal { fill: #00a6a6; }
+      .greenSoft { fill: #dff8ef; stroke: #9ee8cf; stroke-width: 1; }
+      .blueSoft { fill: #e7f0ff; stroke: #aac8ff; stroke-width: 1; }
+      .orangeSoft { fill: #fff1df; stroke: #ffd39a; stroke-width: 1; }
+      .pinkSoft { fill: #ffe8f3; stroke: #ffb7d9; stroke-width: 1; }
+      .tealSoft { fill: #def7f4; stroke: #9de7df; stroke-width: 1; }
+      .line { stroke: #d9e0e5; stroke-width: 1; }
+      .shadow { filter: drop-shadow(0 10px 22px rgba(27, 39, 45, 0.08)); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1320" height="1480"/>
+  <text class="ink title" x="56" y="58">CView Clip Menu: Distinctive Design Candidates</text>
+  <text class="muted tiny" x="56" y="84">A more characterful direction built on the current ClipBrowserViewModel, inspector, queue, and watch later.</text>
+
+  <!-- Option A -->
+  <g transform="translate(56 120)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option A. Clip Reel Desk</text>
+    <text class="muted tiny" x="26" y="62">Recommended: source rail, large stage, inspector, and filmstrip queue in one media desk.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="44" rx="12"/>
+    <circle class="accentPink" cx="52" cy="110" r="7"/>
+    <text class="muted tiny" x="72" y="115">Clips · Week · Popular · Channel resolver · Reel Desk</text>
+
+    <rect class="rail" x="26" y="152" width="150" height="194" rx="14"/>
+    <text class="muted micro" x="48" y="180">SOURCE</text>
+    <rect class="pinkSoft" x="46" y="196" width="92" height="28" rx="8"/>
+    <text class="ink micro" x="66" y="214">Trending</text>
+    <text class="muted micro" x="50" y="252">Channel</text>
+    <text class="muted micro" x="50" y="282">Watch later</text>
+    <text class="muted micro" x="50" y="312">Queue</text>
+
+    <rect class="media" x="200" y="152" width="596" height="146" rx="14"/>
+    <text class="onMedia label" x="226" y="184">Preview / Player Stage</text>
+    <circle class="accentPink" cx="498" cy="224" r="25"/>
+    <polygon points="490,211 490,237 512,224" fill="#ffffff"/>
+    <text class="onMedia micro" x="226" y="272">Embed fallback and VLC transition status live here.</text>
+
+    <rect class="soft" x="200" y="312" width="596" height="34" rx="12"/>
+    <text class="muted micro" x="226" y="333">Filmstrip queue</text>
+    <rect class="pinkSoft" x="344" y="320" width="74" height="18" rx="9"/>
+    <rect class="blueSoft" x="430" y="320" width="74" height="18" rx="9"/>
+    <rect class="orangeSoft" x="516" y="320" width="74" height="18" rx="9"/>
+    <rect class="greenSoft" x="602" y="320" width="74" height="18" rx="9"/>
+
+    <rect class="rail" x="820" y="152" width="356" height="194" rx="14"/>
+    <text class="ink label" x="844" y="182">Action Inspector</text>
+    <text class="muted tiny" x="844" y="212">Selected clip details and actions</text>
+    <rect class="pinkSoft" x="844" y="236" width="78" height="26" rx="13"/>
+    <text class="muted micro" x="866" y="253">Play</text>
+    <rect class="blueSoft" x="934" y="236" width="94" height="26" rx="13"/>
+    <text class="muted micro" x="954" y="253">Channel</text>
+    <rect class="greenSoft" x="1040" y="236" width="80" height="26" rx="13"/>
+    <text class="muted micro" x="1060" y="253">Queue</text>
+    <rect class="orangeSoft" x="844" y="282" width="126" height="26" rx="13"/>
+    <text class="muted micro" x="866" y="299">Watch later</text>
+    <rect class="soft" x="982" y="282" width="104" height="26" rx="13"/>
+    <text class="muted micro" x="1004" y="299">Copy link</text>
+  </g>
+
+  <!-- Option B -->
+  <g transform="translate(56 550)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option B. Clip Zine Wall</text>
+    <text class="muted tiny" x="26" y="62">Most distinctive: an editorial wall with feature story, posters, and asymmetric clip columns.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="44" rx="12"/>
+    <circle class="accentOrange" cx="52" cy="110" r="7"/>
+    <text class="muted tiny" x="72" y="115">This Week in Clips · Popular / Recommend · Channel posters</text>
+
+    <rect class="media" x="26" y="152" width="496" height="194" rx="18"/>
+    <text class="onMedia label" x="54" y="186">Feature Story</text>
+    <rect class="pinkSoft" x="54" y="214" width="104" height="28" rx="14"/>
+    <text class="muted micro" x="78" y="232">Spotlight</text>
+    <text class="onMedia tiny" x="54" y="286">Large cover clip with bold title and channel meta.</text>
+
+    <rect class="soft" x="548" y="152" width="280" height="194" rx="14"/>
+    <text class="ink label" x="572" y="182">Channel Posters</text>
+    <rect class="blueSoft" x="572" y="206" width="106" height="52" rx="12"/>
+    <rect class="greenSoft" x="694" y="206" width="106" height="52" rx="12"/>
+    <rect class="orangeSoft" x="572" y="274" width="106" height="52" rx="12"/>
+    <rect class="pinkSoft" x="694" y="274" width="106" height="52" rx="12"/>
+
+    <rect class="soft" x="854" y="152" width="322" height="194" rx="14"/>
+    <text class="ink label" x="878" y="182">Clip Columns</text>
+    <line class="line" x1="878" y1="200" x2="1148" y2="200"/>
+    <text class="muted micro" x="878" y="228">Fresh</text>
+    <rect class="pinkSoft" x="930" y="214" width="190" height="24" rx="10"/>
+    <text class="muted micro" x="878" y="264">High views</text>
+    <rect class="orangeSoft" x="958" y="250" width="162" height="24" rx="10"/>
+    <text class="muted micro" x="878" y="300">Saved</text>
+    <rect class="greenSoft" x="930" y="286" width="190" height="24" rx="10"/>
+  </g>
+
+  <!-- Option C -->
+  <g transform="translate(56 980)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option C. Clip Pulse Board</text>
+    <text class="muted tiny" x="26" y="62">A lane-based board for scanning today, rising clips, following channels, and queue/saved items.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="44" rx="12"/>
+    <circle class="accentTeal" cx="52" cy="110" r="7"/>
+    <text class="muted tiny" x="72" y="115">Pulse Bar · Today · Rising · Following · Queue / Saved</text>
+
+    <g transform="translate(26 152)">
+      <rect class="soft" x="0" y="0" width="274" height="194" rx="14"/>
+      <text class="ink label" x="22" y="32">Today</text>
+      <rect class="pinkSoft" x="22" y="56" width="230" height="28" rx="10"/>
+      <rect class="soft" x="22" y="96" width="230" height="28" rx="10"/>
+      <rect class="soft" x="22" y="136" width="230" height="28" rx="10"/>
+    </g>
+    <g transform="translate(322 152)">
+      <rect class="soft" x="0" y="0" width="274" height="194" rx="14"/>
+      <text class="ink label" x="22" y="32">Rising</text>
+      <rect class="orangeSoft" x="22" y="56" width="230" height="28" rx="10"/>
+      <rect class="soft" x="22" y="96" width="230" height="28" rx="10"/>
+      <rect class="soft" x="22" y="136" width="230" height="28" rx="10"/>
+    </g>
+    <g transform="translate(618 152)">
+      <rect class="soft" x="0" y="0" width="274" height="194" rx="14"/>
+      <text class="ink label" x="22" y="32">Following</text>
+      <rect class="blueSoft" x="22" y="56" width="230" height="28" rx="10"/>
+      <rect class="greenSoft" x="22" y="96" width="230" height="28" rx="10"/>
+      <rect class="soft" x="22" y="136" width="230" height="28" rx="10"/>
+    </g>
+    <g transform="translate(914 152)">
+      <rect class="soft" x="0" y="0" width="262" height="194" rx="14"/>
+      <text class="ink label" x="22" y="32">Queue / Saved</text>
+      <rect class="greenSoft" x="22" y="56" width="218" height="28" rx="10"/>
+      <rect class="orangeSoft" x="22" y="96" width="218" height="28" rx="10"/>
+      <rect class="soft" x="22" y="136" width="218" height="28" rx="10"/>
+    </g>
+  </g>
+
+  <text class="muted micro" x="56" y="1418">Recommendation: ship Clip Reel Desk first, then add Zine Wall as a discovery mode and Pulse Board as a dense scan mode.</text>
+</svg>

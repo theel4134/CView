@@ -42,6 +42,9 @@ extension AppState {
             await metricsClient?.updateBaseURL(url)
         }
 
+        // App Secret 업데이트 (빈 문자열이면 Bundle/fallback 사용)
+        await metricsClient?.updateAppSecret(ms.appSecret)
+
         // 전송 주기 업데이트
         await metricsForwarder?.updateIntervals(
             forward: forwardInterval,

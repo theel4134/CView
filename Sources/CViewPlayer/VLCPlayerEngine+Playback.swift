@@ -255,9 +255,14 @@ extension VLCPlayerEngine {
         }
         media.addOption(":http-reconnect")
         // [Quality Lock] forceMax면 해상도 캡핑/대역폭 코디네이터 캡 무시 (무제한)
+        // [Buffering Phase 1 / 2026-04-30] 단, 비선택 멀티라이브 세션은 사용자가 보지 않는
+        //   상태이므로 forceMax 라도 720p 캡을 강제 적용해 디코딩 부하를 절감한다.
+        //   사용자가 비선택 세션을 선택으로 전환하면 multiLiveHQ 프로파일로 즉시 승격되어
+        //   1080p 가 자동 복원된다 (MultiLiveManager.selectSession 경로).
+        let isNonSelectedMultiCap = profile.isMultiLiveFamily && !isSelectedSession
         let maxW: Int
         let maxH: Int
-        if forceMax {
+        if forceMax && !isNonSelectedMultiCap {
             maxW = 0
             maxH = 0
         } else {
@@ -330,7 +335,11 @@ extension VLCPlayerEngine {
         media.addOption(":no-sub-autodetect-file")    // 디스크 자막 파일 스캔 스킵
         media.addOption(":no-snapshot-preview")       // 스냅샷 프리뷰 합성 스킵
         media.addOption(":no-video-title-show")       // 시작 시 파일명 오버레이 스킵
-        media.addOption(":no-stats")                  // VLC 내부 통계 누적 스킵 (자체 메트릭은 별도 경로)
+        // [Phase 2 fix / 2026-04-30] :no-stats 제거.
+        //   VLCPlayerEngine.collectMetrics() 가 player.media?.statistics 를 직접 읽어
+        //   FPS / bufferHealth / displayedPictures 등을 계산하므로, :no-stats 가 켜지면
+        //   해당 카운터가 영구 0 으로 보고되어 ABR/PID 모두 거짓 신호를 받는다.
+        //   (네트워크 모니터에서 FPS/버퍼가 영구 "-" 로 표시되던 원인.)
 
         // [Codec Tune 2026-04-23] 비선택 멀티라이브: 오디오 타임 스트레치 비활성화
         // — LowLatencyController 의 rate 기반 catchup 은 선택 세션에만 적용되므로

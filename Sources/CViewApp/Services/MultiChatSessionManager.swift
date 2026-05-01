@@ -276,6 +276,13 @@ public final class MultiChatSessionManager {
             session.chatViewModel.isBackgroundMode = !foreground
             session.chatViewModel.messages.resize(to: foreground ? 200 : 50)
         }
+        // MergedChatView 이탈(foreground=false) 후 선택된 세션은 포그라운드로 복원.
+        // 미처리 시 single-session 패널에서 선택 세션도 3초 flush 지연으로 메시지 출력 불량 발생.
+        if !foreground, let selectedId = selectedChannelId,
+           let idx = sessions.firstIndex(where: { $0.id == selectedId }) {
+            sessions[idx].chatViewModel.isBackgroundMode = false
+            sessions[idx].chatViewModel.messages.resize(to: 200)
+        }
     }
 
     /// 저장된 세션 복원 결과 요약 (P1-3)

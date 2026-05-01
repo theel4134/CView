@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="980" viewBox="0 0 1440 980" role="img" aria-labelledby="title desc">
+  <title id="title">CView Category Menu Redesign Candidates</title>
+  <desc id="desc">Three candidate layouts for the CView category menu redesign: Command Grid, Split Explorer, and Trend Atlas.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#151b24"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b232e"/>
+      <stop offset="1" stop-color="#141a22"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00ffa3"/>
+      <stop offset="1" stop-color="#00c985"/>
+    </linearGradient>
+    <style>
+      .bg { fill: url(#bg); }
+      .frame { fill: #101720; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .panel { fill: url(#card); stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .panel2 { fill: #161e28; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .muted { fill: #8995a3; font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .tiny { fill: #7e8a98; font: 500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label { fill: #dce5ee; font: 800 19px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { fill: #f0f6f3; font: 850 30px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .accent { fill: #00ffa3; }
+      .live { fill: #ff4655; }
+      .chip { fill: #1d2631; stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .line { stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1440" height="980" rx="34"/>
+  <text x="56" y="72" class="title">Category Menu Redesign Candidates</text>
+  <text x="56" y="104" class="muted">Three full redesign options for a lightweight macOS category browser</text>
+
+  <g transform="translate(50 140)">
+    <rect class="frame" width="420" height="780" rx="26"/>
+    <text x="26" y="46" class="label">A. Category Command Grid</text>
+    <text x="26" y="74" class="tiny">default recommendation · current flow refined</text>
+
+    <rect x="26" y="104" width="368" height="64" rx="18" class="panel"/>
+    <text x="46" y="132" class="muted">Search all categories</text>
+    <rect x="296" y="119" width="78" height="34" rx="13" fill="url(#green)"/>
+    <text x="318" y="141" fill="#07120d" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="15" font-weight="850">Sort</text>
+
+    <g transform="translate(26 188)">
+      <rect width="368" height="42" rx="15" class="panel2"/>
+      <rect x="16" y="10" width="68" height="22" rx="11" fill="#00ffa3"/>
+      <text x="37" y="26" fill="#07120d" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" font-weight="850">All</text>
+      <rect x="94" y="10" width="74" height="22" rx="11" class="chip"/>
+      <text x="112" y="26" class="tiny">Game</text>
+      <rect x="178" y="10" width="82" height="22" rx="11" class="chip"/>
+      <text x="194" y="26" class="tiny">Sports</text>
+      <rect x="270" y="10" width="72" height="22" rx="11" class="chip"/>
+      <text x="292" y="26" class="tiny">Etc</text>
+    </g>
+
+    <text x="26" y="276" class="muted">Pinned</text>
+    <g transform="translate(26 296)">
+      <rect width="112" height="92" rx="16" class="panel"/>
+      <circle cx="24" cy="24" r="7" class="accent"/>
+      <text x="18" y="64" class="tiny">League</text>
+      <text x="18" y="82" class="tiny">18 live</text>
+      <rect x="128" width="112" height="92" rx="16" class="panel"/>
+      <circle cx="152" cy="24" r="7" fill="#4ba3ff"/>
+      <text x="146" y="64" class="tiny">Sports</text>
+      <text x="146" y="82" class="tiny">12 live</text>
+      <rect x="256" width="112" height="92" rx="16" class="panel"/>
+      <circle cx="280" cy="24" r="7" fill="#ffb74d"/>
+      <text x="274" y="64" class="tiny">Talk</text>
+      <text x="274" y="82" class="tiny">9 live</text>
+    </g>
+
+    <text x="26" y="430" class="muted">All Categories</text>
+    <g transform="translate(26 452)">
+      <rect width="176" height="110" rx="18" class="panel2"/>
+      <rect x="192" width="176" height="110" rx="18" class="panel2"/>
+      <rect y="126" width="176" height="110" rx="18" class="panel2"/>
+      <rect x="192" y="126" width="176" height="110" rx="18" class="panel2"/>
+      <rect y="252" width="176" height="110" rx="18" class="panel2"/>
+      <rect x="192" y="252" width="176" height="110" rx="18" class="panel2"/>
+      <text x="24" y="62" class="tiny">Deterministic tile</text>
+      <text x="216" y="62" class="tiny">Stable count</text>
+      <text x="24" y="188" class="tiny">Context pin</text>
+      <text x="216" y="188" class="tiny">Keyboard 1-9</text>
+      <text x="24" y="314" class="tiny">No preview load</text>
+      <text x="216" y="314" class="tiny">Light hover</text>
+    </g>
+  </g>
+
+  <g transform="translate(510 140)">
+    <rect class="frame" width="420" height="780" rx="26"/>
+    <text x="26" y="46" class="label">B. Split Explorer</text>
+    <text x="26" y="74" class="tiny">power browser · category and channels at once</text>
+
+    <rect x="26" y="104" width="368" height="54" rx="18" class="panel"/>
+    <text x="46" y="137" class="muted">Search category or live</text>
+
+    <g transform="translate(26 180)">
+      <rect width="126" height="520" rx="18" class="panel2"/>
+      <text x="18" y="34" class="tiny">Categories</text>
+      <rect x="14" y="58" width="98" height="34" rx="12" fill="#00ffa3" opacity="0.18" stroke="#00ffa3" stroke-opacity="0.45"/>
+      <text x="28" y="80" class="tiny">League</text>
+      <rect x="14" y="106" width="98" height="34" rx="12" class="chip"/>
+      <text x="28" y="128" class="tiny">Sports</text>
+      <rect x="14" y="154" width="98" height="34" rx="12" class="chip"/>
+      <text x="28" y="176" class="tiny">Talk</text>
+      <rect x="14" y="202" width="98" height="34" rx="12" class="chip"/>
+      <text x="28" y="224" class="tiny">Music</text>
+      <line x1="14" x2="112" y1="264" y2="264" class="line"/>
+      <text x="18" y="296" class="tiny">Pinned</text>
+      <text x="18" y="326" class="tiny">Recent</text>
+      <text x="18" y="356" class="tiny">Popular</text>
+
+      <rect x="146" width="222" height="520" rx="18" class="panel"/>
+      <text x="166" y="34" class="muted">League · 18 live</text>
+      <rect x="166" y="58" width="182" height="94" rx="16" fill="#202a36"/>
+      <rect x="166" y="168" width="182" height="94" rx="16" fill="#202a36"/>
+      <rect x="166" y="278" width="182" height="94" rx="16" fill="#202a36"/>
+      <rect x="166" y="388" width="182" height="94" rx="16" fill="#202a36"/>
+      <rect x="180" y="74" width="42" height="18" rx="9" class="live"/>
+      <text x="188" y="88" fill="white" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" font-weight="850">LIVE</text>
+      <text x="180" y="128" class="tiny">Channel row/card</text>
+      <text x="180" y="238" class="tiny">Viewer sorted</text>
+      <text x="180" y="348" class="tiny">Play / +Multi</text>
+      <text x="180" y="458" class="tiny">Open detail</text>
+    </g>
+
+    <rect x="26" y="724" width="368" height="34" rx="13" class="chip"/>
+    <text x="44" y="746" class="tiny">Best for repeated browsing without mode transition</text>
+  </g>
+
+  <g transform="translate(970 140)">
+    <rect class="frame" width="420" height="780" rx="26"/>
+    <text x="26" y="46" class="label">C. Trend Atlas</text>
+    <text x="26" y="74" class="tiny">discovery-first · trends and category clusters</text>
+
+    <rect x="26" y="104" width="368" height="74" rx="20" class="panel"/>
+    <text x="46" y="134" class="muted">Today by category</text>
+    <text x="46" y="158" class="tiny">live count · viewers · rising categories</text>
+
+    <g transform="translate(26 204)">
+      <rect width="368" height="188" rx="22" class="panel2"/>
+      <rect x="20" y="24" width="196" height="126" rx="18" fill="#203023" stroke="#00ffa3" stroke-opacity="0.26"/>
+      <text x="40" y="60" fill="#dce5ee" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="17" font-weight="850">Top category</text>
+      <text x="40" y="92" class="tiny">28 live · 120k viewers</text>
+      <rect x="234" y="24" width="114" height="54" rx="15" class="chip"/>
+      <text x="254" y="57" class="tiny">Rising</text>
+      <rect x="234" y="96" width="114" height="54" rx="15" class="chip"/>
+      <text x="254" y="129" class="tiny">Pinned</text>
+    </g>
+
+    <g transform="translate(26 420)">
+      <text x="0" y="22" class="muted">Cluster map</text>
+      <rect y="42" width="176" height="112" rx="18" fill="#22314a" stroke="rgba(255,255,255,0.08)"/>
+      <rect x="192" y="42" width="176" height="112" rx="18" fill="#293044" stroke="rgba(255,255,255,0.08)"/>
+      <rect y="170" width="176" height="112" rx="18" fill="#24392d" stroke="rgba(255,255,255,0.08)"/>
+      <rect x="192" y="170" width="176" height="112" rx="18" fill="#3a2c2d" stroke="rgba(255,255,255,0.08)"/>
+      <rect y="298" width="176" height="112" rx="18" fill="#302b42" stroke="rgba(255,255,255,0.08)"/>
+      <rect x="192" y="298" width="176" height="112" rx="18" fill="#26313f" stroke="rgba(255,255,255,0.08)"/>
+      <text x="20" y="104" class="tiny">Game</text>
+      <text x="212" y="104" class="tiny">Sports</text>
+      <text x="20" y="232" class="tiny">Talk</text>
+      <text x="212" y="232" class="tiny">Music</text>
+      <text x="20" y="360" class="tiny">Rising</text>
+      <text x="212" y="360" class="tiny">No category</text>
+    </g>
+
+    <rect x="26" y="856" width="368" height="34" rx="13" class="chip"/>
+    <text x="44" y="878" class="tiny">Use as optional discovery mode, not default first pass</text>
+  </g>
+</svg>

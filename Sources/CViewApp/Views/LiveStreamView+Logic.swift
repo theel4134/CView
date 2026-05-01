@@ -390,6 +390,18 @@ extension LiveStreamView {
                     let bufferPct = vm.bufferHealth?.currentLevel ?? 0
                     await performanceMonitor.updateLatency(latency * 1000)
                     await performanceMonitor.updateBufferHealth(bufferPct * 100)
+                    // [P-1/P-2 telemetry / 2026-04-30] LowLatencyController 관측치 전달
+                    if let controller = await vm.streamCoordinator?.lowLatencyController {
+                        let snap = await controller.snapshot(currentLatency: latency)
+                        await performanceMonitor.updateLowLatencyTelemetry(
+                            pidOutput: snap.pidOutput,
+                            playbackRate: snap.playbackRate,
+                            syncPhaseLabel: snap.webPhaseLabel,
+                            oscillationCount: snap.oscillationCount,
+                            seeksPerMinute: snap.seeksPerMinute,
+                            isOscillationCapped: snap.isOscillationCapped
+                        )
+                    }
                 }
             }
         }

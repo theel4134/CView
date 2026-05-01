@@ -143,6 +143,16 @@ extension StreamCoordinator {
         // 버퍼 건강도 갱신 (화질 복귀 판단에 사용)
         if let bh = bufferHealth { _lastBufferHealth = bh }
 
+        // [Phase 2.3 / 2026-04-30] 버퍼 부족 시 catchup 가속 상한 자동 축소.
+        //   bh < 0.5 → 1.03 cap, bh > 0.7 → 해제. 히스테리시스로 진동 방지.
+        if let bh = bufferHealth {
+            if bh < 0.5 {
+                await lowLatencyController?.setBufferStarvationCap(1.03)
+            } else if bh > 0.7 {
+                await lowLatencyController?.setBufferStarvationCap(nil)
+            }
+        }
+
         let sample = ABRController.BandwidthSample(
             bytesLoaded: bytesLoaded,
             duration: duration

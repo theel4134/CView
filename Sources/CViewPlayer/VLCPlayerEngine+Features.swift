@@ -322,15 +322,33 @@ extension VLCPlayerEngine {
     @MainActor
     public func bufferHealth() -> BufferHealth {
         guard let stats = player.media?.statistics else {
-            return BufferHealth(currentLevel: 0, targetLevel: 1.0, isHealthy: true)
+            // [Phase 2.2] stats 자체가 없음 → 측정 불가. 마지막 정상값 폴백 + 낮은 신뢰도.
+            return BufferHealth(currentLevel: _lastMeasurableBufferLevel, targetLevel: 1.0, isHealthy: true,
+                                confidence: 0.0, isMeasurable: false)
         }
         let displayed = max(Int(stats.displayedPictures), 0)
-        let decoded   = max(Int(stats.decodedVideo), 1)
+        let decodedRaw = Int(stats.decodedVideo)
         let lost      = max(Int(stats.lostPictures), 0)
-        let ratio     = Float(displayed) / Float(decoded)
         let isBuffering = player.state == .buffering
+
+        // [Phase 2.2 / 2026-04-30] HW 디코드 고착 감지:
+        //   decodedVideo ≤ 0 인데 demuxReadBytes 는 증가 중 → 디코더만 멈춘 상태.
+        //   이 때 frameRatio = 0 으로 보고하면 ABR 가 거짓 강등을 일으키므로
+        //   마지막 측정 가능 값을 폴백으로 사용하고 confidence 를 낮춰 보고한다.
+        let demuxBytes = Int64(stats.demuxReadBytes)
+        let demuxAdvancing = demuxBytes > _lastDemuxReadBytesForHealth
+        _lastDemuxReadBytesForHealth = demuxBytes
+        if decodedRaw <= 0 {
+            let level = demuxAdvancing ? _lastMeasurableBufferLevel : 0.0
+            return BufferHealth(currentLevel: level, targetLevel: 1.0,
+                                isHealthy: demuxAdvancing && !isBuffering,
+                                confidence: demuxAdvancing ? 0.3 : 0.6, isMeasurable: false)
+        }
+
+        let decoded   = max(decodedRaw, 1)
+        let ratio     = Float(displayed) / Float(decoded)
         let isHealthy   = displayed > 0 && lost == 0 && !isBuffering
-        
+
         let frameRatio = Double(ratio)
         let minAuxiliary = min(_ioHealthEWMA, _frameDeliveryEWMA)
         let compositeLevel: Double
@@ -341,8 +359,14 @@ extension VLCPlayerEngine {
             // 정상 → frameRatio만 사용 (불필요한 가속 억제 방지)
             compositeLevel = frameRatio
         }
-        
-        return BufferHealth(currentLevel: compositeLevel, targetLevel: 1.0, isHealthy: isHealthy)
+
+        // [Phase 2.2] 다음 측정 불가 상황 대비 마지막 정상값 갱신
+        if compositeLevel > 0.1 {
+            _lastMeasurableBufferLevel = compositeLevel
+        }
+
+        return BufferHealth(currentLevel: compositeLevel, targetLevel: 1.0, isHealthy: isHealthy,
+                            confidence: 1.0, isMeasurable: true)
     }
 
     // MARK: - 오디오 트랙
@@ -375,7 +399,18 @@ extension VLCPlayerEngine {
         let baseSecs: Double = (streamingProfile == .multiLive) ? 15 : 10
         let scaledSecs = PowerAwareInterval.scaled(baseSecs)
         let interval: UInt64 = UInt64(scaledSecs * 1_000_000_000)
+        // [2026-04-30] 워밍업 — 재생 직후 사용자가 네트워크 모니터를 열면
+        // 첫 메트릭 출력까지 baseSecs 만큼 0 으로 보이는 문제가 있었다.
+        // 워밍업 단계에서는 짧은 간격(2.5s) 으로 3회 샘플링해 약 5–8s 안에
+        // 의미 있는 FPS/대역폭 값이 나오도록 한다. 이후엔 정상 baseSecs 주기.
+        let warmupInterval: UInt64 = 2_500_000_000
+        let warmupCount: Int = 3
         statsTask = Task { [weak self] in
+            for _ in 0..<warmupCount {
+                do { try await Task.sleep(nanoseconds: warmupInterval) } catch { return }
+                guard !Task.isCancelled, let self else { return }
+                await self.collectMetrics()
+            }
             while !Task.isCancelled {
                 do { try await Task.sleep(nanoseconds: interval) } catch { break }
                 guard !Task.isCancelled, let self else { break }
@@ -454,6 +489,7 @@ extension VLCPlayerEngine {
         }
         let resolution = _cachedResolutionString
 
+        let bh = bufferHealth()
         let metrics = VLCLiveMetrics(
             fps: fps,
             droppedFramesDelta: max(0, droppedDelta),
@@ -465,7 +501,8 @@ extension VLCPlayerEngine {
             videoWidth: Double(size.width),
             videoHeight: Double(size.height),
             playbackRate: player.rate,
-            bufferHealth: bufferHealth().currentLevel,
+            bufferHealth: bh.currentLevel,
+            bufferHealthConfidence: bh.confidence,
             lostAudioBuffersDelta: max(0, audioLostDelta),
             decodedAudioDelta: max(0, decodedAudioDelta),
             playedAudioBuffersDelta: max(0, playedAudioDelta),

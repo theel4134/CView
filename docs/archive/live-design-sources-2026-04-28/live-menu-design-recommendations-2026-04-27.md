@@ -24,11 +24,11 @@
 
 아래 이미지는 실제 구현 캡처가 아니라, 현재 코드 구조와 `DesignTokens` 톤을 기준으로 만든 디자인 방향 mockup이다.
 
-![Live Command Board 예시](assets/live-menu-command-board.svg)
+![Live Command Board 예시](../../assets/live-menu-command-board.svg)
 
-![MultiLive Workbench 예시](assets/live-menu-multilive-workbench.svg)
+![MultiLive Workbench 예시](../../assets/live-menu-multilive-workbench.svg)
 
-![Live Monitoring Dashboard 예시](assets/live-menu-monitoring-dashboard.svg)
+![Live Monitoring Dashboard 예시](../../assets/live-menu-monitoring-dashboard.svg)
 
 ---
 
@@ -90,7 +90,7 @@
 
 ## 2. 디자인 추천안 1: Live Command Board
 
-![Live Command Board 예시](assets/live-menu-command-board.svg)
+![Live Command Board 예시](../../assets/live-menu-command-board.svg)
 
 ### 핵심 컨셉
 
@@ -160,7 +160,7 @@
 
 ## 3. 디자인 추천안 2: MultiLive Workbench
 
-![MultiLive Workbench 예시](assets/live-menu-multilive-workbench.svg)
+![MultiLive Workbench 예시](../../assets/live-menu-multilive-workbench.svg)
 
 ### 핵심 컨셉
 
@@ -222,7 +222,7 @@
 
 ## 4. 디자인 추천안 3: Live Monitoring Dashboard
 
-![Live Monitoring Dashboard 예시](assets/live-menu-monitoring-dashboard.svg)
+![Live Monitoring Dashboard 예시](../../assets/live-menu-monitoring-dashboard.svg)
 
 ### 핵심 컨셉
 

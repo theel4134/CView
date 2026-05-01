@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="980" viewBox="0 0 1440 980" role="img" aria-labelledby="title desc">
+  <title id="title">CView Metrics Menu Redesign Candidates</title>
+  <desc id="desc">Three candidate layouts for the CView metrics menu: Command Center, Channel Inspector, and Ops Timeline.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101418"/>
+      <stop offset="0.48" stop-color="#151a20"/>
+      <stop offset="1" stop-color="#11151b"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e262e"/>
+      <stop offset="1" stop-color="#161d24"/>
+    </linearGradient>
+    <linearGradient id="panel2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#202831"/>
+      <stop offset="1" stop-color="#171e25"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38f2b2"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#67e8f9"/>
+      <stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fcd34d"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <style>
+      .bg { fill: url(#bg); }
+      .frame { fill: #111820; stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .panel { fill: url(#panel); stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .panel2 { fill: url(#panel2); stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .rail { fill: #151c23; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .chip { fill: #1d252d; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .muted { fill: #93a1ad; font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .tiny { fill: #8794a0; font: 500 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .micro { fill: #788590; font: 600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0.7px; }
+      .label { fill: #e7edf3; font: 850 19px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { fill: #f3f7f5; font: 850 30px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .num { fill: #f2f6f8; font: 850 24px "SF Mono", ui-monospace, Menlo, monospace; }
+      .numSmall { fill: #f2f6f8; font: 800 17px "SF Mono", ui-monospace, Menlo, monospace; }
+      .mint { fill: #38f2b2; }
+      .cyan { fill: #67e8f9; }
+      .amber { fill: #fbbf24; }
+      .rose { fill: #fb7185; }
+      .purple { fill: #a78bfa; }
+      .line { stroke: rgba(255,255,255,0.1); stroke-width: 1; }
+      .gridline { stroke: rgba(255,255,255,0.07); stroke-width: 1; }
+      .sparkMint { fill: none; stroke: #38f2b2; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+      .sparkCyan { fill: none; stroke: #67e8f9; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+      .sparkAmber { fill: none; stroke: #fbbf24; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1440" height="980" rx="28"/>
+  <text x="56" y="72" class="title">Metrics Menu Redesign Candidates</text>
+  <text x="56" y="104" class="muted">Three macOS-native options for server health, live quality, and channel diagnosis</text>
+
+  <g transform="translate(50 140)">
+    <rect class="frame" width="420" height="780" rx="22"/>
+    <text x="26" y="46" class="label">A. Metrics Command Center</text>
+    <text x="26" y="74" class="tiny">default recommendation · overview first</text>
+
+    <rect x="26" y="104" width="368" height="64" rx="16" class="panel"/>
+    <circle cx="54" cy="136" r="7" class="mint"/>
+    <text x="74" y="132" class="muted">Server Online</text>
+    <text x="74" y="152" class="tiny">Realtime WS · last update 20:27:14</text>
+    <rect x="294" y="121" width="80" height="30" rx="10" fill="url(#mint)"/>
+    <text x="313" y="141" fill="#07120d" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="850">Refresh</text>
+
+    <g transform="translate(26 190)">
+      <rect width="176" height="104" rx="14" class="panel2"/>
+      <text x="18" y="30" class="micro">ACTIVE CHANNELS</text>
+      <text x="18" y="68" class="num">12</text>
+      <path d="M98 73 L118 50 L139 63 L158 38" class="sparkMint"/>
+
+      <rect x="192" width="176" height="104" rx="14" class="panel2"/>
+      <text x="210" y="30" class="micro">SYNC QUALITY</text>
+      <text x="210" y="68" class="num">A</text>
+      <path d="M290 72 L309 67 L328 58 L347 55" class="sparkCyan"/>
+
+      <rect y="122" width="176" height="104" rx="14" class="panel2"/>
+      <text x="18" y="152" class="micro">WEB LATENCY</text>
+      <text x="18" y="190" class="numSmall">124ms</text>
+      <path d="M96 193 L116 170 L136 181 L158 160" class="sparkCyan"/>
+
+      <rect x="192" y="122" width="176" height="104" rx="14" class="panel2"/>
+      <text x="210" y="152" class="micro">APP LATENCY</text>
+      <text x="210" y="190" class="numSmall">142ms</text>
+      <path d="M286 190 L306 178 L328 184 L350 166" class="sparkMint"/>
+    </g>
+
+    <g transform="translate(26 448)">
+      <rect width="368" height="182" rx="16" class="panel"/>
+      <text x="18" y="34" class="muted">Quality trend</text>
+      <line x1="18" y1="62" x2="350" y2="62" class="gridline"/>
+      <line x1="18" y1="100" x2="350" y2="100" class="gridline"/>
+      <line x1="18" y1="138" x2="350" y2="138" class="gridline"/>
+      <path d="M28 126 C65 104, 87 114, 118 90 S184 82, 218 78 S274 98, 340 66" class="sparkMint"/>
+      <path d="M28 138 C66 120, 92 128, 120 112 S178 108, 212 96 S274 104, 340 84" class="sparkCyan"/>
+      <circle cx="340" cy="66" r="4" class="mint"/>
+      <circle cx="340" cy="84" r="4" class="cyan"/>
+    </g>
+
+    <g transform="translate(26 654)">
+      <rect width="368" height="74" rx="16" class="panel2"/>
+      <text x="18" y="31" class="muted">Immediate actions</text>
+      <rect x="18" y="44" width="86" height="20" rx="10" class="chip"/>
+      <text x="32" y="58" class="tiny">Open live</text>
+      <rect x="114" y="44" width="92" height="20" rx="10" class="chip"/>
+      <text x="128" y="58" class="tiny">Settings</text>
+      <rect x="216" y="44" width="116" height="20" rx="10" class="chip"/>
+      <text x="230" y="58" class="tiny">Superset detail</text>
+    </g>
+  </g>
+
+  <g transform="translate(510 140)">
+    <rect class="frame" width="420" height="780" rx="22"/>
+    <text x="26" y="46" class="label">B. Channel Quality Inspector</text>
+    <text x="26" y="74" class="tiny">debug-focused · table and inspector split</text>
+
+    <rect x="26" y="104" width="368" height="54" rx="16" class="panel"/>
+    <text x="46" y="137" class="muted">Search channel, sort by delta, samples, quality</text>
+
+    <g transform="translate(26 182)">
+      <rect width="154" height="502" rx="16" class="rail"/>
+      <text x="16" y="34" class="micro">CHANNELS</text>
+      <rect x="12" y="55" width="130" height="50" rx="12" fill="#23342d" stroke="#38f2b2" stroke-opacity="0.45"/>
+      <text x="24" y="77" class="tiny">Channel A</text>
+      <text x="24" y="94" class="micro">+18ms · A</text>
+      <rect x="12" y="117" width="130" height="50" rx="12" class="chip"/>
+      <text x="24" y="139" class="tiny">Channel B</text>
+      <text x="24" y="156" class="micro">+310ms · C</text>
+      <rect x="12" y="179" width="130" height="50" rx="12" class="chip"/>
+      <text x="24" y="201" class="tiny">Channel C</text>
+      <text x="24" y="218" class="micro">waiting web</text>
+      <rect x="12" y="241" width="130" height="50" rx="12" class="chip"/>
+      <text x="24" y="263" class="tiny">Channel D</text>
+      <text x="24" y="280" class="micro">-24ms · S</text>
+      <rect x="12" y="303" width="130" height="50" rx="12" class="chip"/>
+      <text x="24" y="325" class="tiny">Channel E</text>
+      <text x="24" y="342" class="micro">no app data</text>
+
+      <rect x="170" width="198" height="502" rx="16" class="panel"/>
+      <text x="188" y="34" class="muted">Selected channel</text>
+      <rect x="188" y="58" width="162" height="74" rx="14" fill="#202a33"/>
+      <text x="204" y="84" class="micro">WEB / APP DELTA</text>
+      <text x="204" y="114" class="numSmall">+18ms</text>
+      <rect x="188" y="150" width="162" height="110" rx="14" fill="#202a33"/>
+      <line x1="204" y1="220" x2="336" y2="220" class="gridline"/>
+      <line x1="204" y1="188" x2="336" y2="188" class="gridline"/>
+      <path d="M204 228 C228 205, 246 210, 270 190 S308 188, 336 170" class="sparkCyan"/>
+      <path d="M204 238 C232 222, 248 232, 274 206 S308 204, 336 188" class="sparkMint"/>
+      <rect x="188" y="278" width="162" height="84" rx="14" fill="#202a33"/>
+      <text x="204" y="305" class="micro">RECOMMENDATION</text>
+      <text x="204" y="334" class="tiny">Hold · confidence 96%</text>
+      <rect x="188" y="380" width="162" height="86" rx="14" fill="#202a33"/>
+      <text x="204" y="408" class="micro">ACTIONS</text>
+      <text x="204" y="435" class="tiny">Open live · Add multi</text>
+    </g>
+
+    <rect x="26" y="714" width="368" height="36" rx="12" class="chip"/>
+    <text x="44" y="737" class="tiny">Best when active channel count and debugging volume grow</text>
+  </g>
+
+  <g transform="translate(970 140)">
+    <rect class="frame" width="420" height="780" rx="22"/>
+    <text x="26" y="46" class="label">C. Ops Timeline</text>
+    <text x="26" y="74" class="tiny">incident-first · alerts become playback actions</text>
+
+    <rect x="26" y="104" width="368" height="74" rx="16" class="panel"/>
+    <text x="46" y="133" class="muted">Monitoring mode</text>
+    <text x="46" y="155" class="tiny">Warnings, regressions, and Superset deep links</text>
+    <rect x="292" y="124" width="82" height="32" rx="11" fill="url(#amber)"/>
+    <text x="313" y="145" fill="#1c1204" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="850">3 risks</text>
+
+    <g transform="translate(26 208)">
+      <rect width="368" height="462" rx="16" class="panel"/>
+      <line x1="44" y1="40" x2="44" y2="410" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+
+      <circle cx="44" cy="58" r="7" class="rose"/>
+      <rect x="66" y="30" width="278" height="72" rx="14" fill="#2c2026" stroke="#fb7185" stroke-opacity="0.32"/>
+      <text x="82" y="58" class="muted">Latency spike</text>
+      <text x="82" y="80" class="tiny">Channel B · app +310ms · 24 samples</text>
+
+      <circle cx="44" cy="156" r="7" class="amber"/>
+      <rect x="66" y="128" width="278" height="72" rx="14" fill="#2b251b" stroke="#fbbf24" stroke-opacity="0.32"/>
+      <text x="82" y="156" class="muted">Web data waiting</text>
+      <text x="82" y="178" class="tiny">2 channels need browser collector</text>
+
+      <circle cx="44" cy="254" r="7" class="cyan"/>
+      <rect x="66" y="226" width="278" height="72" rx="14" fill="#1d2930" stroke="#67e8f9" stroke-opacity="0.3"/>
+      <text x="82" y="254" class="muted">Realtime fallback</text>
+      <text x="82" y="276" class="tiny">WS disconnected · polling every 30s</text>
+
+      <circle cx="44" cy="352" r="7" class="mint"/>
+      <rect x="66" y="324" width="278" height="72" rx="14" fill="#1d2b25" stroke="#38f2b2" stroke-opacity="0.28"/>
+      <text x="82" y="352" class="muted">Recovery confirmed</text>
+      <text x="82" y="374" class="tiny">Quality A · avg delta 18ms</text>
+    </g>
+
+    <g transform="translate(26 694)">
+      <rect width="368" height="58" rx="16" class="panel2"/>
+      <rect x="16" y="17" width="98" height="24" rx="10" class="chip"/>
+      <text x="30" y="33" class="tiny">Open Live</text>
+      <rect x="126" y="17" width="98" height="24" rx="10" class="chip"/>
+      <text x="140" y="33" class="tiny">MultiLive</text>
+      <rect x="236" y="17" width="116" height="24" rx="10" class="chip"/>
+      <text x="250" y="33" class="tiny">Superset</text>
+    </g>
+  </g>
+</svg>

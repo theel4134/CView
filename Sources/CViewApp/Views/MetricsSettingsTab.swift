@@ -2,6 +2,7 @@
 // 메트릭 서버 전송 설정 탭 (SettingsView에서 추출)
 
 import SwiftUI
+import AppKit
 import CViewCore
 import CViewPersistence
 
@@ -15,6 +16,67 @@ struct MetricsSettingsTab: View {
     // MARK: 연결 테스트 상태
     @State private var testResult: ConnectionTestResult?
     @State private var isTesting = false
+
+    // MARK: App Secret 표시 상태
+    @State private var revealAppSecret = false
+    @State private var copiedAppSecret = false
+    @State private var secretValidation: SecretValidation?
+    @State private var isValidatingSecret = false
+
+    private enum SecretValidation {
+        case ok
+        case fail(String)
+        var color: Color {
+            switch self { case .ok: .green; case .fail: .red }
+        }
+        var icon: String {
+            switch self { case .ok: "checkmark.seal.fill"; case .fail: "xmark.seal.fill" }
+        }
+        var text: String {
+            switch self {
+            case .ok: "✓ 인증 성공 — 서버에서 발급한 키와 일치합니다"
+            case .fail(let m): "인증 실패: \(m)"
+            }
+        }
+    }
+
+    /// `Info.plist`의 `METRICS_APP_SECRET` (빌드 주입값) 또는
+    /// 프로세스 환경변수 `METRICS_APP_SECRET`. 둘 다 없거나 dev placeholder면 nil.
+    private var bundleAppSecret: String? {
+        if let env = ProcessInfo.processInfo.environment["METRICS_APP_SECRET"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !env.isEmpty, env != "dev-app-secret-change-in-production" {
+            return env
+        }
+        let v = Bundle.main.object(forInfoDictionaryKey: "METRICS_APP_SECRET") as? String
+        guard let v, !v.isEmpty, v != "dev-app-secret-change-in-production" else { return nil }
+        return v
+    }
+    /// 메트릭 인증에 실제로 사용될 secret. (사용자 입력 > ENV/Bundle > dev fallback)
+    private var effectiveAppSecret: String {
+        let user = settings.metrics.appSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !user.isEmpty { return user }
+        return bundleAppSecret ?? "dev-app-secret-change-in-production"
+    }
+    /// 현재 적용되는 secret 출처 레이블
+    private var effectiveSourceLabel: String {
+        let user = settings.metrics.appSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !user.isEmpty { return "사용자 입력값 (저장됨)" }
+        if let env = ProcessInfo.processInfo.environment["METRICS_APP_SECRET"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !env.isEmpty, env != "dev-app-secret-change-in-production" {
+            return "환경변수 METRICS_APP_SECRET"
+        }
+        if bundleAppSecret != nil { return "빌드 주입값 (Info.plist)" }
+        return "⚠️ 개발용 기본값 — 인증 실패합니다"
+    }
+    private var maskedAppSecret: String {
+        let s = effectiveAppSecret
+        guard s.count > 4 else { return String(repeating: "•", count: max(s.count, 4)) }
+        let head = s.prefix(2)
+        let tail = s.suffix(2)
+        return "\(head)\(String(repeating: "•", count: max(s.count - 4, 4)))\(tail)"
+    }
 
     private enum ConnectionTestResult {
         case success(latencyMs: Double, message: String)
@@ -65,6 +127,128 @@ struct MetricsSettingsTab: View {
                             .textFieldStyle(.roundedBorder)
                             .font(DesignTokens.Typography.custom(size: 12, design: .monospaced))
                             .frame(width: 200)
+                    }
+                }
+
+                // ─── App Secret (인증 키) ─────────────────────
+                SettingsSection(title: "App Secret (인증 키)",
+                                icon: "key.fill",
+                                color: DesignTokens.Colors.accentCyan) {
+                    SettingsRow("서버 발급 키 입력",
+                                description: "운영 서버에서 발급받은 App Secret을 붙여넣으세요. 비워두면 빌드 시 주입된 키 또는 개발용 기본값이 사용됩니다.",
+                                icon: "key", iconColor: DesignTokens.Colors.accentCyan) {
+                        HStack(spacing: 6) {
+                            if revealAppSecret {
+                                TextField("서버에서 발급받은 키",
+                                          text: $settings.metrics.appSecret)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(DesignTokens.Typography.custom(size: 11, design: .monospaced))
+                                    .frame(width: 220)
+                            } else {
+                                SecureField("서버에서 발급받은 키",
+                                            text: $settings.metrics.appSecret)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(DesignTokens.Typography.custom(size: 11, design: .monospaced))
+                                    .frame(width: 220)
+                            }
+                            Button {
+                                revealAppSecret.toggle()
+                            } label: {
+                                Image(systemName: revealAppSecret ? "eye.slash" : "eye")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help(revealAppSecret ? "마스킹" : "표시")
+                        }
+                    }
+                    RowDivider()
+                    SettingsRow("현재 적용 중인 키",
+                                description: effectiveSourceLabel,
+                                icon: "checkmark.shield",
+                                iconColor: bundleAppSecret == nil
+                                    && settings.metrics.appSecret.isEmpty
+                                    ? .orange
+                                    : DesignTokens.Colors.accentCyan) {
+                        HStack(spacing: 6) {
+                            Text(revealAppSecret ? effectiveAppSecret : maskedAppSecret)
+                                .font(DesignTokens.Typography.custom(size: 11, design: .monospaced))
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: 200, alignment: .trailing)
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(effectiveAppSecret, forType: .string)
+                                copiedAppSecret = true
+                                Task {
+                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                    copiedAppSecret = false
+                                }
+                            } label: {
+                                Image(systemName: copiedAppSecret ? "checkmark" : "doc.on.doc")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(copiedAppSecret
+                                        ? DesignTokens.Colors.accentCyan
+                                        : DesignTokens.Colors.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help(copiedAppSecret ? "복사됨" : "클립보드에 복사")
+                        }
+                    }
+                    RowDivider()
+                    SettingsRow("키 검증",
+                                description: "현재 키로 /api/auth/token 인증을 시도합니다.",
+                                icon: "lock.shield",
+                                iconColor: DesignTokens.Colors.accentCyan) {
+                        Button {
+                            Task {
+                                isValidatingSecret = true
+                                secretValidation = nil
+                                // 입력 즉시 검증 → 저장 후 client에 전파
+                                await settings.save()
+                                await appState.applyMetricsSettings()
+                                let result = await appState.testMetricsConnection()
+                                secretValidation = result.success
+                                    ? .ok
+                                    : .fail(result.message)
+                                isValidatingSecret = false
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isValidatingSecret {
+                                    ProgressView().scaleEffect(0.7).frame(width: 14, height: 14)
+                                } else {
+                                    Image(systemName: "checkmark.circle")
+                                        .font(DesignTokens.Typography.caption)
+                                }
+                                Text(isValidatingSecret ? "검증 중…" : "인증 검증")
+                                    .font(DesignTokens.Typography.captionMedium)
+                            }
+                            .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                            .padding(.horizontal, DesignTokens.Spacing.md)
+                            .padding(.vertical, DesignTokens.Spacing.xs)
+                            .background(
+                                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                                    .fill(DesignTokens.Colors.accentCyan.opacity(0.9))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isValidatingSecret)
+                    }
+                    if let v = secretValidation {
+                        RowDivider()
+                        SettingsRow(v.text, icon: v.icon, iconColor: v.color) {
+                            EmptyView()
+                        }
+                    }
+                    RowDivider()
+                    SettingsRow("Chrome 확장에 입력",
+                                description: "위 키를 복사한 뒤 Chrome 확장 → 설정 → 인증 → App Secret 칸에 붙여넣으세요.",
+                                icon: "puzzlepiece.extension",
+                                iconColor: DesignTokens.Colors.textSecondary) {
+                        EmptyView()
                     }
                 }
 

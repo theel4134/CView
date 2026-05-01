@@ -113,6 +113,11 @@ public actor LowLatencyController {
         public let syncState: SyncState
         public let pidOutput: Double
         public let timestamp: Date
+        // [P-1/P-2 telemetry / 2026-04-30] 진동/seek 관측치
+        public let oscillationCount: Int      // 최근 60초 내 buffering 진입 횟수
+        public let seeksPerMinute: Double     // 최근 60초 기준 seek 빈도
+        public let webPhaseLabel: String      // "idle"/"acquiring"/"tracking"/"hold(...)"/...
+        public let isOscillationCapped: Bool  // _oscillationMaxRate 활성 여부
     }
 
     // MARK: - Web Sync Phase (P1 / 2026-04-25)
@@ -229,12 +234,23 @@ public actor LowLatencyController {
     public func setMaxRateOverride(_ maxRate: Double?) {
         _maxRateOverride = maxRate
     }
+
+    // [Phase 2.3 / 2026-04-30] 버퍼 부족 시 catchup 가속 상한 자동 축소.
+    //   bufferHealth < 0.5 → 1.03 으로 cap. > 0.7 회복 시 해제.
+    //   StreamCoordinator 가 recordBandwidthSample 에서 호출.
+    private var _bufferStarvationCap: Double?
+    public func setBufferStarvationCap(_ cap: Double?) {
+        _bufferStarvationCap = cap
+    }
     
     /// 현재 실효 최대 가속률 (config, 쿨다운, 진동, 외부 오버라이드 중 최소값)
     private var effectiveMaxRate: Double {
         var rate = config.maxPlaybackRate
         if let override = _maxRateOverride {
             rate = min(rate, override)
+        }
+        if let starv = _bufferStarvationCap {
+            rate = min(rate, starv)
         }
         if Date() < _cooldownUntil {
             rate = min(rate, _cooldownMaxRate)
@@ -743,6 +759,21 @@ public actor LowLatencyController {
 
     /// Get current latency snapshot for monitoring
     public func snapshot(currentLatency: TimeInterval) -> LatencySnapshot {
+        // [P-1/P-2 telemetry] 60초 sliding window 진동·seek 카운트
+        let now = Date()
+        let recentBuffers = _recentBufferingTimestamps.filter { now.timeIntervalSince($0) <= 60 }.count
+        let secondsSinceLastSeek = now.timeIntervalSince(_lastSeekAt)
+        let seeksPerMin: Double = secondsSinceLastSeek <= 60 ? (60.0 / max(secondsSinceLastSeek, 1.0)) : 0
+        let phase: String = {
+            switch _webPhase {
+            case .idle: return "idle"
+            case .acquiring: return "acquiring"
+            case .snap: return "snap"
+            case .tracking: return "tracking"
+            case .hold(let r): return "hold(\(r))"
+            case .reacquire(let r): return "reacquire(\(r))"
+            }
+        }()
         return LatencySnapshot(
             currentLatency: currentLatency,
             targetLatency: config.targetLatency,
@@ -750,7 +781,11 @@ public actor LowLatencyController {
             playbackRate: _currentRate,
             syncState: _state,
             pidOutput: pidController.lastOutput,
-            timestamp: Date()
+            timestamp: now,
+            oscillationCount: recentBuffers,
+            seeksPerMinute: seeksPerMin,
+            webPhaseLabel: phase,
+            isOscillationCapped: _oscillationMaxRate != nil
         )
     }
     

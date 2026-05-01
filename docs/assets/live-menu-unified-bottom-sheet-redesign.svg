@@ -1,0 +1,152 @@
+<svg width="1600" height="1040" viewBox="0 0 1600 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .title { font: 800 38px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f8fafc; }
+    .subtitle { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #a4adb7; }
+    .label { font: 750 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e8edf0; }
+    .small { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #a4adb7; }
+    .tiny { font: 600 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #7f8a94; }
+  </style>
+
+  <rect width="1600" height="1040" fill="#090909"/>
+  <rect x="34" y="28" width="1532" height="984" rx="28" fill="#101010" stroke="#2a2a2a"/>
+
+  <text x="72" y="84" class="title">Unified Bottom Sheet Studio</text>
+  <text x="72" y="116" class="subtitle">상단 탐색/시청/멀티 + 우측 멀티채팅 전용 dock + 하단 팔로잉 bottom sheet + Light/Dark/System 테마</text>
+
+  <!-- Main window -->
+  <g transform="translate(72 154)">
+    <rect width="1120" height="760" rx="22" fill="#151515" stroke="#303030"/>
+
+    <!-- Toolbar -->
+    <rect x="0" y="0" width="1120" height="48" rx="22" fill="#1d1d1d"/>
+    <rect x="0" y="24" width="1120" height="24" fill="#1d1d1d"/>
+    <circle cx="28" cy="24" r="5.5" fill="#ff5f57"/>
+    <circle cx="48" cy="24" r="5.5" fill="#febc2e"/>
+    <circle cx="68" cy="24" r="5.5" fill="#28c840"/>
+    <text x="96" y="29" class="label">Live</text>
+
+    <g transform="translate(392 9)">
+      <rect width="238" height="30" rx="10" fill="#111111" stroke="#3a3a3a"/>
+      <rect x="82" y="4" width="72" height="22" rx="8" fill="#22c55e"/>
+      <text x="30" y="20" class="small">탐색</text>
+      <text x="105" y="20" class="small" fill="#041009">시청</text>
+      <text x="184" y="20" class="small">멀티</text>
+    </g>
+
+    <rect x="744" y="10" width="104" height="28" rx="8" fill="#f8fafc" stroke="#22c55e"/>
+    <text x="779" y="29" class="small" style="fill:#111827">Light</text>
+    <rect x="858" y="10" width="96" height="28" rx="8" fill="#161616" stroke="#333333"/>
+    <text x="888" y="29" class="small">Dark</text>
+    <rect x="964" y="10" width="112" height="28" rx="8" fill="#161616" stroke="#333333"/>
+    <text x="996" y="29" class="small">System</text>
+
+    <!-- Stage and chat content -->
+    <rect x="0" y="48" width="760" height="548" fill="#0c0c0c" stroke="#2f2f2f"/>
+    <rect x="760" y="48" width="1" height="548" fill="#343434"/>
+    <rect x="761" y="48" width="359" height="548" fill="#171717" stroke="#2f2f2f"/>
+
+    <!-- Stage -->
+    <text x="28" y="84" class="label">Main Stage</text>
+    <text x="124" y="84" class="small">시청: single player · 멀티: grid · 탐색: preview</text>
+    <rect x="28" y="112" width="704" height="396" rx="10" fill="#101010" stroke="#383838"/>
+    <rect x="54" y="140" width="318" height="154" rx="8" fill="#232323" stroke="#22c55e"/>
+    <rect x="388" y="140" width="318" height="154" rx="8" fill="#222222" stroke="#424242"/>
+    <rect x="54" y="314" width="318" height="154" rx="8" fill="#222222" stroke="#424242"/>
+    <rect x="388" y="314" width="318" height="154" rx="8" fill="#111111" stroke="#5a5a5a" stroke-dasharray="7 7"/>
+    <text x="78" y="176" class="label">Selected Live</text>
+    <rect x="78" y="194" width="82" height="22" rx="8" fill="#11351f" stroke="#22c55e"/>
+    <text x="95" y="209" class="tiny">ACTIVE</text>
+    <text x="418" y="176" class="label">Multi Slot</text>
+    <text x="84" y="350" class="label">Queue Preview</text>
+    <text x="476" y="386" class="label">Empty Slot</text>
+    <text x="448" y="412" class="small">하단 팔로잉에서 추가</text>
+
+    <!-- Stage status -->
+    <rect x="28" y="526" width="704" height="42" rx="8" fill="#171717" stroke="#303030"/>
+    <text x="46" y="552" class="small">Stage Status · 선택 채널 · 세션 3/4 · Quality popover · Tools popover</text>
+
+    <!-- Right Chat Dock -->
+    <text x="789" y="84" class="label">Right Multi Chat Dock</text>
+    <rect x="789" y="104" width="304" height="464" rx="8" fill="#111111" stroke="#333333"/>
+    <rect x="789" y="104" width="304" height="34" rx="8" fill="#1c1c1c" stroke="#333333"/>
+    <text x="808" y="126" class="label">멀티채팅</text>
+    <text x="886" y="126" class="tiny">Merged / Channel tabs</text>
+    <rect x="810" y="156" width="76" height="24" rx="8" fill="#11351f" stroke="#22c55e"/>
+    <text x="832" y="172" class="tiny">전체</text>
+    <rect x="894" y="156" width="76" height="24" rx="8" fill="#181818" stroke="#333333"/>
+    <text x="914" y="172" class="tiny">채널 A</text>
+    <rect x="978" y="156" width="76" height="24" rx="8" fill="#181818" stroke="#333333"/>
+    <text x="998" y="172" class="tiny">채널 B</text>
+    <rect x="810" y="204" width="206" height="18" rx="5" fill="#242424"/>
+    <rect x="810" y="236" width="244" height="18" rx="5" fill="#242424"/>
+    <rect x="810" y="268" width="178" height="18" rx="5" fill="#242424"/>
+    <rect x="810" y="318" width="256" height="88" rx="8" fill="#171717" stroke="#303030"/>
+    <text x="830" y="350" class="small">현재 시청 채널</text>
+    <text x="830" y="376" class="tiny">시청 모드는 채널 필터만 active</text>
+    <rect x="810" y="456" width="118" height="24" rx="8" fill="#181818" stroke="#22c55e"/>
+    <text x="836" y="472" class="tiny">Sync On</text>
+    <rect x="940" y="456" width="118" height="24" rx="8" fill="#181818" stroke="#333333"/>
+    <text x="964" y="472" class="tiny">Tab Mode</text>
+
+    <!-- Bottom sheet -->
+    <rect x="0" y="596" width="1120" height="164" fill="#181818" stroke="#303030"/>
+    <rect x="516" y="610" width="88" height="5" rx="2.5" fill="#4a4a4a"/>
+    <text x="28" y="642" class="label">Bottom Following Sheet</text>
+    <text x="206" y="642" class="small">Live 18 · Queue 3 · Filter 게임 · collapsed / peek / expanded</text>
+    <rect x="874" y="620" width="96" height="28" rx="8" fill="#111111" stroke="#22c55e"/>
+    <text x="896" y="638" class="tiny">멀티로 열기</text>
+    <rect x="982" y="620" width="86" height="28" rx="8" fill="#111111" stroke="#333333"/>
+    <text x="1010" y="638" class="tiny">비우기</text>
+
+    <g transform="translate(28 666)">
+      <rect width="214" height="64" rx="8" fill="#202020" stroke="#333333"/>
+      <circle cx="26" cy="32" r="12" fill="#22c55e"/>
+      <text x="50" y="28" class="label">Channel A</text>
+      <text x="50" y="46" class="tiny">title · category · viewers · +멀티</text>
+      <rect x="230" width="214" height="64" rx="8" fill="#202020" stroke="#333333"/>
+      <circle cx="256" cy="32" r="12" fill="#38bdf8"/>
+      <text x="280" y="28" class="label">Channel B</text>
+      <text x="280" y="46" class="tiny">preview · channel filter</text>
+      <rect x="460" width="214" height="64" rx="8" fill="#202020" stroke="#333333"/>
+      <circle cx="486" cy="32" r="12" fill="#f59e0b"/>
+      <text x="510" y="28" class="label">Channel C</text>
+      <text x="510" y="46" class="tiny">queued · batch add</text>
+      <rect x="690" width="214" height="64" rx="8" fill="#202020" stroke="#333333"/>
+      <circle cx="716" cy="32" r="12" fill="#71717a"/>
+      <text x="740" y="28" class="label">Recent</text>
+      <text x="740" y="46" class="tiny">최근 시청 · 추천 조합</text>
+    </g>
+  </g>
+
+  <!-- Recommendation cards -->
+  <g transform="translate(1230 174)">
+    <rect width="286" height="166" rx="16" fill="#161616" stroke="#303030"/>
+    <text x="22" y="38" class="label">정리 방침</text>
+    <text x="22" y="70" class="small">좌측 shelf 제거</text>
+    <text x="22" y="96" class="small">우측은 채팅 전용</text>
+    <text x="22" y="122" class="small">Quality/Tools는 popover</text>
+    <text x="22" y="148" class="small">Control Room은 command로 숨김</text>
+  </g>
+
+  <g transform="translate(1230 374)">
+    <rect width="286" height="206" rx="16" fill="#161616" stroke="#303030"/>
+    <text x="22" y="38" class="label">모드별 자동 동작</text>
+    <text x="22" y="72" class="small">탐색: bottom sheet peek</text>
+    <text x="22" y="100" class="small">시청: channel filter</text>
+    <text x="22" y="128" class="small">멀티: multi chat expanded</text>
+    <text x="22" y="156" class="small">Esc: sheet 한 단계 닫기</text>
+    <text x="22" y="184" class="small">⌘K: 고급 기능 실행</text>
+  </g>
+
+  <g transform="translate(1230 614)">
+    <rect width="286" height="206" rx="16" fill="#161616" stroke="#303030"/>
+    <text x="22" y="38" class="label">추천 추가 기능</text>
+    <text x="22" y="72" class="small">Smart Queue</text>
+    <text x="22" y="100" class="small">Batch Add</text>
+    <text x="22" y="128" class="small">Chat Dock State Save</text>
+    <text x="22" y="156" class="small">Light/Dark/System Theme</text>
+    <text x="22" y="184" class="small">Command Palette 정리</text>
+  </g>
+
+  <text x="72" y="952" class="subtitle">최종 형태: Top Mode Bar + Main Stage + Right Multi Chat Dock + Bottom Following Sheet + Theme Mode</text>
+</svg>

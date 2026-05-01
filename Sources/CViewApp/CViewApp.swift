@@ -81,6 +81,9 @@ struct CViewApplication: App {
                         .windowFrameAutosave("cview.main")
                 }
             }
+                // 입력 캐럿/액센트 색을 치지직 그린으로 통일 — 모든 TextField/TextEditor 의
+                // 깜빡이는 커서가 어두운 배경에서도 또렷이 보이도록 보장.
+                .tint(DesignTokens.Colors.chzzkGreen)
                 // 60fps: 트랜잭션 기본값 — 모든 암묵적 애니메이션에 spring 적용.
                 // 단, 다음 경우엔 주입을 건너뛰어 드래그/리사이즈/메뉴전환 시 프레임 드롭 방지:
                 //   1) SwiftUI 가 명시적으로 disablesAnimations = true 를 설정한 경우
@@ -109,6 +112,16 @@ struct CViewApplication: App {
                     // 알림 콜백 설정 (동기, MainActor)
                     NotificationService.shared.onWatchChannel = { [router] channelId in
                         router.navigate(to: .live(channelId: channelId))
+                    }
+
+                    // [Plan 2026-04-30 ACT-1] 액션 레지스트리 주입 — Command Palette/DeepLink/Widget/AppIntent 공유
+                    appState.bindActionRegistry(router: router)
+
+                    // [Plan 2026-04-30 SES-1] 마지막 워크스페이스 스냅샷 복원
+                    Task { @MainActor in
+                        if let snap = await WorkspaceStateStore.shared.load() {
+                            appState.applyWorkspaceSnapshot(snap, router: router)
+                        }
                     }
 
                     // 서비스 등록 (비차단)
@@ -162,6 +175,7 @@ struct CViewApplication: App {
                     .onDisappear { appState.unregisterDetachedChannel(channelId) }
                     .preferredColorScheme(.dark)
                     .windowFrameAutosave("cview.player")
+                    .tint(DesignTokens.Colors.chzzkGreen)
             }
         }
         .defaultSize(width: 960, height: 600)
@@ -172,6 +186,7 @@ struct CViewApplication: App {
                 .environment(appState)
                 .environment(router)
                 .windowFrameAutosave("cview.statistics")
+                .tint(DesignTokens.Colors.chzzkGreen)
         }
         .defaultSize(width: 700, height: 500)
 
@@ -181,6 +196,7 @@ struct CViewApplication: App {
                 .environment(appState)
                 .environment(router)
                 .windowFrameAutosave("cview.chat")
+                .tint(DesignTokens.Colors.chzzkGreen)
         }
         .defaultSize(width: 360, height: 600)
 
@@ -191,6 +207,7 @@ struct CViewApplication: App {
                     .environment(appState)
                     .environment(router)
                     .windowFrameAutosave("cview.multichat")
+                    .tint(DesignTokens.Colors.chzzkGreen)
             } else {
                 ProgressView()
                     .environment(appState)
@@ -307,6 +324,12 @@ struct CViewApplication: App {
             }
             .keyboardShortcut("4", modifiers: .command)
 
+            // [Redesign 2026-04-29] ⌘F = 검색 메뉴로 바로 진입 (전체 검색)
+            Button("검색 메뉴 열기") {
+                router.selectSidebar(.search)
+            }
+            .keyboardShortcut("f", modifiers: .command)
+
             Button("클립") {
                 router.selectSidebar(.clips)
             }
@@ -324,6 +347,50 @@ struct CViewApplication: App {
             }
             .keyboardShortcut("[", modifiers: .command)
             .disabled(router.path.isEmpty)
+        }
+
+        // ── 라이브 허브 메뉴 (2026-04-28 단일 디자인 리디자인) ──
+        CommandMenu("라이브 허브") {
+            Button("모드: 탐색") {
+                router.selectSidebar(.following)
+                appState.followingViewState.applyHubModePreset(.explore, multiLiveManager: appState.multiLiveManager)
+            }
+            .keyboardShortcut("1", modifiers: [.command, .option])
+
+            Button("모드: 시청") {
+                router.selectSidebar(.following)
+                appState.followingViewState.applyHubModePreset(.watch, multiLiveManager: appState.multiLiveManager)
+            }
+            .keyboardShortcut("2", modifiers: [.command, .option])
+
+            Button("모드: 멀티") {
+                router.selectSidebar(.following)
+                appState.followingViewState.applyHubModePreset(.multi, multiLiveManager: appState.multiLiveManager)
+                appState.followingViewState.showMultiChat = true
+            }
+            .keyboardShortcut("3", modifiers: [.command, .option])
+
+            Divider()
+
+            Button("팔로잉 시트 토글") {
+                router.selectSidebar(.following)
+                appState.followingViewState.followingSheetState = appState.followingViewState.followingSheetState.next
+            }
+            .keyboardShortcut("p", modifiers: [.command, .option])
+
+            Divider()
+
+            Button("보조 창: 네트워크 모니터") {
+                openWindow(id: "ml-network-window")
+            }
+
+            Button("보조 창: 메트릭 전송") {
+                openWindow(id: "ml-metrics-window")
+            }
+
+            Button("보조 창: 멀티채팅") {
+                openWindow(id: "multi-chat-window")
+            }
         }
 
         // ── 스트림 메뉴 ──
