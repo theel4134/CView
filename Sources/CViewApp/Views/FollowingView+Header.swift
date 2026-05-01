@@ -75,7 +75,11 @@ extension FollowingView {
                 .help("새로고침")
             }
         }
-        .padding(.horizontal, DesignTokens.Spacing.lg)
+        // [Fix] hiddenTitleBar 창의 트래픽 라이트(빨/노/초)가 좌측 약 72pt
+        // 영역을 차지하므로, 좌측 inset을 그만큼 확보해 브랜드/세그먼트와의
+        // 시각적 겹침을 제거한다. 우측은 기본 lg 유지.
+        .padding(.leading, 78)
+        .padding(.trailing, DesignTokens.Spacing.lg)
         .frame(height: 48)
         .background(
             ZStack {
