@@ -985,14 +985,11 @@ struct CategoryBrowseView: View {
                 statsLoadingBanner
                     .transition(.opacity)
             }
-
-            Divider()
-                .opacity(0.4)
         }
-        .background {
-            DesignTokens.Colors.surfaceBase
-                .ignoresSafeArea(edges: .horizontal)
-        }
+        // [Refine 2026-05-01] surfaceBase 단색 + Divider(0.4) 조합을
+        // 통일 `menuTopChrome` 으로 대체 — 본문과 자연스럽게 흡수되는 페이드 + 페이드 디바이더.
+        .menuTopChrome()
+        .ignoresSafeArea(edges: .horizontal)
         .zIndex(10)
     }
 
@@ -1408,14 +1405,10 @@ struct CategoryBrowseView: View {
             channelSearchBar
                 .padding(.horizontal, DesignTokens.Spacing.md)
                 .padding(.bottom, DesignTokens.Spacing.md)
-            Divider()
-                .opacity(0.4)
         }
-        .background {
-            // 불투명 배경 — 밑으로 썸네일이 지나갈 때 가독성 보장
-            DesignTokens.Colors.surfaceBase
-                .ignoresSafeArea(edges: .horizontal)
-        }
+        // [Refine 2026-05-01] 그리드 헤더와 동일한 통일 크롬 적용.
+        .menuTopChrome()
+        .ignoresSafeArea(edges: .horizontal)
         .zIndex(10)
     }
 

@@ -711,14 +711,11 @@ struct HomeView_v2: View {
             .padding(.horizontal, DesignTokens.Spacing.xl)
             .padding(.top, DesignTokens.Spacing.xl + 32)   // 타이틀바(28) 보정 포함
             .padding(.bottom, DesignTokens.Spacing.sm)
-            .background {
-                // [Perf 2026-04-28] WindowServer 합성 비용 절감.
-                //   기존: opacity(0.96) + LinearGradient(opacity 0.78~0.92) — 두 반투명 레이어가
-                //         ScrollView 위에 떠 있으면 macOS WindowServer 가 스크롤마다 alpha
-                //         compositing pass 수행.
-                //   수정: 완전 불투명 단색 (background) — backing store 1개로 합성 패스 0.
-                DesignTokens.Colors.background
-            }
+            // [Refine 2026-05-01] 단색 background → 통일 menuTopChrome 으로 교체.
+            // 다른 메뉴와 동일한 수직 페이드 + 페이드 hairline 디바이더.
+            // 성능 노트: menuTopChrome 의 LinearGradient 도 정적 단색 stops 라
+            // backing store 1개로 합성되며 매 프레임 alpha 변화가 없어 합성 비용은 동일하다.
+            .menuTopChrome()
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: sectionSpacing) {

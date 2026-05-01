@@ -48,11 +48,14 @@ struct RecentFavoritesView: View {
         VStack(spacing: 0) {
             // [Top chrome 2026-05-01] hiddenTitleBar 환경에서 탭 헤더 바 위로 macOS
             // 트래픽 라이트가 올라오는 문제 해결 — 28pt 드래그 영역 확보.
-            Color.clear
-                .frame(height: 28)
-            // 탭 바 + 요약 배지
-            tabHeaderBar
-            Divider().overlay(DesignTokens.Glass.borderColorLight)
+            // [Refine 2026-05-01] Glass.borderColorLight Divider 를 통일 menuTopChrome
+            // 페이드 hairline 으로 대체.
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: 28)
+                tabHeaderBar
+            }
+            .menuTopChrome()
 
             ScrollView {
                 LazyVStack(spacing: DesignTokens.Spacing.xs) {

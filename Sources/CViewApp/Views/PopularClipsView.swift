@@ -640,21 +640,14 @@ struct PopularClipsView: View {
         VStack(spacing: 0) {
             // [Top chrome 2026-05-01] hiddenTitleBar + .ignoresSafeArea(top) 환경에서
             // 클립 toolbar(아이콘·타이틀) 위로 macOS 트래픽 라이트가 올라오는 문제 해결.
-            Color.clear
-                .frame(height: 28)
-            toolbar
-
-            // [2026-04-30] toolbar 하단 액센트 라인 — 그라디언트 1px
-            LinearGradient(
-                colors: [
-                    DesignTokens.Colors.accentPink.opacity(0.35),
-                    DesignTokens.Colors.chzzkGreen.opacity(0.30),
-                    .clear,
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(height: 1)
+            // [Refine 2026-05-01] toolbar 자체의 .contentBackground() + 핑크/그린 그라디언트
+            // 1px 라인을 제거하고 통일 menuTopChrome 적용. 다른 메뉴와 시각 언어 통일.
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: 28)
+                toolbar
+            }
+            .menuTopChrome()
 
             // [2026-04-30 Phase1] GeometryReader 기반 폭 분기 — 우측 인스펙터 활성화
             GeometryReader { proxy in
@@ -794,7 +787,8 @@ struct PopularClipsView: View {
 
             tabBar
         }
-        .contentBackground()
+        // [Refine 2026-05-01] .contentBackground() 제거 — 부모(`PopularClipsView.body`)의
+        // menuTopChrome 가 통일 배경/디바이더를 제공.
     }
 
     /// [2026-04-30 Pass2] 아이덴티티 — 그라디언트 아이콘 + 타이틀 + 동적 서브레이블
@@ -1583,7 +1577,7 @@ struct PopularClipsView: View {
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
-        .contentBackground()
+        // [Refine 2026-05-01] 중첩 contentBackground 제거 (부모 menuTopChrome 가 담당).
     }
 
     /// 탭 옆 카운트 배지에 표시할 값. 빈 상태일 때는 nil.

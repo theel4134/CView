@@ -85,24 +85,25 @@ struct SettingsWorkspace: View {
             // 상단 ~28pt 가 macOS 트래픽 라이트/드래그 영역과 겹쳐 SettingsTopBar 가
             // 가려지고 ScrollView 콘텐츠가 타이틀바 위로 올라가 보였다.
             // 독립 Settings 윈도우(showRail=true)는 정상 타이틀바를 가지므로 보정 불필요.
-            if !showRail {
-                Color.clear
-                    .frame(height: 28)
+            // [Refine 2026-05-01] background 단색 + Divider 를 통일 menuTopChrome 으로 대체.
+            VStack(spacing: 0) {
+                if !showRail {
+                    Color.clear
+                        .frame(height: 28)
+                }
+
+                SettingsTopBar(
+                    selectedGroup: selectedGroup,
+                    searchQuery: $searchQuery,
+                    showInspector: $showInspector,
+                    changedOnly: $changedOnly,
+                    recentChanges: recentChanges,
+                    hasRollback: lastScenarioSnapshot != nil,
+                    rollbackName: lastScenarioName,
+                    onRollback: rollbackLastScenario
+                )
             }
-
-            // 상단 바 — 검색, 최근 변경, Inspector 토글
-            SettingsTopBar(
-                selectedGroup: selectedGroup,
-                searchQuery: $searchQuery,
-                showInspector: $showInspector,
-                changedOnly: $changedOnly,
-                recentChanges: recentChanges,
-                hasRollback: lastScenarioSnapshot != nil,
-                rollbackName: lastScenarioName,
-                onRollback: rollbackLastScenario
-            )
-
-            Divider()
+            .menuTopChrome()
 
             // 본문 — rail / content / inspector
             HStack(spacing: 0) {
@@ -285,8 +286,9 @@ private struct SettingsTopBar: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .frame(height: 44)
-        .background(DesignTokens.Colors.background)
+        // [Refine 2026-05-01] 높이 44pt → 48pt 로 라이브 메뉴 등 다른 메뉴 상단과 통일.
+        // 자체 background 는 제거 — 부모(`SettingsWorkspace.body`)의 menuTopChrome 가 담당.
+        .frame(height: 48)
         .animation(DesignTokens.Animation.smooth, value: hasRollback)
         .animation(DesignTokens.Animation.smooth, value: recentChanges.entries.first?.id)
     }

@@ -37,24 +37,10 @@ extension FollowingView {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 48)
-        .background(
-            ZStack {
-                DesignTokens.Colors.surfaceBase
-                LinearGradient(
-                    colors: [
-                        DesignTokens.Colors.chzzkGreen.opacity(0.08),
-                        .clear,
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            }
-        )
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(DesignTokens.Colors.border)
-                .frame(height: 1)
-        }
+        // [Refine 2026-05-01] 좌→우 chzzkGreen 0.08 wash 가 본문 색감과 충돌해
+        // 시각적으로 단절된 "스트라이프"처럼 보이는 문제를 제거.
+        // `menuTopChrome` 으로 통일된 수직 페이드 + 페이드 hairline 디바이더 적용.
+        .menuTopChrome()
     }
 
     // MARK: - Top Bar V2 Metrics

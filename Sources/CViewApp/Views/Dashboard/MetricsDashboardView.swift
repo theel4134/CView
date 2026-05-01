@@ -101,19 +101,23 @@ struct MetricsDashboardView: View {
             // [Top chrome 2026-05-01] hiddenTitleBar + .ignoresSafeArea(top) 환경에서
             // statusStrip(서버 배지·실시간) 위로 macOS 트래픽 라이트가 올라오는 문제
             // 해결 — 28pt 드래그 영역 확보.
-            Color.clear
-                .frame(height: 28)
-            statusStrip
-                .padding(.horizontal, DesignTokens.Spacing.xl)
-                .padding(.top, DesignTokens.Spacing.lg)
-                .padding(.bottom, DesignTokens.Spacing.md)
-            forwarderStatusBanner
-                .padding(.horizontal, DesignTokens.Spacing.xl)
-                .padding(.bottom, DesignTokens.Spacing.sm)
-            tabPicker
-                .padding(.horizontal, DesignTokens.Spacing.xl)
-                .padding(.bottom, DesignTokens.Spacing.md)
-            Divider().opacity(0.4)
+            // [Refine 2026-05-01] surfaceBase 단색 + Divider(0.4) 조합을 통일 menuTopChrome
+            // 으로 대체. 28pt 드래그 영역까지 헤더에 포함시켜 본문과 자연스럽게 분리.
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: 28)
+                statusStrip
+                    .padding(.horizontal, DesignTokens.Spacing.xl)
+                    .padding(.top, DesignTokens.Spacing.lg)
+                    .padding(.bottom, DesignTokens.Spacing.md)
+                forwarderStatusBanner
+                    .padding(.horizontal, DesignTokens.Spacing.xl)
+                    .padding(.bottom, DesignTokens.Spacing.sm)
+                tabPicker
+                    .padding(.horizontal, DesignTokens.Spacing.xl)
+                    .padding(.bottom, DesignTokens.Spacing.md)
+            }
+            .menuTopChrome()
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
                     switch tab {
