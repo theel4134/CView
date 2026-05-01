@@ -113,18 +113,27 @@ extension AppState {
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.multiLiveManager.isTerminating = true
-            MultiLivePersistedState.clear()
+            guard let self else { return }
+            self.multiLiveManager.isTerminating = true
 
-            // [\ud504\ub85c\uc138\uc2a4 \uaca9\ub9ac] \ub54c\uc5b0\ub85c launch \ub41c \uc790\uc2dd \uc778\uc2a4\ud134\uc2a4\ub4e4 \uc885\ub8cc
-            self?.multiLiveLauncher.terminateAll()
+            // [Bug-fix 2026-05-01] 자식(`--multilive-child`) 인스턴스는 부모와 UserDefaults 를
+            // 공유하므로, 자식이 종료될 때마다 부모의 멀티라이브/멀티채팅 영속 상태를 건드리면
+            // 부모 세션이 한 자식 닫힐 때마다 비워지는 부작용이 발생한다.
+            // 또한 자식의 `multiLiveLauncher` 는 본인이 띄운 손자가 없으므로 호출은 무의미하지만,
+            // 잠재적인 손자 spawn 코드(향후 변경 등) 의 도화선이 되지 않도록 자식에서는 전부 건너뛴다.
+            if !self.isChildInstance {
+                MultiLivePersistedState.clear()
 
-            // 멀티채팅 초기화 플래그 — DataStore는 actor라 동기 저장 불가하므로
-            // UserDefaults 플래그만 설정하고 다음 실행 시 load()에서 처리
-            UserDefaults.standard.set(true, forKey: "multiChatShouldClear")
+                // [프로세스 격리] 부모로부터 launch 된 자식 인스턴스들 종료
+                self.multiLiveLauncher.terminateAll()
+
+                // 멀티채팅 초기화 플래그 — DataStore는 actor라 동기 저장 불가하므로
+                // UserDefaults 플래그만 설정하고 다음 실행 시 load()에서 처리
+                UserDefaults.standard.set(true, forKey: "multiChatShouldClear")
+            }
 
             // NotificationCenter observer 명시적 해제
-            self?.removeAllObservers()
+            self.removeAllObservers()
         }
 
         // [Live Settings] 스트림 보정 모드 변경 — 활성 멀티라이브 세션을 즉시 재시작

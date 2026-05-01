@@ -118,9 +118,19 @@ struct CViewApplication: App {
                     appState.bindActionRegistry(router: router)
 
                     // [Plan 2026-04-30 SES-1] 마지막 워크스페이스 스냅샷 복원
-                    Task { @MainActor in
-                        if let snap = await WorkspaceStateStore.shared.load() {
-                            appState.applyWorkspaceSnapshot(snap, router: router)
+                    //
+                    // [Bug-fix 2026-05-01] 자식(`--multilive-child`) 인스턴스에서는 절대 복원하지 않는다.
+                    // - 자식은 부모와 동일 번들 ID 라 UserDefaults("WorkspaceSnapshot.v1") 가 공유되며,
+                    //   여기에는 부모가 띄웠던 멀티라이브 임베디드 세션의 channelId 가 그대로 남아 있다.
+                    // - 자식이 `applyWorkspaceSnapshot` 을 실행하면 `addSession(channelId:)` 가 호출되고,
+                    //   설정 `useSeparateProcesses=true`(기본값) 와 결합해 자식의 launcher 가
+                    //   "손자 프로세스" 를 또 spawn → 앱 재실행 시 분할 인스턴스가 자동 재생되는
+                    //   회귀(`라이브 스트리밍 자동 재생`) 가 발생한다.
+                    if !launchMode.isChild {
+                        Task { @MainActor in
+                            if let snap = await WorkspaceStateStore.shared.load() {
+                                appState.applyWorkspaceSnapshot(snap, router: router)
+                            }
                         }
                     }
 

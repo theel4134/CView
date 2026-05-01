@@ -15,6 +15,19 @@ import CViewPlayer
 @MainActor
 final class AppState {
 
+    // MARK: - Launch Mode
+
+    /// 현재 프로세스가 멀티라이브 자식 인스턴스(`--multilive-child`)로 부팅되었는지 여부.
+    /// 자식 프로세스는 부모와 동일 번들 ID 라 UserDefaults 가 공유되므로,
+    /// 워크스페이스 스냅샷 복원 / 종료 시 공유 상태 정리 / 멀티라이브 launcher 주입 등
+    /// "메인 인스턴스 전용" 동작을 자식에서 건너뛰는 데 사용한다.
+    /// CommandLine.arguments 기반이라 프로세스 lifetime 동안 불변.
+    let isChildInstance: Bool
+
+    init() {
+        self.isChildInstance = AppLaunchModeParser.detect().isChild
+    }
+
     // MARK: - Published Properties
 
     var isInitialized = false
@@ -100,10 +113,17 @@ final class AppState {
             pendingMetricsTab = tab
         }
         // 멀티라이브 세션 복원 (현재 비어있을 때만)
+        //
+        // [Bug-fix 2026-05-01] 워크스페이스 스냅샷의 `multiLiveChannelIds` 는
+        // `captureWorkspaceSnapshot` 에서 `multiLiveManager.sessions.map { $0.channelId }` 로만
+        // 채워지므로 **임베디드(in-process) 세션** 의 채널이다. 복원 시에도 반드시 `.embedded` 로
+        // 강제해야, 사용자가 `useSeparateProcesses=true` (기본값) 로 설정해 둔 상태에서도
+        // 자식 프로세스를 새로 띄우지 않고 부모 윈도우 내 멀티라이브 그리드로 그대로 복원된다.
+        // 이전에는 override 미지정으로 launcher 분기를 타 "분할 인스턴스가 자동 재생되는" 회귀가 발생했다.
         if multiLiveManager.sessions.isEmpty, !snap.multiLiveChannelIds.isEmpty {
             for cid in snap.multiLiveChannelIds {
                 Task { @MainActor in
-                    await multiLiveManager.addSession(channelId: cid)
+                    await multiLiveManager.addSession(channelId: cid, presentationOverride: .embedded)
                 }
             }
         }
