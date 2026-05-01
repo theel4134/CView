@@ -2,50 +2,54 @@
 // CViewApp - 프리미엄 최근 시청 및 즐겨찾기 채널 목록
 // Design: 세그먼트 탭 + 프리미엄 채널 카드 + 라이브 상태 실시간 표시
 
-import SwiftUI
 import CViewCore
+import CViewNetworking
 import CViewPersistence
 import CViewUI
-import CViewNetworking
+import SwiftUI
 
 struct RecentFavoritesView: View {
-    
+
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
-    
+
     @State private var recentChannels: [ChannelListData] = []
     @State private var favoriteChannels: [ChannelListData] = []
-    @State private var liveStatusMap: [String: Bool] = [:]   // channelId → isLive
-    @State private var viewerCountMap: [String: Int] = [:]   // channelId → viewerCount
+    @State private var liveStatusMap: [String: Bool] = [:]  // channelId → isLive
+    @State private var viewerCountMap: [String: Int] = [:]  // channelId → viewerCount
     @State private var isLoading = false
     @State private var isCheckingLive = false
     @State private var errorMessage: String?
     @State private var selectedTab: FavTab = .favorites
-    
+
     enum FavTab: String, CaseIterable, Identifiable {
         case favorites = "즐겨찾기"
-        case recent    = "최근 시청"
+        case recent = "최근 시청"
         var id: String { rawValue }
         var icon: String {
             switch self {
             case .favorites: "star.fill"
-            case .recent:    "clock.fill"
+            case .recent: "clock.fill"
             }
         }
         var color: Color {
             switch self {
             case .favorites: .yellow
-            case .recent:    DesignTokens.Colors.accentBlue
+            case .recent: DesignTokens.Colors.accentBlue
             }
         }
     }
-    
+
     private var currentChannels: [ChannelListData] {
         selectedTab == .favorites ? favoriteChannels : recentChannels
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            // [Top chrome 2026-05-01] hiddenTitleBar 환경에서 탭 헤더 바 위로 macOS
+            // 트래픽 라이트가 올라오는 문제 해결 — 28pt 드래그 영역 확보.
+            Color.clear
+                .frame(height: 28)
             // 탭 바 + 요약 배지
             tabHeaderBar
             Divider().overlay(DesignTokens.Glass.borderColorLight)
@@ -53,7 +57,8 @@ struct RecentFavoritesView: View {
             ScrollView {
                 LazyVStack(spacing: DesignTokens.Spacing.xs) {
                     // 라이브 현황 배지
-                    let liveCount = currentChannels.filter { liveStatusMap[$0.channelId] == true }.count
+                    let liveCount = currentChannels.filter { liveStatusMap[$0.channelId] == true }
+                        .count
                     if liveCount > 0 {
                         HStack(spacing: 6) {
                             Circle()
@@ -75,7 +80,8 @@ struct RecentFavoritesView: View {
                     if currentChannels.isEmpty {
                         emptyState(
                             icon: selectedTab == .favorites ? "star.slash" : "clock",
-                            message: selectedTab == .favorites ? "즐겨찾기한 채널이 없습니다" : "최근 시청한 채널이 없습니다"
+                            message: selectedTab == .favorites
+                                ? "즐겨찾기한 채널이 없습니다" : "최근 시청한 채널이 없습니다"
                         )
                     } else {
                         ForEach(currentChannels) { channel in
@@ -112,10 +118,13 @@ struct RecentFavoritesView: View {
                 }
             }
         }
-        .alert("오류", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
+        .alert(
+            "오류",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
             Button("확인", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
@@ -135,12 +144,17 @@ struct RecentFavoritesView: View {
                         Image(systemName: tab.icon)
                             .font(DesignTokens.Typography.caption)
                         Text(tab.rawValue)
-                            .font(DesignTokens.Typography.custom(size: 13, weight: isSelected ? .semibold : .regular))
-                        let count = tab == .favorites ? favoriteChannels.count : recentChannels.count
+                            .font(
+                                DesignTokens.Typography.custom(
+                                    size: 13, weight: isSelected ? .semibold : .regular))
+                        let count =
+                            tab == .favorites ? favoriteChannels.count : recentChannels.count
                         if count > 0 {
                             Text("\(count)")
                                 .font(DesignTokens.Typography.micro)
-                                .foregroundStyle(isSelected ? .black : DesignTokens.Colors.textTertiary)
+                                .foregroundStyle(
+                                    isSelected ? .black : DesignTokens.Colors.textTertiary
+                                )
                                 .padding(.horizontal, DesignTokens.Spacing.xs)
                                 .padding(.vertical, DesignTokens.Spacing.xxs)
                                 .background {
@@ -179,7 +193,7 @@ struct RecentFavoritesView: View {
         }
         .background(DesignTokens.Colors.surfaceOverlay)
     }
-    
+
     // MARK: - Data Loading
 
     private func loadData() async {
@@ -228,8 +242,8 @@ struct RecentFavoritesView: View {
 
 // MARK: - Section Header + Empty State helpers (used in other views)
 
-private extension RecentFavoritesView {
-    func emptyState(icon: String, message: String) -> some View {
+extension RecentFavoritesView {
+    fileprivate func emptyState(icon: String, message: String) -> some View {
         EmptyStateView(icon: icon, title: message, style: .panel)
             .padding(.vertical, DesignTokens.Spacing.xl)
     }
@@ -264,7 +278,9 @@ struct PremiumChannelRow: View {
                 .overlay(
                     Circle()
                         .stroke(
-                            isLive ? DesignTokens.Colors.live : DesignTokens.Colors.border.opacity(0.6),
+                            isLive
+                                ? DesignTokens.Colors.live
+                                : DesignTokens.Colors.border.opacity(0.6),
                             lineWidth: isLive ? 2.5 : 1
                         )
                 )
@@ -335,7 +351,10 @@ struct PremiumChannelRow: View {
             ZStack {
                 if isHovered {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                        .fill(isLive ? DesignTokens.Colors.live.opacity(0.07) : DesignTokens.Colors.surfaceOverlay)
+                        .fill(
+                            isLive
+                                ? DesignTokens.Colors.live.opacity(0.07)
+                                : DesignTokens.Colors.surfaceOverlay)
                 } else {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                         .fill(DesignTokens.Colors.surfaceElevated)
@@ -384,7 +403,7 @@ struct SimpleChannelRow: View {
     let onTap: () -> Void
     let onToggleFavorite: () async -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.md) {
             // 채널 이미지 with ring
@@ -403,14 +422,14 @@ struct SimpleChannelRow: View {
             } else {
                 channelPlaceholder
             }
-            
+
             // 채널 정보
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.channelName)
                     .font(DesignTokens.Typography.bodySemibold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
                     .lineLimit(1)
-                
+
                 if let lastWatched = item.lastWatched {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
@@ -421,9 +440,9 @@ struct SimpleChannelRow: View {
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
             }
-            
+
             Spacer()
-            
+
             // 즐겨찾기 버튼
             Button {
                 Task { await onToggleFavorite() }
@@ -446,7 +465,7 @@ struct SimpleChannelRow: View {
         .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
     }
-    
+
     private var channelPlaceholder: some View {
         Circle()
             .fill(DesignTokens.Colors.surfaceBase)

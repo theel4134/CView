@@ -8,10 +8,10 @@
 // - Overview = compact KPI(4) + 차트 + 문제 채널 + 액션 + DB drawer
 // - Channels = 기존 channelDetailSection 재사용
 
-import SwiftUI
-import Charts
 import CViewCore
 import CViewUI
+import Charts
+import SwiftUI
 
 // MARK: - Tab Mode (Redesign 2026-04-28)
 
@@ -22,15 +22,15 @@ enum MetricsDashboardTab: String, CaseIterable, Identifiable, Sendable, Codable 
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .overview:   return "개요"
-        case .channels:   return "채널"
+        case .overview: return "개요"
+        case .channels: return "채널"
         case .monitoring: return "모니터링"
         }
     }
     var icon: String {
         switch self {
-        case .overview:   return "square.grid.2x2.fill"
-        case .channels:   return "antenna.radiowaves.left.and.right"
+        case .overview: return "square.grid.2x2.fill"
+        case .channels: return "antenna.radiowaves.left.and.right"
         case .monitoring: return "waveform.path.ecg"
         }
     }
@@ -38,28 +38,28 @@ enum MetricsDashboardTab: String, CaseIterable, Identifiable, Sendable, Codable 
 
 // [Channels Inspector 2026-04-28] table 정렬/필터.
 enum ChannelInspectorSort: String, CaseIterable, Identifiable {
-    case deltaDesc      // 동기화 편차 큰 순 (기본)
-    case samplesDesc    // 샘플 많은 순
+    case deltaDesc  // 동기화 편차 큰 순 (기본)
+    case samplesDesc  // 샘플 많은 순
     case nameAsc
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .deltaDesc:   return "편차 큰 순"
+        case .deltaDesc: return "편차 큰 순"
         case .samplesDesc: return "샘플 많은 순"
-        case .nameAsc:     return "채널명"
+        case .nameAsc: return "채널명"
         }
     }
 }
 
 enum ChannelInspectorFilter: String, CaseIterable, Identifiable {
-    case all        // 전체
-    case withWeb    // 웹 데이터 있음
-    case withApp    // 앱 데이터 있음
-    case waiting    // 웹 데이터 대기
+    case all  // 전체
+    case withWeb  // 웹 데이터 있음
+    case withApp  // 앱 데이터 있음
+    case waiting  // 웹 데이터 대기
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .all:     return "전체"
+        case .all: return "전체"
         case .withWeb: return "웹"
         case .withApp: return "앱"
         case .waiting: return "대기"
@@ -67,7 +67,7 @@ enum ChannelInspectorFilter: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
-        case .all:     return "square.grid.2x2"
+        case .all: return "square.grid.2x2"
         case .withWeb: return "globe"
         case .withApp: return "desktopcomputer"
         case .waiting: return "hourglass"
@@ -98,6 +98,11 @@ struct MetricsDashboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // [Top chrome 2026-05-01] hiddenTitleBar + .ignoresSafeArea(top) 환경에서
+            // statusStrip(서버 배지·실시간) 위로 macOS 트래픽 라이트가 올라오는 문제
+            // 해결 — 28pt 드래그 영역 확보.
+            Color.clear
+                .frame(height: 28)
             statusStrip
                 .padding(.horizontal, DesignTokens.Spacing.xl)
                 .padding(.top, DesignTokens.Spacing.lg)
@@ -112,8 +117,8 @@ struct MetricsDashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
                     switch tab {
-                    case .overview:   overviewContent
-                    case .channels:   channelsContent
+                    case .overview: overviewContent
+                    case .channels: channelsContent
                     case .monitoring: monitoringContent
                     }
                 }
@@ -144,7 +149,9 @@ struct MetricsDashboardView: View {
             HStack(spacing: 8) {
                 ZStack {
                     Circle()
-                        .fill(viewModel.isMetricsServerOnline ? DesignTokens.Colors.chzzkGreen : .red)
+                        .fill(
+                            viewModel.isMetricsServerOnline ? DesignTokens.Colors.chzzkGreen : .red
+                        )
                         .frame(width: 9, height: 9)
                     if viewModel.isMetricsServerOnline {
                         Circle()
@@ -207,14 +214,19 @@ struct MetricsDashboardView: View {
                     .font(DesignTokens.Typography.captionSemibold)
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                     .frame(width: 28, height: 28)
-                    .background(DesignTokens.Colors.chzzkGreen.opacity(0.1), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                    .background(
+                        DesignTokens.Colors.chzzkGreen.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             }
             .buttonStyle(.plain)
             .help("새로고침")
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -276,22 +288,28 @@ struct MetricsDashboardView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            .background(
+                Color.orange.opacity(0.10),
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                     .strokeBorder(.orange.opacity(0.4), lineWidth: 0.6)
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if viewModel.serverChannelStats.isEmpty,
-                  viewModel.isMetricsServerOnline {
+            viewModel.isMetricsServerOnline
+        {
             // 전송 활성화 + 서버 응답에 채널이 비어있는 상태 — 첫 전송 대기 안내.
             HStack(spacing: 10) {
                 Image(systemName: "hourglass")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
-                Text("재생 중인 채널 메트릭이 처음 도착하기까지 최대 \(Int(appState.settingsStore.metrics.forwardInterval))초 정도 걸립니다")
-                    .font(DesignTokens.Typography.captionMedium)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Text(
+                    "재생 중인 채널 메트릭이 처음 도착하기까지 최대 \(Int(appState.settingsStore.metrics.forwardInterval))초 정도 걸립니다"
+                )
+                .font(DesignTokens.Typography.captionMedium)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
                 Spacer()
                 Button {
                     Task {
@@ -307,7 +325,10 @@ struct MetricsDashboardView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
-            .background(DesignTokens.Colors.accentCyan.opacity(0.08), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            .background(
+                DesignTokens.Colors.accentCyan.opacity(0.08),
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                     .strokeBorder(DesignTokens.Colors.accentCyan.opacity(0.3), lineWidth: 0.6)
@@ -330,9 +351,11 @@ struct MetricsDashboardView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: mode.allOk ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(mode.allOk ? DesignTokens.Colors.chzzkGreen : .orange)
+                Image(
+                    systemName: mode.allOk ? "checkmark.shield.fill" : "exclamationmark.shield.fill"
+                )
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(mode.allOk ? DesignTokens.Colors.chzzkGreen : .orange)
                 Text(mode.label)
                     .font(DesignTokens.Typography.micro)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
@@ -340,7 +363,8 @@ struct MetricsDashboardView: View {
                 if !mode.dots.isEmpty {
                     HStack(spacing: 3) {
                         ForEach(Array(mode.dots.enumerated()), id: \.offset) { _, ok in
-                            Circle().fill(ok ? DesignTokens.Colors.chzzkGreen : .red).frame(width: 5, height: 5)
+                            Circle().fill(ok ? DesignTokens.Colors.chzzkGreen : .red).frame(
+                                width: 5, height: 5)
                         }
                     }
                 }
@@ -419,7 +443,9 @@ struct MetricsDashboardView: View {
                 .font(DesignTokens.Typography.captionSemibold)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(width: 28, height: 28)
-                .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                .background(
+                    DesignTokens.Colors.surfaceBase,
+                    in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -445,7 +471,8 @@ struct MetricsDashboardView: View {
             components.host = host
             components.port = nil
             components.path = path
-            components.queryItems = query.isEmpty ? nil : query.map { URLQueryItem(name: $0.key, value: $0.value) }
+            components.queryItems =
+                query.isEmpty ? nil : query.map { URLQueryItem(name: $0.key, value: $0.value) }
             components.fragment = nil
             if let url = components.url { return url }
         }
@@ -468,9 +495,11 @@ struct MetricsDashboardView: View {
                         Text(mode.label)
                             .font(DesignTokens.Typography.captionSemibold)
                     }
-                    .foregroundStyle(tab == mode
-                                     ? DesignTokens.Colors.textPrimary
-                                     : DesignTokens.Colors.textSecondary)
+                    .foregroundStyle(
+                        tab == mode
+                            ? DesignTokens.Colors.textPrimary
+                            : DesignTokens.Colors.textSecondary
+                    )
                     .padding(.horizontal, DesignTokens.Spacing.md)
                     .padding(.vertical, 6)
                     .background {
@@ -482,7 +511,8 @@ struct MetricsDashboardView: View {
                     .overlay {
                         if tab == mode {
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.4), lineWidth: 0.6)
+                                .strokeBorder(
+                                    DesignTokens.Colors.chzzkGreen.opacity(0.4), lineWidth: 0.6)
                         }
                     }
                 }
@@ -539,7 +569,9 @@ struct MetricsDashboardView: View {
         return sortChannelStats(base, by: channelSort)
     }
 
-    private func sortChannelStats(_ list: [ChannelStatsItem], by mode: ChannelInspectorSort) -> [ChannelStatsItem] {
+    private func sortChannelStats(_ list: [ChannelStatsItem], by mode: ChannelInspectorSort)
+        -> [ChannelStatsItem]
+    {
         switch mode {
         case .deltaDesc:
             return list.sorted { lhs, rhs in
@@ -609,7 +641,8 @@ struct MetricsDashboardView: View {
 
     private func autoSelectInspectorChannel() {
         if let id = selectedChannelId,
-           viewModel.serverChannelStats.contains(where: { $0.channelId == id }) {
+            viewModel.serverChannelStats.contains(where: { $0.channelId == id })
+        {
             return
         }
         selectedChannelId = filteredChannels.first?.channelId
@@ -644,7 +677,11 @@ struct MetricsDashboardView: View {
                             Text(f.label)
                                 .font(DesignTokens.Typography.micro)
                         }
-                        .foregroundStyle(channelFilter == f ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textSecondary)
+                        .foregroundStyle(
+                            channelFilter == f
+                                ? DesignTokens.Colors.textPrimary
+                                : DesignTokens.Colors.textSecondary
+                        )
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background {
@@ -683,7 +720,9 @@ struct MetricsDashboardView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
-                .overlay { Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5) }
+                .overlay {
+                    Capsule().strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                }
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -730,7 +769,10 @@ struct MetricsDashboardView: View {
             }
             .padding(.vertical, 4)
         }
-        .background(DesignTokens.Colors.surfaceElevated.opacity(0.4), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceElevated.opacity(0.4),
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -773,8 +815,13 @@ struct MetricsDashboardView: View {
                 Spacer(minLength: 4)
                 if let cur = deltaCur {
                     Text(String(format: "%+.0fms", cur))
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(abs(cur) >= 100 ? .orange : DesignTokens.Colors.textSecondary)
+                        .font(
+                            DesignTokens.Typography.custom(
+                                size: 11, weight: .semibold, design: .monospaced)
+                        )
+                        .foregroundStyle(
+                            abs(cur) >= 100 ? .orange : DesignTokens.Colors.textSecondary
+                        )
                         .frame(minWidth: 60, alignment: .trailing)
                 } else {
                     Text("—")
@@ -923,7 +970,8 @@ struct MetricsDashboardView: View {
     // (latencyHistory 스파이크 / WS 끊김 / 채널 편차 / DB 비정상 / 웹 대기)
 
     private struct OpsEvent: Identifiable {
-        enum Severity { case info, warn, error
+        enum Severity {
+            case info, warn, error
             var color: Color {
                 switch self {
                 case .info: return DesignTokens.Colors.accentCyan
@@ -939,7 +987,11 @@ struct MetricsDashboardView: View {
                 }
             }
             var label: String {
-                switch self { case .info: return "INFO"; case .warn: return "WARN"; case .error: return "ERR" }
+                switch self {
+                case .info: return "INFO"
+                case .warn: return "WARN"
+                case .error: return "ERR"
+                }
             }
         }
         let id: String
@@ -955,34 +1007,45 @@ struct MetricsDashboardView: View {
 
         // WS 상태
         if viewModel.isWebSocketConnected {
-            out.append(OpsEvent(
-                id: "ws-ok",
-                severity: .info,
-                title: "WebSocket 연결됨",
-                detail: "메시지 \(viewModel.wsMessageCount.formatted())건 누적",
-                timestamp: viewModel.serverLastUpdate
-            ))
+            out.append(
+                OpsEvent(
+                    id: "ws-ok",
+                    severity: .info,
+                    title: "WebSocket 연결됨",
+                    detail: "메시지 \(viewModel.wsMessageCount.formatted())건 누적",
+                    timestamp: viewModel.serverLastUpdate
+                ))
         } else {
-            out.append(OpsEvent(
-                id: "ws-down",
-                severity: .error,
-                title: "WebSocket 끊김",
-                detail: "30초 폴백 폴링 사용 중. 자동 재연결 시도",
-                timestamp: nil
-            ))
+            out.append(
+                OpsEvent(
+                    id: "ws-down",
+                    severity: .error,
+                    title: "WebSocket 끊김",
+                    detail: "30초 폴백 폴링 사용 중. 자동 재연결 시도",
+                    timestamp: nil
+                ))
         }
 
         // DB 비정상
         let sys = viewModel.systemStats
         if let sys {
             if let s = sys.influxdb?.status, !isHealthy(s) {
-                out.append(OpsEvent(id: "db-influx", severity: .error, title: "InfluxDB 이상", detail: "status=\(s)", timestamp: nil))
+                out.append(
+                    OpsEvent(
+                        id: "db-influx", severity: .error, title: "InfluxDB 이상",
+                        detail: "status=\(s)", timestamp: nil))
             }
             if let s = sys.postgres, !isHealthy(s) {
-                out.append(OpsEvent(id: "db-pg", severity: .error, title: "PostgreSQL 이상", detail: "status=\(s)", timestamp: nil))
+                out.append(
+                    OpsEvent(
+                        id: "db-pg", severity: .error, title: "PostgreSQL 이상",
+                        detail: "status=\(s)", timestamp: nil))
             }
             if let s = sys.redis?.status, !isHealthy(s) {
-                out.append(OpsEvent(id: "db-redis", severity: .warn, title: "Redis 이상", detail: "status=\(s)", timestamp: nil))
+                out.append(
+                    OpsEvent(
+                        id: "db-redis", severity: .warn, title: "Redis 이상", detail: "status=\(s)",
+                        timestamp: nil))
             }
         }
 
@@ -994,19 +1057,23 @@ struct MetricsDashboardView: View {
             return abs(d) >= 200 ? (entry.timestamp, d) : nil
         }
         if let last = spikes.last, now.timeIntervalSince(last.0) < 600 {
-            out.append(OpsEvent(
-                id: "spike-latest",
-                severity: .warn,
-                title: "최근 지연 스파이크",
-                detail: String(format: "Δ %+0.0fms (총 %d회 in 2분)", last.1, spikes.count),
-                timestamp: last.0
-            ))
+            out.append(
+                OpsEvent(
+                    id: "spike-latest",
+                    severity: .warn,
+                    title: "최근 지연 스파이크",
+                    detail: String(format: "Δ %+0.0fms (총 %d회 in 2분)", last.1, spikes.count),
+                    timestamp: last.0
+                ))
         }
 
         // 편차 큰 채널
-        let problemDelta = viewModel.serverChannelStats.filter { abs($0.delta?.current ?? 0) >= 150 }
+        let problemDelta = viewModel.serverChannelStats.filter {
+            abs($0.delta?.current ?? 0) >= 150
+        }
         if !problemDelta.isEmpty {
-            let top = problemDelta
+            let top =
+                problemDelta
                 .sorted { abs($0.delta?.current ?? 0) > abs($1.delta?.current ?? 0) }
                 .prefix(3)
                 .map { stat -> String in
@@ -1015,38 +1082,41 @@ struct MetricsDashboardView: View {
                     return String(format: "%@ %+0.0fms", name, cur)
                 }
                 .joined(separator: " · ")
-            out.append(OpsEvent(
-                id: "delta-channels",
-                severity: .warn,
-                title: "\(problemDelta.count)개 채널 편차 ≥150ms",
-                detail: top,
-                timestamp: nil
-            ))
+            out.append(
+                OpsEvent(
+                    id: "delta-channels",
+                    severity: .warn,
+                    title: "\(problemDelta.count)개 채널 편차 ≥150ms",
+                    detail: top,
+                    timestamp: nil
+                ))
         }
 
         // 웹 대기
         let waiting = viewModel.serverChannelStats.filter { $0.web == nil }
         if !waiting.isEmpty {
-            out.append(OpsEvent(
-                id: "waiting",
-                severity: .info,
-                title: "\(waiting.count)개 채널 웹 데이터 대기",
-                detail: "수집기 미부착 또는 신규 채널",
-                timestamp: nil
-            ))
+            out.append(
+                OpsEvent(
+                    id: "waiting",
+                    severity: .info,
+                    title: "\(waiting.count)개 채널 웹 데이터 대기",
+                    detail: "수집기 미부착 또는 신규 채널",
+                    timestamp: nil
+                ))
         }
 
         // 마지막 server update 신선도
         if let last = viewModel.serverLastUpdate {
             let age = now.timeIntervalSince(last)
             if age >= 60 {
-                out.append(OpsEvent(
-                    id: "stale",
-                    severity: .warn,
-                    title: "서버 데이터 \(Int(age))초 미수신",
-                    detail: "WebSocket 또는 폴백 응답 지연",
-                    timestamp: last
-                ))
+                out.append(
+                    OpsEvent(
+                        id: "stale",
+                        severity: .warn,
+                        title: "서버 데이터 \(Int(age))초 미수신",
+                        detail: "WebSocket 또는 폴백 응답 지연",
+                        timestamp: last
+                    ))
             }
         }
 
@@ -1088,8 +1158,10 @@ struct MetricsDashboardView: View {
                 }
                 .padding(.vertical, DesignTokens.Spacing.xl)
                 .frame(maxWidth: .infinity)
-                .background(DesignTokens.Colors.surfaceElevated.opacity(0.3),
-                            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+                .background(
+                    DesignTokens.Colors.surfaceElevated.opacity(0.3),
+                    in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+                )
                 .overlay {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                         .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -1118,7 +1190,10 @@ struct MetricsDashboardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(event.severity.label)
-                        .font(DesignTokens.Typography.custom(size: 9, weight: .bold, design: .monospaced))
+                        .font(
+                            DesignTokens.Typography.custom(
+                                size: 9, weight: .bold, design: .monospaced)
+                        )
                         .foregroundStyle(event.severity.color)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -1143,8 +1218,10 @@ struct MetricsDashboardView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DesignTokens.Colors.surfaceElevated.opacity(0.5),
-                    in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(
+            DesignTokens.Colors.surfaceElevated.opacity(0.5),
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(event.severity.color.opacity(0.25), lineWidth: 0.5)
@@ -1191,24 +1268,31 @@ struct MetricsDashboardView: View {
                         for (i, d) in deltas.enumerated() {
                             let x = CGFloat(i) * stepX
                             let norm = CGFloat(d / maxAbs)
-                            let y = h/2 - norm * (h/2 - 2)
-                            if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                            else { path.addLine(to: CGPoint(x: x, y: y)) }
+                            let y = h / 2 - norm * (h / 2 - 2)
+                            if i == 0 {
+                                path.move(to: CGPoint(x: x, y: y))
+                            } else {
+                                path.addLine(to: CGPoint(x: x, y: y))
+                            }
                         }
                     }
                     .stroke(DesignTokens.Colors.accentCyan, lineWidth: 1.2)
                     Path { path in
-                        path.move(to: CGPoint(x: 0, y: h/2))
-                        path.addLine(to: CGPoint(x: w, y: h/2))
+                        path.move(to: CGPoint(x: 0, y: h / 2))
+                        path.addLine(to: CGPoint(x: w, y: h / 2))
                     }
-                    .stroke(DesignTokens.Colors.textTertiary.opacity(0.25), style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                    .stroke(
+                        DesignTokens.Colors.textTertiary.opacity(0.25),
+                        style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
                 }
                 .frame(height: 36)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(DesignTokens.Colors.surfaceElevated.opacity(0.4),
-                        in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+            .background(
+                DesignTokens.Colors.surfaceElevated.opacity(0.4),
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                     .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -1227,7 +1311,8 @@ struct MetricsDashboardView: View {
             metricTile(
                 title: "활성 채널",
                 value: "\(viewModel.serverChannelStats.count)",
-                subtitle: viewModel.activeAppChannelCount > 0 ? "\(viewModel.activeAppChannelCount) 시청 중" : nil,
+                subtitle: viewModel.activeAppChannelCount > 0
+                    ? "\(viewModel.activeAppChannelCount) 시청 중" : nil,
                 icon: "play.circle",
                 color: DesignTokens.Colors.accentCyan
             )
@@ -1314,7 +1399,8 @@ struct MetricsDashboardView: View {
             metricTile(
                 title: connClients > 0 ? "CView 클라이언트" : "서버 가동",
                 value: connClients > 0 ? "\(connClients)" : (uptimeStr.isEmpty ? "—" : uptimeStr),
-                subtitle: connClients > 0 ? "실시간 연결" : (viewModel.isMetricsServerOnline ? "온라인" : "오프라인"),
+                subtitle: connClients > 0
+                    ? "실시간 연결" : (viewModel.isMetricsServerOnline ? "온라인" : "오프라인"),
                 icon: connClients > 0 ? "person.2.fill" : "clock.fill",
                 color: viewModel.isMetricsServerOnline ? DesignTokens.Colors.chzzkGreen : .gray
             )
@@ -1338,8 +1424,9 @@ struct MetricsDashboardView: View {
             uniqueKeysWithValues: (viewModel.serverStats?.cviewSummary?.syncChannels ?? [])
                 .compactMap { entry -> (String, String)? in
                     guard let cid = entry.channelId,
-                          let action = entry.recommendation?.action,
-                          action != "hold" else { return nil }
+                        let action = entry.recommendation?.action,
+                        action != "hold"
+                    else { return nil }
                     return (cid, action)
                 }
         )
@@ -1442,7 +1529,9 @@ struct MetricsDashboardView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 6)
-        .background(DesignTokens.Colors.surfaceBase.opacity(0.6), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(
+            DesignTokens.Colors.surfaceBase.opacity(0.6),
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
     }
 
     // MARK: - DB Health Disclosure (Overview)
@@ -1467,7 +1556,9 @@ struct MetricsDashboardView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.surfaceElevated.opacity(0.5), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceElevated.opacity(0.5),
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
     }
 
     // MARK: - Hero Header
@@ -1480,7 +1571,10 @@ struct MetricsDashboardView: View {
                         // 글로우 도트
                         ZStack {
                             Circle()
-                                .fill(viewModel.isMetricsServerOnline ? DesignTokens.Colors.chzzkGreen : .red)
+                                .fill(
+                                    viewModel.isMetricsServerOnline
+                                        ? DesignTokens.Colors.chzzkGreen : .red
+                                )
                                 .frame(width: 10, height: 10)
                             if viewModel.isMetricsServerOnline {
                                 Circle()
@@ -1514,7 +1608,9 @@ struct MetricsDashboardView: View {
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .padding(.horizontal, DesignTokens.Spacing.sm)
                             .padding(.vertical, DesignTokens.Spacing.xs)
-                            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                            .background(
+                                DesignTokens.Colors.surfaceElevated,
+                                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                     }
 
                     // 새로고침
@@ -1525,7 +1621,9 @@ struct MetricsDashboardView: View {
                             .font(DesignTokens.Typography.bodyMedium)
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                             .frame(width: 28, height: 28)
-                            .background(DesignTokens.Colors.chzzkGreen.opacity(0.1), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                            .background(
+                                DesignTokens.Colors.chzzkGreen.opacity(0.1),
+                                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                     }
                     .buttonStyle(.plain)
                 }
@@ -1535,7 +1633,10 @@ struct MetricsDashboardView: View {
             Rectangle()
                 .fill(
                     LinearGradient(
-                        colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.chzzkGreen.opacity(0)],
+                        colors: [
+                            DesignTokens.Colors.chzzkGreen,
+                            DesignTokens.Colors.chzzkGreen.opacity(0),
+                        ],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -1554,7 +1655,10 @@ struct MetricsDashboardView: View {
             Text(viewModel.isWebSocketConnected ? "실시간" : "폴링")
                 .font(DesignTokens.Typography.captionSemibold)
         }
-        .foregroundStyle(viewModel.isWebSocketConnected ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+        .foregroundStyle(
+            viewModel.isWebSocketConnected
+                ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary
+        )
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, DesignTokens.Spacing.xs)
         .background(
@@ -1564,7 +1668,8 @@ struct MetricsDashboardView: View {
         )
         .overlay(
             Capsule().strokeBorder(
-                viewModel.isWebSocketConnected ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : Color.clear,
+                viewModel.isWebSocketConnected
+                    ? DesignTokens.Colors.chzzkGreen.opacity(0.3) : Color.clear,
                 lineWidth: 0.5
             )
         )
@@ -1610,20 +1715,25 @@ struct MetricsDashboardView: View {
             )
         }
         .padding(.vertical, DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
         )
     }
 
-    private func overviewCell(icon: String, title: String, value: String, color: Color) -> some View {
+    private func overviewCell(icon: String, title: String, value: String, color: Color) -> some View
+    {
         HStack(spacing: DesignTokens.Spacing.sm) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(color)
                 .frame(width: 28, height: 28)
-                .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                .background(
+                    color.opacity(0.1), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(DesignTokens.Typography.micro)
@@ -1689,16 +1799,32 @@ struct MetricsDashboardView: View {
                     // 레코드 수 — recordCounts (v4.5 nested) 우선, 없으면 flat 응답.
                     if let records = sys.recordCounts {
                         HStack(spacing: DesignTokens.Spacing.sm) {
-                            recordPill(title: "채널", count: records.channels, icon: "play.circle", color: DesignTokens.Colors.accentCyan)
-                            recordPill(title: "VLC", count: records.vlcMetrics, icon: "desktopcomputer", color: DesignTokens.Colors.chzzkGreen)
-                            recordPill(title: "웹", count: records.webMetrics, icon: "globe", color: DesignTokens.Colors.accentBlue)
-                            recordPill(title: "일간", count: records.dailyStats, icon: "calendar", color: DesignTokens.Colors.accentPurple)
-                            recordPill(title: "시간별", count: records.hourlyStats, icon: "clock", color: DesignTokens.Colors.accentOrange)
+                            recordPill(
+                                title: "채널", count: records.channels, icon: "play.circle",
+                                color: DesignTokens.Colors.accentCyan)
+                            recordPill(
+                                title: "VLC", count: records.vlcMetrics, icon: "desktopcomputer",
+                                color: DesignTokens.Colors.chzzkGreen)
+                            recordPill(
+                                title: "웹", count: records.webMetrics, icon: "globe",
+                                color: DesignTokens.Colors.accentBlue)
+                            recordPill(
+                                title: "일간", count: records.dailyStats, icon: "calendar",
+                                color: DesignTokens.Colors.accentPurple)
+                            recordPill(
+                                title: "시간별", count: records.hourlyStats, icon: "clock",
+                                color: DesignTokens.Colors.accentOrange)
                         }
-                    } else if sys.recordsLast24h != nil || sys.recordsTotal != nil || sys.dbSizeBytes != nil {
+                    } else if sys.recordsLast24h != nil || sys.recordsTotal != nil
+                        || sys.dbSizeBytes != nil
+                    {
                         HStack(spacing: DesignTokens.Spacing.sm) {
-                            recordPill(title: "24시간", count: sys.recordsLast24h, icon: "clock", color: DesignTokens.Colors.accentOrange)
-                            recordPill(title: "누적", count: sys.recordsTotal, icon: "tray.full", color: DesignTokens.Colors.accentBlue)
+                            recordPill(
+                                title: "24시간", count: sys.recordsLast24h, icon: "clock",
+                                color: DesignTokens.Colors.accentOrange)
+                            recordPill(
+                                title: "누적", count: sys.recordsTotal, icon: "tray.full",
+                                color: DesignTokens.Colors.accentBlue)
                             if let bytes = sys.dbSizeBytes {
                                 HStack(spacing: DesignTokens.Spacing.xs) {
                                     Image(systemName: "internaldrive")
@@ -1744,7 +1870,11 @@ struct MetricsDashboardView: View {
     /// services 맵을 카드 그리드로 렌더 (cv.dododo.app 처럼 flat 응답인 경우).
     private func servicesHealthGrid(_ services: [String: String]) -> some View {
         let sorted = services.sorted { $0.key < $1.key }
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: DesignTokens.Spacing.sm), count: min(3, max(sorted.count, 1))), spacing: DesignTokens.Spacing.sm) {
+        return LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: DesignTokens.Spacing.sm),
+                count: min(3, max(sorted.count, 1))), spacing: DesignTokens.Spacing.sm
+        ) {
             ForEach(sorted, id: \.key) { entry in
                 healthCard(
                     name: serviceDisplayName(entry.key),
@@ -1784,11 +1914,11 @@ struct MetricsDashboardView: View {
     private func serviceTint(_ key: String) -> Color {
         switch key.lowercased() {
         case "cview-api", "cview", "api": return DesignTokens.Colors.chzzkGreen
-        case "influxdb", "influx":        return DesignTokens.Colors.accentOrange
+        case "influxdb", "influx": return DesignTokens.Colors.accentOrange
         case "postgres", "postgresql", "pg": return DesignTokens.Colors.accentBlue
-        case "redis":                     return DesignTokens.Colors.accentPurple
-        case "nginx":                     return DesignTokens.Colors.accentCyan
-        default:                          return DesignTokens.Colors.textSecondary
+        case "redis": return DesignTokens.Colors.accentPurple
+        case "nginx": return DesignTokens.Colors.accentCyan
+        default: return DesignTokens.Colors.textSecondary
         }
     }
 
@@ -1800,8 +1930,12 @@ struct MetricsDashboardView: View {
         return f.string(fromByteCount: Int64(bytes))
     }
 
-    private func healthCard(name: String, status: String?, detail: String?, icon: String, color: Color) -> some View {
-        let isOk = status?.lowercased() == "connected" || status?.lowercased() == "ok" || status?.lowercased() == "healthy"
+    private func healthCard(
+        name: String, status: String?, detail: String?, icon: String, color: Color
+    ) -> some View {
+        let isOk =
+            status?.lowercased() == "connected" || status?.lowercased() == "ok"
+            || status?.lowercased() == "healthy"
         let statusColor = isOk ? DesignTokens.Colors.chzzkGreen : .red
 
         return VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
@@ -1810,7 +1944,9 @@ struct MetricsDashboardView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(color)
                     .frame(width: 32, height: 32)
-                    .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                    .background(
+                        color.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
                 Spacer()
                 Circle()
                     .fill(statusColor)
@@ -1835,7 +1971,10 @@ struct MetricsDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -1857,7 +1996,10 @@ struct MetricsDashboardView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, DesignTokens.Spacing.sm)
         .padding(.horizontal, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -1888,7 +2030,8 @@ struct MetricsDashboardView: View {
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     metricTile(
                         title: "실시간 수신",
-                        value: viewModel.wsMessageCount > 0 ? formatLargeNumber(viewModel.wsMessageCount) : "—",
+                        value: viewModel.wsMessageCount > 0
+                            ? formatLargeNumber(viewModel.wsMessageCount) : "—",
                         subtitle: viewModel.wsMessageCount > 0 ? "WebSocket" : "대기 중",
                         icon: "bolt.circle.fill",
                         color: viewModel.wsMessageCount > 0 ? .yellow : .gray
@@ -1898,14 +2041,16 @@ struct MetricsDashboardView: View {
                         value: viewModel.avgWebLatency.map { String(format: "%.0fms", $0) } ?? "—",
                         subtitle: viewModel.avgWebLatency != nil ? "평균" : "데이터 없음",
                         icon: "globe",
-                        color: viewModel.avgWebLatency != nil ? DesignTokens.Colors.accentCyan : .gray
+                        color: viewModel.avgWebLatency != nil
+                            ? DesignTokens.Colors.accentCyan : .gray
                     )
                     metricTile(
                         title: "CView 레이턴시",
                         value: viewModel.avgAppLatency.map { String(format: "%.0fms", $0) } ?? "—",
                         subtitle: viewModel.avgAppLatency != nil ? "평균" : "데이터 없음",
                         icon: "desktopcomputer",
-                        color: viewModel.avgAppLatency != nil ? DesignTokens.Colors.chzzkGreen : .gray
+                        color: viewModel.avgAppLatency != nil
+                            ? DesignTokens.Colors.chzzkGreen : .gray
                     )
                 }
 
@@ -1915,7 +2060,10 @@ struct MetricsDashboardView: View {
                         let platforms = stats.resolvedPlatforms
                         metricTile(
                             title: "플랫폼",
-                            value: platforms.isEmpty ? "—" : platforms.map { "\($0.key): \($0.value)" }.joined(separator: ", "),
+                            value: platforms.isEmpty
+                                ? "—"
+                                : platforms.map { "\($0.key): \($0.value)" }.joined(
+                                    separator: ", "),
                             subtitle: nil,
                             icon: "rectangle.stack",
                             color: platforms.isEmpty ? .gray : DesignTokens.Colors.accentPurple
@@ -1926,7 +2074,8 @@ struct MetricsDashboardView: View {
                         value: "\(viewModel.serverStats?.cviewSummary?.connectedClients ?? 0)",
                         subtitle: viewModel.serverStats?.cviewSummary.map { cviewSyncLabel($0) },
                         icon: "monitor.and.phone",
-                        color: (viewModel.serverStats?.cviewSummary?.connectedClients ?? 0) > 0 ? DesignTokens.Colors.accentPurple : .gray
+                        color: (viewModel.serverStats?.cviewSummary?.connectedClients ?? 0) > 0
+                            ? DesignTokens.Colors.accentPurple : .gray
                     )
                     syncQualityTile
                 }
@@ -1934,7 +2083,9 @@ struct MetricsDashboardView: View {
         }
     }
 
-    private func metricTile(title: String, value: String, subtitle: String?, icon: String, color: Color) -> some View {
+    private func metricTile(
+        title: String, value: String, subtitle: String?, icon: String, color: Color
+    ) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             HStack {
                 Image(systemName: icon)
@@ -1966,7 +2117,10 @@ struct MetricsDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -2043,8 +2197,8 @@ struct MetricsDashboardView: View {
                 emptyChartState
             } else {
                 let hasAnyData = viewModel.serverChannelStats.contains { ch in
-                    ((ch.web?.samples ?? 0) > 0 && ch.web?.avg != nil) ||
-                    ((ch.app?.samples ?? 0) > 0 && ch.app?.avg != nil)
+                    ((ch.web?.samples ?? 0) > 0 && ch.web?.avg != nil)
+                        || ((ch.app?.samples ?? 0) > 0 && ch.app?.avg != nil)
                 }
                 if !hasAnyData {
                     emptyChartState
@@ -2061,7 +2215,10 @@ struct MetricsDashboardView: View {
                             .cornerRadius(3)
                             .annotation(position: .top, spacing: 2) {
                                 Text(String(format: "%.0f", webAvg))
-                                    .font(DesignTokens.Typography.custom(size: 8, weight: .semibold, design: .monospaced))
+                                    .font(
+                                        DesignTokens.Typography.custom(
+                                            size: 8, weight: .semibold, design: .monospaced)
+                                    )
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                         }
@@ -2075,7 +2232,10 @@ struct MetricsDashboardView: View {
                             .cornerRadius(3)
                             .annotation(position: .top, spacing: 2) {
                                 Text(String(format: "%.0f", appAvg))
-                                    .font(DesignTokens.Typography.custom(size: 8, weight: .semibold, design: .monospaced))
+                                    .font(
+                                        DesignTokens.Typography.custom(
+                                            size: 8, weight: .semibold, design: .monospaced)
+                                    )
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                         }
@@ -2103,7 +2263,10 @@ struct MetricsDashboardView: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -2157,7 +2320,10 @@ struct MetricsDashboardView: View {
                 }
                 .frame(height: 120)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: DesignTokens.Spacing.sm)], spacing: DesignTokens.Spacing.sm) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 340), spacing: DesignTokens.Spacing.sm)],
+                    spacing: DesignTokens.Spacing.sm
+                ) {
                     ForEach(viewModel.serverChannelStats) { stat in
                         channelDetailCard(stat)
                     }
@@ -2235,8 +2401,11 @@ struct MetricsDashboardView: View {
             }
 
             // CView 동기화 정보
-            if let syncChannel = viewModel.serverStats?.cviewSummary?.syncChannels?.first(where: { $0.channelId == stat.channelId }),
-               let rec = syncChannel.recommendation {
+            if let syncChannel = viewModel.serverStats?.cviewSummary?.syncChannels?.first(where: {
+                $0.channelId == stat.channelId
+            }),
+                let rec = syncChannel.recommendation
+            {
                 Rectangle().fill(DesignTokens.Glass.borderColor).frame(height: 0.5)
                 HStack(spacing: DesignTokens.Spacing.sm) {
                     Image(systemName: cviewActionIcon(rec.action))
@@ -2266,7 +2435,10 @@ struct MetricsDashboardView: View {
                 .padding(DesignTokens.Spacing.md)
             }
         }
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -2297,23 +2469,34 @@ struct MetricsDashboardView: View {
 
             if let stats, hasSamples, let avg = stats.avg {
                 Text(String(format: "%.0fms", avg))
-                    .font(DesignTokens.Typography.custom(size: 16, weight: .bold, design: .monospaced))
+                    .font(
+                        DesignTokens.Typography.custom(size: 16, weight: .bold, design: .monospaced)
+                    )
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
                 HStack(spacing: DesignTokens.Spacing.xs) {
                     if let min = stats.min {
                         Text(String(format: "↓%.0f", min))
-                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .monospaced))
+                            .font(
+                                DesignTokens.Typography.custom(
+                                    size: 9, weight: .medium, design: .monospaced)
+                            )
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     if let max = stats.max {
                         Text(String(format: "↑%.0f", max))
-                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .monospaced))
+                            .font(
+                                DesignTokens.Typography.custom(
+                                    size: 9, weight: .medium, design: .monospaced)
+                            )
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                     if let samples = stats.samples {
                         Text("n=\(samples)")
-                            .font(DesignTokens.Typography.custom(size: 9, weight: .medium, design: .monospaced))
+                            .font(
+                                DesignTokens.Typography.custom(
+                                    size: 9, weight: .medium, design: .monospaced)
+                            )
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                 }
@@ -2336,12 +2519,19 @@ struct MetricsDashboardView: View {
 
             if let current = delta.current {
                 Text(String(format: "%+.0fms", current))
-                    .font(DesignTokens.Typography.custom(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundStyle(current > 0 ? DesignTokens.Colors.accentOrange : DesignTokens.Colors.chzzkGreen)
+                    .font(
+                        DesignTokens.Typography.custom(size: 16, weight: .bold, design: .monospaced)
+                    )
+                    .foregroundStyle(
+                        current > 0
+                            ? DesignTokens.Colors.accentOrange : DesignTokens.Colors.chzzkGreen)
             }
             if let avg = delta.avg {
                 Text(String(format: "avg %+.0f", avg))
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium, design: .monospaced))
+                    .font(
+                        DesignTokens.Typography.custom(
+                            size: 10, weight: .medium, design: .monospaced)
+                    )
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
         }
@@ -2370,7 +2560,9 @@ struct MetricsDashboardView: View {
 
     // MARK: - Section Container
 
-    private func sectionContainer<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+    private func sectionContainer<Content: View>(
+        title: String, icon: String, @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
             HStack(spacing: DesignTokens.Spacing.sm) {
                 Image(systemName: icon)
@@ -2393,7 +2585,7 @@ struct MetricsDashboardView: View {
 
     private func formatLargeNumber(_ n: Int) -> String {
         if n >= 10_000 { return String(format: "%.1f만", Double(n) / 10_000.0) }
-        if n >= 1_000  { return String(format: "%.1f천", Double(n) / 1_000.0) }
+        if n >= 1_000 { return String(format: "%.1f천", Double(n) / 1_000.0) }
         return "\(n)"
     }
 

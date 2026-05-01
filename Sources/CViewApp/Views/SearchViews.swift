@@ -2,11 +2,12 @@
 // CViewApp - 검색 뷰 (프리미엄 디자인)
 // Design: Spotlight/Raycast 스타일 검색 + 모던 결과 카드
 
-import SwiftUI
 import CViewCore
 import CViewUI
+import SwiftUI
+
 #if canImport(AppKit)
-import AppKit
+    import AppKit
 #endif
 
 // MARK: - Search View
@@ -15,9 +16,13 @@ struct SearchView: View {
     @Environment(AppState.self) private var appState
     @Environment(AppRouter.self) private var router
     @State private var viewModel: SearchViewModel?
-    
+
     var body: some View {
         VStack(spacing: 0) {
+            // [Top chrome 2026-05-01] hiddenTitleBar 환경에서 검색 바 위로 macOS
+            // 트래픽 라이트가 올라오는 문제 해결 — 28pt 드래그 영역 확보.
+            Color.clear
+                .frame(height: 28)
             if let vm = viewModel {
                 SearchContentView(viewModel: vm)
                     .task(id: appState.homeViewModel?.followingChannels.count) {
@@ -36,7 +41,8 @@ struct SearchView: View {
                             let vm = SearchViewModel(apiClient: apiClient)
                             // 팔로잉 채널명 주입 (자동완성 용)
                             if let homeVM = appState.homeViewModel {
-                                vm.followingChannelNames = homeVM.followingChannels.map(\.channelName)
+                                vm.followingChannelNames = homeVM.followingChannels.map(
+                                    \.channelName)
                             }
                             viewModel = vm
                             // VM 생성 직후에도 pending query 즉시 적용
@@ -70,17 +76,17 @@ struct SearchContentView: View {
     /// [Redesign 2026-04-29] 빠른 액션 결과 toast/오류 메시지
     @State private var actionMessage: String?
     @State private var actionMessageId = UUID()
-    
+
     var body: some View {
         HStack(spacing: 0) {
             // 왼쪽: 검색 리스트
             searchListContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
+
             // 오른쪽: 채널 상세 패널 (push-left 슬라이드)
             if let channelId = selectedChannelId {
                 Divider()
-                
+
                 channelDetailPanel(channelId: channelId)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -114,20 +120,34 @@ struct SearchContentView: View {
     @ViewBuilder
     private func liveResultRow(_ live: LiveInfo) -> some View {
         let channelId = live.channel?.channelId
-        let isInMultiLive = channelId.map { id in
-            appState.multiLiveManager.sessions.contains(where: { $0.channelId == id })
-        } ?? false
-        let isInMultiChat = channelId.map { id in
-            appState.followingViewState.chatSessionManager.sessions.contains(where: { $0.id == id })
-        } ?? false
+        let isInMultiLive =
+            channelId.map { id in
+                appState.multiLiveManager.sessions.contains(where: { $0.channelId == id })
+            } ?? false
+        let isInMultiChat =
+            channelId.map { id in
+                appState.followingViewState.chatSessionManager.sessions.contains(where: {
+                    $0.id == id
+                })
+            } ?? false
 
         EquatableSearchLiveRow(
             live: live,
             onAddMultiLive: channelId.map { id in
-                { Task { await addLiveToMultiLive(channelId: id, channelName: live.channel?.channelName) } }
+                {
+                    Task {
+                        await addLiveToMultiLive(
+                            channelId: id, channelName: live.channel?.channelName)
+                    }
+                }
             },
             onAddMultiChat: channelId.map { id in
-                { Task { await addLiveToMultiChat(channelId: id, channelName: live.channel?.channelName) } }
+                {
+                    Task {
+                        await addLiveToMultiChat(
+                            channelId: id, channelName: live.channel?.channelName)
+                    }
+                }
             },
             onOpenChannel: channelId.map { id in
                 { selectedChannelId = id }
@@ -135,10 +155,10 @@ struct SearchContentView: View {
             onCopyLink: channelId.map { id in
                 {
                     #if canImport(AppKit)
-                    let url = "https://chzzk.naver.com/live/\(id)"
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url, forType: .string)
-                    showActionMessage("링크 복사됨")
+                        let url = "https://chzzk.naver.com/live/\(id)"
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url, forType: .string)
+                        showActionMessage("링크 복사됨")
                     #endif
                 }
             },
@@ -191,7 +211,8 @@ struct SearchContentView: View {
             let resolvedName = liveDetail.channel?.channelName ?? channelName ?? channelId
             let chatUid: String?
             if appState.isLoggedIn,
-               let userInfo = try? await apiClient.userStatus() {
+                let userInfo = try? await apiClient.userStatus()
+            {
                 chatUid = userInfo.userIdHash ?? appState.userChannelId
             } else {
                 chatUid = appState.userChannelId
@@ -229,25 +250,29 @@ struct SearchContentView: View {
             }
         }
     }
-    
+
     // MARK: - Search List Content
-    
+
     private var searchListContent: some View {
         VStack(spacing: 0) {
             // Premium search bar
             searchBar
-            
+
             // Autocomplete suggestions dropdown
             if viewModel.showAutocomplete && !viewModel.autocompleteSuggestions.isEmpty {
                 autocompleteDropdown
             }
-            
+
             // Tab picker
             tabPicker
-            
+
             // Results
-            let allSearching = viewModel.isSearchingChannels && viewModel.isSearchingLives && viewModel.isSearchingVideos && viewModel.isSearchingClips
-            let allEmpty = viewModel.channelResults.isEmpty && viewModel.liveResults.isEmpty && viewModel.videoResults.isEmpty && viewModel.clipResults.isEmpty
+            let allSearching =
+                viewModel.isSearchingChannels && viewModel.isSearchingLives
+                && viewModel.isSearchingVideos && viewModel.isSearchingClips
+            let allEmpty =
+                viewModel.channelResults.isEmpty && viewModel.liveResults.isEmpty
+                && viewModel.videoResults.isEmpty && viewModel.clipResults.isEmpty
             if allSearching && allEmpty {
                 Spacer()
                 VStack(spacing: DesignTokens.Spacing.md) {
@@ -271,9 +296,9 @@ struct SearchContentView: View {
             }
         }
     }
-    
+
     // MARK: - Channel Detail Panel
-    
+
     @ViewBuilder
     private func channelDetailPanel(channelId: String) -> some View {
         VStack(spacing: 0) {
@@ -291,9 +316,9 @@ struct SearchContentView: View {
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
-                
+
                 Spacer()
-                
+
                 Button {
                     router.navigate(to: .channelDetail(channelId: channelId))
                     selectedChannelId = nil
@@ -311,28 +336,30 @@ struct SearchContentView: View {
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.sm)
             .background(DesignTokens.Colors.surfaceBase)
-            
+
             Divider()
-            
+
             ChannelInfoView(channelId: channelId)
                 .id(channelId)
         }
     }
-    
+
     // MARK: - Search Bar
-    
+
     private var searchBar: some View {
         HStack(spacing: DesignTokens.Spacing.sm) {
             Image(systemName: "magnifyingglass")
                 .font(DesignTokens.Typography.subhead)
-                .foregroundStyle(isSearchBarFocused ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
-            
+                .foregroundStyle(
+                    isSearchBarFocused
+                        ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+
             TextField("채널, 라이브, 비디오 검색...", text: $viewModel.query)
                 .textFieldStyle(.plain)
                 .font(DesignTokens.Typography.custom(size: 15))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .onSubmit { Task { await viewModel.performSearch() } }
-            
+
             if !viewModel.query.isEmpty {
                 Button {
                     viewModel.query = ""
@@ -347,21 +374,29 @@ struct SearchContentView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.md)
         .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                 .strokeBorder(
-                    isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.borderColorLight,
+                    isSearchBarFocused
+                        ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
+                        : DesignTokens.Glass.borderColorLight,
                     lineWidth: isSearchBarFocused ? 1.5 : 0.5
                 )
         }
-        .shadow(color: isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.1) : .clear, radius: 8)
+        .shadow(
+            color: isSearchBarFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.1) : .clear,
+            radius: 8
+        )
         .padding(.horizontal, DesignTokens.Spacing.lg)
         .padding(.vertical, DesignTokens.Spacing.md)
         .animation(DesignTokens.Animation.fast, value: isSearchBarFocused)
         .animation(DesignTokens.Animation.micro, value: viewModel.query.isEmpty)
     }
-    
+
     // MARK: - Autocomplete Dropdown
 
     private var autocompleteDropdown: some View {
@@ -372,8 +407,8 @@ struct SearchContentView: View {
                         .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(
                             suggestion.kind == .recent
-                            ? DesignTokens.Colors.textTertiary
-                            : DesignTokens.Colors.chzzkGreen
+                                ? DesignTokens.Colors.textTertiary
+                                : DesignTokens.Colors.chzzkGreen
                         )
                         .frame(width: 18)
 
@@ -419,7 +454,10 @@ struct SearchContentView: View {
                 }
             }
         }
-        .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        .background(
+            DesignTokens.Colors.surfaceBase,
+            in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -433,7 +471,7 @@ struct SearchContentView: View {
     }
 
     // MARK: - Tab Picker
-    
+
     private var tabPicker: some View {
         HStack(spacing: 0) {
             // [Redesign 2026-04-29] `전체`(통합 결과) scope 추가
@@ -474,7 +512,7 @@ struct SearchContentView: View {
         case .clip: "클립"
         }
     }
-    
+
     private func tabIcon(for tab: SearchType) -> String {
         switch tab {
         case .channel: "person.2"
@@ -483,9 +521,9 @@ struct SearchContentView: View {
         case .clip: "film.stack"
         }
     }
-    
+
     // MARK: - Empty Prompt
-    
+
     private var searchEmptyPrompt: some View {
         VStack(spacing: 0) {
             if !viewModel.recentSearches.isEmpty {
@@ -503,7 +541,7 @@ struct SearchContentView: View {
                     .padding(.horizontal, DesignTokens.Spacing.lg)
                     .padding(.top, DesignTokens.Spacing.md)
                     .padding(.bottom, DesignTokens.Spacing.xs)
-                    
+
                     ForEach(viewModel.recentSearches, id: \.self) { term in
                         HStack(spacing: DesignTokens.Spacing.sm) {
                             Image(systemName: "clock")
@@ -530,40 +568,40 @@ struct SearchContentView: View {
                             Task { await viewModel.performSearch() }
                         }
                     }
-                    
+
                     Divider()
                         .padding(.top, DesignTokens.Spacing.sm)
                 }
             }
-            
+
             VStack(spacing: DesignTokens.Spacing.lg) {
                 Spacer()
-                
+
                 ZStack {
                     Circle()
                         .fill(DesignTokens.Colors.chzzkGreen.opacity(0.08))
                         .frame(width: 80, height: 80)
-                    
+
                     Image(systemName: "magnifyingglass")
                         .font(DesignTokens.Typography.custom(size: 30))
                         .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.6))
                 }
-                
+
                 VStack(spacing: DesignTokens.Spacing.xs) {
                     Text("검색어를 입력하세요")
                         .font(DesignTokens.Typography.custom(size: 16, weight: .semibold))
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
-                    
+
                     Text("채널명, 라이브 방송, 비디오, 클립을 검색할 수 있습니다")
                         .font(DesignTokens.Typography.captionMedium)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
-                
+
                 Spacer()
             }
         }
     }
-    
+
     @ViewBuilder
     private var searchResultsList: some View {
         ScrollView {
@@ -603,7 +641,7 @@ struct SearchContentView: View {
                                 }
                         }
                     }
-                    
+
                 case .live:
                     if viewModel.liveResults.isEmpty && !viewModel.query.isEmpty {
                         if viewModel.isSearchingLives {
@@ -635,7 +673,7 @@ struct SearchContentView: View {
                                 }
                         }
                     }
-                    
+
                 case .video:
                     if viewModel.videoResults.isEmpty && !viewModel.query.isEmpty {
                         if viewModel.isSearchingVideos {
@@ -658,7 +696,7 @@ struct SearchContentView: View {
                                 }
                         }
                     }
-                    
+
                 case .clip:
                     if viewModel.clipResults.isEmpty && !viewModel.query.isEmpty {
                         if viewModel.isSearchingClips {
@@ -682,7 +720,7 @@ struct SearchContentView: View {
                         }
                     }
                 }
-                
+
                 if viewModel.isSearching && !viewModel.query.isEmpty {
                     HStack {
                         Spacer()
@@ -699,7 +737,7 @@ struct SearchContentView: View {
                 .frame(minWidth: 640, minHeight: 400)
         }
     }
-    
+
     private var tabLoadingView: some View {
         VStack(spacing: DesignTokens.Spacing.sm) {
             ForEach(0..<4, id: \.self) { _ in
@@ -725,7 +763,7 @@ struct SearchContentView: View {
         }
         .padding(.vertical, DesignTokens.Spacing.md)
     }
-    
+
     private func searchEmptyState(_ type: String) -> some View {
         VStack(spacing: DesignTokens.Spacing.md) {
             Image(systemName: "doc.text.magnifyingglass")
@@ -745,11 +783,13 @@ struct SearchContentView: View {
     /// 각 bucket의 상위 N개를 section별로 표시하고, 더보기로 해당 scope로 전환된다.
     @ViewBuilder
     private var topResultsContent: some View {
-        let allEmpty = viewModel.channelResults.isEmpty
+        let allEmpty =
+            viewModel.channelResults.isEmpty
             && viewModel.liveResults.isEmpty
             && viewModel.videoResults.isEmpty
             && viewModel.clipResults.isEmpty
-        let anySearching = viewModel.isSearchingChannels
+        let anySearching =
+            viewModel.isSearchingChannels
             || viewModel.isSearchingLives
             || viewModel.isSearchingVideos
             || viewModel.isSearchingClips
@@ -921,4 +961,3 @@ struct SearchContentView: View {
         }
     }
 }
-

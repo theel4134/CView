@@ -2,11 +2,11 @@
 // CViewApp - 클립 메뉴 (전체 인기클립 + 채널별 클립)
 // 2026-04-29 리팩터: 상태를 ClipBrowserViewModel로 분리, 채널 입력은 ID/URL 모두 허용.
 
-import SwiftUI
 import AppKit
 import CViewCore
 import CViewNetworking
 import CViewUI
+import SwiftUI
 
 // MARK: - JSON Coders (Phase5 — ClipInfo persistence)
 
@@ -138,8 +138,9 @@ enum ChannelResolver {
         }
 
         guard let url = URL(string: normalized),
-              let host = url.host?.lowercased(),
-              host.contains("chzzk.naver.com") else {
+            let host = url.host?.lowercased(),
+            host.contains("chzzk.naver.com")
+        else {
             return nil
         }
 
@@ -309,7 +310,8 @@ final class ClipBrowserViewModel {
                     size: pageSize
                 )
                 guard token == channelRequestToken,
-                      channelId == resolvedChannelId else { return }
+                    channelId == resolvedChannelId
+                else { return }
 
                 if reset {
                     channelClips = result.data
@@ -504,17 +506,20 @@ final class ClipBrowserViewModel {
         }
         // Snapshots
         if let data = UserDefaults.standard.data(forKey: savedSnapshotsDefaultsKey),
-           let decoded = try? JSONDecoder.cv_clip.decode([String: ClipInfo].self, from: data) {
+            let decoded = try? JSONDecoder.cv_clip.decode([String: ClipInfo].self, from: data)
+        {
             savedClipSnapshots = decoded
         }
         // Queue
         if let data = UserDefaults.standard.data(forKey: queueDefaultsKey),
-           let decoded = try? JSONDecoder.cv_clip.decode([ClipInfo].self, from: data) {
+            let decoded = try? JSONDecoder.cv_clip.decode([ClipInfo].self, from: data)
+        {
             queueClips = decoded
         }
         // Recent channels
         if let data = UserDefaults.standard.data(forKey: recentChannelsDefaultsKey),
-           let decoded = try? JSONDecoder.cv_clip.decode([ChannelInfo].self, from: data) {
+            let decoded = try? JSONDecoder.cv_clip.decode([ChannelInfo].self, from: data)
+        {
             recentChannels = decoded
         }
     }
@@ -600,8 +605,9 @@ final class ClipBrowserViewModel {
     func playNextInQueue(after current: ClipInfo?) -> ClipInfo? {
         guard !queueClips.isEmpty else { return nil }
         if let current,
-           let idx = queueClips.firstIndex(where: { $0.clipUID == current.clipUID }),
-           idx + 1 < queueClips.count {
+            let idx = queueClips.firstIndex(where: { $0.clipUID == current.clipUID }),
+            idx + 1 < queueClips.count
+        {
             return queueClips[idx + 1]
         }
         return queueClips.first
@@ -632,6 +638,10 @@ struct PopularClipsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // [Top chrome 2026-05-01] hiddenTitleBar + .ignoresSafeArea(top) 환경에서
+            // 클립 toolbar(아이콘·타이틀) 위로 macOS 트래픽 라이트가 올라오는 문제 해결.
+            Color.clear
+                .frame(height: 28)
             toolbar
 
             // [2026-04-30] toolbar 하단 액센트 라인 — 그라디언트 1px
@@ -639,7 +649,7 @@ struct PopularClipsView: View {
                 colors: [
                     DesignTokens.Colors.accentPink.opacity(0.35),
                     DesignTokens.Colors.chzzkGreen.opacity(0.30),
-                    .clear
+                    .clear,
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
@@ -696,10 +706,12 @@ struct PopularClipsView: View {
         .frame(minWidth: 400, minHeight: 300)
         .animation(DesignTokens.Animation.snappy, value: vm.queueClips.count)
         .animation(DesignTokens.Animation.snappy, value: vm.watchLaterUIDs.count)
-        .sheet(item: Binding(
-            get: { vm.selectedClip },
-            set: { vm.selectedClip = $0 }
-        )) { clip in
+        .sheet(
+            item: Binding(
+                get: { vm.selectedClip },
+                set: { vm.selectedClip = $0 }
+            )
+        ) { clip in
             ClipPlayerView(clipInfo: clip)
                 .frame(minWidth: 640, minHeight: 400)
         }
@@ -794,7 +806,7 @@ struct PopularClipsView: View {
                         LinearGradient(
                             colors: [
                                 DesignTokens.Colors.accentPink.opacity(0.26),
-                                DesignTokens.Colors.accentOrange.opacity(0.20)
+                                DesignTokens.Colors.accentOrange.opacity(0.20),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -803,7 +815,8 @@ struct PopularClipsView: View {
                     .frame(width: 32, height: 32)
                     .overlay {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(DesignTokens.Colors.accentPink.opacity(0.32), lineWidth: 0.7)
+                            .strokeBorder(
+                                DesignTokens.Colors.accentPink.opacity(0.32), lineWidth: 0.7)
                     }
                     .shadow(color: DesignTokens.Colors.accentPink.opacity(0.18), radius: 6, y: 2)
                 Image(systemName: "film.stack.fill")
@@ -814,12 +827,14 @@ struct PopularClipsView: View {
                 Text("클립")
                     .font(DesignTokens.Typography.bodySemibold)
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Text(vm.selectedTab == .trending
-                     ? "인기 클립 · \(vm.trendingFilter.rawValue) · \(vm.trendingOrder.rawValue)"
-                     : "채널별 클립")
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                    .lineLimit(1)
+                Text(
+                    vm.selectedTab == .trending
+                        ? "인기 클립 · \(vm.trendingFilter.rawValue) · \(vm.trendingOrder.rawValue)"
+                        : "채널별 클립"
+                )
+                .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .lineLimit(1)
             }
         }
     }
@@ -836,20 +851,25 @@ struct PopularClipsView: View {
                         .frame(width: 28, height: 24)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(vm.viewMode == mode
-                                      ? DesignTokens.Colors.chzzkGreen.opacity(0.18)
-                                      : .clear)
+                                .fill(
+                                    vm.viewMode == mode
+                                        ? DesignTokens.Colors.chzzkGreen.opacity(0.18)
+                                        : .clear)
                         )
-                        .foregroundStyle(vm.viewMode == mode
-                                         ? DesignTokens.Colors.chzzkGreen
-                                         : DesignTokens.Colors.textTertiary)
+                        .foregroundStyle(
+                            vm.viewMode == mode
+                                ? DesignTokens.Colors.chzzkGreen
+                                : DesignTokens.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help(mode == .grid ? "그리드 보기" : "리스트 보기")
             }
         }
         .padding(2)
-        .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            DesignTokens.Colors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
@@ -870,16 +890,27 @@ struct PopularClipsView: View {
                             .padding(.vertical, DesignTokens.Spacing.xs)
                             .background(
                                 RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                    .fill(vm.trendingFilter == filter ? DesignTokens.Colors.chzzkGreen.opacity(0.15) : .clear)
+                                    .fill(
+                                        vm.trendingFilter == filter
+                                            ? DesignTokens.Colors.chzzkGreen.opacity(0.15) : .clear)
                             )
-                            .foregroundStyle(vm.trendingFilter == filter ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+                            .foregroundStyle(
+                                vm.trendingFilter == filter
+                                    ? DesignTokens.Colors.chzzkGreen
+                                    : DesignTokens.Colors.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(DesignTokens.Spacing.xxs)
-            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
+            .background(
+                DesignTokens.Colors.surfaceElevated,
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(
+                    DesignTokens.Glass.borderColor, lineWidth: 0.5)
+            }
 
             HStack(spacing: 2) {
                 ForEach(ClipBrowser.TrendingOrder.allCases) { order in
@@ -895,16 +926,27 @@ struct PopularClipsView: View {
                         .padding(.vertical, DesignTokens.Spacing.xs)
                         .background(
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .fill(vm.trendingOrder == order ? DesignTokens.Colors.chzzkGreen.opacity(0.15) : .clear)
+                                .fill(
+                                    vm.trendingOrder == order
+                                        ? DesignTokens.Colors.chzzkGreen.opacity(0.15) : .clear)
                         )
-                        .foregroundStyle(vm.trendingOrder == order ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+                        .foregroundStyle(
+                            vm.trendingOrder == order
+                                ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary
+                        )
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(DesignTokens.Spacing.xxs)
-            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
+            .background(
+                DesignTokens.Colors.surfaceElevated,
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(
+                    DesignTokens.Glass.borderColor, lineWidth: 0.5)
+            }
         }
     }
 
@@ -913,7 +955,9 @@ struct PopularClipsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(DesignTokens.Typography.captionSemibold)
-                    .foregroundStyle(isSearchFocused ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
+                    .foregroundStyle(
+                        isSearchFocused
+                            ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textTertiary)
                 TextField("채널명, ID, 또는 URL", text: $vm.channelInput)
                     .textFieldStyle(.plain)
                     .font(DesignTokens.Typography.caption)
@@ -926,7 +970,9 @@ struct PopularClipsView: View {
                         showSuggestions = !isEmpty
                     }
                 if !vm.channelInput.isEmpty {
-                    Button { vm.submitChannelInput() } label: {
+                    Button {
+                        vm.submitChannelInput()
+                    } label: {
                         Image(systemName: "arrow.right.circle.fill")
                             .font(DesignTokens.Typography.body)
                             .foregroundStyle(DesignTokens.Colors.chzzkGreen)
@@ -936,10 +982,16 @@ struct PopularClipsView: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
             .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            .background(
+                DesignTokens.Colors.surfaceElevated,
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md)
-                    .strokeBorder(isSearchFocused ? DesignTokens.Colors.chzzkGreen.opacity(0.5) : DesignTokens.Glass.borderColor, lineWidth: 1)
+                    .strokeBorder(
+                        isSearchFocused
+                            ? DesignTokens.Colors.chzzkGreen.opacity(0.5)
+                            : DesignTokens.Glass.borderColor, lineWidth: 1)
             )
             .popover(isPresented: $showSuggestions, arrowEdge: .bottom) {
                 channelSuggestionsList
@@ -953,8 +1005,14 @@ struct PopularClipsView: View {
                     .font(DesignTokens.Typography.captionSemibold)
                     .frame(width: 28, height: 28)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-                    .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
+                    .background(
+                        DesignTokens.Colors.surfaceElevated,
+                        in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(
+                            DesignTokens.Glass.borderColor, lineWidth: 0.5)
+                    }
             }
             .buttonStyle(.plain)
             .help("팔로잉 채널에서 선택")
@@ -981,16 +1039,27 @@ struct PopularClipsView: View {
                         .padding(.vertical, DesignTokens.Spacing.xs)
                         .background(
                             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                                .fill(vm.channelSortOrder == order ? DesignTokens.Colors.chzzkGreen.opacity(0.15) : .clear)
+                                .fill(
+                                    vm.channelSortOrder == order
+                                        ? DesignTokens.Colors.chzzkGreen.opacity(0.15) : .clear)
                         )
-                        .foregroundStyle(vm.channelSortOrder == order ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary)
+                        .foregroundStyle(
+                            vm.channelSortOrder == order
+                                ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary
+                        )
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(DesignTokens.Spacing.xxs)
-            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
-            .overlay { RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5) }
+            .background(
+                DesignTokens.Colors.surfaceElevated,
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.sm).strokeBorder(
+                    DesignTokens.Glass.borderColor, lineWidth: 0.5)
+            }
         }
     }
 
@@ -1009,7 +1078,10 @@ struct PopularClipsView: View {
                 }
                 .frame(width: 18, height: 18)
                 .clipShape(Circle())
-                .overlay { Circle().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.4), lineWidth: 0.7) }
+                .overlay {
+                    Circle().strokeBorder(
+                        DesignTokens.Colors.chzzkGreen.opacity(0.4), lineWidth: 0.7)
+                }
             } else {
                 Image(systemName: "person.crop.circle.fill")
                     .font(.system(size: 14))
@@ -1023,7 +1095,10 @@ struct PopularClipsView: View {
                     .lineLimit(1)
                 if !idShort.isEmpty {
                     Text(idShort)
-                        .font(DesignTokens.Typography.custom(size: 8.5, weight: .medium, design: .monospaced))
+                        .font(
+                            DesignTokens.Typography.custom(
+                                size: 8.5, weight: .medium, design: .monospaced)
+                        )
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                 }
             }
@@ -1044,7 +1119,9 @@ struct PopularClipsView: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
         .background(DesignTokens.Colors.chzzkGreen.opacity(0.10), in: Capsule())
-        .overlay { Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 0.6) }
+        .overlay {
+            Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 0.6)
+        }
     }
     private var channelSuggestionsList: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1185,9 +1262,13 @@ struct PopularClipsView: View {
                     .frame(width: 28, height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .fill(vm.queueClips.isEmpty ? Color.clear : DesignTokens.Colors.accentPink.opacity(0.15))
+                            .fill(
+                                vm.queueClips.isEmpty
+                                    ? Color.clear : DesignTokens.Colors.accentPink.opacity(0.15))
                     )
-                    .foregroundStyle(vm.queueClips.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.accentPink)
+                    .foregroundStyle(
+                        vm.queueClips.isEmpty
+                            ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.accentPink)
                 if !vm.queueClips.isEmpty {
                     Text("\(vm.queueClips.count)")
                         .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
@@ -1217,9 +1298,13 @@ struct PopularClipsView: View {
                     .frame(width: 28, height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
-                            .fill(vm.watchLaterUIDs.isEmpty ? Color.clear : DesignTokens.Colors.accentOrange.opacity(0.15))
+                            .fill(
+                                vm.watchLaterUIDs.isEmpty
+                                    ? Color.clear : DesignTokens.Colors.accentOrange.opacity(0.15))
                     )
-                    .foregroundStyle(vm.watchLaterUIDs.isEmpty ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.accentOrange)
+                    .foregroundStyle(
+                        vm.watchLaterUIDs.isEmpty
+                            ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.accentOrange)
                 if !vm.watchLaterUIDs.isEmpty {
                     Text("\(vm.watchLaterUIDs.count)")
                         .font(DesignTokens.Typography.custom(size: 9, weight: .bold))
@@ -1423,12 +1508,21 @@ struct PopularClipsView: View {
                     VStack(spacing: 0) {
                         HStack(spacing: 6) {
                             Image(systemName: tab.icon)
-                                .font(DesignTokens.Typography.custom(size: 11.5, weight: vm.selectedTab == tab ? .semibold : .medium))
+                                .font(
+                                    DesignTokens.Typography.custom(
+                                        size: 11.5,
+                                        weight: vm.selectedTab == tab ? .semibold : .medium))
                             Text(tab.rawValue)
-                                .font(DesignTokens.Typography.custom(size: 12.5, weight: vm.selectedTab == tab ? .semibold : .medium))
+                                .font(
+                                    DesignTokens.Typography.custom(
+                                        size: 12.5,
+                                        weight: vm.selectedTab == tab ? .semibold : .medium))
                             if let count = tabCount(tab) {
                                 Text("\(count)")
-                                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
+                                    .font(
+                                        DesignTokens.Typography.custom(
+                                            size: 10, weight: .semibold, design: .monospaced)
+                                    )
                                     .foregroundStyle(
                                         vm.selectedTab == tab
                                             ? DesignTokens.Colors.chzzkGreen
@@ -1441,14 +1535,16 @@ struct PopularClipsView: View {
                                             (vm.selectedTab == tab
                                                 ? DesignTokens.Colors.chzzkGreen
                                                 : DesignTokens.Colors.textTertiary)
-                                            .opacity(0.12)
+                                                .opacity(0.12)
                                         )
                                     )
                             }
                         }
-                        .foregroundStyle(vm.selectedTab == tab
-                                         ? DesignTokens.Colors.chzzkGreen
-                                         : DesignTokens.Colors.textSecondary)
+                        .foregroundStyle(
+                            vm.selectedTab == tab
+                                ? DesignTokens.Colors.chzzkGreen
+                                : DesignTokens.Colors.textSecondary
+                        )
                         .padding(.vertical, 8)
                         .animation(DesignTokens.Animation.indicator, value: vm.selectedTab)
 
@@ -1464,7 +1560,7 @@ struct PopularClipsView: View {
                                         LinearGradient(
                                             colors: [
                                                 DesignTokens.Colors.chzzkGreen,
-                                                DesignTokens.Colors.chzzkGreen.opacity(0.55)
+                                                DesignTokens.Colors.chzzkGreen.opacity(0.55),
                                             ],
                                             startPoint: .leading,
                                             endPoint: .trailing
@@ -1473,7 +1569,9 @@ struct PopularClipsView: View {
                                     .frame(height: 2.5)
                                     .padding(.horizontal, 28)
                                     .matchedGeometryEffect(id: "clipTabUnderline", in: tabNS)
-                                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.45), radius: 4, y: 1)
+                                    .shadow(
+                                        color: DesignTokens.Colors.chzzkGreen.opacity(0.45),
+                                        radius: 4, y: 1)
                             }
                         }
                         .frame(height: 3)
@@ -1563,20 +1661,25 @@ struct PopularClipsView: View {
                         LinearGradient(
                             colors: [
                                 DesignTokens.Colors.accentPink.opacity(0.18),
-                                DesignTokens.Colors.accentOrange.opacity(0.10)
+                                DesignTokens.Colors.accentOrange.opacity(0.10),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 76, height: 76)
-                    .overlay { Circle().strokeBorder(DesignTokens.Colors.accentPink.opacity(0.30), lineWidth: 0.7) }
+                    .overlay {
+                        Circle().strokeBorder(
+                            DesignTokens.Colors.accentPink.opacity(0.30), lineWidth: 0.7)
+                    }
                     .shadow(color: DesignTokens.Colors.accentPink.opacity(0.18), radius: 12, y: 4)
                 Image(systemName: "flame.fill")
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [DesignTokens.Colors.accentPink, DesignTokens.Colors.accentOrange],
+                            colors: [
+                                DesignTokens.Colors.accentPink, DesignTokens.Colors.accentOrange,
+                            ],
                             startPoint: .top, endPoint: .bottom
                         )
                     )
@@ -1589,7 +1692,9 @@ struct PopularClipsView: View {
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
-            Button { Task { await vm.loadTrendingClips() } } label: {
+            Button {
+                Task { await vm.loadTrendingClips() }
+            } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "arrow.clockwise")
                     Text("새로고침")
@@ -1647,7 +1752,10 @@ struct PopularClipsView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(DesignTokens.Colors.chzzkGreen.opacity(0.10), in: Capsule())
-                .overlay { Capsule().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 0.6) }
+                .overlay {
+                    Capsule().strokeBorder(
+                        DesignTokens.Colors.chzzkGreen.opacity(0.35), lineWidth: 0.6)
+                }
             }
             .buttonStyle(PressScaleButtonStyle(scale: 0.96))
             .customCursor(.pointingHand)
@@ -1658,7 +1766,10 @@ struct PopularClipsView: View {
                 }
                 .frame(width: 22, height: 22)
                 .clipShape(Circle())
-                .overlay { Circle().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.4), lineWidth: 0.7) }
+                .overlay {
+                    Circle().strokeBorder(
+                        DesignTokens.Colors.chzzkGreen.opacity(0.4), lineWidth: 0.7)
+                }
             }
 
             Text(channelName.isEmpty ? "채널" : channelName)
@@ -1668,7 +1779,10 @@ struct PopularClipsView: View {
 
             if let total = vm.channelTotalCount {
                 Text("\(total)개")
-                    .font(DesignTokens.Typography.custom(size: 10.5, weight: .medium, design: .monospaced))
+                    .font(
+                        DesignTokens.Typography.custom(
+                            size: 10.5, weight: .medium, design: .monospaced)
+                    )
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -1713,9 +1827,13 @@ struct PopularClipsView: View {
                         icon: "clock.arrow.circlepath",
                         accent: DesignTokens.Colors.accentBlue,
                         trailing: AnyView(
-                            Button { vm.clearRecentChannels() } label: {
+                            Button {
+                                vm.clearRecentChannels()
+                            } label: {
                                 Text("기록 지우기")
-                                    .font(DesignTokens.Typography.custom(size: 10.5, weight: .medium))
+                                    .font(
+                                        DesignTokens.Typography.custom(size: 10.5, weight: .medium)
+                                    )
                                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                             }
                             .buttonStyle(.plain)
@@ -1748,11 +1866,15 @@ struct PopularClipsView: View {
                         accent: DesignTokens.Colors.chzzkGreen,
                         trailing: AnyView(
                             Text("\(following.count)")
-                                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold, design: .monospaced))
+                                .font(
+                                    DesignTokens.Typography.custom(
+                                        size: 10, weight: .semibold, design: .monospaced)
+                                )
                                 .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1.5)
-                                .background(DesignTokens.Colors.chzzkGreen.opacity(0.12), in: Capsule())
+                                .background(
+                                    DesignTokens.Colors.chzzkGreen.opacity(0.12), in: Capsule())
                         )
                     ) {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -1792,20 +1914,25 @@ struct PopularClipsView: View {
                         LinearGradient(
                             colors: [
                                 DesignTokens.Colors.chzzkGreen.opacity(0.20),
-                                DesignTokens.Colors.accentBlue.opacity(0.10)
+                                DesignTokens.Colors.accentBlue.opacity(0.10),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 92, height: 92)
-                    .overlay { Circle().strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.30), lineWidth: 0.8) }
+                    .overlay {
+                        Circle().strokeBorder(
+                            DesignTokens.Colors.chzzkGreen.opacity(0.30), lineWidth: 0.8)
+                    }
                     .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.20), radius: 14, y: 4)
                 Image(systemName: "film.stack")
                     .font(.system(size: 38, weight: .regular))
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.accentBlue],
+                            colors: [
+                                DesignTokens.Colors.chzzkGreen, DesignTokens.Colors.accentBlue,
+                            ],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )
@@ -1902,7 +2029,10 @@ struct PopularClipsView: View {
                             .foregroundStyle(DesignTokens.Colors.accentPink)
                     } else {
                         Text(channelId.prefix(10) + (channelId.count > 10 ? "…" : ""))
-                            .font(DesignTokens.Typography.custom(size: 8.5, weight: .medium, design: .monospaced))
+                            .font(
+                                DesignTokens.Typography.custom(
+                                    size: 8.5, weight: .medium, design: .monospaced)
+                            )
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                     }
                 }
@@ -1910,7 +2040,10 @@ struct PopularClipsView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(DesignTokens.Colors.surfaceElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(
+                DesignTokens.Colors.surfaceElevated,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(accent.opacity(0.20), lineWidth: 0.7)
@@ -1933,14 +2066,18 @@ struct PopularClipsView: View {
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
             }
             VStack(alignment: .leading, spacing: 5) {
-                guideItem(num: "1", text: "채널 페이지 URL 끝의 ID 복사",
-                          mono: "chzzk.naver.com/{channelId}")
+                guideItem(
+                    num: "1", text: "채널 페이지 URL 끝의 ID 복사",
+                    mono: "chzzk.naver.com/{channelId}")
                 guideItem(num: "2", text: "검색창에 채널명 직접 입력 → 자동완성 선택")
                 guideItem(num: "3", text: "팔로잉 채널은 위의 카드에서 클릭")
             }
             .padding(DesignTokens.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DesignTokens.Colors.surfaceElevated.opacity(0.55), in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous))
+            .background(
+                DesignTokens.Colors.surfaceElevated.opacity(0.55),
+                in: RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
                     .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.45), lineWidth: 0.6)
@@ -1966,7 +2103,9 @@ struct PopularClipsView: View {
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1.5)
-                        .background(DesignTokens.Colors.surfaceBase.opacity(0.7), in: RoundedRectangle(cornerRadius: 4))
+                        .background(
+                            DesignTokens.Colors.surfaceBase.opacity(0.7),
+                            in: RoundedRectangle(cornerRadius: 4))
                 }
             }
         }
@@ -1975,7 +2114,9 @@ struct PopularClipsView: View {
     // MARK: - 공용 클립 목록 뷰
 
     /// trending용. ScrollView 없이 inline로 그리드/리스트를 그린다 (Spotlight와 같은 ScrollView 안에 배치).
-    private func clipListInline(clips: ArraySlice<ClipInfo>, showChannelBadge: Bool, inspectorAvailable: Bool) -> some View {
+    private func clipListInline(
+        clips: ArraySlice<ClipInfo>, showChannelBadge: Bool, inspectorAvailable: Bool
+    ) -> some View {
         Group {
             switch vm.viewMode {
             case .grid:
@@ -2014,14 +2155,18 @@ struct PopularClipsView: View {
     }
 
     /// [2026-04-30 Phase3] 채널 클립 페이지 표시 — 한 페이지(24개)만 렌더링하여 누적 비용 제거.
-    private func clipListPaged(clips: ArraySlice<ClipInfo>, showChannelBadge: Bool, inspectorAvailable: Bool) -> some View {
+    private func clipListPaged(
+        clips: ArraySlice<ClipInfo>, showChannelBadge: Bool, inspectorAvailable: Bool
+    ) -> some View {
         ScrollView {
             VStack(spacing: 0) {
                 Group {
                     switch vm.viewMode {
                     case .grid:
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 230), spacing: DesignTokens.Spacing.md)],
+                            columns: [
+                                GridItem(.adaptive(minimum: 230), spacing: DesignTokens.Spacing.md)
+                            ],
                             alignment: .leading,
                             spacing: DesignTokens.Spacing.md
                         ) {
@@ -2079,19 +2224,27 @@ struct PopularClipsView: View {
 
             HStack(spacing: 6) {
                 Text("\(cur + 1)")
-                    .font(DesignTokens.Typography.custom(size: 13, weight: .bold, design: .monospaced))
+                    .font(
+                        DesignTokens.Typography.custom(size: 13, weight: .bold, design: .monospaced)
+                    )
                     .foregroundStyle(DesignTokens.Colors.chzzkGreen)
                 Text("/")
                     .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                 Text("\(total)\(vm.channelHasMore ? "+" : "")")
-                    .font(DesignTokens.Typography.custom(size: 12, weight: .medium, design: .monospaced))
+                    .font(
+                        DesignTokens.Typography.custom(
+                            size: 12, weight: .medium, design: .monospaced)
+                    )
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, 5)
             .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
-            .overlay { Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.45), lineWidth: 0.6) }
+            .overlay {
+                Capsule().strokeBorder(
+                    DesignTokens.Glass.borderColorLight.opacity(0.45), lineWidth: 0.6)
+            }
 
             paginationButton(
                 icon: "chevron.right",
@@ -2118,20 +2271,31 @@ struct PopularClipsView: View {
                 }
                 HStack(spacing: 6) {
                     Text("\(cur + 1)")
-                        .font(DesignTokens.Typography.custom(size: 13, weight: .bold, design: .monospaced))
+                        .font(
+                            DesignTokens.Typography.custom(
+                                size: 13, weight: .bold, design: .monospaced)
+                        )
                         .foregroundStyle(DesignTokens.Colors.accentPink)
                     Text("/")
                         .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
                         .foregroundStyle(DesignTokens.Colors.textTertiary)
                     Text("\(total)")
-                        .font(DesignTokens.Typography.custom(size: 12, weight: .medium, design: .monospaced))
+                        .font(
+                            DesignTokens.Typography.custom(
+                                size: 12, weight: .medium, design: .monospaced)
+                        )
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.vertical, 5)
                 .background(DesignTokens.Colors.surfaceElevated, in: Capsule())
-                .overlay { Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.45), lineWidth: 0.6) }
-                paginationButton(icon: "chevron.right", label: "다음", enabled: cur < total - 1, trailing: true) {
+                .overlay {
+                    Capsule().strokeBorder(
+                        DesignTokens.Glass.borderColorLight.opacity(0.45), lineWidth: 0.6)
+                }
+                paginationButton(
+                    icon: "chevron.right", label: "다음", enabled: cur < total - 1, trailing: true
+                ) {
                     vm.goToTrendingDisplayPage(cur + 1)
                 }
             }
@@ -2162,16 +2326,24 @@ struct PopularClipsView: View {
                     }
                 }
             }
-            .foregroundStyle(enabled ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary.opacity(0.55))
+            .foregroundStyle(
+                enabled
+                    ? DesignTokens.Colors.textPrimary
+                    : DesignTokens.Colors.textTertiary.opacity(0.55)
+            )
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(
-                (enabled ? DesignTokens.Colors.surfaceElevated : DesignTokens.Colors.surfaceBase.opacity(0.4)),
+                (enabled
+                    ? DesignTokens.Colors.surfaceElevated
+                    : DesignTokens.Colors.surfaceBase.opacity(0.4)),
                 in: Capsule()
             )
             .overlay {
                 Capsule().strokeBorder(
-                    enabled ? DesignTokens.Glass.borderColorLight.opacity(0.55) : DesignTokens.Glass.borderColorLight.opacity(0.18),
+                    enabled
+                        ? DesignTokens.Glass.borderColorLight.opacity(0.55)
+                        : DesignTokens.Glass.borderColorLight.opacity(0.18),
                     lineWidth: 0.6
                 )
             }
@@ -2186,7 +2358,8 @@ struct PopularClipsView: View {
     private func loadingView(message: String) -> some View {
         VStack(spacing: DesignTokens.Spacing.md) {
             ProgressView().controlSize(.large).tint(DesignTokens.Colors.chzzkGreen)
-            Text(message).font(DesignTokens.Typography.captionMedium).foregroundStyle(DesignTokens.Colors.textSecondary)
+            Text(message).font(DesignTokens.Typography.captionMedium).foregroundStyle(
+                DesignTokens.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -2204,9 +2377,9 @@ struct PopularClipsView: View {
             Text(error).font(DesignTokens.Typography.captionMedium)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)
-            Button("다시 시도", action: retry).buttonStyle(.bordered).tint(DesignTokens.Colors.chzzkGreen)
+            Button("다시 시도", action: retry).buttonStyle(.bordered).tint(
+                DesignTokens.Colors.chzzkGreen)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
