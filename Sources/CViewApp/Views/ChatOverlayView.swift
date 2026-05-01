@@ -55,7 +55,7 @@ struct ChatOverlayView: View {
                 .strokeBorder(isHovering ? DesignTokens.Colors.borderOnDarkMediaStrong : DesignTokens.Colors.borderOnDarkMedia, lineWidth: 0.5)
         }
         // [GPU 최적화] shadow radius 12 → 4로 축소 — blur radius가 클수록 offscreen pass 비용 증가
-        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+        .shadow(DesignTokens.Shadow.sm)
         .opacity(chatOpacity)
         .position(currentPosition)
         .gesture(dragGesture)
@@ -326,7 +326,7 @@ struct OverlayChatMessageRow: View {
             RoundedRectangle(cornerRadius: 3)
                 .fill(.black.opacity(0.2))
         )
-        .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+        .shadow(DesignTokens.Shadow.textOnMedia)
     }
 
     private var nicknameColor: Color {

@@ -29,17 +29,17 @@
 
 ### 예시 이미지 미리보기
 
-![Minimal Mode Bar 예시](assets/live-trimode-light-modebar.svg)
+![Minimal Mode Bar 예시](../../assets/live-trimode-light-modebar.svg)
 
-![Focus Split 예시](assets/live-trimode-light-focus-split.svg)
+![Focus Split 예시](../../assets/live-trimode-light-focus-split.svg)
 
-![Floating Mode Switcher 예시](assets/live-trimode-light-floating-switcher.svg)
+![Floating Mode Switcher 예시](../../assets/live-trimode-light-floating-switcher.svg)
 
 ---
 
 ## 1. 추천안 1: Minimal Mode Bar
 
-![Minimal Mode Bar 예시](assets/live-trimode-light-modebar.svg)
+![Minimal Mode Bar 예시](../../assets/live-trimode-light-modebar.svg)
 
 ### 핵심 컨셉
 
@@ -83,7 +83,7 @@ Selected Mode Content
 
 ## 2. 추천안 2: Focus Split
 
-![Focus Split 예시](assets/live-trimode-light-focus-split.svg)
+![Focus Split 예시](../../assets/live-trimode-light-focus-split.svg)
 
 ### 핵심 컨셉
 
@@ -128,7 +128,7 @@ Channel List     Focus Area
 
 ## 3. 추천안 3: Floating Mode Switcher
 
-![Floating Mode Switcher 예시](assets/live-trimode-light-floating-switcher.svg)
+![Floating Mode Switcher 예시](../../assets/live-trimode-light-floating-switcher.svg)
 
 ### 핵심 컨셉
 

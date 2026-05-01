@@ -1,0 +1,88 @@
+{
+  "title": "CView App Player",
+  "uid": "cview-app-player",
+  "timezone": "Asia/Seoul",
+  "editable": true,
+  "schemaVersion": 39,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "channel",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+        "query": "SELECT DISTINCT channel_name AS __text, channel_id AS __value FROM app_metrics WHERE time > now() - interval '24 hours' ORDER BY 1",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "title": "App latency p50 / p95 (ms)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, percentile_cont(0.50) WITHIN GROUP (ORDER BY latency_ms) AS p50, percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95 FROM app_latency WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] }
+    },
+    {
+      "id": 2, "title": "Bitrate (kbps)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, channel_name AS metric, avg(bitrate) AS bitrate FROM app_metrics WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Kbits" }, "overrides": [] }
+    },
+    {
+      "id": 3, "title": "FPS", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, channel_name AS metric, avg(fps) AS fps FROM app_metrics WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4, "title": "Buffer health / Health score", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, channel_name || ' health' AS metric, avg(health_score) AS v FROM app_metrics WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' GROUP BY 1, 2 ORDER BY 1"
+        },
+        {
+          "refId": "B",
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, channel_name || ' buffer' AS metric, avg(buffer_health) AS v FROM app_metrics WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 5, "title": "Viewer count", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "postgres-chzzk" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, channel_name AS metric, max(viewer_count) AS viewers FROM app_metrics WHERE $__timeFilter(time) AND channel_id ~ '${channel:regex}' GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    }
+  ]
+}

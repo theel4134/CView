@@ -28,12 +28,7 @@ struct MultiLiveView: View {
                         showAddChannel.toggle()
                         if showAddChannel { showSettings = false }
                     }},
-                    isAddPanelOpen: showAddChannel,
-                    onSettings: { withAnimation(DesignTokens.Animation.snappy) {
-                        showSettings.toggle()
-                        if showSettings { showAddChannel = false }
-                    }},
-                    isSettingsPanelOpen: showSettings
+                    isAddPanelOpen: showAddChannel
                 )
 
                 // [중복 제거 2026-04-21] 탭 칩이 이미 아바타·채널명·상태 도트·라이브 제목을

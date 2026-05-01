@@ -14,6 +14,14 @@ struct ClipPlayerView: View {
     @State private var viewModel = ClipPlayerViewModel()
     @State private var showControls = true
     @State private var controlsTimer: Task<Void, Never>?
+    /// [2026-04-30] 임베드 WebView 가 첫 화면을 표출할 때까지 표시되는 로딩 스플래시.
+    /// chzzk 임베드의 자체 placeholder(흐릿한 회색) 가 시야를 가려 사용자가 클립이
+    /// 로드되지 않는다고 오해하는 문제를 방지하기 위해, 우리 자체의 thumbnail+재생
+    /// 버튼 오버레이를 보여주고, 사용자가 명시적으로 재생을 누르면 WebView 의
+    /// video.play() 를 트리거하면서 스플래시를 페이드아웃한다.
+    @State private var showEmbedLoadingSplash = true
+    /// WebView 에 play 트리거를 보내는 카운터 (변경 시마다 JS evaluation 실행).
+    @State private var embedPlayRequestId: Int = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
 
@@ -25,11 +33,19 @@ struct ClipPlayerView: View {
             if let embedURL = viewModel.embedFallbackURL {
                 ClipEmbedWebView(
                     url: embedURL,
+                    playRequestId: embedPlayRequestId,
                     onVideoURLExtracted: { url in
                         Task { await viewModel.switchToVLCPlayer(streamURL: url, clipUID: clipInfo.clipUID) }
                     }
                 )
                 .ignoresSafeArea()
+
+                // [2026-04-30] 임베드 로딩 스플래시 — 우리 측 thumbnail + spinner.
+                if showEmbedLoadingSplash {
+                    embedLoadingSplash
+                        .transition(.opacity)
+                }
+
                 embedTitleBar
             } else {
                 // ── VLC 직접 재생
@@ -218,6 +234,116 @@ struct ClipPlayerView: View {
         .foregroundStyle(DesignTokens.Colors.textOnOverlay)
     }
 
+    // MARK: - Embed Loading Splash
+
+    /// 임베드 WebView 위에 표시되는 자체 로딩 스플래시.
+    /// 사용자가 보는 것: 클립 썸네일(블러+다크 오버레이) + 큰 재생 버튼 + 클립 메타.
+    /// [2026-04-30] 자동 페이드 제거 — chzzk 임베드의 autoplay 가 정책상 막힐 수 있어
+    /// 사용자가 명시적으로 "재생" 버튼을 눌렀을 때 splash 페이드 + WebView 의 video.play()
+    /// 동시 트리거. 이는 macOS WebKit 의 미디어 정책에서 가장 안정적인 경로.
+    private var embedLoadingSplash: some View {
+        ZStack {
+            // 배경: 클립 썸네일 (블러 처리)
+            if let thumbURL = clipInfo.thumbnailImageURL {
+                CachedAsyncImage(url: thumbURL) {
+                    Rectangle().fill(DesignTokens.Colors.surfaceBase)
+                }
+                .scaledToFill()
+                .blur(radius: 32)
+                .opacity(0.55)
+            } else {
+                Rectangle().fill(DesignTokens.Colors.surfaceBase)
+            }
+            Rectangle().fill(.black.opacity(0.62))
+
+            VStack(spacing: 16) {
+                // 선명한 썸네일 카드 + 중앙 재생 버튼
+                ZStack {
+                    if let thumbURL = clipInfo.thumbnailImageURL {
+                        CachedAsyncImage(url: thumbURL) {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(DesignTokens.Colors.surfaceElevated)
+                        }
+                        .scaledToFill()
+                        .frame(width: 280, height: 158)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    } else {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(DesignTokens.Colors.surfaceElevated)
+                            .frame(width: 280, height: 158)
+                    }
+
+                    // 썸네일 위 다크 오버레이로 재생 버튼 가독성 확보
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.black.opacity(0.30))
+                        .frame(width: 280, height: 158)
+
+                    // 중앙 재생 버튼
+                    Button {
+                        // 1) WebView 에 play 트리거 전송
+                        embedPlayRequestId &+= 1
+                        // 2) 스플래시 페이드아웃
+                        withAnimation(DesignTokens.Animation.smooth) {
+                            showEmbedLoadingSplash = false
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(.white.opacity(0.95))
+                                .frame(width: 64, height: 64)
+                                .shadow(color: .black.opacity(0.45), radius: 14, y: 4)
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(.black)
+                                .offset(x: 2)
+                        }
+                    }
+                    .buttonStyle(PressScaleButtonStyle(scale: 0.94))
+                    .help("클립 재생")
+                }
+                .frame(width: 280, height: 158)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 0.7)
+                }
+                .shadow(color: .black.opacity(0.55), radius: 22, y: 8)
+
+                Text(clipInfo.clipTitle)
+                    .font(DesignTokens.Typography.custom(size: 14, weight: .semibold))
+                    .foregroundStyle(DesignTokens.Colors.textOnOverlay)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DesignTokens.Spacing.lg)
+                    .padding(.top, 4)
+
+                if let channel = clipInfo.channel {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.fill")
+                            .font(DesignTokens.Typography.custom(size: 9.5, weight: .semibold))
+                        Text(channel.channelName)
+                            .font(DesignTokens.Typography.custom(size: 11.5, weight: .medium))
+                    }
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaDim)
+                }
+
+                Text("재생 버튼을 누르세요")
+                    .font(DesignTokens.Typography.custom(size: 10.5, weight: .medium))
+                    .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
+                    .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        // 배경(썸네일 외 영역) 탭으로도 splash 닫기 가능
+        .contentShape(Rectangle())
+        .onTapGesture {
+            embedPlayRequestId &+= 1
+            withAnimation(DesignTokens.Animation.smooth) {
+                showEmbedLoadingSplash = false
+            }
+        }
+    }
+
     // MARK: - Embed title bar
 
     private var embedTitleBar: some View {
@@ -368,6 +494,9 @@ struct ClipPlayerView: View {
 /// XHR/fetch를 인터셉트하여 .m3u8 URL을 추출, VLC로 전환합니다.
 private struct ClipEmbedWebView: NSViewRepresentable {
     let url: URL
+    /// [2026-04-30] 외부 splash 의 "재생" 버튼 클릭 시 카운터가 증가.
+    /// updateNSView 에서 변경을 감지해 WebView 의 video element 에 play() 트리거.
+    var playRequestId: Int = 0
     var onVideoURLExtracted: ((URL) -> Void)? = nil
 
     /// React SPA 로드 완료 후 자동재생 시도 스크립트 (최대 30회 = 15초)
@@ -592,7 +721,26 @@ private struct ClipEmbedWebView: NSViewRepresentable {
         return webView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {}
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        // [2026-04-30] playRequestId 변경 시 WebView 에 video.play() 트리거.
+        // 사용자가 splash 의 "재생" 버튼을 누르면 호출됨.
+        guard playRequestId != context.coordinator.lastPlayRequestId else { return }
+        context.coordinator.lastPlayRequestId = playRequestId
+        guard playRequestId > 0 else { return }
+        let js = """
+        (function() {
+            var v = document.querySelector('video');
+            if (v) {
+                v.muted = false;
+                v.volume = 1.0;
+                try { v.play(); } catch(e) {}
+                return true;
+            }
+            return false;
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
         nsView.configuration.userContentController.removeScriptMessageHandler(forName: "m3u8URL")
@@ -605,6 +753,9 @@ private struct ClipEmbedWebView: NSViewRepresentable {
         private var reloadCount = 0
         private var pollTask: Task<Void, Never>?
         private var urlReported = false
+        /// [2026-04-30] updateNSView 의 playRequestId 변경 감지용. SwiftUI struct 는 매번 재생성되므로
+        /// Coordinator 에 보관해야 함.
+        var lastPlayRequestId: Int = 0
 
         init(onVideoURLExtracted: ((URL) -> Void)?) {
             self.onVideoURLExtracted = onVideoURLExtracted
@@ -683,3 +834,84 @@ private struct ClipEmbedWebView: NSViewRepresentable {
     }
 }
 
+
+// MARK: - Clip Lookup View
+// AppRoute.clip(clipUID:) 진입점. clipUID 하나만 가지고 ClipDetail을 조회한 뒤
+// `ClipPlayerView`로 위임한다.
+
+struct ClipLookupView: View {
+    let clipUID: String
+    @Environment(AppState.self) private var appState
+    @State private var clipInfo: ClipInfo?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if isLoading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text("클립 정보를 불러오는 중...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let clipInfo {
+                ClipPlayerView(clipInfo: clipInfo)
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "film.stack")
+                        .font(DesignTokens.Typography.custom(size: 48))
+                        .foregroundStyle(.tertiary)
+                    Text("클립을 찾을 수 없습니다")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("클립 UID: \(clipUID)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+
+                    Button("다시 시도") {
+                        Task { await loadClip() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task { await loadClip() }
+    }
+
+    private func loadClip() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        guard let api = appState.apiClient else {
+            errorMessage = "API 클라이언트가 초기화되지 않았습니다"
+            return
+        }
+
+        do {
+            let detail = try await api.clipDetail(clipUID: clipUID)
+            clipInfo = ClipInfo(
+                clipUID: clipUID,
+                clipTitle: detail.clipTitle,
+                thumbnailImageURL: detail.thumbnailImageURL,
+                clipURL: detail.bestPlaybackURL ?? detail.clipURL,
+                duration: detail.duration,
+                readCount: detail.readCount ?? 0
+            )
+        } catch {
+            // Fallback: create minimal ClipInfo
+            clipInfo = ClipInfo(
+                clipUID: clipUID,
+                clipTitle: "클립 \(clipUID)"
+            )
+        }
+    }
+}

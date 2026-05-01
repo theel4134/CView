@@ -9,15 +9,15 @@ struct MLTabBar: View {
     @Binding var isGridLayout: Bool
     let onAdd: () -> Void
     var isAddPanelOpen: Bool = false
-    var onSettings: (() -> Void)? = nil
-    var isSettingsPanelOpen: Bool = false
-    var showFollowingList: Bool = false
-    var onFollowingToggle: (() -> Void)? = nil
     // 멀티채팅 토글 (인라인 패널 전용 — 스탠드얼론에서는 숨김)
     var showMultiChatToggle: Bool = false
     var isMultiChatOpen: Bool = false
     var multiChatSessionCount: Int = 0
     var onMultiChatToggle: (() -> Void)? = nil
+    /// hiddenTitleBar 상단 드래그 영역(약 10pt) 보정 적용 여부.
+    /// FollowingView의 Live Hub 아래 임베드되는 경우에는 false로 꺼서
+    /// 상단 바가 이중으로 보이는 시각적 겹침을 방지한다.
+    var includeWindowTopInset: Bool = true
 
     @State private var showStopAllConfirm = false
     @State private var draggingSessionId: UUID?
@@ -35,39 +35,27 @@ struct MLTabBar: View {
             tabScrollArea
             Spacer(minLength: 0)
             gridToolbar
-            settingsArea
+            stopAllArea
             multiChatToggleArea
-            followingListArea
         }
         // [hiddenTitleBar 대응 2026-04-21] 창 최상단 ~10pt 는 macOS 전통적으로
         // 트래픽 라이트/드래그 영역으로 인지되는 구간이므로, 탭 칩을 해당 구간
         // 아래로 밀어 상단이 "잘려 보이는" 착시를 제거한다.
         // [2026-04-22] 하단 4pt 여유 + 실선 Divider 로 영상 영역과 명확히 분리.
-        .padding(.top, 10)
+        .padding(.top, includeWindowTopInset ? 10 : 0)
         .padding(.bottom, 4)
         .frame(height: MSTokens.tabBarHeight)
-        // [Refined Classic 2026-04-22] Material 제거, solid surfaceBase + subtle
-        // 그라데이션으로 칩 주변 콘텐츠 대비 확보. 하단 hairline divider.
-        .background {
-            ZStack {
-                DesignTokens.Colors.surfaceBase
-                // 상단 살짝 밝은 톤으로 높이감 부여
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.03),
-                        .clear,
-                    ],
-                    startPoint: .top,
-                    endPoint: .center
-                )
-            }
+        .background(DesignTokens.Colors.surfaceBase)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(DesignTokens.Colors.border.opacity(0.4))
+                .frame(height: 0.5)
         }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(DesignTokens.Glass.dividerColor.opacity(0.35))
+                .fill(DesignTokens.Colors.border.opacity(0.65))
                 .frame(height: 0.5)
         }
-        .shadow(color: .black.opacity(0.18), radius: 4, x: 0, y: 2)
         .zIndex(2)
     }
 
@@ -75,7 +63,7 @@ struct MLTabBar: View {
 
     private var tabScrollArea: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
+            HStack(spacing: 6) {
                 ForEach(manager.sessions) { session in
                     MLTabChip(
                         session: session,
@@ -106,9 +94,7 @@ struct MLTabBar: View {
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.sm)
-            // [탭 클리핑 해소 2026-04-21] ScrollView 내부 수직 패딩을 최소화 — 칩 상하 패딩(4pt)과
-            // 합해 칩 시각높이가 tabBarHeight(44pt)를 초과하지 않도록 조정.
-            .padding(.vertical, 2)
+            .padding(.vertical, 3)
         }
     }
 
@@ -220,20 +206,14 @@ struct MLTabBar: View {
         .padding(.trailing, DesignTokens.Spacing.xxs)
     }
 
-    // MARK: - Settings Area
+    // MARK: - Settings Area  [Removed 2026-04-28]
+    // 설정/팔로잉 토글 버튼은 새 디자인(스테이지 Tool Popover + Bottom Sheet)에서 대체됨.
+    // 전체 해제는 confirmation Dialog 포함한 축소된 버전만 유지.
 
     @ViewBuilder
-    private var settingsArea: some View {
+    private var stopAllArea: some View {
         if !manager.sessions.isEmpty {
             mlDivider
-            MLToolButton(
-                icon: isSettingsPanelOpen ? "gearshape.fill" : "gearshape",
-                isActive: isSettingsPanelOpen,
-                help: "멀티라이브 설정"
-            ) { onSettings?() }
-            .padding(.trailing, DesignTokens.Spacing.xxs)
-
-            // 전체 해제
             MLToolButton(
                 icon: "xmark.circle",
                 isActive: false,
@@ -271,25 +251,9 @@ struct MLTabBar: View {
                 count: multiChatSessionCount,
                 action: onToggle
             )
-            .padding(.trailing, DesignTokens.Spacing.xxs)
+            .padding(.trailing, DesignTokens.Spacing.sm)
             .help(isMultiChatOpen ? "멀티채팅 닫기" : "멀티채팅 열기")
         }
-    }
-
-    // MARK: - Following List Toggle Area
-
-    @ViewBuilder
-    private var followingListArea: some View {
-        if !manager.sessions.isEmpty || showMultiChatToggle { mlDivider }
-        MSChipButton(
-            icon: "sidebar.left",
-            title: "팔로잉",
-            style: .accent,
-            isActive: showFollowingList,
-            action: { onFollowingToggle?() }
-        )
-        .padding(.trailing, DesignTokens.Spacing.sm)
-        .help(showFollowingList ? "팔로잉 목록 닫기" : "팔로잉 목록 열기")
     }
 
     // MARK: - Divider Helper
@@ -318,31 +282,28 @@ private struct MLToolButton: View {
                 .foregroundStyle(
                     isActive ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.textSecondary
                 )
-                .symbolEffect(.bounce, value: isActive)
                 .frame(width: 28, height: 28)
-                // [Modern Curves 2026-04-21] 정사각형 배경 → 원형 Capsule
                 .background {
                     if isActive {
-                        Circle()
-                            .fill(DesignTokens.Colors.chzzkGreen.opacity(0.10))
-                            .overlay {
-                                Circle()
-                                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.20), lineWidth: 0.5)
-                            }
-                            .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(DesignTokens.Colors.chzzkGreen.opacity(0.16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(DesignTokens.Colors.chzzkGreen.opacity(0.32), lineWidth: 0.6)
+                            )
+                            .transition(.opacity)
                     } else if isHovered {
-                        Circle()
-                            .fill(DesignTokens.Colors.surfaceElevated.opacity(0.4))
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(DesignTokens.Colors.surfaceElevated.opacity(0.72))
                             .transition(.opacity)
                     }
                 }
-                .scaleEffect(isHovered ? 1.05 : 1.0)
         }
         .buttonStyle(PressScaleButtonStyle(scale: 0.88))
         .help(help)
         .onHover { isHovered = $0 }
         .animation(DesignTokens.Animation.fast, value: isHovered)
-        .animation(DesignTokens.Animation.snappy, value: isActive)
+        .animation(DesignTokens.Animation.fast, value: isActive)
     }
 }
 
@@ -420,34 +381,11 @@ struct MLTabChip: View {
         }
         .padding(.leading, 6)
         .padding(.trailing, closeButtonVisible ? 4 : 12)
-        // [Refined Classic 2026-04-22] 2줄 구조 칩, 솔리드 배경 스타일.
-        // Material/specular(plusLighter) 제거하고 surfaceElevated 솔리드 + subtle gradient.
         .padding(.vertical, 5)
         .frame(minWidth: MSTokens.tabChipMinWidth, maxWidth: MSTokens.tabChipMaxWidth, alignment: .leading)
         .background(chipBackground)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(chipBorder)
-        // 선택 하단 언더라인 (classic Safari-pre-17 / Chrome 스타일) — 2pt green capsule
-        .overlay(alignment: .bottom) {
-            if isSelected {
-                Capsule(style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                DesignTokens.Colors.chzzkGreen,
-                                DesignTokens.Colors.chzzkGreen.opacity(0.75),
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(height: 2.5)
-                    .padding(.horizontal, 14)
-                    .offset(y: 1)
-                    .shadow(color: DesignTokens.Colors.chzzkGreen.opacity(0.85), radius: 5, y: 0)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-        }
         // 로딩 중 하단 progress bar (선택 상태가 아닐 때만)
         .overlay(alignment: .bottom) {
             if case .loading = session.loadState, !isSelected {
@@ -459,11 +397,6 @@ struct MLTabChip: View {
                     .transition(.opacity)
             }
         }
-        // 선택 탭만 아주 은은한 drop shadow
-        .shadow(
-            color: isSelected ? Color.black.opacity(0.22) : .clear,
-            radius: 6, x: 0, y: 2
-        )
         .animation(DesignTokens.Animation.snappy, value: isSelected)
         .help(chipTooltip)
     }
@@ -474,25 +407,11 @@ struct MLTabChip: View {
     private var chipBackground: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         if isSelected {
-            ZStack {
-                // 베이스: elevated surface
-                shape.fill(DesignTokens.Colors.surfaceElevated)
-                // 악센트: green gradient — 선택 상태 강조
-                shape.fill(
-                    LinearGradient(
-                        colors: [
-                            DesignTokens.Colors.chzzkGreen.opacity(0.28),
-                            DesignTokens.Colors.chzzkGreen.opacity(0.08),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            }
+            shape.fill(DesignTokens.Colors.chzzkGreen.opacity(0.14))
         } else if isHovered {
-            shape.fill(DesignTokens.Colors.surfaceElevated.opacity(0.55))
+            shape.fill(DesignTokens.Colors.surfaceElevated.opacity(0.72))
         } else {
-            Color.clear
+            shape.fill(DesignTokens.Colors.surfaceBase.opacity(0.22))
         }
     }
 
@@ -500,11 +419,11 @@ struct MLTabChip: View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .strokeBorder(
                 isSelected
-                    ? DesignTokens.Colors.chzzkGreen.opacity(0.55)
+                    ? DesignTokens.Colors.chzzkGreen.opacity(0.45)
                     : (isHovered
-                        ? DesignTokens.Glass.borderColor.opacity(0.45)
-                        : Color.clear),
-                lineWidth: isSelected ? 1.2 : 0.5
+                        ? DesignTokens.Colors.border.opacity(0.55)
+                        : DesignTokens.Colors.border.opacity(0.22)),
+                lineWidth: isSelected ? 1.0 : 0.7
             )
     }
 
@@ -672,18 +591,8 @@ struct MLTabChip: View {
 
     private var avatarView: some View {
         ZStack(alignment: .bottomTrailing) {
-            // 베이스 gradient — specular 없이 깨끗한 원형
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            avatarColor,
-                            avatarColor.opacity(0.55),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(avatarColor.opacity(0.92))
                 .frame(width: 28, height: 28)
                 .overlay(
                     Text(String(tabTitle.prefix(1)).uppercased())

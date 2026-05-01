@@ -22,7 +22,10 @@ struct FollowingView: View {
     @Bindable var viewModel: HomeViewModel
     @Environment(AppState.self) var appState
     @Environment(AppRouter.self) var router
+    @Environment(\.openWindow) var openWindow
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 영속 상태 — AppState에서 관리되어 메뉴 전환 시에도 유지
     var ps: FollowingViewState { appState.followingViewState }
@@ -54,17 +57,17 @@ struct FollowingView: View {
         nonmutating set { ps.offlinePageIndex = newValue }
     }
     // 멀티라이브 — 영속
-    var showFollowingList: Bool {
-        get { ps.showFollowingList }
-        nonmutating set { ps.showFollowingList = newValue }
-    }
     var showMultiLive: Bool {
         get { ps.showMultiLive }
         nonmutating set { ps.showMultiLive = newValue }
     }
-    var showMLSettings: Bool {
-        get { ps.showMLSettings }
-        nonmutating set { ps.showMLSettings = newValue }
+    var autoSyncChatOnMultiLiveAdd: Bool {
+        get { ps.autoSyncChatOnMultiLiveAdd }
+        nonmutating set { ps.autoSyncChatOnMultiLiveAdd = newValue }
+    }
+    var smartQueueChannelIds: [String] {
+        get { ps.smartQueueChannelIds }
+        nonmutating set { ps.smartQueueChannelIds = newValue }
     }
     // PiP 모드 — 영속 (AppState)
     var isMultiLivePiPMode: Bool {
@@ -91,6 +94,7 @@ struct FollowingView: View {
     @State private var _searchDebounceTask: Task<Void, Never>?
     @State private var _resizeDebounceTask: Task<Void, Never>?
     @State var mlAddError: String?
+    @State var smartQueueBatchResult: String?
     @FocusState var isSearchFocused: Bool
     @State var skeletonAppeared = false
 
@@ -213,495 +217,420 @@ struct FollowingView: View {
         recomputeFiltered()
     }
 
+    private func runInitialFollowingLoad() async {
+        // 멀티채팅 세션 복원 (SettingsStore 연결 + 저장된 세션 재연결)
+        if chatSessionManager.sessions.isEmpty {
+            chatSessionManager.configure(settingsStore: appState.settingsStore)
+            isRestoringChatSessions = true
+            await restoreSavedChatSessions()
+            isRestoringChatSessions = false
+        }
+
+        // [2026-04-28] 시트 필터(즐겨찾기/최근) 데이터 로드
+        await reloadFavoritesAndRecent()
+
+        // [최적화] 캐시 데이터가 있으면 즉시 렌더링 → 백그라운드 갱신
+        if !viewModel.followingChannels.isEmpty {
+            recomputeFiltered()
+            let isFresh = viewModel.followingCachedAt
+                .map { Date().timeIntervalSince($0) < 300 } ?? false
+            if isFresh { return }
+            // 캐시가 오래된 경우 백그라운드에서 갱신 (스켈레톤 표시 없이)
+            guard !viewModel.isLoadingFollowing else { return }
+            await viewModel.loadFollowingChannels()
+        } else {
+            guard !viewModel.isLoadingFollowing else { return }
+            await viewModel.loadFollowingChannels()
+        }
+    }
+
+    /// [2026-04-28] DataStore에서 즐겨찾기/최근 채널 ID를 로드해 ps에 캐싱.
+    /// FollowingBottomSheetView의 favorites/recent 필터에서 즉시 사용.
+    private func reloadFavoritesAndRecent() async {
+        guard let ds = appState.dataStore else { return }
+        let favs = (try? await ds.fetchFavoriteItems()) ?? []
+        let recents = (try? await ds.fetchRecentItems(limit: 30)) ?? []
+        ps.favoriteChannelIds = Set(favs.map(\.channelId))
+        ps.recentChannelIds = recents.map(\.channelId)
+    }
+
     var body: some View {
-        ZStack {
-            DesignTokens.Colors.background
+        let root = AnyView(
+            ZStack {
+                DesignTokens.Colors.background
+                    .ignoresSafeArea()
+
+                // 배경 레이어: 단색 + 앰비언트 글로우 + 상단 스캔라인로 깊이감을 강화.
+                ZStack {
+                    LinearGradient(
+                        stops: [
+                            .init(color: DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.03 : 0.05), location: 0),
+                            .init(color: DesignTokens.Colors.accentBlue.opacity(colorScheme == .light ? 0.015 : 0.03), location: 0.32),
+                            .init(color: .clear, location: 0.78),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    RadialGradient(
+                        colors: [
+                            DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.08 : 0.14),
+                            .clear,
+                        ],
+                        center: .topLeading,
+                        startRadius: 24,
+                        endRadius: 560
+                    )
+
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(colorScheme == .light ? 0.10 : 0.05),
+                            .clear,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(maxHeight: 120)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                }
                 .ignoresSafeArea()
+                .allowsHitTesting(false)
 
-            // 배경 — 단색 기반 미니멀 그라디언트.
-            // [HiDPI/perf 2026-04-24] drawingGroup() 제거: SwiftUI 가 정적 LinearGradient
-            // 를 이미 단일 CAGradientLayer 로 합성하며, drawingGroup 은 backingScale
-            // 비율로 매 layout 패스마다 오프스크린 비트맵을 생성해 메뉴 진입 시
-            // 첫 프레임 GPU 업로드 비용을 유발했음. Retina/비정수 backing 에서도
-            // 네이티브 그라디언트가 더 선명함.
-            LinearGradient(
-                stops: [
-                    .init(color: DesignTokens.Colors.chzzkGreen.opacity(colorScheme == .light ? 0.02 : 0.03), location: 0),
-                    .init(color: .clear, location: 0.5),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            if !appState.isLoggedIn {
-                followingGateView(
-                    icon: "person.crop.circle.badge.questionmark",
-                    iconColor: DesignTokens.Colors.textTertiary,
-                    title: "로그인이 필요합니다",
-                    subtitle: "로그인하면 라이브 채널을 확인할 수 있습니다",
-                    buttonLabel: "로그인",
-                    action: { router.presentSheet(.login) }
-                )
-                .transition(.opacity)
-            } else if viewModel.needsCookieLogin {
-                followingGateView(
-                    icon: "key.fill",
-                    iconColor: DesignTokens.Colors.accentOrange,
-                    title: "네이버 로그인이 필요합니다",
-                    subtitle: "라이브 목록을 보려면 '네이버 로그인'으로 다시 로그인하세요",
-                    buttonLabel: "네이버 로그인",
-                    action: { router.presentSheet(.login) }
-                )
-                .transition(.opacity)
-            } else if viewModel.followingChannels.isEmpty {
-                if viewModel.isLoadingFollowing {
-                    skeletonLoadingView
-                        .transition(.opacity)
-                } else {
+                if !appState.isLoggedIn {
                     followingGateView(
-                        icon: "heart",
-                        iconColor: DesignTokens.Colors.accentPink,
-                        title: "라이브 채널이 없습니다",
-                        subtitle: "치지직에서 채널을 팔로우하면 여기서 확인할 수 있어요",
-                        buttonLabel: nil,
-                        action: nil
+                        icon: "person.crop.circle.badge.questionmark",
+                        iconColor: DesignTokens.Colors.textTertiary,
+                        title: "로그인이 필요합니다",
+                        subtitle: "로그인하면 라이브 채널을 확인할 수 있습니다",
+                        buttonLabel: "로그인",
+                        action: { router.presentSheet(.login) }
                     )
                     .transition(.opacity)
-                }
-            } else {
-                mainContent
-                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
-            }
-        }
-        .animation(DesignTokens.Animation.smooth, value: appState.isLoggedIn)
-        .animation(DesignTokens.Animation.smooth, value: viewModel.needsCookieLogin)
-        .animation(DesignTokens.Animation.smooth, value: viewModel.followingChannels.isEmpty)
-        .animation(DesignTokens.Animation.smooth, value: viewModel.isLoadingFollowing)
-        // 필터/정렬 관련 값 변경 시 1회만 recomputeFiltered() 호출되도록 통합
-        .onChange(of: sortOrder) { _, _ in resetPaginationAndRecompute() }
-        .onChange(of: filterLiveOnly) { _, _ in resetPaginationAndRecompute() }
-        .onChange(of: selectedCategory) { _, _ in resetPaginationAndRecompute() }
-        .onChange(of: searchText) { _, _ in
-            _searchDebounceTask?.cancel()
-            _searchDebounceTask = Task {
-                try? await Task.sleep(for: .milliseconds(200))
-                guard !Task.isCancelled else { return }
-                recomputeFiltered()
-            }
-        }
-        .onChange(of: viewModel.followingChannels) { _, _ in recomputeFiltered() }
-        // 페이지 전환 시 인접 페이지 썸네일 프리페치 + 프리디코딩
-        .onChange(of: livePageIndex) { _, newPage in
-            prefetchAdjacentLivePages(around: newPage)
-        }
-        .onChange(of: offlinePageIndex) { _, newPage in
-            prefetchAdjacentOfflinePages(around: newPage)
-        }
-        // 멀티라이브 세션 추가 시 → 멀티채팅에도 자동 추가 (복원 중에는 스킵)
-        .onChange(of: multiLiveManager.sessions.count) { oldCount, newCount in
-            guard newCount > oldCount else { return }
-            guard !isRestoringChatSessions else { return }
-            // [Fix] 배열 스냅샷 캡처 — onChange 콜백과 배열 접근 사이의 레이스 방지
-            let currentSessions = Array(multiLiveManager.sessions)
-            let existingChatIds = Set(chatSessionManager.sessions.map { $0.id })
-            let newSessions = currentSessions.filter { !existingChatIds.contains($0.channelId) }
-            for session in newSessions {
-                let channelId = session.channelId
-                Task { await addChatChannel(channelId: channelId) }
-            }
-            if !newSessions.isEmpty {
-                showMultiChat = true
-            }
-        }
-        .task {
-            // 멀티채팅 세션 복원 (SettingsStore 연결 + 저장된 세션 재연결)
-            if chatSessionManager.sessions.isEmpty {
-                chatSessionManager.configure(settingsStore: appState.settingsStore)
-                isRestoringChatSessions = true
-                await restoreSavedChatSessions()
-                isRestoringChatSessions = false
-            }
-
-            // [최적화] 캐시 데이터가 있으면 즉시 렌더링 → 백그라운드 갱신
-            if !viewModel.followingChannels.isEmpty {
-                recomputeFiltered()
-                let isFresh = viewModel.followingCachedAt.map { Date().timeIntervalSince($0) < 300 } ?? false
-                if isFresh { return }
-                // 캐시가 오래된 경우 백그라운드에서 갱신 (스켈레톤 표시 없이)
-                guard !viewModel.isLoadingFollowing else { return }
-                await viewModel.loadFollowingChannels()
-            } else {
-                guard !viewModel.isLoadingFollowing else { return }
-                await viewModel.loadFollowingChannels()
-            }
-        }
-        .onAppear {
-            viewModel.startAutoRefresh()
-        }
-        .onDisappear {
-            viewModel.stopAutoRefresh()
-        }
-    }
-
-
-    // MARK: - Main Content (widget-style card layout)
-
-    private var mainContent: some View {
-        let effectiveShowMultiLive = showMultiLive && !isMultiLivePiPMode
-        let hasSidePanel = effectiveShowMultiLive || showMultiChat
-
-        return VStack(spacing: 0) {
-            liveHubTopBar
-
-            GeometryReader { geo in
-                let totalWidth = geo.size.width
-                let listWidth = totalWidth * FollowingViewState.followingListRatio
-
-                if !hasSidePanel {
-                    // 탐색 모드: 리스트를 메인으로
-                    activeLeftPanelContent
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+                } else if viewModel.needsCookieLogin {
+                    followingGateView(
+                        icon: "key.fill",
+                        iconColor: DesignTokens.Colors.accentOrange,
+                        title: "네이버 로그인이 필요합니다",
+                        subtitle: "라이브 목록을 보려면 '네이버 로그인'으로 다시 로그인하세요",
+                        buttonLabel: "네이버 로그인",
+                        action: { router.presentSheet(.login) }
+                    )
+                    .transition(.opacity)
+                } else if viewModel.followingChannels.isEmpty {
+                    if viewModel.isLoadingFollowing {
+                        skeletonLoadingView
+                            .transition(.opacity)
+                    } else {
+                        followingGateView(
+                            icon: "heart",
+                            iconColor: DesignTokens.Colors.accentPink,
+                            title: "라이브 채널이 없습니다",
+                            subtitle: "치지직에서 채널을 팔로우하면 여기서 확인할 수 있어요",
+                            buttonLabel: nil,
+                            action: nil
+                        )
+                        .transition(.opacity)
+                    }
                 } else {
-                    HStack(spacing: 0) {
-                        // 좌측 탐색 컬럼
-                        if showFollowingList {
-                            activeLeftPanelContent
-                                .frame(width: listWidth)
-                                .frame(maxHeight: .infinity)
-                                .compositingGroup()
-                                .background {
-                                    HStack(spacing: 0) {
-                                        LinearGradient(
-                                            colors: [.black.opacity(0.06), .clear],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                        .frame(width: 8)
-                                        Spacer(minLength: 0)
-                                        LinearGradient(
-                                            colors: [.clear, .black.opacity(0.08)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                        .frame(width: 10)
-                                    }
-                                    .allowsHitTesting(false)
-                                }
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .leading).combined(with: .opacity),
-                                    removal: .move(edge: .leading).combined(with: .opacity)
-                                ))
+                    mainContent
+                        .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+                }
+            }
+        )
 
-                            Rectangle()
-                                .fill(DesignTokens.Glass.dividerColor.opacity(0.3))
-                                .frame(width: 1)
-                                .transition(.opacity)
-                        }
+        let animatedRoot = AnyView(
+            root
+                .animation(DesignTokens.Animation.smooth, value: appState.isLoggedIn)
+                .animation(DesignTokens.Animation.smooth, value: viewModel.needsCookieLogin)
+                .animation(DesignTokens.Animation.smooth, value: viewModel.followingChannels.isEmpty)
+                .animation(DesignTokens.Animation.smooth, value: viewModel.isLoadingFollowing)
+        )
 
-                        // 중앙/우측 stage + drawer
-                        sidePanelContent(windowWidth: totalWidth)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .trailing).combined(with: .opacity),
-                                removal: .opacity
-                            ))
+        let observedRoot = AnyView(
+            animatedRoot
+                // 필터/정렬 관련 값 변경 시 1회만 recomputeFiltered() 호출되도록 통합
+                .onChange(of: sortOrder) { _, _ in resetPaginationAndRecompute() }
+                .onChange(of: filterLiveOnly) { _, _ in resetPaginationAndRecompute() }
+                .onChange(of: selectedCategory) { _, _ in resetPaginationAndRecompute() }
+                .onChange(of: searchText) { _, _ in
+                    _searchDebounceTask?.cancel()
+                    _searchDebounceTask = Task {
+                        try? await Task.sleep(for: .milliseconds(200))
+                        guard !Task.isCancelled else { return }
+                        recomputeFiltered()
                     }
                 }
+                .onChange(of: viewModel.followingChannels) { _, _ in recomputeFiltered() }
+                // 페이지 전환 시 인접 페이지 썸네일 프리페치 + 프리디코딩
+                .onChange(of: livePageIndex) { _, newPage in
+                    prefetchAdjacentLivePages(around: newPage)
+                }
+                .onChange(of: offlinePageIndex) { _, newPage in
+                    prefetchAdjacentOfflinePages(around: newPage)
+                }
+                // 멀티라이브 세션 추가 시 → 멀티채팅에도 자동 추가 (복원 중에는 스킵)
+                .onChange(of: multiLiveManager.sessions.count) { oldCount, newCount in
+                    guard newCount > oldCount else { return }
+                    guard autoSyncChatOnMultiLiveAdd else { return }
+                    guard !isRestoringChatSessions else { return }
+                    let currentSessions = Array(multiLiveManager.sessions)
+                    let existingChatIds = Set(chatSessionManager.sessions.map { $0.id })
+                    let newSessions = currentSessions.filter { !existingChatIds.contains($0.channelId) }
+                    for session in newSessions {
+                        let channelId = session.channelId
+                        Task { await addChatChannel(channelId: channelId) }
+                    }
+                    if !newSessions.isEmpty {
+                        showMultiChat = true
+                    }
+                }
+                .onChange(of: showMultiChat) { _, isOn in
+                    if isOn { ps.chatDockFocus = .multi }
+                }
+        )
+
+        return observedRoot
+            .task { await runInitialFollowingLoad() }
+            .onAppear {
+                viewModel.startAutoRefresh()
             }
-        }
-        .animation(DesignTokens.Animation.smooth, value: showFollowingList)
-        .animation(DesignTokens.Animation.smooth, value: hasSidePanel)
-        .animation(DesignTokens.Animation.smooth, value: effectiveShowMultiLive)
-        .animation(DesignTokens.Animation.smooth, value: showMultiChat)
-        .transaction { t in
-            // reduceMotion 보호 — 시스템 선호도에 따라 애니메이션 요청을 무효화
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                t.animation = nil
+            .onDisappear {
+                viewModel.stopAutoRefresh()
             }
-        }
+            // [2026-04-30] 카테고리 → 시청 탭 진입 시 pending 채널을 자동 재생
+            .task(id: router.pendingWatchChannelId) {
+                guard let channelId = router.pendingWatchChannelId else { return }
+                router.pendingWatchChannelId = nil
+                await multiLiveManager.addSession(channelId: channelId, presentationOverride: .embedded)
+                applyHubModePreset(.watch)
+            }
     }
 
-    /// 사이드 패널이 모두 닫혀있을 때 표시되는 빈 상태 뷰
-    private var followingListEmptyPanel: some View {
-        VStack(spacing: DesignTokens.Spacing.lg) {
-            // 미니 토글 버튼 (좌상단)
-            HStack {
-                followingListToggleButton
-                Spacer()
-            }
-            .padding(.horizontal, DesignTokens.Spacing.lg)
-            .padding(.top, DesignTokens.Spacing.lg)
 
-            Spacer()
+    // MARK: - Main Content (2026-04-27 Final Redesign)
+    //
+    // [Fix 2026-04-28] GeometryReader가 VStack 내부에서 부모에게 제안받은 전체 높이를
+    // 가져가 liveHubTopBar 위에 덮어씌우는 macOS SwiftUI 레이아웃 버그.
+    // 해결: redesignedWorkspace에 .padding(.top, 48)으로 공간을 확보하고
+    // liveHubTopBar를 .overlay(alignment: .top)으로 항상 최상단에 렌더링.
 
-            VStack(spacing: DesignTokens.Spacing.md) {
-                Image(systemName: "rectangle.split.2x2")
-                    .font(.system(size: 40, weight: .ultraLight))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.5))
-                Text("멀티라이브 또는 멀티채팅을 열어보세요")
-                    .font(DesignTokens.Typography.custom(size: 13, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-                Text("팔로잉 목록에서 채널을 선택할 수 있습니다")
-                    .font(DesignTokens.Typography.custom(size: 11))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.7))
-            }
-
-            Spacer()
-        }
-    }
-
-    /// 팔로잉 리스트 열기/닫기 토글 버튼 (재사용)
-    var followingListToggleButton: some View {
-        Button {
-            withAnimation(DesignTokens.Animation.smooth) {
-                showFollowingList.toggle()
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: showFollowingList ? "sidebar.left" : "sidebar.left")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                    .symbolEffect(.bounce, value: showFollowingList)
-                Text("팔로잉")
-                    .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(
-                Capsule()
-                    .fill(showFollowingList
-                        ? DesignTokens.Colors.chzzkGreen
-                        : DesignTokens.Colors.textTertiary.opacity(0.5))
-            )
-            // [GPU] shadow는 경량 고정 + opacity 변화에만 의존
-            .shadow(
-                color: showFollowingList ? DesignTokens.Colors.chzzkGreen.opacity(0.35) : .clear,
-                radius: 5, y: 1
-            )
-            .animation(DesignTokens.Animation.snappy, value: showFollowingList)
-        }
-        .buttonStyle(PressScaleButtonStyle(scale: 0.94))
-        .help(showFollowingList ? "팔로잉 목록 닫기" : "팔로잉 목록 열기")
-    }
-
-    // MARK: - 듀얼 패널 리사이즈 디바이더 [Removed 2026-04: dead code — 호출처 없음]
-
-    /// 멀티라이브 + 멀티채팅 동시 또는 단독 표시
-    /// 멀티채팅 너비는 사용자 설정(`SettingsStore.multiChat.panelWidthRatio`, 기본 25%)을 따름.
-    @ViewBuilder
-    private func sidePanelContent(windowWidth: CGFloat) -> some View {
-        let effectiveShowMultiLive = showMultiLive && !isMultiLivePiPMode
-        let ratio = min(max(appState.settingsStore.multiChat.panelWidthRatio, 0.15), 0.50)
-        let chatFixedWidth = max(windowWidth * ratio, 0)
-        if effectiveShowMultiLive && showMultiChat {
-            GeometryReader { geo in
-                let panelW = geo.size.width
-                let chatW = min(chatFixedWidth, max(panelW - 100, 0))
-                let liveW = max(panelW - chatW, 0)
-
-                HStack(spacing: 0) {
-                    multiLiveInlinePanel
-                        .frame(width: liveW)
-                        .frame(maxHeight: .infinity)
-
-                    multiChatInlinePanel
-                        .frame(width: chatW)
-                        .frame(maxHeight: .infinity)
+    private var mainContent: some View {
+        redesignedWorkspace
+            .animation(DesignTokens.Animation.smooth, value: hubMode)
+            .animation(DesignTokens.Animation.smooth, value: ps.followingSheetState)
+            .animation(DesignTokens.Animation.smooth, value: ps.chatDockFocus)
+            .transaction { t in
+                if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    t.animation = nil
                 }
             }
-        } else if effectiveShowMultiLive {
-            multiLiveInlinePanel
-        } else if showMultiChat {
+            .padding(.top, 48)
+            .overlay(alignment: .top) {
+                liveHubTopBar
+            }
+    }
+
+    @ViewBuilder
+    private var redesignedWorkspace: some View {
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let chatDockWidth = chatDockWidth(for: totalWidth)
+            let stageWidth = max(totalWidth - chatDockWidth - 1, 0)
+
+            // 시청/멀티 모드(싱글·그리드 공통)에서 팔로잉 시트 on/off 토글로 제어.
+            // 우상단 stageToolBar 의 토글 버튼이 단일 진실 공급원이며,
+            // 싱글 시청·멀티 그리드 모두에서 사용자가 토글로 시트를 표시/숨길 수 있다.
+            let shouldHideFollowingSheet = (hubMode == .watch || hubMode == .multi)
+                && !multiLiveManager.sessions.isEmpty
+                && ps.isFollowingSheetHidden
+
             HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                multiChatInlinePanel
-                    .frame(width: chatFixedWidth)
+                ZStack(alignment: .bottom) {
+                    redesignedStage
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if !shouldHideFollowingSheet {
+                        followingBottomSheet(totalWidth: stageWidth, totalHeight: geo.size.height)
+                    }
+                }
+                .frame(width: stageWidth)
+
+                Rectangle()
+                    .fill(DesignTokens.Glass.dividerColor.opacity(0.6))
+                    .frame(width: 1)
+
+                rightChatDock
+                    .frame(width: chatDockWidth)
                     .frame(maxHeight: .infinity)
             }
         }
     }
 
-    // MARK: - Multi-Live PiP Auto-Transition
-
-    /// 멀티라이브 활성 세션을 PiP로 자동 전환
-    private func startMultiLivePiP() {
-        let pip = PiPController.shared
-
-        // 이미 PiP 활성 → 모드 플래그만 동기화
-        guard !pip.isActive else {
-            isMultiLivePiPMode = true
-            return
+    /// 우측 채팅 도크 폭 — 화면 폭에 따라 280-420pt 클램프
+    private func chatDockWidth(for totalWidth: CGFloat) -> CGFloat {
+        let base: CGFloat
+        switch ps.chatDockFocus {
+        case .balanced: base = totalWidth * 0.30
+        case .single:   base = totalWidth * 0.34
+        case .multi:    base = totalWidth * 0.36
         }
-
-        guard let session = multiLiveManager.selectedSession ?? multiLiveManager.sessions.first,
-              let vlcEngine = session.playerViewModel.playerEngine as? VLCPlayerEngine
-        else { return }
-
-        pip.startPiP(vlcEngine: vlcEngine, title: session.channelName)
-
-        // PiP "메인 창 복귀" 버튼 → PiP 종료 + 인라인 복원
-        pip.onReturnToMain = { [ps] in
-            pip.stopPiP()
-            ps.isMultiLivePiPMode = false
-        }
-
-        // PiP 종료(닫기 버튼·외부 호출 등) → 인라인 복원
-        pip.onPiPStopped = { [ps] in
-            ps.isMultiLivePiPMode = false
-        }
-
-        isMultiLivePiPMode = true
+        return min(max(base, 280), 460)
     }
 
-    // MARK: - Following List Content
-
-    private var activeLeftPanelContent: some View {
-        Group {
-            if hubMode == .explore {
-                followingListContent
+    @ViewBuilder
+    private var redesignedStage: some View {
+        switch hubMode {
+        case .explore:
+            overviewStage
+        case .watch:
+            if multiLiveManager.sessions.isEmpty {
+                emptyWatchStage
             } else {
-                compactExploreListContent
+                multiLiveInlinePanel
+            }
+        case .multi:
+            if multiLiveManager.sessions.isEmpty {
+                emptyMultiStage
+            } else {
+                multiLiveInlinePanel
             }
         }
     }
 
-    private var compactExploreListContent: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
-                compactExploreHeader
-
-                ForEach(cachedLive.prefix(10), id: \.channelId) { channel in
-                    compactExploreRow(channel)
+    private var emptyWatchStage: some View {
+        VStack(spacing: DesignTokens.Spacing.md) {
+            Image(systemName: "play.tv")
+                .font(.system(size: 44, weight: .ultraLight))
+                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.55))
+            Text("아직 시청 중인 채널이 없습니다")
+                .font(DesignTokens.Typography.custom(size: 13, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+            Text("아래 팔로잉 시트에서 채널을 선택하세요")
+                .font(DesignTokens.Typography.custom(size: 11.5, weight: .regular))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+            Button {
+                withAnimation(DesignTokens.Animation.snappy) {
+                    ps.followingSheetState = .expanded
                 }
-
-                if cachedLive.isEmpty {
-                    emptySearchResult
-                }
+            } label: {
+                Label("팔로잉 시트 열기", systemImage: "rectangle.portrait.and.arrow.up")
+                    .font(DesignTokens.Typography.custom(size: 11.5, weight: .semibold))
+                    .padding(.horizontal, 14)
+                    .frame(height: 30)
+                    .background(Capsule().fill(DesignTokens.Colors.chzzkGreen.opacity(0.16)))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
             }
-            .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.top, DesignTokens.Spacing.md)
-            .padding(.bottom, DesignTokens.Spacing.lg)
+            .buttonStyle(.plain)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DesignTokens.Colors.background)
     }
 
-    private var compactExploreHeader: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-            searchBarContent
-            filterSegmentContent
-
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                Text("라이브 \(cachedLive.count)")
-                    .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-
-                Spacer(minLength: 0)
-
-                Menu {
-                    ForEach(FollowingSortOrder.allCases, id: \.self) { order in
-                        Button {
-                            withAnimation(DesignTokens.Animation.smooth) {
-                                sortOrder = order
-                                resetPaginationAndRecompute()
-                            }
-                        } label: {
-                            Label(order.rawValue, systemImage: sortOrder == order ? "checkmark" : "")
-                        }
-                    }
-                } label: {
-                    Label(sortOrder.rawValue, systemImage: "arrow.up.arrow.down")
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .padding(.horizontal, 10)
-                        .frame(height: 24)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(DesignTokens.Colors.surfaceBase)
-                        )
-                }
-                .menuStyle(.borderlessButton)
-            }
+    private var emptyMultiStage: some View {
+        VStack(spacing: DesignTokens.Spacing.md) {
+            Image(systemName: "rectangle.split.2x2")
+                .font(.system(size: 44, weight: .ultraLight))
+                .foregroundStyle(DesignTokens.Colors.textTertiary.opacity(0.55))
+            Text("멀티라이브 세션이 비어 있습니다")
+                .font(DesignTokens.Typography.custom(size: 13, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+            Text("팔로잉 시트의 Smart Queue에 채널을 담거나, 카드의 + 멀티 버튼으로 추가하세요")
+                .font(DesignTokens.Typography.custom(size: 11.5, weight: .regular))
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DesignTokens.Colors.background)
     }
 
-    private func compactExploreRow(_ channel: LiveChannelItem) -> some View {
-        Button {
-            let existingSession = multiLiveManager.sessions.first { $0.channelId == channel.channelId }
+    func performSmartQueueBatchAdd() async {
+        guard !smartQueueChannelIds.isEmpty else { return }
 
-            switch hubMode {
-            case .explore:
-                router.navigate(to: .live(channelId: channel.channelId))
+        var added = 0
+        var duplicated = 0
+        var notLive = 0
+        var skippedMax = 0
+        let queuedIds = smartQueueChannelIds
 
-            case .watch, .multi:
-                showFollowingList = true
-                showMultiLive = true
-                if hubMode == .multi {
-                    showMultiChat = true
-                }
-
-                if let existingSession {
-                    multiLiveManager.select(existingSession)
-                    return
-                }
-
-                guard multiLiveManager.canAddSession else {
-                    router.navigate(to: .live(channelId: channel.channelId))
-                    return
-                }
-
-                Task {
-                    await multiLiveManager.addSession(
-                        channelId: channel.channelId,
-                        preferredEngine: appState.settingsStore.player.preferredEngine,
-                        presentationOverride: .embedded
-                    )
-                }
+        for channelId in queuedIds {
+            if multiLiveManager.sessions.contains(where: { $0.channelId == channelId }) {
+                duplicated += 1
+                continue
             }
-        } label: {
-            HStack(spacing: DesignTokens.Spacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(DesignTokens.Colors.surfaceBase)
-                        .frame(width: 34, height: 34)
-                    Text(String(channel.channelName.prefix(1)).uppercased())
-                        .font(DesignTokens.Typography.custom(size: 12, weight: .bold))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(channel.channelName)
-                        .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        .lineLimit(1)
-
-                    Text(channel.liveTitle)
-                        .font(DesignTokens.Typography.custom(size: 10, weight: .regular))
-                        .foregroundStyle(DesignTokens.Colors.textTertiary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-
-                Text(channel.formattedViewerCount)
-                    .font(DesignTokens.Typography.custom(size: 10, weight: .medium))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                    .padding(.horizontal, 8)
-                    .frame(height: 20)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(DesignTokens.Colors.chzzkGreen.opacity(0.12))
-                    )
+            guard multiLiveManager.canAddSession else {
+                skippedMax += 1
+                continue
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(DesignTokens.Colors.surfaceElevated.opacity(0.55))
+            guard cachedLive.contains(where: { $0.channelId == channelId }) else {
+                notLive += 1
+                continue
+            }
+
+            await multiLiveManager.addSession(
+                channelId: channelId,
+                preferredEngine: appState.settingsStore.player.preferredEngine,
+                presentationOverride: .embedded
             )
+            added += 1
         }
-        .buttonStyle(PressScaleButtonStyle(scale: 0.98))
+
+        smartQueueChannelIds.removeAll()
+        if added > 0 {
+            // [2026-04-28] queue batch add 후 자동으로 멀티 모드로 전환
+            applyHubModePreset(.multi)
+            if autoSyncChatOnMultiLiveAdd {
+                showMultiChat = true
+            }
+        }
+
+        var tokens: [String] = []
+        tokens.append("추가 \(added)")
+        if duplicated > 0 { tokens.append("중복 \(duplicated)") }
+        if notLive > 0 { tokens.append("오프라인 \(notLive)") }
+        if skippedMax > 0 { tokens.append("한도초과 \(skippedMax)") }
+        smartQueueBatchResult = tokens.joined(separator: " · ")
+    }
+
+    /// [2026-04-28 P2] 추천 알고리즘으로 Smart Queue 자동 채우기.
+    /// 현재 라이브 중 후보를 점수화 (팔로잉/즐겨찾기/최근시청/카테고리/시청자 수) 후 상위 N개를 큐에 담는다.
+    /// 이미 멀티라이브 세션에 추가된 채널은 제외, 남은 슬롯 수만큼만 채운다.
+    func autoFillSmartQueue() {
+        let alreadyAdded = Set(multiLiveManager.sessions.map(\.channelId))
+        let remainingSlots = max(0, multiLiveManager.effectiveMaxSessions - multiLiveManager.sessions.count)
+        guard remainingSlots > 0 else {
+            smartQueueBatchResult = "세션 한도 초과 — 큐를 채울 수 없습니다"
+            return
+        }
+
+        // 최근 시청 카테고리 추론 — recentChannelIds → cachedLive에서 카테고리 매핑
+        let recentCategoriesArr = ps.recentChannelIds.compactMap { id -> String? in
+            cachedLive.first(where: { $0.channelId == id })?.categoryName
+        }
+        let inputs = HomeRecommendationEngine.Inputs(
+            candidates: cachedLive,
+            followingChannelIds: Set(cachedLive.map(\.channelId)),
+            favoriteChannelIds: ps.favoriteChannelIds,
+            recentChannelIds: Set(ps.recentChannelIds),
+            recentCategories: Set(recentCategoriesArr),
+            alreadyWatchingChannelIds: alreadyAdded
+        )
+        let scored = HomeRecommendationEngine.score(inputs, limit: remainingSlots)
+        let picked = scored.map(\.channel.channelId)
+
+        // 기존 큐 + 추천 결과 (중복 제거, 순서 유지)
+        var merged = smartQueueChannelIds
+        for id in picked where !merged.contains(id) {
+            merged.append(id)
+            if merged.count >= remainingSlots { break }
+        }
+        smartQueueChannelIds = merged
+
+        if picked.isEmpty {
+            smartQueueBatchResult = "추천할 라이브 채널이 없습니다"
+        } else {
+            smartQueueBatchResult = "추천 \(picked.count)개를 큐에 담았습니다"
+        }
     }
 
     private var followingListContent: some View {

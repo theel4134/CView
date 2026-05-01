@@ -167,11 +167,12 @@ struct MergedChatView: View {
                         exitReplayMode()
                     }
                 } else {
-                    // 하단 이탈 시 debounce 후 진입 — 배치 flush(100ms)에 의한 일시적 geometry 변경 걸러냄
+                    // 하단 이탈 시 debounce 후 진입 — 배치 flush(100ms) 및 멀티세션 스크롤 정착 시간 커버
+                    // [Auto-scroll fix] 400ms debounce: suppress(150ms) + 스크롤 정착(250ms) 통합 커버
                     guard !isReplayMode, mergedMessages.count > 3 else { return }
                     guard replayDebounceTask == nil else { return }
                     replayDebounceTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        try? await Task.sleep(nanoseconds: 400_000_000)
                         guard !Task.isCancelled, !self.isReplayMode else { return }
                         self.enterReplayMode()
                         self.replayDebounceTask = nil
@@ -385,6 +386,8 @@ struct MergedChatView: View {
                 }
                 // ID가 다르면 새 메시지가 들어오면서 eviction 발생한 것.
                 // 기존 merged에서 이 세션의 메시지를 제거 후 전체 재수집.
+                // [Auto-scroll fix] 대량 content 교체 → suppress 연장으로 geometry oscillation 방지
+                scrollSuppressUntil = max(scrollSuppressUntil, Date().addingTimeInterval(0.15))
                 mergedMessages.removeAll { $0.sessionIndex == index }
                 scanStart = 0
             } else {
@@ -446,8 +449,9 @@ struct MergedChatView: View {
             mergedMessages.append(contentsOf: newItems)
         }
 
-        // 300개 초과 시 앞에서 제거
+        // 300개 초과 시 앞에서 제거 — content 수축 발생, suppress 연장으로 오탐 방지
         if mergedMessages.count > 300 {
+            scrollSuppressUntil = max(scrollSuppressUntil, Date().addingTimeInterval(0.15))
             mergedMessages.removeFirst(mergedMessages.count - 300)
         }
 
@@ -521,12 +525,16 @@ struct MergedChatView: View {
     /// contentSize/containerSize 변동 후 앵커 손실이 종종 발생하므로
     /// 명시적 `proxy.scrollTo(bottomAnchorID)` 로 하단 고정을 보장한다.
     /// `scrollSuppressUntil` 은 geometry oscillation 으로 인한 replay mode 오진입 차단용.
+    /// [Auto-scroll fix] suppress 150ms (멀티세션 고빈도 flush 환경 커버),
+    /// withAnimation(nil) 으로 즉시 스크롤 → 중간 geometry 상태 제거.
     private func stickyScroll(proxy: ScrollViewProxy) {
         guard !mergedMessages.isEmpty else { return }
         replayDebounceTask?.cancel()
         replayDebounceTask = nil
-        scrollSuppressUntil = max(scrollSuppressUntil, Date().addingTimeInterval(0.08))
-        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+        scrollSuppressUntil = max(scrollSuppressUntil, Date().addingTimeInterval(0.15))
+        withAnimation(nil) {
+            proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+        }
     }
 
     /// 사용자 요청 시 최하단 스크롤 — 부드러운 애니메이션으로 이동

@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="960" viewBox="0 0 1440 960" role="img" aria-labelledby="title desc">
+  <title id="title">CView Home Final Lightweight Design</title>
+  <desc id="desc">A lightweight CView home layout with command bar, status chips, featured live, up next queue, compact insight dock, and condensed rails.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#141a22"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b222c"/>
+      <stop offset="1" stop-color="#141a22"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#26313f"/>
+      <stop offset="0.55" stop-color="#1d2631"/>
+      <stop offset="1" stop-color="#15251e"/>
+    </linearGradient>
+    <filter id="softShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#000000" flood-opacity="0.22"/>
+    </filter>
+    <style>
+      .screen { fill: url(#bg); }
+      .sidebar { fill: #111720; }
+      .panel { fill: url(#panel); stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .panelFlat { fill: #151c25; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+      .muted { fill: #8d99a8; font: 500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .tiny { fill: #7f8b99; font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label { fill: #dce5ee; font: 700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { fill: #eef5f2; font: 800 34px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .accent { fill: #00ffa3; }
+      .live { fill: #ff4655; }
+      .chip { fill: #1a232d; stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .line { stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+      .railCard { fill: #18202a; stroke: rgba(255,255,255,0.07); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect class="screen" width="1440" height="960" rx="34"/>
+
+  <rect class="sidebar" x="28" y="28" width="238" height="904" rx="24"/>
+  <circle cx="64" cy="62" r="7" fill="#ff5f57"/>
+  <circle cx="88" cy="62" r="7" fill="#febc2e"/>
+  <circle cx="112" cy="62" r="7" fill="#28c840"/>
+  <text x="60" y="128" class="label">CView</text>
+  <rect x="52" y="184" width="190" height="42" rx="12" fill="#1c2732"/>
+  <circle cx="75" cy="205" r="7" class="accent"/>
+  <text x="96" y="211" class="muted">Home</text>
+  <text x="60" y="270" class="tiny">Live</text>
+  <text x="60" y="318" class="tiny">Search</text>
+  <text x="60" y="366" class="tiny">Recent</text>
+  <text x="60" y="414" class="tiny">Metrics</text>
+
+  <g transform="translate(302 38)">
+    <rect x="0" y="0" width="1100" height="884" rx="28" fill="#0f151d" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+
+    <g filter="url(#softShadow)">
+      <rect x="28" y="28" width="1044" height="86" rx="20" class="panel"/>
+    </g>
+    <text x="58" y="78" class="title">Light Command Home</text>
+    <rect x="430" y="46" width="356" height="46" rx="16" fill="#101821" stroke="rgba(255,255,255,0.1)"/>
+    <text x="456" y="76" class="muted">Search channel, live, clip</text>
+    <rect x="804" y="46" width="98" height="46" rx="15" fill="#00ffa3" opacity="0.92"/>
+    <text x="830" y="76" fill="#07120d" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="800">Multi</text>
+    <rect x="918" y="46" width="54" height="46" rx="15" class="chip"/>
+    <text x="936" y="76" class="muted">↻</text>
+    <rect x="984" y="46" width="54" height="46" rx="15" class="chip"/>
+    <text x="1000" y="76" class="muted">⚙</text>
+
+    <g transform="translate(28 134)">
+      <rect x="0" y="0" width="1044" height="54" rx="18" class="panelFlat"/>
+      <rect x="22" y="14" width="148" height="26" rx="13" class="chip"/>
+      <circle cx="42" cy="27" r="6" class="accent"/>
+      <text x="58" y="33" class="tiny">Login ready</text>
+      <rect x="184" y="14" width="154" height="26" rx="13" class="chip"/>
+      <circle cx="204" cy="27" r="6" class="accent"/>
+      <text x="220" y="33" class="tiny">Cookie normal</text>
+      <rect x="352" y="14" width="166" height="26" rx="13" class="chip"/>
+      <circle cx="372" cy="27" r="6" class="accent"/>
+      <text x="388" y="33" class="tiny">Cache warm</text>
+      <rect x="532" y="14" width="178" height="26" rx="13" class="chip"/>
+      <circle cx="552" cy="27" r="6" fill="#7f8b99"/>
+      <text x="568" y="33" class="tiny">Updated 1m ago</text>
+    </g>
+
+    <g transform="translate(28 210)">
+      <rect x="0" y="0" width="512" height="294" rx="24" fill="url(#hero)" stroke="rgba(255,255,255,0.1)"/>
+      <rect x="26" y="24" width="460" height="194" rx="18" fill="#202b38"/>
+      <rect x="46" y="42" width="92" height="28" rx="14" fill="#ff4655"/>
+      <text x="72" y="62" fill="white" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="15" font-weight="800">LIVE</text>
+      <text x="28" y="250" class="label">Featured live for now</text>
+      <text x="28" y="276" class="tiny">Play first, add to MultiLive second</text>
+      <rect x="338" y="236" width="64" height="38" rx="13" fill="#ff4655"/>
+      <text x="361" y="261" fill="white" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="900">▶</text>
+      <rect x="414" y="236" width="72" height="38" rx="13" fill="#00ffa3" opacity="0.18" stroke="#00ffa3" stroke-opacity="0.35"/>
+      <text x="443" y="261" fill="#00ffa3" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" font-weight="900">+</text>
+    </g>
+
+    <g transform="translate(560 210)">
+      <rect x="0" y="0" width="248" height="294" rx="20" class="panelFlat"/>
+      <text x="22" y="34" class="label">Up Next</text>
+      <rect x="22" y="56" width="204" height="32" rx="12" class="chip"/>
+      <text x="42" y="78" class="tiny">Following · Favorites · Recent</text>
+      <g transform="translate(22 108)">
+        <rect x="0" y="0" width="204" height="38" rx="12" class="railCard"/>
+        <circle cx="22" cy="19" r="12" fill="#26313f"/>
+        <text x="44" y="25" class="tiny">Channel row</text>
+        <circle cx="164" cy="19" r="13" fill="#ff4655"/>
+        <circle cx="190" cy="19" r="13" fill="#00ffa3" opacity="0.16"/>
+      </g>
+      <g transform="translate(22 158)">
+        <rect x="0" y="0" width="204" height="38" rx="12" class="railCard"/>
+        <circle cx="22" cy="19" r="12" fill="#26313f"/>
+        <text x="44" y="25" class="tiny">Favorite live</text>
+        <circle cx="164" cy="19" r="13" fill="#ff4655"/>
+        <circle cx="190" cy="19" r="13" fill="#00ffa3" opacity="0.16"/>
+      </g>
+      <g transform="translate(22 208)">
+        <rect x="0" y="0" width="204" height="38" rx="12" class="railCard"/>
+        <circle cx="22" cy="19" r="12" fill="#26313f"/>
+        <text x="44" y="25" class="tiny">Recent live</text>
+        <circle cx="164" cy="19" r="13" fill="#ff4655"/>
+        <circle cx="190" cy="19" r="13" fill="#00ffa3" opacity="0.16"/>
+      </g>
+    </g>
+
+    <g transform="translate(828 210)">
+      <rect x="0" y="0" width="244" height="294" rx="20" class="panelFlat"/>
+      <text x="20" y="34" class="label">Insight Dock</text>
+      <text x="20" y="60" class="tiny">summary only, no WebView</text>
+      <line x1="20" y1="82" x2="224" y2="82" class="line"/>
+      <text x="20" y="122" class="tiny">P95 latency</text>
+      <text x="170" y="122" fill="#dce5ee" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="800">742ms</text>
+      <text x="20" y="160" class="tiny">Buffer warnings</text>
+      <text x="194" y="160" fill="#dce5ee" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="800">0</text>
+      <text x="20" y="198" class="tiny">VLC samples</text>
+      <text x="174" y="198" fill="#dce5ee" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="800">12k</text>
+      <rect x="20" y="230" width="204" height="42" rx="14" fill="#00ffa3" opacity="0.9"/>
+      <text x="58" y="256" fill="#07120d" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="900">Open Superset</text>
+    </g>
+
+    <g transform="translate(28 526)">
+      <text x="0" y="24" class="label">Active MultiLive</text>
+      <rect x="0" y="44" width="1044" height="68" rx="18" class="panelFlat"/>
+      <rect x="24" y="63" width="142" height="30" rx="15" class="chip"/>
+      <text x="46" y="84" class="tiny">2 watching</text>
+      <rect x="184" y="63" width="176" height="30" rx="15" class="chip"/>
+      <text x="206" y="84" class="tiny">Restore session</text>
+      <rect x="378" y="63" width="126" height="30" rx="15" class="chip"/>
+      <text x="400" y="84" class="tiny">View all</text>
+    </g>
+
+    <g transform="translate(28 672)">
+      <text x="0" y="24" class="label">Discover</text>
+      <rect x="0" y="44" width="246" height="126" rx="18" class="railCard"/>
+      <rect x="266" y="44" width="246" height="126" rx="18" class="railCard"/>
+      <rect x="532" y="44" width="246" height="126" rx="18" class="railCard"/>
+      <rect x="798" y="44" width="246" height="126" rx="18" class="railCard"/>
+      <text x="24" y="98" class="tiny">static thumbnail · once</text>
+      <text x="290" y="98" class="tiny">compact media card</text>
+      <text x="556" y="98" class="tiny">category filtered</text>
+      <text x="822" y="98" class="tiny">top channel</text>
+    </g>
+
+    <g transform="translate(28 858)">
+      <rect x="0" y="0" width="1044" height="1" class="line"/>
+      <text x="0" y="34" class="tiny">Default home rule: content first, analytics collapsed, heavy work delayed after transition.</text>
+    </g>
+  </g>
+</svg>

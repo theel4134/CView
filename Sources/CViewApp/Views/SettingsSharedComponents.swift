@@ -64,7 +64,7 @@ struct SettingsSection<Content: View>: View {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.md, style: .continuous)
                     .strokeBorder(DesignTokens.Glass.borderColor, lineWidth: 0.5)
             }
-            .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+            .shadow(DesignTokens.Shadow.sm)
         }
     }
 }

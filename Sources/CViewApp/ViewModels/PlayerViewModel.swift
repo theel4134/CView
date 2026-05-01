@@ -96,6 +96,12 @@ public final class PlayerViewModel {
     /// 안티플리커: 마지막으로 .playing 전환된 시각 (쿨다운 기준)
     /// playing 진입 후 일정 시간 동안은 버퍼링 전환을 억제하여 깜빡임 방지
     var _lastPlayingTime: Date?
+    /// [Buffering Phase 1 / 2026-04-30] 통합 버퍼링 이벤트 추적용 — 동작 변화 없음, 로깅만.
+    /// `.buffering` 전환 시 새 UUID 발급하고 시작 시각/원인을 기록한다.
+    /// `.playing` 복귀 시 종료 로그 + duration 계산.
+    var _bufferingEventId: UUID?
+    var _bufferingStartedAt: Date?
+    var _bufferingCause: String?
     /// [Freeze Fix] drawable 재바인딩 Task 추적
     var _refreshDrawableTask: Task<Void, Never>?
     let logger = AppLogger.player
@@ -122,6 +128,9 @@ public final class PlayerViewModel {
 
     public var preferredEngineType: PlayerEngineType = .avPlayer
     public private(set) var currentEngineType: PlayerEngineType = .avPlayer
+
+    /// 현재 스트림 프록시 모드 rawValue (startStream 시 playerSettings 에서 반영)
+    public private(set) var currentProxyMode: String = StreamProxyMode.localProxy.rawValue
 
     // MARK: - VLC 고급 설정 (Observable 상태)
 
@@ -202,12 +211,29 @@ public final class PlayerViewModel {
         guard let vlc = playerEngine as? VLCPlayerEngine else { return }
         if let callback = callback {
             let coordinator = self.streamCoordinator
-            vlc.onVLCMetrics = { [weak coordinator] metrics in
+            // [Buffering Phase 1 / 2026-04-30] ABR sample duration 을 실제 statsTimer 주기로
+            //   보정 (고정 2.0s → multiLive 15s / 그 외 10s).
+            //   EWMA 가중치가 duration에 비례하므로, 실제 측정 주기로 넣어야
+            //   과민 한 다운시프트를 피한다.
+            vlc.onVLCMetrics = { [weak self, weak coordinator, weak vlc] metrics in
                 callback(metrics)
+                // [Stats fix / 2026-04-30] bufferUpdate 이벤트가 별도 경로로 발행되지 않아
+                //   PVM.bufferHealth 가 영구 nil 이던 문제 — VLC 메트릭 도착 시 직접 갱신.
+                Task { @MainActor in
+                    self?.bufferHealth = BufferHealth(
+                        currentLevel: metrics.bufferHealth,
+                        targetLevel: 1.0,
+                        isHealthy: metrics.bufferHealth >= 0.7,
+                        confidence: metrics.bufferHealthConfidence,
+                        isMeasurable: metrics.bufferHealthConfidence >= 0.5
+                    )
+                }
                 if metrics.networkBytesPerSec > 0 {
-                    let bytes = Int(metrics.networkBytesPerSec * 2)
-                    let bh = metrics.bufferHealth
-                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0, bufferHealth: bh) }
+                    let intervalSec: TimeInterval = (vlc?.streamingProfile == .multiLive) ? 15.0 : 10.0
+                    let bytes = Int(Double(metrics.networkBytesPerSec) * intervalSec)
+                    // [Phase 2.2] confidence < 0.5 면 bufferHealth 측정 불가 — ABR 갱신 보류
+                    let bh: Double? = metrics.bufferHealthConfidence >= 0.5 ? metrics.bufferHealth : nil
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: intervalSec, bufferHealth: bh) }
                 }
             }
         } else {
@@ -295,14 +321,24 @@ public final class PlayerViewModel {
         guard let vlc = playerEngine as? VLCPlayerEngine else { return }
         if enabled {
             let coordinator = self.streamCoordinator
-            vlc.onVLCMetrics = { [weak self, weak coordinator] metrics in
+            vlc.onVLCMetrics = { [weak self, weak coordinator, weak vlc] metrics in
                 Task { @MainActor in
                     self?.latestMetrics = metrics
+                    // [Stats fix / 2026-04-30] PVM.bufferHealth 직접 갱신 (위 setVLCMetricsCallback 동일).
+                    self?.bufferHealth = BufferHealth(
+                        currentLevel: metrics.bufferHealth,
+                        targetLevel: 1.0,
+                        isHealthy: metrics.bufferHealth >= 0.7,
+                        confidence: metrics.bufferHealthConfidence,
+                        isMeasurable: metrics.bufferHealthConfidence >= 0.5
+                    )
                 }
                 if metrics.networkBytesPerSec > 0 {
-                    let bytes = Int(metrics.networkBytesPerSec * 2)
-                    let bh = metrics.bufferHealth
-                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: 2.0, bufferHealth: bh) }
+                    let intervalSec: TimeInterval = (vlc?.streamingProfile == .multiLive) ? 15.0 : 10.0
+                    let bytes = Int(Double(metrics.networkBytesPerSec) * intervalSec)
+                    // [Phase 2.2] confidence < 0.5 면 bufferHealth 측정 불가 — ABR 갱신 보류
+                    let bh: Double? = metrics.bufferHealthConfidence >= 0.5 ? metrics.bufferHealth : nil
+                    Task { await coordinator?.recordBandwidthSample(bytesLoaded: bytes, duration: intervalSec, bufferHealth: bh) }
                 }
             }
         } else {
@@ -551,23 +587,17 @@ public final class PlayerViewModel {
         self.currentChannelId = channelId
 
         let lowLatencyConfig: LowLatencyController.Configuration = playerSettings.map { Self.lowLatencyConfig(from: $0) } ?? .webSync
-        // [Quality Lock] 레이턴시 동기화(lowLatencyMode/catchupRate>1.0) 활성 시
-        // forceHighestQuality 가 꺼져 있어도 1080p60/8Mbps 화질 잠금을 자동 강제.
-        // — sync 가속 중 ABR 강등으로 화질이 떨어지는 회귀 차단.
-        // [P0-2 2026-04-24] 멀티라이브에서는 sync 활성만으로 forceMax 자동 잠금하지 않는다.
-        //   이유: 모든 세션을 1080p로 묶으면 대역폭 코디네이터/비선택 절약 정책이 무력화되어
-        //   디코딩/프록시/GPU 병목으로 잦은 버퍼링이 발생함. 사용자가 명시적으로
-        //   forceHighestQuality 를 켠 경우에만 잠금. 단일 라이브는 기존 거동 유지.
+        // [Buffering Phase 1 / 2026-04-30] 자동 forceHighestQuality 강제 제거.
+        //   기존 거동: 단일 라이브에서 lowLatencyMode || catchupRate>1.0 이면 사용자가
+        //     forceHighestQuality 를 끄더라도 자동 ON → ABR 강등 경로를 모두 우회 →
+        //     CPU/GPU/네트워크 병목 누적으로 오히려 잦은 버퍼링을 유발했다.
+        //   변경: 단일/멀티 모두 사용자 명시 설정(forceHighestQuality)만 따른다.
+        //   레이턴시 동기화는 LowLatencyController(catchup PID) 가 단독으로 담당하고,
+        //   화질 잠금과는 분리한다.
         let userForceMax = playerSettings?.forceHighestQuality ?? true
-        let syncActive = (playerSettings?.lowLatencyMode ?? true) || ((playerSettings?.catchupRate ?? 1.0) > 1.0)
-        let requestedForceMax = isMultiLive ? userForceMax : (userForceMax || syncActive)
-        // [Quality 2026-04-18] 멀티라이브 + AVPlayer 조합도 forceMax 허용.
-        //   이전에는 1080p variant URL 고정이 ABR 우회로 첫 프레임 정지 회귀를 유발한다는
-        //   우려로 차단했으나, AVPlayerEngine 의 isQualityLocked(8Mbps/1080p ceiling) +
-        //   HQ recovery watchdog 가 회복 경로를 보장하므로 차단을 해제하여 비선택→선택
-        //   전환 시에도 1080p 변종이 즉시 선택되도록 한다.
-        let forceMax = requestedForceMax
+        let forceMax = userForceMax
         let proxyMode = playerSettings?.streamProxyMode ?? .localProxy
+        currentProxyMode = proxyMode.rawValue
         // [Code Review 2026-04-24] 장문 한 줄 → 파라미터별 줄바꿈으로 가독성 개선
         let config = StreamCoordinator.Configuration(
             channelId: channelId,
@@ -823,8 +853,19 @@ public final class PlayerViewModel {
     }
 
     public var formattedLatency: String {
-        guard let info = latencyInfo else { return "-" }
-        return String(format: "%.1f초", info.current)
+        if let info = latencyInfo {
+            return String(format: "%.1f초", info.current)
+        }
+        // [Stats fix / 2026-04-30] LowLatencyController 의 첫 sync(≈수 초) 또는 PDT 안정화
+        //   이전에는 latencyInfo 가 nil — VLC 버퍼 길이(duration-currentTime) 로 폴백 표시.
+        if let engine = playerEngine, engine.isPlaying {
+            let d = engine.duration, c = engine.currentTime
+            let lat = d - c
+            if d > 0, c > 0, lat > 0, lat < 60 {
+                return String(format: "%.1f초", lat)
+            }
+        }
+        return "-"
     }
 
     public var formattedPlaybackRate: String {

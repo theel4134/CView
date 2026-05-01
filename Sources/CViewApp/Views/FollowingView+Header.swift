@@ -6,46 +6,137 @@ import CViewCore
 
 extension FollowingView {
 
-    // MARK: - Live Hub Top Bar (최종안)
+    // MARK: - Live Hub Top Bar (2026-04-27 Final Redesign)
+    //
+    // 도큐먼트 지침: 상단에는 `탐색 / 시청 / 멀티` 3개 모드 버튼만 둔다.
+    // 검색·팔로잉 도구·필터는 모두 하단 Bottom Sheet로 이동.
+    // Quality/Tools/Inspector 등은 Command Palette 또는 stage popover로 격리.
 
     var liveHubTopBar: some View {
         HStack(spacing: DesignTokens.Spacing.md) {
-            Text("Live Hub")
-                .font(DesignTokens.Typography.custom(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            // 좌측 브랜드
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.horizontal.circle.fill")
+                    .font(DesignTokens.Typography.custom(size: 14, weight: .bold))
+                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
+                Text("Live")
+                    .font(DesignTokens.Typography.custom(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+            }
+            .frame(width: 70, alignment: .leading)
 
-            hubInfoPill(text: hubStageSummaryText, tint: DesignTokens.Colors.textSecondary)
-
-            Spacer(minLength: 0)
-
+            // 중앙 모드 세그먼트 (탐색 / 시청 / 멀티)
             hubModeSegment
 
             Spacer(minLength: 0)
 
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                if let selected = multiLiveManager.selectedSession ?? multiLiveManager.sessions.first {
-                    hubInfoPill(text: selected.channelName, tint: DesignTokens.Colors.textSecondary)
+            // 우측: 라이브 카운트 + 명령 + 새로고침
+            HStack(spacing: 8) {
+                if viewModel.followingLiveCount > 0 {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(DesignTokens.Colors.live)
+                            .frame(width: 6, height: 6)
+                        Text("LIVE \(viewModel.followingLiveCount)")
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 24)
+                    .background(Capsule().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
                 }
-                hubInfoPill(text: "멀티 \(multiLiveManager.sessions.count)/\(multiLiveManager.effectiveMaxSessions)", tint: DesignTokens.Colors.chzzkGreen)
-                hubInfoPill(text: hubDrawerSummaryText, tint: DesignTokens.Colors.accentOrange)
+
+                Button {
+                    appState.showCommandPalette = true
+                } label: {
+                    topBarToken(text: "Command", icon: "command")
+                }
+                .buttonStyle(.plain)
+                .help("Command Palette (⌘K)")
+
+                // [2026-04-28] 테마 토글 — Light/Dark/System 순환 (디자인 사료 §2 Theme Mode)
+                themeCycleButton
+
                 Button {
                     guard !viewModel.isLoadingFollowing else { return }
                     Task { await viewModel.loadFollowingChannels(invalidateThumbnails: true) }
                 } label: {
-                    hubInfoPill(text: "새로고침", tint: DesignTokens.Colors.textSecondary)
+                    Image(systemName: "arrow.clockwise")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+                        .overlay(Circle().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+                        .rotationEffect(.degrees(viewModel.isLoadingFollowing ? refreshRotation : 0))
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isLoadingFollowing)
+                .help("새로고침")
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.lg)
-        .padding(.vertical, DesignTokens.Spacing.sm)
-        .background(DesignTokens.Colors.background)
+        .frame(height: 48)
+        .background(
+            ZStack {
+                DesignTokens.Colors.surfaceBase
+                LinearGradient(
+                    colors: [
+                        DesignTokens.Colors.chzzkGreen.opacity(0.08),
+                        .clear,
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            }
+        )
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(DesignTokens.Glass.dividerColor.opacity(0.45))
+                .fill(DesignTokens.Colors.border)
                 .frame(height: 1)
         }
+    }
+
+    private func topBarToken(text: String, icon: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+            Text(text)
+                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(DesignTokens.Colors.textSecondary)
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(Capsule().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+        .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+    }
+
+    // MARK: - Theme Cycle Button (2026-04-28)
+    //
+    // 디자인 사료 §2 Theme Mode: Light / Dark / System 3가지를 toolbar 우측에 노출.
+    // 클릭 시 System → Light → Dark → System 순으로 순환 전환한다.
+    private var themeCycleButton: some View {
+        let theme = appState.settingsStore.appearance.theme
+        return Button {
+            let next: AppTheme = {
+                switch theme {
+                case .system: return .light
+                case .light: return .dark
+                case .dark: return .system
+                }
+            }()
+            appState.settingsStore.appearance.theme = next
+            Task { await appState.settingsStore.save() }
+        } label: {
+            Image(systemName: theme.icon)
+                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+                .overlay(Circle().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+        }
+        .buttonStyle(.plain)
+        .help("테마: \(theme.displayName) (클릭하여 전환)")
     }
 
     private var hubModeSegment: some View {
@@ -54,96 +145,59 @@ extension FollowingView {
                 Button {
                     applyHubModePreset(mode)
                 } label: {
-                    Text(mode.rawValue)
-                        .font(DesignTokens.Typography.custom(size: 11, weight: hubMode == mode ? .bold : .medium))
-                        .foregroundStyle(hubMode == mode ? DesignTokens.Colors.textPrimary : DesignTokens.Colors.textTertiary)
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .frame(height: 24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(hubMode == mode ? DesignTokens.Colors.chzzkGreen : DesignTokens.Colors.surfaceBase)
-                                .opacity(hubMode == mode ? 1 : 0.9)
-                        )
+                    HStack(spacing: 5) {
+                        Image(systemName: mode.icon)
+                            .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                        Text(mode.rawValue)
+                            .font(DesignTokens.Typography.custom(size: 12, weight: hubMode == mode ? .bold : .medium))
+                    }
+                    .foregroundStyle(hubMode == mode ? .white : DesignTokens.Colors.textSecondary)
+                    .padding(.horizontal, 14)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(hubMode == mode
+                                  ? AnyShapeStyle(DesignTokens.Colors.chzzkGreen)
+                                  : AnyShapeStyle(Color.clear))
+                    )
                 }
                 .buttonStyle(PressScaleButtonStyle(scale: 0.96))
             }
         }
-        .padding(4)
+        .padding(3)
         .background(
             Capsule(style: .continuous)
-                .fill(DesignTokens.Colors.surfaceElevated.opacity(0.45))
+                .fill(DesignTokens.Colors.surfaceBase.opacity(0.85))
         )
         .overlay(
             Capsule(style: .continuous)
-                .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.35), lineWidth: 0.5)
+                .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6)
         )
     }
 
-    private func hubInfoPill(text: String, tint: Color) -> some View {
-        Text(text)
-            .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(DesignTokens.Colors.surfaceBase)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.35), lineWidth: 0.5)
-            )
-    }
-
-    private func applyHubModePreset(_ mode: FollowingHubMode) {
+    func applyHubModePreset(_ mode: FollowingHubMode) {
         withAnimation(DesignTokens.Animation.snappy) {
-            hubMode = mode
-
-            switch mode {
-            case .explore:
-                showFollowingList = true
-                showMultiLive = false
-                showMultiChat = false
-                filterLiveOnly = false
-                sortOrder = .liveFirst
-                // 탐색 모드는 중앙 stage를 비워두므로 다음 시청 복귀 시 기본 단일 모드로 준비.
-                multiLiveManager.isGridLayout = false
-            case .watch:
-                showFollowingList = true
-                showMultiLive = true
-                showMultiChat = false
-                filterLiveOnly = true
-                sortOrder = .liveFirst
-                // 시청 모드는 단일 stage 중심.
-                multiLiveManager.isGridLayout = false
-            case .multi:
-                showFollowingList = true
-                showMultiLive = true
-                showMultiChat = true
-                filterLiveOnly = true
-                sortOrder = .viewers
-                // 멀티 모드는 grid stage 중심.
-                multiLiveManager.isGridLayout = true
-            }
+            ps.applyHubModePreset(mode, multiLiveManager: multiLiveManager)
         }
     }
 
     private var hubStageSummaryText: String {
         switch hubMode {
-        case .explore: return "탐색 중심"
-        case .watch: return "단일 시청"
-        case .multi: return "멀티 시청"
+        case .explore: return "탐색"
+        case .watch: return "시청"
+        case .multi: return "멀티"
         }
     }
 
-    private var hubDrawerSummaryText: String {
-        var states: [String] = []
-        if showMultiLive { states.append("라이브") }
-        if showMultiChat { states.append("채팅") }
-        if states.isEmpty { return "드로어 닫힘" }
-        return "드로어 " + states.joined(separator: "+")
+    private var hubModeDetailText: String {
+        switch hubMode {
+        case .explore: return "목록 탐색 + 필터"
+        case .watch: return "현재 채널 빠른 전환"
+        case .multi: return "세션 조합 + 채팅 동시"
+        }
     }
+
+    // [Removed 2026-04-28] hubDrawerSummaryText — 사용처 없음 (레거시 Inspector 문구)
 
     // MARK: - Header Section (모던 리디자인)
 

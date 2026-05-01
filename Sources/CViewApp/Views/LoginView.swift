@@ -70,7 +70,7 @@ struct LoginView: View {
                             .font(DesignTokens.Typography.custom(size: 15, weight: .black))
                             .foregroundStyle(DesignTokens.Colors.onPrimary)
                     }
-                    .shadow(color: Color.accentColor.opacity(0.35), radius: 5, y: 2)
+                    .shadow(DesignTokens.Shadow.sm)
                     
                     Text("CView 로그인")
                         .font(.system(size: 15, weight: .semibold))

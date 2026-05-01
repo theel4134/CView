@@ -45,16 +45,17 @@ extension PlayerViewModel {
             // 정상 재생 중에도 버퍼링 스피너가 계속 표시된다.
             if phase == .buffering && streamPhase == .playing {
                 // 이미 재생 중이면 디바운스 적용 (VLC _handleVLCPhase와 동일 로직)
-                // [Fix 16h-opt3] 안티플리커: 5→3초, 디바운스: 3→2초
+                // [Buffering Phase 1 / 2026-04-30] 안티플리커: 3.0s→1.5s, 디바운스: 2.0s→1.0s
                 if let lastPlaying = _lastPlayingTime,
-                   Date().timeIntervalSince(lastPlaying) < 3.0 {
+                   Date().timeIntervalSince(lastPlaying) < 1.5 {
                     // 쿨다운 중 — 무시
                 } else {
                     // [Fix] 항상 기존 Task cancel 후 재할당 — 비원자적 nil 체크 race 제거
                     _bufferingDebounceTask?.cancel()
                     _bufferingDebounceTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
                         guard !Task.isCancelled, let self else { return }
+                        self._beginBufferingEvent(cause: "coordinator.phaseChanged")
                         self.streamPhase = .buffering
                         self._bufferingDebounceTask = nil
                     }
@@ -64,6 +65,7 @@ extension PlayerViewModel {
                 _bufferingDebounceTask?.cancel()
                 _bufferingDebounceTask = nil
                 _lastPlayingTime = Date()
+                _endBufferingEvent()
                 streamPhase = phase
             } else {
                 streamPhase = phase
@@ -102,9 +104,11 @@ extension PlayerViewModel {
         case .streamEnded:
             _bufferingDebounceTask?.cancel()
             _bufferingDebounceTask = nil
+            _endBufferingEvent()
             streamPhase = .streamEnded
 
         case .stopped:
+            _endBufferingEvent()
             streamPhase = .idle
         }
     }
@@ -139,6 +143,7 @@ extension PlayerViewModel {
             _bufferingDebounceTask = nil
             let wasAlreadyPlaying = (_lastPlayingTime != nil)
             _lastPlayingTime = Date()
+            _endBufferingEvent()
             streamPhase = .playing
             errorMessage = nil
             onPlaybackStateChanged?()
@@ -170,22 +175,26 @@ extension PlayerViewModel {
             // 해결 2: 안티플리커 쿨다운 — 재생 시작 후 5초 이내 버퍼링은 무시.
             //         VLC가 재생 초반에 버퍼를 정리하는 과정에서 발생하는 순간 버퍼링 방지.
             if streamPhase == .playing {
-                // 안티플리커: 재생 시작 후 3초 이내면 버퍼링 전환 억제
+                // 안티플리커: 재생 시작 후 1.5초 이내면 버퍼링 전환 억제
                 if let lastPlaying = _lastPlayingTime,
-                   Date().timeIntervalSince(lastPlaying) < 3.0 {
+                   Date().timeIntervalSince(lastPlaying) < 1.5 {
                     break
                 }
                 // [Fix] 항상 기존 Task cancel 후 재할당 — 비원자적 nil 체크 race 제거
                 _bufferingDebounceTask?.cancel()
                 _bufferingDebounceTask = Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 2_000_000_000) // [Fix 16h-opt3] 3→2초
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // [Buffering Phase 1] 2→1.0s
                     guard !Task.isCancelled, let self else { return }
+                    self._beginBufferingEvent(cause: "vlc.buffering")
                     self.streamPhase = .buffering
                     self._bufferingDebounceTask = nil
                 }
             } else {
                 // 아직 재생 전이면 (connecting, idle 등) 즉시 반영
-                if streamPhase != .buffering { streamPhase = .buffering }
+                if streamPhase != .buffering {
+                    _beginBufferingEvent(cause: "vlc.buffering.startup")
+                    streamPhase = .buffering
+                }
             }
         case .paused:
             streamPhase = .paused
@@ -194,6 +203,36 @@ extension PlayerViewModel {
         case .idle:
             break
         }
+    }
+
+    // MARK: - 통합 버퍼링 이벤트 로깅 (Phase 1 / 2026-04-30)
+
+    /// 새 버퍼링 이벤트 시작 — 동일 이벤트가 진행 중이면 갱신하지 않음.
+    /// `streamPhase = .buffering` 직전에 호출한다.
+    @MainActor
+    func _beginBufferingEvent(cause: String) {
+        guard _bufferingEventId == nil else { return }
+        let id = UUID()
+        _bufferingEventId = id
+        _bufferingStartedAt = Date()
+        _bufferingCause = cause
+        let chId = currentChannelId ?? "-"
+        let engine = currentEngineType.rawValue
+        let multi = isMultiLive ? "multi" : "single"
+        logger.info("buffering.begin id=\(id.uuidString.prefix(8), privacy: .public) ch=\(chId, privacy: .public) engine=\(engine, privacy: .public) ctx=\(multi, privacy: .public) cause=\(cause, privacy: .public)")
+    }
+
+    /// 진행 중인 버퍼링 이벤트 종료. `streamPhase`가 .playing 으로 복귀할 때 호출.
+    @MainActor
+    func _endBufferingEvent() {
+        guard let id = _bufferingEventId, let started = _bufferingStartedAt else { return }
+        let durMs = Int(Date().timeIntervalSince(started) * 1000)
+        let cause = _bufferingCause ?? "-"
+        let chId = currentChannelId ?? "-"
+        logger.info("buffering.end   id=\(id.uuidString.prefix(8), privacy: .public) ch=\(chId, privacy: .public) duration_ms=\(durMs, privacy: .public) cause=\(cause, privacy: .public)")
+        _bufferingEventId = nil
+        _bufferingStartedAt = nil
+        _bufferingCause = nil
     }
 
     // MARK: - VLC → AVPlayer 자동 폴백 (No-Proxy 모드)

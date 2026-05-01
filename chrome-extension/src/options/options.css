@@ -1,0 +1,48 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: #0f172a; color: #e5e7eb;
+  margin: 0; padding: 20px; font-size: 13px;
+}
+main { max-width: 720px; margin: 0 auto; }
+h1 { color: #818cf8; font-size: 20px; margin: 0; }
+.version { color: #64748b; margin: 4px 0 20px; }
+.card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+  padding: 16px; margin-bottom: 16px;
+}
+.card h2 {
+  font-size: 11px; color: #94a3b8; text-transform: uppercase;
+  letter-spacing: 0.05em; margin: 0 0 10px 0;
+}
+label {
+  display: block; margin-bottom: 8px; color: #cbd5e1;
+}
+input[type=text], input[type=url], input[type=password], input[type=number] {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px; margin-top: 4px;
+  background: #0f172a; color: #e5e7eb;
+  border: 1px solid #475569; border-radius: 4px;
+  font-family: inherit; font-size: 13px;
+}
+input:focus { outline: none; border-color: #818cf8; }
+.hint { color: #64748b; font-size: 11px; margin: 4px 0 0; }
+.checkbox { display: flex; align-items: center; gap: 8px; }
+.actions {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+}
+button {
+  background: #334155; color: #e5e7eb;
+  border: 1px solid #475569; border-radius: 4px;
+  padding: 8px 14px; cursor: pointer; font-size: 13px;
+}
+button:hover { background: #475569; }
+button.primary { background: #4f46e5; border-color: #4f46e5; }
+button.primary:hover { background: #6366f1; }
+button.danger { background: #7f1d1d; border-color: #b91c1c; }
+button.danger:hover { background: #991b1b; }
+.status { margin-left: 8px; color: #34d399; font-size: 12px; }
+pre {
+  background: #0f172a; border: 1px solid #334155; border-radius: 4px;
+  padding: 10px; color: #cbd5e1; font-size: 11px;
+  overflow: auto; max-height: 320px;
+}

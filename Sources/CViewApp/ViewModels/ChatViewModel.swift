@@ -213,6 +213,15 @@ public final class ChatViewModel {
                     await engine.setBackgroundMode(enabled)
                 }
             }
+            // 백그라운드 → 포그라운드 전환 시: 기존 3초 타이머를 즉시 취소하고
+            // 포그라운드 간격(33ms)으로 재스케줄. 미취소 시 최대 3초간 메시지 출력 지연 발생.
+            if !enabled {
+                batchFlushTask?.cancel()
+                batchFlushTask = nil
+                if !pendingMessages.isEmpty {
+                    scheduleBatchFlush()
+                }
+            }
         }
     }
     /// [Fix 24E] 백그라운드 모드에서의 배치 flush 간격 (3초 — 기존 1초에서 완화)

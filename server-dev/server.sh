@@ -314,6 +314,11 @@ cmd_edit() {
 }
 
 # Superset 연동 자동화 (views + datasets + dashboards + verify)
+# DEPRECATED (2026-04-29): cv.dododo.app 의 분석 대시보드는 Grafana로 전환되었다.
+#   - 새 진입점: https://cv.dododo.app/ (Grafana, dashboards: cview-overview / cview-system /
+#     cview-app-player / cview-vlc-quality)
+#   - 본 명령은 Superset 스택이 완전히 제거될 때까지 (1~2주 안정화 기간) 호환용으로만 남는다.
+#   - 신규 view/dashboard 작업은 grafana/dashboards/*.json 및 scripts/sql/*.sql 로 진행한다.
 cmd_superset_sync() {
     local base_url="${1:-https://cv.dododo.app:9443}"
     local superset_user="${SUPERSET_USER:-admin}"
@@ -321,6 +326,8 @@ cmd_superset_sync() {
     local db_name="${SUPERSET_DB_NAME:-ChzzkMetricsDB}"
 
     header "Superset 연동: 메트릭 뷰/데이터셋/대시보드 동기화"
+    warn "DEPRECATED: Superset → Grafana 전환 완료 (2026-04-29). 1~2주 안정화 후 본 명령은 제거된다."
+    warn "분석 대시보드 신규 작업은 grafana/dashboards/*.json 및 scripts/sql/views_vlc_metrics_2026_04_29.sql 등을 사용하라."
     info "BASE=$base_url, DB=$db_name, USER=$superset_user"
 
     info "1) PostgreSQL view 적용 (superset_views_poc.sql + views_app_metrics.sql)..."

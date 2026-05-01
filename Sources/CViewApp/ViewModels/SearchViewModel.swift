@@ -1,11 +1,56 @@
 // MARK: - SearchViewModel.swift
 // CViewApp - 검색 뷰모델
-// 4-tab 검색 (채널/라이브/비디오/클립) + debounce + 페이지네이션 + 전체 탭 동시 검색
+// 5-scope 검색 (전체/채널/라이브/비디오/클립) + debounce + 페이지네이션 + stale guard
+// [Redesign 2026-04-29] Search Command Hub: SearchScope 도입, bucketErrors, activeSearchId
 
 import Foundation
 import SwiftUI
 import CViewCore
 import CViewNetworking
+
+// MARK: - SearchScope
+
+/// 검색 메뉴 UI scope. `all`은 통합 결과(Top Results)이며, 나머지는 `SearchType`과 1:1 매핑된다.
+public enum SearchScope: String, CaseIterable, Identifiable, Sendable {
+    case all
+    case channel
+    case live
+    case video
+    case clip
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .all: "전체"
+        case .channel: "채널"
+        case .live: "라이브"
+        case .video: "비디오"
+        case .clip: "클립"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .all: "square.grid.2x2"
+        case .channel: "person.2"
+        case .live: "play.tv"
+        case .video: "film"
+        case .clip: "film.stack"
+        }
+    }
+
+    /// `SearchType`과 매핑. `.all`은 nil.
+    public var searchType: SearchType? {
+        switch self {
+        case .all: nil
+        case .channel: .channel
+        case .live: .live
+        case .video: .video
+        case .clip: .clip
+        }
+    }
+}
 
 @Observable
 @MainActor
@@ -16,7 +61,13 @@ public final class SearchViewModel {
     public var query: String = "" {
         didSet { scheduleSearch() }
     }
-    public var selectedTab: SearchType = .channel
+    /// [Redesign 2026-04-29] 기본 scope는 `전체`(통합 결과).
+    public var selectedScope: SearchScope = .all
+    /// 하위 호환: 기존 `selectedTab` API. `.all`이면 `.channel`로 변환된다.
+    public var selectedTab: SearchType {
+        get { selectedScope.searchType ?? .channel }
+        set { selectedScope = SearchScope(rawValue: newValue.rawValue) ?? .channel }
+    }
     
     // Results
     public var channelResults: [ChannelInfo] = []
@@ -33,7 +84,10 @@ public final class SearchViewModel {
     public var hasMoreLives = true
     public var hasMoreVideos = true
     public var hasMoreClips = true
+    /// 전체 검색 단위 오류 (네트워크 등). bucket 단위 오류는 `bucketErrors`에 저장.
     public var errorMessage: String?
+    /// bucket(SearchType)별 오류 메시지. 일부 bucket만 실패해도 다른 bucket 결과는 유지된다.
+    public var bucketErrors: [SearchType: String] = [:]
 
     // 최근 검색어
     public var recentSearches: [String] = []
@@ -86,9 +140,10 @@ public final class SearchViewModel {
         return Array(suggestions.prefix(8))
     }
 
-    /// 현재 선택된 탭의 로딩 상태
+    /// 현재 선택된 scope의 로딩 상태. `.all`은 모든 bucket이 로딩 중인지를 의미한다.
     public var isSearching: Bool {
-        switch selectedTab {
+        switch selectedScope {
+        case .all: isSearchingChannels || isSearchingLives || isSearchingVideos || isSearchingClips
         case .channel: isSearchingChannels
         case .live: isSearchingLives
         case .video: isSearchingVideos
@@ -100,6 +155,9 @@ public final class SearchViewModel {
     
     private let apiClient: ChzzkAPIClient
     private var searchTask: Task<Void, Never>?
+    /// stale 결과 방지용 토큰. `performSearch`/`clearResults`에서 갱신되며,
+    /// fetch 콜백은 시작 시점의 토큰과 비교해 다르면 결과를 버린다.
+    private var activeSearchId: UUID = UUID()
     private var channelOffset = 0
     private var liveOffset = 0
     private var videoOffset = 0
@@ -140,7 +198,12 @@ public final class SearchViewModel {
 
         saveRecentSearch(trimmed)
         errorMessage = nil
-        
+        bucketErrors = [:]
+
+        // stale guard: 새 토큰으로 갱신 → 이후 도착하는 이전 검색 응답은 무시
+        let token = UUID()
+        activeSearchId = token
+
         // 오프셋 리셋
         channelOffset = 0
         liveOffset = 0
@@ -157,46 +220,57 @@ public final class SearchViewModel {
         
         // 모든 탭 동시 검색
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.fetchChannels(keyword: trimmed, reset: false) }
-            group.addTask { await self.fetchLives(keyword: trimmed, reset: false) }
-            group.addTask { await self.fetchVideos(keyword: trimmed, reset: false) }
-            group.addTask { await self.fetchClips(keyword: trimmed, reset: false) }
+            group.addTask { await self.fetchChannels(keyword: trimmed, reset: false, token: token) }
+            group.addTask { await self.fetchLives(keyword: trimmed, reset: false, token: token) }
+            group.addTask { await self.fetchVideos(keyword: trimmed, reset: false, token: token) }
+            group.addTask { await self.fetchClips(keyword: trimmed, reset: false, token: token) }
         }
     }
     
-    /// 탭 변경 시 해당 탭 결과 없으면 검색
-    public func onTabChanged(_ tab: SearchType) async {
-        selectedTab = tab
+    /// scope 변경 시 해당 bucket 결과가 비어 있으면 검색
+    public func onScopeChanged(_ scope: SearchScope) async {
+        selectedScope = scope
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        
-        switch tab {
+        let token = activeSearchId
+        switch scope {
+        case .all:
+            break
         case .channel where channelResults.isEmpty && !isSearchingChannels:
-            await fetchChannels(keyword: trimmed, reset: true)
+            await fetchChannels(keyword: trimmed, reset: true, token: token)
         case .live where liveResults.isEmpty && !isSearchingLives:
-            await fetchLives(keyword: trimmed, reset: true)
+            await fetchLives(keyword: trimmed, reset: true, token: token)
         case .video where videoResults.isEmpty && !isSearchingVideos:
-            await fetchVideos(keyword: trimmed, reset: true)
+            await fetchVideos(keyword: trimmed, reset: true, token: token)
         case .clip where clipResults.isEmpty && !isSearchingClips:
-            await fetchClips(keyword: trimmed, reset: true)
+            await fetchClips(keyword: trimmed, reset: true, token: token)
         default:
             break
         }
+    }
+
+    /// 하위 호환: 기존 `onTabChanged(_ tab:)` API
+    public func onTabChanged(_ tab: SearchType) async {
+        let scope = SearchScope(rawValue: tab.rawValue) ?? .channel
+        await onScopeChanged(scope)
     }
     
     /// 더 불러오기
     public func loadMore() async {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        switch selectedTab {
+        let token = activeSearchId
+        switch selectedScope {
+        case .all:
+            break
         case .channel where hasMoreChannels && !isSearchingChannels:
-            await fetchChannels(keyword: trimmed, reset: false)
+            await fetchChannels(keyword: trimmed, reset: false, token: token)
         case .live where hasMoreLives && !isSearchingLives:
-            await fetchLives(keyword: trimmed, reset: false)
+            await fetchLives(keyword: trimmed, reset: false, token: token)
         case .video where hasMoreVideos && !isSearchingVideos:
-            await fetchVideos(keyword: trimmed, reset: false)
+            await fetchVideos(keyword: trimmed, reset: false, token: token)
         case .clip where hasMoreClips && !isSearchingClips:
-            await fetchClips(keyword: trimmed, reset: false)
+            await fetchClips(keyword: trimmed, reset: false, token: token)
         default:
             break
         }
@@ -204,14 +278,17 @@ public final class SearchViewModel {
     
     // MARK: - Private Fetch Helpers
     
-    private func fetchChannels(keyword: String, reset: Bool) async {
+    private func fetchChannels(keyword: String, reset: Bool, token: UUID) async {
         if reset {
             channelOffset = 0
             hasMoreChannels = true
         }
         isSearchingChannels = true
+        bucketErrors[.channel] = nil
         do {
             let result = try await apiClient.searchChannels(keyword: keyword, offset: channelOffset, size: pageSize)
+            // stale guard
+            guard token == activeSearchId else { return }
             if channelOffset == 0 {
                 channelResults = result.data
             } else {
@@ -220,19 +297,24 @@ public final class SearchViewModel {
             channelOffset += result.data.count
             hasMoreChannels = result.data.count >= pageSize
         } catch {
+            guard token == activeSearchId else { return }
             logger.error("채널 검색 실패: \(error.localizedDescription)")
+            bucketErrors[.channel] = error.localizedDescription
         }
+        guard token == activeSearchId else { return }
         isSearchingChannels = false
     }
     
-    private func fetchLives(keyword: String, reset: Bool) async {
+    private func fetchLives(keyword: String, reset: Bool, token: UUID) async {
         if reset {
             liveOffset = 0
             hasMoreLives = true
         }
         isSearchingLives = true
+        bucketErrors[.live] = nil
         do {
             let result = try await apiClient.searchLives(keyword: keyword, offset: liveOffset, size: pageSize)
+            guard token == activeSearchId else { return }
             if liveOffset == 0 {
                 liveResults = result.data
             } else {
@@ -242,19 +324,24 @@ public final class SearchViewModel {
             liveOffset += result.data.count
             hasMoreLives = result.data.count >= pageSize
         } catch {
+            guard token == activeSearchId else { return }
             logger.error("라이브 검색 실패: \(error.localizedDescription)")
+            bucketErrors[.live] = error.localizedDescription
         }
+        guard token == activeSearchId else { return }
         isSearchingLives = false
     }
     
-    private func fetchVideos(keyword: String, reset: Bool) async {
+    private func fetchVideos(keyword: String, reset: Bool, token: UUID) async {
         if reset {
             videoOffset = 0
             hasMoreVideos = true
         }
         isSearchingVideos = true
+        bucketErrors[.video] = nil
         do {
             let result = try await apiClient.searchVideos(keyword: keyword, offset: videoOffset, size: pageSize)
+            guard token == activeSearchId else { return }
             if videoOffset == 0 {
                 videoResults = result.data
             } else {
@@ -263,23 +350,28 @@ public final class SearchViewModel {
             videoOffset += result.data.count
             hasMoreVideos = result.data.count >= pageSize
         } catch {
+            guard token == activeSearchId else { return }
             logger.error("비디오 검색 실패: \(error.localizedDescription)")
+            bucketErrors[.video] = error.localizedDescription
         }
+        guard token == activeSearchId else { return }
         isSearchingVideos = false
     }
     
     /// 클립: 채널 검색 후 해당 채널들의 클립을 병렬로 가져온다 (Chzzk에 클립 전용 검색 API 없음)
-    private func fetchClips(keyword: String, reset: Bool) async {
+    private func fetchClips(keyword: String, reset: Bool, token: UUID) async {
         if reset {
             clipPage = 0
             hasMoreClips = true
         }
         isSearchingClips = true
+        bucketErrors[.clip] = nil
         do {
             // 채널 결과가 없으면 먼저 채널 검색
             let channels: [ChannelInfo]
             if channelResults.isEmpty {
                 let channelResult = try await apiClient.searchChannels(keyword: keyword, offset: 0, size: 5)
+                guard token == activeSearchId else { return }
                 channels = channelResult.data
                 if clipPage == 0 && channelResults.isEmpty {
                     channelResults = channelResult.data
@@ -291,6 +383,7 @@ public final class SearchViewModel {
             }
             
             guard !channels.isEmpty else {
+                guard token == activeSearchId else { return }
                 hasMoreClips = false
                 isSearchingClips = false
                 return
@@ -315,6 +408,7 @@ public final class SearchViewModel {
                 }
                 return results
             }
+            guard token == activeSearchId else { return }
             
             // 키워드로 로컬 필터링 (제목 매칭)
             let keywordLower = keyword.lowercased()
@@ -329,12 +423,17 @@ public final class SearchViewModel {
             clipPage += 1
             hasMoreClips = !allClips.isEmpty
         } catch {
+            guard token == activeSearchId else { return }
             logger.error("클립 검색 실패: \(error.localizedDescription)")
+            bucketErrors[.clip] = error.localizedDescription
         }
+        guard token == activeSearchId else { return }
         isSearchingClips = false
     }
     
     private func clearResults() {
+        // stale guard: 진행 중인 검색 결과 무시
+        activeSearchId = UUID()
         channelResults = []
         liveResults = []
         videoResults = []
@@ -348,6 +447,7 @@ public final class SearchViewModel {
         hasMoreVideos = true
         hasMoreClips = true
         errorMessage = nil
+        bucketErrors = [:]
     }
 
     // MARK: - Live Sort

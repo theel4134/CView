@@ -80,7 +80,7 @@ struct PlayerProgressSection: View {
                 LiveBadge()
                 Spacer()
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, DesignTokens.Spacing.xxl)
             .padding(.bottom, DesignTokens.Spacing.sm)
         } else if duration > 0 {
             // VOD seekable progress bar
@@ -175,7 +175,7 @@ struct PlayerProgressSection: View {
                         .foregroundStyle(DesignTokens.Colors.textOnDarkMediaMuted)
                 }
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, DesignTokens.Spacing.xxl)
             .padding(.bottom, DesignTokens.Spacing.xs)
         }
     }
@@ -443,8 +443,8 @@ struct PlayerControlsBar: View {
         .padding(.vertical, 10)
         // [Design Unify 2026-04-18] 재생바 배경/테두리/그림자 제거 — 아이콘만 표시.
         // 비디오 위 가독성은 PlayerButton 내부의 아이콘 자체 그림자로 확보.
-        .padding(.horizontal, 32)
-        .padding(.bottom, 16)
+        .padding(.horizontal, DesignTokens.Spacing.xxl)
+        .padding(.bottom, DesignTokens.Spacing.lg)
     }
 
     private var volumeIcon: String {

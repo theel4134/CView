@@ -501,7 +501,7 @@ struct MLProcessInstanceCard: View {
                             lineWidth: 0.5
                         )
                 )
-                .shadow(color: .black.opacity(isHovered ? 0.20 : 0.10), radius: isHovered ? 8 : 4, y: isHovered ? 6 : 3)
+                .shadow(isHovered ? DesignTokens.Shadow.cardHover : DesignTokens.Shadow.card)
         )
         .onHover { isHovered = $0 }
         .animation(DesignTokens.Animation.fast, value: isHovered)

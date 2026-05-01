@@ -203,12 +203,17 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
     public var serverURL: String
     public var forwardInterval: TimeInterval
     public var pingInterval: TimeInterval
+    /// 서버에서 발급받은 App Secret (인증 키).
+    /// 빈 값이면 `Bundle.main.METRICS_APP_SECRET` (빌드 주입값) 또는 dev fallback이 사용된다.
+    /// 설정에서 직접 입력 시 영속 저장되어 메트릭 인증과 Chrome 확장 안내 모두에 사용된다.
+    public var appSecret: String
 
     enum CodingKeys: String, CodingKey {
         case metricsEnabled
         case serverURL
         case forwardInterval
         case pingInterval
+        case appSecret
     }
 
     public static func clampForwardInterval(_ value: TimeInterval) -> TimeInterval {
@@ -242,12 +247,14 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
         metricsEnabled: Bool = false,
         serverURL: String = MetricsSettings.defaultServerURL,
         forwardInterval: TimeInterval = 5.0,
-        pingInterval: TimeInterval = 30.0
+        pingInterval: TimeInterval = 30.0,
+        appSecret: String = ""
     ) {
         self.metricsEnabled = metricsEnabled
         self.serverURL = Self.normalizeServerURL(serverURL)
         self.forwardInterval = Self.clampForwardInterval(forwardInterval)
         self.pingInterval = Self.clampPingInterval(pingInterval)
+        self.appSecret = appSecret.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public init(from decoder: Decoder) throws {
@@ -257,11 +264,13 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
         let serverURL = try container.decodeIfPresent(String.self, forKey: .serverURL) ?? Self.defaultServerURL
         let forwardInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .forwardInterval) ?? 5.0
         let pingInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .pingInterval) ?? 30.0
+        let appSecret = try container.decodeIfPresent(String.self, forKey: .appSecret) ?? ""
 
         self.metricsEnabled = metricsEnabled
         self.serverURL = Self.normalizeServerURL(serverURL)
         self.forwardInterval = Self.clampForwardInterval(forwardInterval)
         self.pingInterval = Self.clampPingInterval(pingInterval)
+        self.appSecret = appSecret.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func normalized() -> Self {
@@ -269,7 +278,8 @@ public struct MetricsSettings: Codable, Sendable, Equatable {
             metricsEnabled: metricsEnabled,
             serverURL: serverURL,
             forwardInterval: forwardInterval,
-            pingInterval: pingInterval
+            pingInterval: pingInterval,
+            appSecret: appSecret
         )
     }
 

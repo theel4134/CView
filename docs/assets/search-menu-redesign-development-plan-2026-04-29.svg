@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1480" viewBox="0 0 1320 1480" role="img" aria-labelledby="title desc">
+  <title id="title">CView Search Menu Redesign Candidates</title>
+  <desc id="desc">Three proposed search menu redesign concepts for CView macOS app.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f5f7f8; }
+      .panel { fill: #ffffff; stroke: #d9e0e5; stroke-width: 1; }
+      .soft { fill: #f8fafb; stroke: #e1e7eb; stroke-width: 1; }
+      .rail { fill: #edf2f3; stroke: #d8e1e4; stroke-width: 1; }
+      .dark { fill: #172126; }
+      .ink { fill: #172126; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .muted { fill: #6b777d; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .tiny { font-size: 13px; }
+      .micro { font-size: 11px; }
+      .label { font-size: 15px; font-weight: 650; }
+      .title { font-size: 24px; font-weight: 750; }
+      .section { font-size: 18px; font-weight: 720; }
+      .accentGreen { fill: #20c997; }
+      .accentBlue { fill: #2f7cf6; }
+      .accentOrange { fill: #ff9f43; }
+      .accentRed { fill: #ef476f; }
+      .accentTeal { fill: #00a6a6; }
+      .accentPurple { fill: #7c5cff; }
+      .greenSoft { fill: #dff8ef; stroke: #9ee8cf; stroke-width: 1; }
+      .blueSoft { fill: #e7f0ff; stroke: #aac8ff; stroke-width: 1; }
+      .orangeSoft { fill: #fff1df; stroke: #ffd39a; stroke-width: 1; }
+      .redSoft { fill: #ffe8ee; stroke: #ffb3c6; stroke-width: 1; }
+      .tealSoft { fill: #def7f4; stroke: #9de7df; stroke-width: 1; }
+      .purpleSoft { fill: #eeeaff; stroke: #c6bbff; stroke-width: 1; }
+      .line { stroke: #d9e0e5; stroke-width: 1; }
+      .shadow { filter: drop-shadow(0 10px 22px rgba(27, 39, 45, 0.08)); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1320" height="1480"/>
+  <text class="ink title" x="56" y="58">CView Search Menu Redesign Candidates</text>
+  <text class="muted tiny" x="56" y="84">Current shell preserved. Search is redesigned around top results, watch actions, and global entry.</text>
+
+  <!-- Option A -->
+  <g transform="translate(56 120)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option A. Search Command Hub</text>
+    <text class="muted tiny" x="26" y="62">Recommended baseline: unified results, scoped tabs, and a right inspector with quick actions.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="56" rx="14"/>
+    <circle class="accentGreen" cx="54" cy="116" r="7"/>
+    <text class="muted tiny" x="74" y="121">Search channels, live streams, VOD, and related clips</text>
+    <rect class="greenSoft" x="784" y="102" width="82" height="28" rx="14"/>
+    <text class="muted micro" x="808" y="120">All</text>
+    <rect class="blueSoft" x="878" y="102" width="82" height="28" rx="14"/>
+    <text class="muted micro" x="900" y="120">Live</text>
+    <rect class="orangeSoft" x="972" y="102" width="88" height="28" rx="14"/>
+    <text class="muted micro" x="992" y="120">Sort</text>
+
+    <rect class="soft" x="26" y="168" width="710" height="178" rx="14"/>
+    <text class="ink label" x="50" y="198">Top Results</text>
+    <line class="line" x1="50" y1="214" x2="712" y2="214"/>
+    <rect class="greenSoft" x="50" y="232" width="198" height="42" rx="10"/>
+    <circle class="accentGreen" cx="72" cy="253" r="6"/>
+    <text class="ink tiny" x="92" y="258">Live now · 12.4k</text>
+    <rect class="blueSoft" x="266" y="232" width="198" height="42" rx="10"/>
+    <circle class="accentBlue" cx="288" cy="253" r="6"/>
+    <text class="ink tiny" x="308" y="258">Channel match</text>
+    <rect class="orangeSoft" x="482" y="232" width="198" height="42" rx="10"/>
+    <circle class="accentOrange" cx="504" cy="253" r="6"/>
+    <text class="ink tiny" x="524" y="258">Recent VOD</text>
+    <rect class="tealSoft" x="50" y="290" width="198" height="32" rx="10"/>
+    <text class="muted micro" x="76" y="311">Related clips</text>
+    <rect class="purpleSoft" x="266" y="290" width="198" height="32" rx="10"/>
+    <text class="muted micro" x="292" y="311">Following match</text>
+    <rect class="soft" x="482" y="290" width="198" height="32" rx="10"/>
+    <text class="muted micro" x="508" y="311">More results</text>
+
+    <rect class="rail" x="760" y="168" width="416" height="178" rx="14"/>
+    <text class="ink label" x="784" y="198">Inspector</text>
+    <text class="muted tiny" x="784" y="228">Selected result details and next actions</text>
+    <rect class="greenSoft" x="784" y="250" width="86" height="26" rx="13"/>
+    <text class="muted micro" x="806" y="267">Watch</text>
+    <rect class="blueSoft" x="882" y="250" width="94" height="26" rx="13"/>
+    <text class="muted micro" x="902" y="267">+ Multi</text>
+    <rect class="purpleSoft" x="988" y="250" width="88" height="26" rx="13"/>
+    <text class="muted micro" x="1006" y="267">+ Chat</text>
+    <rect class="orangeSoft" x="784" y="292" width="140" height="26" rx="13"/>
+    <text class="muted micro" x="806" y="309">Channel detail</text>
+    <rect class="soft" x="936" y="292" width="106" height="26" rx="13"/>
+    <text class="muted micro" x="958" y="309">Copy link</text>
+  </g>
+
+  <!-- Option B -->
+  <g transform="translate(56 550)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option B. Watch-First Split Explorer</text>
+    <text class="muted tiny" x="26" y="62">Live-first search: filter rail, watch results, and a queue dock for multi-live and multi-chat.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="48" rx="12"/>
+    <circle class="accentBlue" cx="52" cy="112" r="7"/>
+    <text class="muted tiny" x="72" y="117">Search · following only · live only · category · viewer sort</text>
+
+    <rect class="rail" x="26" y="158" width="208" height="188" rx="12"/>
+    <text class="muted micro" x="48" y="186">FILTERS</text>
+    <rect class="greenSoft" x="48" y="202" width="132" height="28" rx="8"/>
+    <text class="ink tiny" x="68" y="221">Live only</text>
+    <text class="muted tiny" x="52" y="258">Following</text>
+    <text class="muted tiny" x="52" y="290">Category</text>
+    <text class="muted tiny" x="52" y="322">Recent VOD</text>
+
+    <rect class="soft" x="258" y="158" width="602" height="188" rx="12"/>
+    <text class="ink label" x="282" y="188">Watch Results</text>
+    <line class="line" x1="282" y1="206" x2="832" y2="206"/>
+    <rect class="dark" x="282" y="224" width="142" height="80" rx="10"/>
+    <rect class="greenSoft" x="296" y="238" width="50" height="18" rx="9"/>
+    <text class="muted micro" x="306" y="251">LIVE</text>
+    <text class="muted tiny" x="444" y="244">Top live result</text>
+    <text class="ink label" x="444" y="270">Watch, add to multi, add chat</text>
+    <rect class="greenSoft" x="444" y="288" width="72" height="24" rx="12"/>
+    <text class="muted micro" x="464" y="304">Watch</text>
+    <rect class="blueSoft" x="528" y="288" width="80" height="24" rx="12"/>
+    <text class="muted micro" x="548" y="304">+ Multi</text>
+    <rect class="purpleSoft" x="620" y="288" width="76" height="24" rx="12"/>
+    <text class="muted micro" x="640" y="304">+ Chat</text>
+
+    <rect class="rail" x="884" y="158" width="292" height="188" rx="12"/>
+    <text class="ink label" x="908" y="188">Queue Dock</text>
+    <text class="muted tiny" x="908" y="220">Up next: 3 channels</text>
+    <rect class="blueSoft" x="908" y="244" width="112" height="24" rx="12"/>
+    <text class="muted micro" x="930" y="260">MultiLive</text>
+    <rect class="purpleSoft" x="1032" y="244" width="112" height="24" rx="12"/>
+    <text class="muted micro" x="1054" y="260">MultiChat</text>
+    <text class="muted tiny" x="908" y="306">Duplicate and failure states shown inline.</text>
+  </g>
+
+  <!-- Option C -->
+  <g transform="translate(56 980)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option C. Global Spotlight Search</text>
+    <text class="muted tiny" x="26" y="62">Overlay entry: combine command search, recent/following suggestions, and top content results.</text>
+
+    <rect class="dark" x="318" y="86" width="572" height="260" rx="18"/>
+    <rect x="342" y="110" width="524" height="44" rx="12" fill="#243139" stroke="#40505a"/>
+    <circle class="accentGreen" cx="364" cy="132" r="6"/>
+    <text x="384" y="137" fill="#b8c2c7" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="13">Command + content search</text>
+    <rect x="342" y="176" width="524" height="34" rx="9" fill="#1f2b32"/>
+    <text x="364" y="198" fill="#f8fafb" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="13">Commands</text>
+    <text x="790" y="198" fill="#9ba8ae" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="11">⌘K</text>
+    <rect x="342" y="218" width="524" height="34" rx="9" fill="#20372f"/>
+    <text x="364" y="240" fill="#f8fafb" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="13">Live now</text>
+    <text x="770" y="240" fill="#20c997" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="11">Enter</text>
+    <rect x="342" y="260" width="524" height="34" rx="9" fill="#1f2b32"/>
+    <text x="364" y="282" fill="#f8fafb" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="13">Channels and recent searches</text>
+    <rect x="342" y="302" width="236" height="26" rx="13" fill="#e7f0ff" opacity="0.95"/>
+    <text x="366" y="319" fill="#172126" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="11">Open full search results</text>
+
+    <rect class="soft" x="26" y="148" width="238" height="138" rx="14"/>
+    <text class="ink label" x="50" y="178">Entry Points</text>
+    <text class="muted tiny" x="50" y="210">Command Palette</text>
+    <text class="muted tiny" x="50" y="238">Home search button</text>
+    <text class="muted tiny" x="50" y="266">Slash / Cmd+F</text>
+
+    <rect class="soft" x="944" y="148" width="232" height="138" rx="14"/>
+    <text class="ink label" x="968" y="178">Guardrails</text>
+    <text class="muted tiny" x="968" y="210">Local first</text>
+    <text class="muted tiny" x="968" y="238">Remote after debounce</text>
+    <text class="muted tiny" x="968" y="266">Full results in menu</text>
+  </g>
+
+  <text class="muted micro" x="56" y="1418">Recommendation: ship Option A as the base, fold Option B actions into the Live scope, and use Option C as a fast global entry.</text>
+</svg>

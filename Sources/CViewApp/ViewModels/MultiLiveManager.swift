@@ -95,6 +95,8 @@ public final class MultiLiveManager {
     private weak var settingsStore: SettingsStore?
     /// 멀티라이브 자식 프로세스 launcher (프로세스 격리 모드에서 사용)
     private weak var processLauncher: MultiLiveProcessLauncher?
+    /// 멀티채팅 세션 매니저 — 멀티라이브 세션 종료 시 동일 채널의 채팅 세션도 자동 종료
+    private weak var chatSessionManager: MultiChatSessionManager?
     private let logger = AppLogger.player
 
     /// 메트릭 전송 포워더 (AppState에서 주입)
@@ -130,7 +132,8 @@ public final class MultiLiveManager {
         userUid: String? = nil,
         userNickname: String? = nil,
         metricsForwarder: MetricsForwarder? = nil,
-        processLauncher: MultiLiveProcessLauncher? = nil
+        processLauncher: MultiLiveProcessLauncher? = nil,
+        chatSessionManager: MultiChatSessionManager? = nil
     ) {
         self.apiClient = apiClient
         self.settingsStore = settingsStore
@@ -138,6 +141,7 @@ public final class MultiLiveManager {
         self.userNickname = userNickname
         self.metricsForwarder = metricsForwarder
         self.processLauncher = processLauncher
+        self.chatSessionManager = chatSessionManager
     }
 
     /// 캐시된 기본 이모티콘 업데이트 (프리로드 완료 후 호출)
@@ -515,6 +519,12 @@ public final class MultiLiveManager {
         // 제거된 세션이 선택 세션이었다면 폴레터 세션으로 attach 강등
         // (이미 detach 된 세션은 idempotent 하므로 안전).
         Task { await self.applyPDTFocusToSelected() }
+        // 동일 채널의 멀티채팅 세션도 함께 종료 (있으면)
+        let closedChannelId = session.channelId
+        if let manager = chatSessionManager,
+           manager.sessions.contains(where: { $0.id == closedChannelId }) {
+            Task { await manager.removeSession(channelId: closedChannelId) }
+        }
         logger.info("MultiLive: 세션 제거 — \(session.channelName)")
     }
 

@@ -1,0 +1,165 @@
+<svg width="1440" height="930" viewBox="0 0 1440 930" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .title { font: 800 34px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #eef7f1; }
+    .subtitle { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #91a4b2; }
+    .panel-title { font: 800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f4f7fa; }
+    .panel-subtitle { font: 600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #92a4b3; }
+    .label { font: 700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #dbe7ee; }
+    .small { font: 600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #91a4b2; }
+    .tiny { font: 600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #778996; }
+    .dark { fill: #0b1117; }
+    .surface { fill: #111a23; }
+    .surface2 { fill: #172330; }
+    .stroke { stroke: #263746; stroke-width: 1; }
+    .divider { stroke: #324555; stroke-width: 1; opacity: .85; }
+  </style>
+
+  <rect width="1440" height="930" rx="0" fill="#070b10"/>
+  <rect x="30" y="28" width="1380" height="874" rx="26" fill="#0b1117" stroke="#22313f"/>
+
+  <text x="64" y="82" class="title">CView 라이브 메뉴: 멀티라이브 스튜디오형 인기 디자인 3안</text>
+  <text x="64" y="112" class="subtitle">현재 탐색/시청/멀티 구조를 유지하면서, 인기 라이브 스튜디오 패턴을 CView식으로 변환한 추천 보드</text>
+
+  <!-- Panel 1 -->
+  <g transform="translate(64 154)">
+    <rect width="410" height="694" rx="18" fill="#0f171f" stroke="#284153"/>
+    <text x="24" y="42" class="panel-title">1. MultiView Switcher Studio</text>
+    <text x="24" y="64" class="panel-subtitle">OBS Studio Mode / Multiview 기반</text>
+
+    <rect x="24" y="88" width="362" height="44" rx="10" fill="#15222d" stroke="#2b4052"/>
+    <rect x="40" y="101" width="48" height="18" rx="9" fill="#22c55e" opacity=".18" stroke="#22c55e"/>
+    <text x="50" y="114" class="small" fill="#93f3b2">멀티</text>
+    <text x="108" y="115" class="small">세션 3/4</text>
+    <text x="246" y="115" class="small">Grid · Audio · Chat</text>
+
+    <rect x="24" y="152" width="92" height="360" rx="12" fill="#121d27" stroke="#2a3d4d"/>
+    <text x="38" y="176" class="label">Channel Shelf</text>
+    <rect x="38" y="194" width="64" height="20" rx="6" fill="#1e2b36"/>
+    <rect x="38" y="226" width="64" height="42" rx="8" fill="#223141"/>
+    <circle cx="51" cy="245" r="8" fill="#22c55e"/>
+    <text x="65" y="243" class="tiny">Live A</text>
+    <text x="65" y="256" class="tiny">+ multi</text>
+    <rect x="38" y="278" width="64" height="42" rx="8" fill="#223141"/>
+    <circle cx="51" cy="297" r="8" fill="#60a5fa"/>
+    <text x="65" y="295" class="tiny">Live B</text>
+    <text x="65" y="308" class="tiny">preview</text>
+    <rect x="38" y="330" width="64" height="42" rx="8" fill="#223141"/>
+    <circle cx="51" cy="349" r="8" fill="#f59e0b"/>
+    <text x="65" y="347" class="tiny">Live C</text>
+    <text x="65" y="360" class="tiny">queued</text>
+
+    <rect x="132" y="152" width="254" height="360" rx="14" fill="#0a1016" stroke="#22c55e" stroke-width="1.8"/>
+    <text x="152" y="178" class="label">Program Stage</text>
+    <g transform="translate(152 198)">
+      <rect width="96" height="76" rx="10" fill="#192838" stroke="#22c55e"/>
+      <rect x="108" width="96" height="76" rx="10" fill="#192838" stroke="#36536a"/>
+      <rect y="88" width="96" height="76" rx="10" fill="#192838" stroke="#36536a"/>
+      <rect x="108" y="88" width="96" height="76" rx="10" fill="#101820" stroke="#4b6172" stroke-dasharray="6 6"/>
+      <text x="22" y="42" class="small">Active</text>
+      <text x="132" y="42" class="small">Live B</text>
+      <text x="24" y="130" class="small">Live C</text>
+      <text x="128" y="130" class="small">Empty</text>
+    </g>
+    <rect x="152" y="390" width="214" height="34" rx="8" fill="#14212b" stroke="#31485a"/>
+    <text x="172" y="412" class="small">Preview Queue · 최근 본 채널 · 추천 조합</text>
+
+    <rect x="24" y="536" width="362" height="112" rx="14" fill="#121b24" stroke="#2a3d4d"/>
+    <text x="44" y="562" class="label">핵심 적용</text>
+    <text x="44" y="588" class="small">중앙 stage를 가장 크게, 활성 세션 frame 강화</text>
+    <text x="44" y="612" class="small">채널 후보는 left shelf, 채팅/설정은 right drawer</text>
+    <text x="44" y="636" class="small">기본 추천: CView 멀티라이브 정체성과 가장 잘 맞음</text>
+  </g>
+
+  <!-- Panel 2 -->
+  <g transform="translate(515 154)">
+    <rect width="410" height="694" rx="18" fill="#0f171f" stroke="#3b3b28"/>
+    <text x="24" y="42" class="panel-title">2. Session Dock + Unified Chat</text>
+    <text x="24" y="64" class="panel-subtitle">Meld / Restream / Streamlabs형 세션 dock</text>
+
+    <rect x="24" y="88" width="362" height="50" rx="12" fill="#171f25" stroke="#3c4b52"/>
+    <rect x="40" y="103" width="70" height="20" rx="10" fill="#f59e0b" opacity=".20" stroke="#f59e0b"/>
+    <text x="54" y="117" class="small">Live A</text>
+    <rect x="118" y="103" width="70" height="20" rx="10" fill="#223141" stroke="#3b5364"/>
+    <text x="132" y="117" class="small">Live B</text>
+    <rect x="196" y="103" width="70" height="20" rx="10" fill="#223141" stroke="#3b5364"/>
+    <text x="210" y="117" class="small">Live C</text>
+    <rect x="300" y="103" width="24" height="20" rx="8" fill="#1d2a34" stroke="#526879"/>
+    <text x="308" y="117" class="small">+</text>
+
+    <rect x="24" y="160" width="98" height="350" rx="12" fill="#121d27" stroke="#2a3d4d"/>
+    <text x="39" y="184" class="label">Shelf</text>
+    <rect x="40" y="206" width="64" height="50" rx="9" fill="#223141"/>
+    <text x="52" y="235" class="tiny">Live 후보</text>
+    <rect x="40" y="268" width="64" height="50" rx="9" fill="#223141"/>
+    <text x="51" y="297" class="tiny">카테고리</text>
+    <rect x="40" y="330" width="64" height="50" rx="9" fill="#223141"/>
+    <text x="54" y="359" class="tiny">추천</text>
+
+    <rect x="136" y="160" width="154" height="350" rx="14" fill="#0a1016" stroke="#465e6e"/>
+    <text x="156" y="184" class="label">MultiLive Stage</text>
+    <rect x="154" y="206" width="118" height="86" rx="12" fill="#1a2a38" stroke="#f59e0b"/>
+    <rect x="154" y="306" width="54" height="46" rx="8" fill="#182532" stroke="#3f586a"/>
+    <rect x="218" y="306" width="54" height="46" rx="8" fill="#182532" stroke="#3f586a"/>
+    <rect x="154" y="366" width="118" height="36" rx="9" fill="#14212b" stroke="#31485a"/>
+    <text x="172" y="389" class="small">Quality · Audio</text>
+
+    <rect x="304" y="160" width="82" height="350" rx="12" fill="#121d27" stroke="#f59e0b" opacity=".96"/>
+    <text x="320" y="184" class="label">Chat</text>
+    <rect x="320" y="204" width="50" height="20" rx="7" fill="#263544"/>
+    <rect x="320" y="236" width="50" height="20" rx="7" fill="#263544"/>
+    <rect x="320" y="268" width="50" height="20" rx="7" fill="#263544"/>
+    <rect x="320" y="316" width="50" height="56" rx="9" fill="#1c2935" stroke="#3d5363"/>
+    <text x="326" y="346" class="tiny">Merged</text>
+
+    <rect x="24" y="536" width="362" height="112" rx="14" fill="#121b24" stroke="#2a3d4d"/>
+    <text x="44" y="562" class="label">핵심 적용</text>
+    <text x="44" y="588" class="small">상단 chip은 세션 dock, 우측은 통합채팅 기본</text>
+    <text x="44" y="612" class="small">비디오/오디오/채팅/품질 상태를 세션별로 표시</text>
+    <text x="44" y="636" class="small">멀티채팅을 강하게 보여줄 때 2순위 추천</text>
+  </g>
+
+  <!-- Panel 3 -->
+  <g transform="translate(966 154)">
+    <rect width="410" height="694" rx="18" fill="#0f171f" stroke="#29435f"/>
+    <text x="24" y="42" class="panel-title">3. Control Room Monitor Studio</text>
+    <text x="24" y="64" class="panel-subtitle">Twitch / YouTube Live Control Room형</text>
+
+    <rect x="24" y="88" width="362" height="44" rx="10" fill="#15222d" stroke="#2b4052"/>
+    <text x="42" y="115" class="small">FPS 59</text>
+    <text x="112" y="115" class="small">Latency 2.4s</text>
+    <rect x="216" y="101" width="62" height="18" rx="9" fill="#ef4444" opacity=".20" stroke="#ef4444"/>
+    <text x="229" y="114" class="small">Buffer</text>
+    <text x="304" y="115" class="small">Proxy OK</text>
+
+    <rect x="24" y="152" width="232" height="314" rx="14" fill="#0a1016" stroke="#4b6578"/>
+    <text x="44" y="178" class="label">MultiLive Stage</text>
+    <rect x="44" y="204" width="86" height="66" rx="10" fill="#1a2a38" stroke="#60a5fa"/>
+    <rect x="142" y="204" width="86" height="66" rx="10" fill="#1a2a38" stroke="#3f586a"/>
+    <rect x="44" y="282" width="86" height="66" rx="10" fill="#1a2a38" stroke="#3f586a"/>
+    <rect x="142" y="282" width="86" height="66" rx="10" fill="#1a2a38" stroke="#ef4444"/>
+    <rect x="44" y="376" width="184" height="48" rx="10" fill="#14212b" stroke="#31485a"/>
+    <text x="62" y="405" class="small">선택 세션 · 재연결 · 품질 변경</text>
+
+    <rect x="270" y="152" width="116" height="314" rx="12" fill="#121d27" stroke="#36536a"/>
+    <text x="290" y="178" class="label">Status</text>
+    <rect x="290" y="200" width="76" height="38" rx="9" fill="#172838" stroke="#60a5fa"/>
+    <text x="304" y="224" class="tiny">Engine VLC</text>
+    <rect x="290" y="250" width="76" height="38" rx="9" fill="#172838" stroke="#22c55e"/>
+    <text x="307" y="274" class="tiny">Network</text>
+    <rect x="290" y="300" width="76" height="38" rx="9" fill="#2a1d1e" stroke="#ef4444"/>
+    <text x="309" y="324" class="tiny">Warning</text>
+    <rect x="290" y="356" width="76" height="38" rx="9" fill="#172838" stroke="#f59e0b"/>
+    <text x="309" y="380" class="tiny">Action</text>
+
+    <rect x="24" y="486" width="362" height="56" rx="12" fill="#121d27" stroke="#2a3d4d"/>
+    <text x="44" y="512" class="label">Event Timeline</text>
+    <text x="170" y="512" class="small">버퍼링 · 재연결 · 품질 변경 · 채팅 연결</text>
+
+    <rect x="24" y="566" width="362" height="82" rx="14" fill="#121b24" stroke="#2a3d4d"/>
+    <text x="44" y="592" class="label">핵심 적용</text>
+    <text x="44" y="618" class="small">레이턴시, 버퍼, 엔진, 프록시 상태를 compact 표시</text>
+    <text x="44" y="642" class="small">기본 UI보다 고급 도구/상태 drawer로 적합</text>
+  </g>
+
+  <text x="64" y="884" class="subtitle">추천: 1안 OBS형을 기본 골격으로 두고, 2안 통합채팅 drawer와 3안 compact status strip을 부분 적용</text>
+</svg>

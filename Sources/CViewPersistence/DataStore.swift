@@ -300,6 +300,50 @@ public actor DataStore {
             .map { (channelName: $0.name, duration: $0.duration) }
     }
 
+    /// 시간대(0–23)별 시청 시간 합계 (사용자 로컬 캘린더 기준).
+    /// StatisticsView 의 시청 패턴 히스토그램에 사용.
+    public func watchTimeByHour() throws -> [Int: TimeInterval] {
+        let descriptor = FetchDescriptor<WatchHistory>()
+        let records = try modelContext.fetch(descriptor)
+        let calendar = Calendar.current
+
+        var bucket: [Int: TimeInterval] = [:]
+        for record in records {
+            guard record.duration > 0 else { continue }
+            let hour = calendar.component(.hour, from: record.startedAt)
+            bucket[hour, default: 0] += record.duration
+        }
+        return bucket
+    }
+
+    /// 카테고리별 시청 시간 통계 (categoryName == nil 인 레코드는 "기타" 로 묶임).
+    public func watchTimeByCategory(limit: Int = 8) throws -> [(category: String, duration: TimeInterval)] {
+        let descriptor = FetchDescriptor<WatchHistory>()
+        let records = try modelContext.fetch(descriptor)
+
+        var bucket: [String: TimeInterval] = [:]
+        for record in records {
+            guard record.duration > 0 else { continue }
+            let key = (record.categoryName?.isEmpty == false) ? record.categoryName! : "기타"
+            bucket[key, default: 0] += record.duration
+        }
+        return bucket
+            .sorted { $0.value > $1.value }
+            .prefix(limit)
+            .map { (category: $0.key, duration: $0.value) }
+    }
+
+    /// 평균 세션 시청 시간 (duration > 0 인 레코드 한정).
+    /// 0초 레코드(시청 시작 직후 종료)는 평균 왜곡을 막기 위해 제외한다.
+    public func averageSessionDuration() throws -> TimeInterval {
+        let descriptor = FetchDescriptor<WatchHistory>()
+        let records = try modelContext.fetch(descriptor)
+        let valid = records.filter { $0.duration > 0 }
+        guard !valid.isEmpty else { return 0 }
+        let total = valid.reduce(0) { $0 + $1.duration }
+        return total / Double(valid.count)
+    }
+
     /// 오래된 시청 기록 정리 (30일 이전)
     public func cleanupOldWatchHistory(olderThan days: Int = 30) throws {
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .now

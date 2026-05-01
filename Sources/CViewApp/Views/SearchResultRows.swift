@@ -149,6 +149,15 @@ struct SearchChannelRow: View {
 
 struct SearchLiveRow: View {
     let live: LiveInfo
+    /// [Redesign 2026-04-29] 검색 결과 행 빠른 액션. nil이면 표시하지 않는다.
+    var onAddMultiLive: (() -> Void)? = nil
+    var onAddMultiChat: (() -> Void)? = nil
+    var onOpenChannel: (() -> Void)? = nil
+    var onCopyLink: (() -> Void)? = nil
+    /// 멀티라이브에 이미 추가되어 있는지 (버튼 disabled 표시)
+    var isAlreadyInMultiLive: Bool = false
+    /// 멀티채팅에 이미 추가되어 있는지
+    var isAlreadyInMultiChat: Bool = false
     @State private var isHovered = false
     
     var body: some View {
@@ -207,6 +216,12 @@ struct SearchLiveRow: View {
             }
             
             Spacer()
+
+            // [Redesign 2026-04-29] 빠른 액션 — hover 시 표시
+            if isHovered {
+                quickActions
+                    .transition(.opacity)
+            }
         }
         .padding(DesignTokens.Spacing.sm)
         .background(isHovered ? DesignTokens.Colors.surfaceOverlay.opacity(0.3) : .clear)
@@ -214,6 +229,97 @@ struct SearchLiveRow: View {
         .onHover { hovering in isHovered = hovering }
         .customCursor(.pointingHand)
         .animation(DesignTokens.Animation.fast, value: isHovered)
+        .contextMenu { contextMenuContent }
+    }
+
+    // MARK: - Quick Actions
+
+    @ViewBuilder
+    private var quickActions: some View {
+        HStack(spacing: DesignTokens.Spacing.xxs) {
+            if let onAddMultiLive {
+                quickActionButton(
+                    icon: isAlreadyInMultiLive ? "checkmark.rectangle.stack.fill" : "rectangle.stack.badge.plus",
+                    help: isAlreadyInMultiLive ? "멀티라이브에 이미 추가됨" : "멀티라이브에 추가",
+                    disabled: isAlreadyInMultiLive,
+                    action: onAddMultiLive
+                )
+            }
+            if let onAddMultiChat {
+                quickActionButton(
+                    icon: isAlreadyInMultiChat ? "bubble.left.fill" : "bubble.left.and.bubble.right",
+                    help: isAlreadyInMultiChat ? "멀티채팅에 이미 추가됨" : "멀티채팅에 추가",
+                    disabled: isAlreadyInMultiChat,
+                    action: onAddMultiChat
+                )
+            }
+            if let onOpenChannel {
+                quickActionButton(
+                    icon: "person.crop.circle",
+                    help: "채널 상세",
+                    action: onOpenChannel
+                )
+            }
+        }
+    }
+
+    private func quickActionButton(
+        icon: String,
+        help: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(DesignTokens.Typography.captionSemibold)
+                .foregroundStyle(disabled ? DesignTokens.Colors.textTertiary : DesignTokens.Colors.chzzkGreen)
+                .frame(width: 26, height: 26)
+                .background(DesignTokens.Colors.surfaceBase, in: RoundedRectangle(cornerRadius: DesignTokens.Radius.xs))
+                .overlay {
+                    RoundedRectangle(cornerRadius: DesignTokens.Radius.xs)
+                        .strokeBorder(DesignTokens.Glass.borderColorLight, lineWidth: 0.5)
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .help(help)
+    }
+
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        if let onAddMultiLive {
+            Button {
+                onAddMultiLive()
+            } label: {
+                Label(isAlreadyInMultiLive ? "멀티라이브에 추가됨" : "멀티라이브에 추가",
+                      systemImage: "rectangle.stack.badge.plus")
+            }
+            .disabled(isAlreadyInMultiLive)
+        }
+        if let onAddMultiChat {
+            Button {
+                onAddMultiChat()
+            } label: {
+                Label(isAlreadyInMultiChat ? "멀티채팅에 추가됨" : "멀티채팅에 추가",
+                      systemImage: "bubble.left.and.bubble.right")
+            }
+            .disabled(isAlreadyInMultiChat)
+        }
+        if let onOpenChannel {
+            Button {
+                onOpenChannel()
+            } label: {
+                Label("채널 상세", systemImage: "person.crop.circle")
+            }
+        }
+        if let onCopyLink {
+            Divider()
+            Button {
+                onCopyLink()
+            } label: {
+                Label("링크 복사", systemImage: "link")
+            }
+        }
     }
 }
 
@@ -359,8 +465,30 @@ struct EquatableSearchChannelRow: View, Equatable {
 
 struct EquatableSearchLiveRow: View, Equatable {
     let live: LiveInfo
-    var body: some View { SearchLiveRow(live: live) }
-    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.live == rhs.live }
+    /// [Redesign 2026-04-29] 빠른 액션은 Equatable 비교 대상이 아니다 (closure는 비교 불가).
+    /// 외부에서 동일한 row를 매 frame 다시 만들어도 `live`만 같으면 body는 재계산되지 않는다.
+    var onAddMultiLive: (() -> Void)? = nil
+    var onAddMultiChat: (() -> Void)? = nil
+    var onOpenChannel: (() -> Void)? = nil
+    var onCopyLink: (() -> Void)? = nil
+    var isAlreadyInMultiLive: Bool = false
+    var isAlreadyInMultiChat: Bool = false
+    var body: some View {
+        SearchLiveRow(
+            live: live,
+            onAddMultiLive: onAddMultiLive,
+            onAddMultiChat: onAddMultiChat,
+            onOpenChannel: onOpenChannel,
+            onCopyLink: onCopyLink,
+            isAlreadyInMultiLive: isAlreadyInMultiLive,
+            isAlreadyInMultiChat: isAlreadyInMultiChat
+        )
+    }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.live == rhs.live
+            && lhs.isAlreadyInMultiLive == rhs.isAlreadyInMultiLive
+            && lhs.isAlreadyInMultiChat == rhs.isAlreadyInMultiChat
+    }
 }
 
 struct EquatableSearchVideoRow: View, Equatable {

@@ -48,7 +48,7 @@ struct HomeLayoutMenu: View {
     @AppStorage("home.v2.show.top")            private var showTopChannels: Bool = true
     @AppStorage("home.v2.show.insights")       private var showInsights: Bool = true
     @AppStorage("home.v2.show.activeMulti")    private var showActiveMultiLive: Bool = true
-    @AppStorage("home.v2.show.supersetDock")   private var showSupersetDock: Bool = true
+    @AppStorage("home.v2.show.supersetDock")   private var showAnalyticsDock: Bool = true
     @AppStorage("home.v2.density")             private var densityRaw: String = HomeCardDensity.comfortable.rawValue
 
     var body: some View {
@@ -61,7 +61,7 @@ struct HomeLayoutMenu: View {
                 Toggle("인기 채널", isOn: $showTopChannels)
                 Toggle("요약 인사이트", isOn: $showInsights)
                 Toggle("멀티라이브 strip", isOn: $showActiveMultiLive)
-                Toggle("Superset Insight Dock", isOn: $showSupersetDock)
+                Toggle("Analytics Insight Dock", isOn: $showAnalyticsDock)
             }
             Section("카드 밀도") {
                 Picker("밀도", selection: $densityRaw) {
@@ -80,7 +80,7 @@ struct HomeLayoutMenu: View {
                     showTopChannels = true
                     showInsights = true
                     showActiveMultiLive = true
-                    showSupersetDock = true
+                    showAnalyticsDock = true
                     densityRaw = HomeCardDensity.comfortable.rawValue
                 }
             }

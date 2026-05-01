@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1480" viewBox="0 0 1320 1480" role="img" aria-labelledby="title desc">
+  <title id="title">CView Clip Menu Redesign Candidates</title>
+  <desc id="desc">Three proposed clip menu redesign concepts for CView macOS app.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f5f7f8; }
+      .panel { fill: #ffffff; stroke: #d9e0e5; stroke-width: 1; }
+      .soft { fill: #f8fafb; stroke: #e1e7eb; stroke-width: 1; }
+      .rail { fill: #edf2f3; stroke: #d8e1e4; stroke-width: 1; }
+      .media { fill: #172126; }
+      .ink { fill: #172126; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .muted { fill: #6b777d; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .onMedia { fill: #f8fafb; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
+      .tiny { font-size: 13px; }
+      .micro { font-size: 11px; }
+      .label { font-size: 15px; font-weight: 650; }
+      .title { font-size: 24px; font-weight: 750; }
+      .section { font-size: 18px; font-weight: 720; }
+      .accentGreen { fill: #20c997; }
+      .accentBlue { fill: #2f7cf6; }
+      .accentOrange { fill: #ff9f43; }
+      .accentRed { fill: #ef476f; }
+      .accentTeal { fill: #00a6a6; }
+      .accentPink { fill: #ef5da8; }
+      .greenSoft { fill: #dff8ef; stroke: #9ee8cf; stroke-width: 1; }
+      .blueSoft { fill: #e7f0ff; stroke: #aac8ff; stroke-width: 1; }
+      .orangeSoft { fill: #fff1df; stroke: #ffd39a; stroke-width: 1; }
+      .redSoft { fill: #ffe8ee; stroke: #ffb3c6; stroke-width: 1; }
+      .tealSoft { fill: #def7f4; stroke: #9de7df; stroke-width: 1; }
+      .pinkSoft { fill: #ffe8f3; stroke: #ffb7d9; stroke-width: 1; }
+      .line { stroke: #d9e0e5; stroke-width: 1; }
+      .shadow { filter: drop-shadow(0 10px 22px rgba(27, 39, 45, 0.08)); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1320" height="1480"/>
+  <text class="ink title" x="56" y="58">CView Clip Menu Redesign Candidates</text>
+  <text class="muted tiny" x="56" y="84">Current shell preserved. Clip browsing is redesigned around discovery, channel resolving, preview, and queue.</text>
+
+  <!-- Option A -->
+  <g transform="translate(56 120)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option A. Clip Command Gallery</text>
+    <text class="muted tiny" x="26" y="62">Recommended baseline: spotlight, trend gallery, channel quick search, and a preview inspector.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="54" rx="14"/>
+    <circle class="accentPink" cx="54" cy="115" r="7"/>
+    <text class="muted tiny" x="74" y="120">Period · Popular / Recommend · Channel · Grid / List · Refresh</text>
+    <rect class="greenSoft" x="792" y="101" width="90" height="28" rx="14"/>
+    <text class="muted micro" x="814" y="119">Week</text>
+    <rect class="pinkSoft" x="894" y="101" width="108" height="28" rx="14"/>
+    <text class="muted micro" x="916" y="119">Popular</text>
+    <rect class="blueSoft" x="1014" y="101" width="92" height="28" rx="14"/>
+    <text class="muted micro" x="1036" y="119">Grid</text>
+
+    <rect class="soft" x="26" y="164" width="330" height="182" rx="14"/>
+    <text class="ink label" x="50" y="194">Spotlight Clip</text>
+    <rect class="media" x="50" y="212" width="282" height="88" rx="12"/>
+    <circle class="accentPink" cx="88" cy="256" r="18"/>
+    <text class="onMedia tiny" x="122" y="262">Top clip preview</text>
+    <text class="muted micro" x="50" y="326">Large thumbnail, no autoplay, one-click play</text>
+
+    <rect class="soft" x="378" y="164" width="474" height="182" rx="14"/>
+    <text class="ink label" x="402" y="194">Trending Gallery</text>
+    <line class="line" x1="402" y1="210" x2="828" y2="210"/>
+    <rect class="pinkSoft" x="402" y="226" width="126" height="44" rx="10"/>
+    <text class="muted micro" x="430" y="252">Clip card</text>
+    <rect class="greenSoft" x="544" y="226" width="126" height="44" rx="10"/>
+    <text class="muted micro" x="572" y="252">Clip card</text>
+    <rect class="orangeSoft" x="686" y="226" width="126" height="44" rx="10"/>
+    <text class="muted micro" x="714" y="252">Clip card</text>
+    <rect class="blueSoft" x="402" y="286" width="126" height="28" rx="10"/>
+    <text class="muted micro" x="432" y="304">Following</text>
+    <rect class="tealSoft" x="544" y="286" width="126" height="28" rx="10"/>
+    <text class="muted micro" x="574" y="304">Recent</text>
+    <rect class="soft" x="686" y="286" width="126" height="28" rx="10"/>
+    <text class="muted micro" x="718" y="304">More</text>
+
+    <rect class="rail" x="874" y="164" width="302" height="182" rx="14"/>
+    <text class="ink label" x="898" y="194">Preview Inspector</text>
+    <text class="muted tiny" x="898" y="224">Selected clip details and actions</text>
+    <rect class="pinkSoft" x="898" y="246" width="70" height="26" rx="13"/>
+    <text class="muted micro" x="918" y="263">Play</text>
+    <rect class="blueSoft" x="980" y="246" width="86" height="26" rx="13"/>
+    <text class="muted micro" x="1000" y="263">Channel</text>
+    <rect class="greenSoft" x="1078" y="246" width="70" height="26" rx="13"/>
+    <text class="muted micro" x="1098" y="263">Queue</text>
+    <rect class="orangeSoft" x="898" y="292" width="106" height="26" rx="13"/>
+    <text class="muted micro" x="918" y="309">Copy link</text>
+    <rect class="soft" x="1016" y="292" width="96" height="26" rx="13"/>
+    <text class="muted micro" x="1036" y="309">Original</text>
+  </g>
+
+  <!-- Option B -->
+  <g transform="translate(56 550)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option B. Channel Clip Studio</text>
+    <text class="muted tiny" x="26" y="62">Channel-first browsing: resolve channel by name, URL, following list, or raw channel ID.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="48" rx="12"/>
+    <circle class="accentBlue" cx="52" cy="112" r="7"/>
+    <text class="muted tiny" x="72" y="117">Channel resolver: name search · URL paste · following picker · channel ID</text>
+
+    <rect class="rail" x="26" y="158" width="220" height="188" rx="12"/>
+    <text class="muted micro" x="48" y="186">CHANNEL RAIL</text>
+    <rect class="blueSoft" x="48" y="202" width="144" height="28" rx="8"/>
+    <text class="ink tiny" x="68" y="221">Following</text>
+    <text class="muted tiny" x="52" y="258">Recent watched</text>
+    <text class="muted tiny" x="52" y="290">Search results</text>
+    <text class="muted tiny" x="52" y="322">Manual input</text>
+
+    <rect class="soft" x="270" y="158" width="588" height="188" rx="12"/>
+    <text class="ink label" x="294" y="188">Clip Timeline</text>
+    <line class="line" x1="294" y1="206" x2="830" y2="206"/>
+    <text class="muted micro" x="294" y="232">TODAY</text>
+    <rect class="pinkSoft" x="294" y="246" width="150" height="36" rx="10"/>
+    <text class="muted micro" x="326" y="268">Popular clip</text>
+    <rect class="greenSoft" x="460" y="246" width="150" height="36" rx="10"/>
+    <text class="muted micro" x="492" y="268">Recent clip</text>
+    <text class="muted micro" x="294" y="314">THIS WEEK</text>
+    <rect class="orangeSoft" x="374" y="298" width="150" height="36" rx="10"/>
+    <text class="muted micro" x="406" y="320">Clip group</text>
+
+    <rect class="rail" x="882" y="158" width="294" height="188" rx="12"/>
+    <text class="ink label" x="906" y="188">Channel Info</text>
+    <text class="muted tiny" x="906" y="220">Live status, channel clips, actions</text>
+    <rect class="greenSoft" x="906" y="246" width="84" height="26" rx="13"/>
+    <text class="muted micro" x="926" y="263">Live</text>
+    <rect class="blueSoft" x="1002" y="246" width="92" height="26" rx="13"/>
+    <text class="muted micro" x="1022" y="263">Detail</text>
+    <rect class="pinkSoft" x="906" y="292" width="116" height="26" rx="13"/>
+    <text class="muted micro" x="928" y="309">Open clip</text>
+  </g>
+
+  <!-- Option C -->
+  <g transform="translate(56 980)" class="shadow">
+    <rect class="panel" x="0" y="0" width="1208" height="380" rx="16"/>
+    <text class="ink section" x="26" y="38">Option C. Clip Watch Queue</text>
+    <text class="muted tiny" x="26" y="62">Media-first mode: embedded player stage, next queue, related clips, and explicit autoplay controls.</text>
+
+    <rect class="soft" x="26" y="88" width="1150" height="48" rx="12"/>
+    <circle class="accentPink" cx="52" cy="112" r="7"/>
+    <text class="muted tiny" x="72" y="117">Watch mode · source · autoplay next off · open original · queue</text>
+
+    <rect class="media" x="26" y="158" width="706" height="188" rx="14"/>
+    <text class="onMedia label" x="54" y="190">Player Stage</text>
+    <circle class="accentPink" cx="378" cy="250" r="28"/>
+    <polygon points="370,236 370,264 394,250" fill="#ffffff"/>
+    <text class="onMedia tiny" x="54" y="318">Embed fallback and VLC transition state shown in the stage.</text>
+
+    <rect class="rail" x="760" y="158" width="416" height="188" rx="14"/>
+    <text class="ink label" x="784" y="188">Queue</text>
+    <rect class="pinkSoft" x="784" y="210" width="336" height="28" rx="10"/>
+    <text class="muted micro" x="806" y="228">Now playing</text>
+    <rect class="soft" x="784" y="248" width="336" height="28" rx="10"/>
+    <text class="muted micro" x="806" y="266">Next clip from trending</text>
+    <rect class="soft" x="784" y="286" width="336" height="28" rx="10"/>
+    <text class="muted micro" x="806" y="304">Related channel clip</text>
+    <rect class="greenSoft" x="784" y="326" width="106" height="24" rx="12"/>
+    <text class="muted micro" x="806" y="342">Watch later</text>
+    <rect class="orangeSoft" x="902" y="326" width="96" height="24" rx="12"/>
+    <text class="muted micro" x="924" y="342">Shuffle</text>
+  </g>
+
+  <text class="muted micro" x="56" y="1418">Recommendation: ship Option A as the base, rebuild channel clips with Option B resolver, and expand Option C after queue is stable.</text>
+</svg>

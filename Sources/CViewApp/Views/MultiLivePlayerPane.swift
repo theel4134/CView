@@ -12,6 +12,8 @@ struct MLPlayerPane: View {
     /// 이 패인이 현재 활성(포그라운드) 상태인지 여부
     /// false이면 비디오 뷰만 유지하고 오버레이/채팅 등 무거운 UI 렌더링을 생략
     var isActive: Bool = true
+    /// false이면 hover 컨트롤을 숨김 (싱글 시청 모드에서 전용 컨트롤 바 사용 시)
+    var showHoverControls: Bool = true
 
     var body: some View {
         videoAndStateArea
@@ -26,7 +28,8 @@ struct MLPlayerPane: View {
             // isActive 전환 시 PlayerVideoView(NSViewRepresentable) 재마운트로 인한
             // AVPlayerLayer 재바인딩/프레임 드롭을 방지. 컨트롤 오버레이(showControls/Stats)는
             // MLVideoArea 내부에서 자체 제어되므로 비활성 상태에서도 렌더 비용이 크지 않다.
-            MLVideoArea(session: session, appState: appState, settingsStore: appState.settingsStore)
+            MLVideoArea(session: session, appState: appState, settingsStore: appState.settingsStore,
+                        showHoverControls: showHoverControls)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .allowsHitTesting(isActive)

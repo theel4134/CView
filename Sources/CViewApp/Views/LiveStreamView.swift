@@ -94,6 +94,12 @@ struct LiveStreamView: View {
                 engineType: playerVM?.currentEngineType ?? .avPlayer
             )
 
+            // [PLY-1] 재생 가드레일 compact chips
+            if let vm = playerVM {
+                PlaybackGuardrailChipsView(playerVM: vm)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             // ── 메인 컨텐츠 (플레이어 + 채팅 + 설정 패널) ──
             HStack(spacing: 0) {
                 HStack(spacing: 0) {
@@ -121,7 +127,9 @@ struct LiveStreamView: View {
                     // 사이드 모드: 드래그 핸들 + 채팅 패널
                     if chatVM?.displayMode == .side {
                         ChatResizeHandle(isDragging: $isDraggingChatResize, currentWidth: liveChatWidth) { newWidth in
-                            liveChatWidth = min(max(newWidth, 120), containerSize.width * 0.5)
+                            // [L-1 / 2026-04-30] 폭별 breakpoint 기반 클램프
+                            let bp = LiveBreakpoint(width: containerSize.width)
+                            liveChatWidth = bp.clampChatWidth(newWidth, containerWidth: containerSize.width)
                         } onDragEnd: {
                             savedChatWidth = liveChatWidth
                         }
@@ -146,6 +154,9 @@ struct LiveStreamView: View {
                 } action: { newSize in
                     guard newSize != containerSize else { return }
                     containerSize = newSize
+                    // [L-1 / 2026-04-30] 컨테이너 변경 시 채팅 폭 재클램프
+                    let bp = LiveBreakpoint(width: newSize.width)
+                    liveChatWidth = bp.clampChatWidth(liveChatWidth, containerWidth: newSize.width)
                 }
 
                 // ── 설정 슬라이드 패널 (push 방식 — 멀티라이브와 동일) ──
@@ -186,9 +197,21 @@ struct LiveStreamView: View {
                     await chatVM?.disconnect()
                     // 메트릭 포워더 채널 비활성화
                     await appState.metricsForwarder?.deactivateCurrentChannel()
+                    // 시청 종료 시 동일 채널의 멀티채팅 세션도 함께 종료
+                    let manager = appState.followingViewState.chatSessionManager
+                    if manager.sessions.contains(where: { $0.id == channelId }) {
+                        await manager.removeSession(channelId: channelId)
+                    }
                 }
                 await performanceMonitor.stop()
             }
+        }
+        // 방송이 자연 종료될 때도 멀티채팅 세션 닫기
+        .onChange(of: playerVM?.streamPhase) { _, newPhase in
+            guard case .streamEnded = newPhase else { return }
+            let manager = appState.followingViewState.chatSessionManager
+            guard manager.sessions.contains(where: { $0.id == channelId }) else { return }
+            Task { await manager.removeSession(channelId: channelId) }
         }
         .onKeyPress(.escape) {
             if showSettings {

@@ -1,0 +1,147 @@
+<svg width="1600" height="1040" viewBox="0 0 1600 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .title { font: 800 38px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f8fafc; }
+    .subtitle { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #a4adb7; }
+    .panel-title { font: 800 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f7f8f8; }
+    .panel-subtitle { font: 600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #9ca7b1; }
+    .label { font: 700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e7ecef; }
+    .small { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #a4adb7; }
+    .tiny { font: 600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #7e8993; }
+  </style>
+
+  <rect width="1600" height="1040" fill="#090909"/>
+  <rect x="34" y="28" width="1532" height="984" rx="28" fill="#101010" stroke="#2a2a2a"/>
+
+  <text x="72" y="84" class="title">CView 라이브 메뉴 Flat Modern 리디자인 3안</text>
+  <text x="72" y="116" class="subtitle">glass, shadow, card-heavy UI를 줄이고 toolbar, dense list, flat stage, inspector 중심으로 정리</text>
+
+  <!-- Option 1 -->
+  <g transform="translate(72 154)">
+    <rect width="456" height="744" rx="18" fill="#161616" stroke="#303030"/>
+    <text x="24" y="42" class="panel-title">1. Flat Studio Workspace</text>
+    <text x="24" y="66" class="panel-subtitle">기본 추천 · 얇은 toolbar + flat 3-pane</text>
+
+    <rect x="24" y="92" width="408" height="38" rx="8" fill="#202020" stroke="#353535"/>
+    <text x="42" y="116" class="small">Live</text>
+    <rect x="112" y="100" width="142" height="22" rx="8" fill="#121212" stroke="#3b3b3b"/>
+    <rect x="158" y="102" width="46" height="18" rx="7" fill="#22c55e"/>
+    <text x="122" y="115" class="tiny">탐색</text>
+    <text x="169" y="115" class="tiny" fill="#06100a">시청</text>
+    <text x="214" y="115" class="tiny">멀티</text>
+    <text x="290" y="116" class="small">Search · Layout · Inspector</text>
+
+    <rect x="24" y="154" width="116" height="398" fill="#1a1a1a" stroke="#303030"/>
+    <text x="40" y="180" class="label">Shelf</text>
+    <rect x="40" y="202" width="84" height="28" rx="6" fill="#111111" stroke="#313131"/>
+    <text x="52" y="220" class="tiny">검색</text>
+    <rect x="40" y="252" width="84" height="46" rx="6" fill="#202020" stroke="#323232"/>
+    <circle cx="54" cy="275" r="5" fill="#22c55e"/>
+    <text x="66" y="271" class="tiny">Live A</text>
+    <text x="66" y="286" class="tiny">+ multi</text>
+    <rect x="40" y="310" width="84" height="46" rx="6" fill="#202020" stroke="#323232"/>
+    <circle cx="54" cy="333" r="5" fill="#38bdf8"/>
+    <text x="66" y="329" class="tiny">Live B</text>
+    <text x="66" y="344" class="tiny">preview</text>
+
+    <rect x="141" y="154" width="190" height="398" fill="#0d0d0d" stroke="#303030"/>
+    <text x="160" y="180" class="label">Program Stage</text>
+    <rect x="160" y="206" width="70" height="54" rx="6" fill="#222222" stroke="#22c55e"/>
+    <rect x="242" y="206" width="70" height="54" rx="6" fill="#222222" stroke="#424242"/>
+    <rect x="160" y="272" width="70" height="54" rx="6" fill="#222222" stroke="#424242"/>
+    <rect x="242" y="272" width="70" height="54" rx="6" fill="#121212" stroke="#5b5b5b" stroke-dasharray="5 5"/>
+    <rect x="170" y="356" width="132" height="28" rx="8" fill="#181818" stroke="#383838"/>
+    <text x="194" y="374" class="tiny">flat stage action</text>
+
+    <rect x="332" y="154" width="100" height="398" fill="#1a1a1a" stroke="#303030"/>
+    <text x="350" y="180" class="label">Inspector</text>
+    <rect x="350" y="204" width="64" height="22" rx="6" fill="#2a1f12" stroke="#f59e0b"/>
+    <text x="367" y="219" class="tiny">Chat</text>
+    <rect x="350" y="240" width="64" height="22" rx="6" fill="#202020" stroke="#323232"/>
+    <text x="360" y="255" class="tiny">Quality</text>
+    <rect x="350" y="276" width="64" height="22" rx="6" fill="#202020" stroke="#323232"/>
+    <text x="367" y="291" class="tiny">Tools</text>
+
+    <rect x="24" y="552" width="408" height="44" fill="#181818" stroke="#303030"/>
+    <text x="42" y="579" class="small">Session Strip · Live A · Live B · Buffer · PiP · Command</text>
+
+    <rect x="24" y="626" width="408" height="82" rx="10" fill="#181818" stroke="#303030"/>
+    <text x="42" y="654" class="label">핵심</text>
+    <text x="42" y="680" class="small">1px divider, shadow 제거, stage 중심의 평평한 3-pane</text>
+  </g>
+
+  <!-- Option 2 -->
+  <g transform="translate(572 154)">
+    <rect width="456" height="744" rx="18" fill="#161616" stroke="#303030"/>
+    <text x="24" y="42" class="panel-title">2. Dense Channel Console</text>
+    <text x="24" y="66" class="panel-subtitle">팔로잉이 많은 사용자 · 고밀도 list/detail</text>
+
+    <rect x="24" y="92" width="408" height="38" rx="8" fill="#202020" stroke="#353535"/>
+    <text x="42" y="116" class="small">Live Console</text>
+    <text x="292" y="116" class="small">Filter · Sort · Search</text>
+
+    <rect x="24" y="154" width="184" height="442" fill="#1a1a1a" stroke="#303030"/>
+    <text x="42" y="180" class="label">Dense Live List</text>
+    <g transform="translate(42 206)">
+      <rect width="148" height="48" rx="6" fill="#202020" stroke="#323232"/>
+      <circle cx="16" cy="24" r="8" fill="#22c55e"/>
+      <text x="32" y="20" class="tiny">Channel A</text>
+      <text x="32" y="35" class="tiny">게임 · 12.4k</text>
+      <rect y="58" width="148" height="48" rx="6" fill="#202020" stroke="#323232"/>
+      <circle cx="16" cy="82" r="8" fill="#38bdf8"/>
+      <text x="32" y="78" class="tiny">Channel B</text>
+      <text x="32" y="93" class="tiny">토크 · 8.1k</text>
+      <rect y="116" width="148" height="48" rx="6" fill="#202020" stroke="#323232"/>
+      <circle cx="16" cy="140" r="8" fill="#f59e0b"/>
+      <text x="32" y="136" class="tiny">Channel C</text>
+      <text x="32" y="151" class="tiny">음악 · buffer</text>
+      <rect y="174" width="148" height="48" rx="6" fill="#202020" stroke="#323232"/>
+      <circle cx="16" cy="198" r="8" fill="#7c7c7c"/>
+      <text x="32" y="194" class="tiny">Channel D</text>
+      <text x="32" y="209" class="tiny">오프라인</text>
+    </g>
+
+    <rect x="209" y="154" width="223" height="442" fill="#0d0d0d" stroke="#303030"/>
+    <text x="230" y="180" class="label">Preview / Stage</text>
+    <rect x="230" y="210" width="180" height="122" rx="6" fill="#222222" stroke="#22c55e"/>
+    <text x="284" y="276" class="small">Selected Preview</text>
+    <rect x="230" y="358" width="84" height="56" rx="6" fill="#222222" stroke="#424242"/>
+    <rect x="326" y="358" width="84" height="56" rx="6" fill="#222222" stroke="#424242"/>
+    <rect x="230" y="444" width="180" height="34" rx="8" fill="#181818" stroke="#383838"/>
+    <text x="272" y="466" class="tiny">Enter 재생 · +멀티</text>
+
+    <rect x="24" y="626" width="408" height="82" rx="10" fill="#181818" stroke="#303030"/>
+    <text x="42" y="654" class="label">핵심</text>
+    <text x="42" y="680" class="small">썸네일 card보다 row scan을 우선하는 빠른 탐색 콘솔</text>
+  </g>
+
+  <!-- Option 3 -->
+  <g transform="translate(1072 154)">
+    <rect width="456" height="744" rx="18" fill="#161616" stroke="#303030"/>
+    <text x="24" y="42" class="panel-title">3. Command Canvas</text>
+    <text x="24" y="66" class="panel-subtitle">몰입형 stage · command-first · 임시 drawer</text>
+
+    <rect x="24" y="92" width="408" height="504" fill="#0d0d0d" stroke="#303030"/>
+    <text x="48" y="126" class="label">Stage Canvas</text>
+    <rect x="54" y="160" width="348" height="260" rx="8" fill="#222222" stroke="#424242"/>
+    <rect x="82" y="190" width="138" height="88" rx="6" fill="#292929" stroke="#22c55e"/>
+    <rect x="236" y="190" width="138" height="88" rx="6" fill="#292929" stroke="#424242"/>
+    <rect x="82" y="296" width="138" height="88" rx="6" fill="#292929" stroke="#424242"/>
+    <rect x="236" y="296" width="138" height="88" rx="6" fill="#292929" stroke="#424242"/>
+
+    <rect x="98" y="442" width="260" height="44" rx="12" fill="#171717" stroke="#525252"/>
+    <text x="130" y="469" class="small">⌘K  채널 추가, 멀티 전환, 창 열기</text>
+
+    <rect x="54" y="514" width="108" height="42" rx="8" fill="#181818" stroke="#383838"/>
+    <text x="80" y="540" class="tiny">Shelf</text>
+    <rect x="174" y="514" width="108" height="42" rx="8" fill="#181818" stroke="#383838"/>
+    <text x="198" y="540" class="tiny">Inspector</text>
+    <rect x="294" y="514" width="108" height="42" rx="8" fill="#181818" stroke="#383838"/>
+    <text x="324" y="540" class="tiny">Windows</text>
+
+    <rect x="24" y="626" width="408" height="82" rx="10" fill="#181818" stroke="#303030"/>
+    <text x="42" y="654" class="label">핵심</text>
+    <text x="42" y="680" class="small">stage를 먼저 두고 탐색/도구는 command와 임시 패널로 호출</text>
+  </g>
+
+  <text x="72" y="948" class="subtitle">최종 추천: Flat Studio Workspace를 기본으로 하고 Dense List와 Command Canvas를 부분 적용</text>
+</svg>

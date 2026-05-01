@@ -262,6 +262,9 @@ extension AppState {
         }
 
         logger.info("App resigned active – throttled metrics polling, background playback: \(self.settingsStore.player.continuePlaybackInBackground)")
+
+        // [Plan 2026-04-30 SES-1] 워크스페이스 스냅샷 저장
+        persistWorkspaceSnapshot(router: router)
     }
 
     // MARK: - App Nap Prevention

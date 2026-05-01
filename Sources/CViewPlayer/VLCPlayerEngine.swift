@@ -169,26 +169,25 @@ public enum VLCStreamingProfile: Sendable {
     case multiLive            // 멀티라이브 비선택 세션 (GPU/메모리 절약 우선)
     case multiLiveHQ          // 멀티라이브 선택 세션 (1080p60 / 8Mbps 유지)
 
-    // [Fix 19] 네트워크 지터 흡수 + 초기 재생 지연 균형
-    // lowLatency 500ms: 2초 세그먼트 25% 커버리지, prefetch 병용
-    // multiLive 1000→1500ms: 1초 세그먼트 커버 + 0.5초 지터 마진
-    //   (2000ms는 4스트림에서 VLC 버퍼 경합 유발, 1000ms는 지터 흡수 부족)
-    // [P0-3 2026-04-24] multiLiveHQ 800→1200ms: 멀티라이브 burst 환경에서 선택 세션도
-    //   800ms는 CDN 지터 흡수 부족으로 buffering 발생. 1200ms로 1차 안정화 검증.
+    // [Buffering Phase 1 / 2026-04-30] CDN 지터 흡수 마진 확대 (저지연 유지).
+    //   lowLatency  : 500→700ms (LL-HLS 2s 세그먼트의 35% 커버리지)
+    //   multiLiveHQ : 1200→1500ms (버스트 환경에서 선택 세션 버퍼링 완화)
+    //   multiLive   : 1500→1800ms (비선택 세션 안정성 우선)
+    //   ultraLow    : 변동 없음 (사용자 명시 선택 시나리오)
     var networkCaching: Int {
         switch self {
         case .ultraLow: return 300
-        case .lowLatency: return 500
-        case .multiLive: return 1500     // 1000→1500ms: 지터 흡수 마진 확보
-        case .multiLiveHQ: return 1200   // 800→1200ms: 선택 세션 지터 흡수 강화
+        case .lowLatency: return 700
+        case .multiLive: return 1800
+        case .multiLiveHQ: return 1500
         }
     }
     public var liveCaching: Int {
         switch self {
         case .ultraLow: return 300
-        case .lowLatency: return 500
-        case .multiLive: return 1500     // network-caching과 동일
-        case .multiLiveHQ: return 1200   // network-caching과 동일
+        case .lowLatency: return 700
+        case .multiLive: return 1800
+        case .multiLiveHQ: return 1500
         }
     }
     var manifestRefreshInterval: Int {
@@ -200,13 +199,14 @@ public enum VLCStreamingProfile: Sendable {
         }
     }
     /// clock-jitter 허용 범위 (µs) — 프레임 타이밍 편차 허용량
-    /// [Fix 18] multiLive 30ms→10ms: A/V 싱크 허용 오차 축소로 오디오-비디오 동기화 강화
+    /// [Buffering Phase 1 / 2026-04-30] 라이브 프로파일 일괄 5000µs 통일.
+    ///   ultraLow=0µs 는 CDN 지터에 매우 취약해 잦은 버퍼링을 유발함.
     var clockJitter: Int {
         switch self {
-        case .ultraLow: return 0
+        case .ultraLow: return 5000
         case .lowLatency: return 5000
-        case .multiLive: return 10000 // 10ms — 영상/소리 싱크 정밀도 향상
-        case .multiLiveHQ: return 5000 // 선택 HQ: 저지연 프로파일과 동일한 싱크 정밀도
+        case .multiLive: return 10000
+        case .multiLiveHQ: return 5000
         }
     }
     /// cr-average 클럭 복구 평균 (ms) — 낮을수록 더 빠른 타이밍 조정
@@ -416,6 +416,12 @@ public final class VLCPlayerEngine: NSObject, PlayerEngineProtocol, @unchecked S
     // [Fix 20 Phase3] 버퍼 건강도: I/O 비율 + 프레임 전달률 EWMA 추적
     var _ioHealthEWMA: Double = 1.0      // input/demux 바이트 비율 (1.0 = 정상)
     var _frameDeliveryEWMA: Double = 1.0 // 프레임 전달 성공률 (1.0 = 모든 프레임 표시)
+
+    // [Phase 2.2 / 2026-04-30] HW 디코드 0 고착 감지 + 마지막 측정 가능값 폴백.
+    //   bufferHealth() 가 stats 측정 불가 시(decoded=0 인데 demux 진행) 0 을 반환해
+    //   ABR 가 거짓 downgrade 하던 문제 대응.
+    var _lastMeasurableBufferLevel: Double = 1.0
+    var _lastDemuxReadBytesForHealth: Int64 = 0
 
     // [Fix 27] 버퍼링 필터 상태 — VLC delegate 스레드 + Main 스레드 동시 접근 보호
     struct _BufferingFilterState: Sendable {

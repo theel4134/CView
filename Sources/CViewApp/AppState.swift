@@ -47,6 +47,80 @@ final class AppState {
     /// 메인 LiveStreamView가 사라질 때 이 집합에 포함된 채널은 스트림을 중단하지 않음
     var detachedChannelIds: Set<String> = []
 
+    /// [Plan 2026-04-30 ACT-1] 메트릭 사이드바로 진입 후 특정 탭으로 점프하기 위한 pending 값.
+    /// MetricsDashboardView가 소비 후 nil로 비운다.
+    var pendingMetricsTab: MetricsDashboardTab?
+
+    /// [Plan 2026-04-30 ACT-1] CommandPalette/DeepLink/Widget/AppIntent가 공유하는
+    /// 단일 액션 dispatcher. `bindActionRegistry(router:)` 로 라우터 주입 후 사용.
+    var actionRegistry: CViewActionRegistry?
+
+    /// [Plan 2026-04-30 SES-1] AppLifecycle 에서 router 접근용 weak 참조.
+    /// `bindActionRegistry(router:)` 시 함께 설정된다.
+    weak var router: AppRouter?
+
+    /// 액션 레지스트리를 주입한다. App 진입 시 `AppRouter`가 만들어진 직후 1회 호출.
+    func bindActionRegistry(router: AppRouter) {
+        self.router = router
+        self.actionRegistry = CViewActionRegistry(router: router, appState: self)
+    }
+
+    // MARK: - Workspace Snapshot (SES-1)
+
+    /// 현재 워크스페이스 상태를 스냅샷으로 캡처.
+    /// router 가 nil 이면 sidebar/검색 query 는 비어있는 상태로 저장.
+    func captureWorkspaceSnapshot(router: AppRouter?) -> WorkspaceSnapshot {
+        var snap = WorkspaceSnapshot()
+        snap.sidebar = router?.selectedSidebarItem.rawValue
+        snap.hubMode = followingViewState.hubMode.rawValue
+        snap.multiLiveChannelIds = multiLiveManager.sessions.map { $0.channelId }
+        snap.multiChatChannelIds = followingViewState.chatSessionManager.sessions.map { $0.id }
+        snap.pendingSearchQuery = router?.pendingSearchQuery
+        snap.pendingMetricsTab = pendingMetricsTab?.rawValue
+        snap.smartQueueChannelIds = followingViewState.smartQueueChannelIds
+        return snap
+    }
+
+    /// 저장된 스냅샷을 워크스페이스에 적용.
+    /// - 멀티라이브/멀티채팅 세션은 비어있을 때만 복원 (이미 진행중이면 덮어쓰지 않음)
+    func applyWorkspaceSnapshot(_ snap: WorkspaceSnapshot, router: AppRouter) {
+        if let raw = snap.sidebar,
+           let item = AppRouter.SidebarItem(rawValue: raw) {
+            router.selectedSidebarItem = item
+        }
+        if let raw = snap.hubMode,
+           let mode = FollowingHubMode(rawValue: raw) {
+            followingViewState.applyHubModePreset(mode, multiLiveManager: multiLiveManager)
+        }
+        if let q = snap.pendingSearchQuery, !q.isEmpty {
+            router.pendingSearchQuery = q
+        }
+        if let raw = snap.pendingMetricsTab,
+           let tab = MetricsDashboardTab(rawValue: raw) {
+            pendingMetricsTab = tab
+        }
+        // 멀티라이브 세션 복원 (현재 비어있을 때만)
+        if multiLiveManager.sessions.isEmpty, !snap.multiLiveChannelIds.isEmpty {
+            for cid in snap.multiLiveChannelIds {
+                Task { @MainActor in
+                    await multiLiveManager.addSession(channelId: cid)
+                }
+            }
+        }
+        if !snap.smartQueueChannelIds.isEmpty {
+            followingViewState.smartQueueChannelIds = snap.smartQueueChannelIds
+        }
+        // 멀티채팅은 액세스토큰 등 부수효과가 커서 v1에서는 sidebar/hubMode/multiLive 까지만 복원
+    }
+
+    /// 비동기 저장 헬퍼.
+    func persistWorkspaceSnapshot(router: AppRouter?) {
+        let snap = captureWorkspaceSnapshot(router: router)
+        Task.detached(priority: .utility) {
+            await WorkspaceStateStore.shared.save(snap)
+        }
+    }
+
     // MARK: - ViewModels & Stores
 
     var homeViewModel: HomeViewModel?

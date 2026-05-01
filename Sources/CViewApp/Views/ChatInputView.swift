@@ -73,7 +73,7 @@ struct ChatInputView: View {
                         .frame(width: 28, height: 28)
                         .background(
                             isEmoticonHovered && canSend
-                                ? DesignTokens.Colors.surfaceElevated.opacity(1.2)
+                                ? DesignTokens.Colors.surfaceOverlay
                                 : DesignTokens.Colors.surfaceElevated,
                             in: Circle()
                         )

@@ -20,13 +20,30 @@ public actor MetricsAPIClient {
     private var jwtToken: String?
     private var jwtExpiresAt: Date?
     private let deviceId: String
-    private let appSecret: String
+    private var appSecret: String
     
+    /// METRICS_APP_SECRET 해석 우선순위:
+    /// 1) 호출자가 명시적으로 전달한 값
+    /// 2) 프로세스 환경변수 `METRICS_APP_SECRET` (Xcode scheme / launchctl)
+    /// 3) `Bundle.main.METRICS_APP_SECRET` (Info.plist 빌드 주입값)
+    /// 4) dev fallback (인증 실패하므로 운영에는 부적합)
+    public static func resolveDefaultAppSecret() -> String {
+        if let env = ProcessInfo.processInfo.environment["METRICS_APP_SECRET"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !env.isEmpty {
+            return env
+        }
+        if let bundleVal = Bundle.main.object(forInfoDictionaryKey: "METRICS_APP_SECRET") as? String,
+           !bundleVal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return bundleVal
+        }
+        return "dev-app-secret-change-in-production"
+    }
+
     public init(
         baseURL: URL = URL(string: MetricsSettings.defaultServerURL)!,
         directBaseURL: URL = URL(string: MetricsSettings.defaultDirectServerURL)!,
         cache: ResponseCache = ResponseCache(),
-        appSecret: String = Bundle.main.object(forInfoDictionaryKey: "METRICS_APP_SECRET") as? String ?? "dev-app-secret-change-in-production"
+        appSecret: String = MetricsAPIClient.resolveDefaultAppSecret()
     ) {
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = [
@@ -61,6 +78,22 @@ public actor MetricsAPIClient {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
         components.port = 8443
         self.directBaseURL = components.url ?? url
+    }
+
+    /// App Secret 런타임 갱신. 빈 문자열을 넘기면 Bundle 주입값(또는 dev fallback)으로 되돌린다.
+    /// 변경 시 기존 JWT 토큰을 무효화한다.
+    public func updateAppSecret(_ secret: String) {
+        let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved: String
+        if trimmed.isEmpty {
+            resolved = MetricsAPIClient.resolveDefaultAppSecret()
+        } else {
+            resolved = trimmed
+        }
+        guard resolved != self.appSecret else { return }
+        self.appSecret = resolved
+        self.jwtToken = nil
+        self.jwtExpiresAt = nil
     }
     
     // MARK: - JWT Token Management

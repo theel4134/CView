@@ -245,7 +245,7 @@ private struct MCTabBar: View {
                 .fill(DesignTokens.Glass.dividerColor.opacity(0.35))
                 .frame(height: 0.5)
         }
-        .shadow(color: .black.opacity(0.18), radius: 4, x: 0, y: 2)
+        .shadow(DesignTokens.Shadow.sm)
         .zIndex(2)
     }
 
@@ -556,7 +556,7 @@ private struct MCTabChip: View {
                 Text(String(session.channelName.prefix(1)).uppercased())
                     .font(DesignTokens.Typography.custom(size: 10, weight: .bold))
                     .foregroundStyle(DesignTokens.Colors.textOnOverlay)
-                    .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                    .shadow(DesignTokens.Shadow.textOnMedia)
             }
             statusDot
         }

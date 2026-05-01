@@ -82,10 +82,16 @@ struct MLNetworkTab: View {
             .tint(healthColor(m.healthScore))
 
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignTokens.Spacing.xs) {
-            metricCard("대역폭", formatBytesPerSec(m.networkBytesPerSec), icon: "arrow.down.circle")
-            metricCard("입력 비트레이트", String(format: "%.0f kbps", m.inputBitrateKbps), icon: "speedometer")
-            metricCard("FPS", String(format: "%.1f", m.fps), icon: "film")
-            metricCard("버퍼 건강도", String(format: "%.0f%%", m.bufferHealth * 100), icon: "heart.fill")
+            metricCard("대역폭", formatBandwidth(session.displayBandwidthBytesPerSec), icon: "arrow.down.circle",
+                       sparkline: bandwidthSpark())
+            // [정밀화] VLC inputBitrateKbps 가 0이면 프록시 대역폭을 kbps 로 환산해 관찰값 표시.
+            metricCard("입력 비트레이트", inputBitrateText(m), icon: "speedometer")
+            // [정밀화] VLC HW-decode 경로에서 fps=0 으로 고착 → 최근 유효 값 fallback.
+            metricCard("FPS", fpsText(m.fps), icon: "film", sparkline: fpsSpark())
+            // [정밀화] bufferHealth=0 stuck 시도 최근 유효 값 fallback.
+            metricCard("버퍼 건강도", bufferText(m.bufferHealth), icon: "heart.fill",
+                       alert: bufferAlert(m.bufferHealth),
+                       sparkline: bufferSpark())
             metricCard("드롭 프레임", "\(m.droppedFramesDelta)", icon: "exclamationmark.triangle", alert: m.droppedFramesDelta > 0)
             metricCard("지연 프레임", "\(m.latePicturesDelta)", icon: "clock.badge.exclamationmark", alert: m.latePicturesDelta > 0)
         }
@@ -146,8 +152,12 @@ struct MLNetworkTab: View {
             .tint(healthColor(m.healthScore))
 
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignTokens.Spacing.xs) {
+            metricCard("대역폭", formatBytesPerSecD(session.displayBandwidthBytesPerSec), icon: "arrow.down.circle",
+                       sparkline: bandwidthSpark())
             metricCard("비트레이트", String(format: "%.0f kbps", m.bitrateKbps), icon: "speedometer")
-            metricCard("버퍼 건강도", String(format: "%.0f%%", m.bufferHealth * 100), icon: "heart.fill")
+            metricCard("버퍼 건강도", String(format: "%.0f%%", m.bufferHealth * 100), icon: "heart.fill",
+                       alert: m.bufferHealth < 0.3,
+                       sparkline: bufferSpark())
             metricCard("드롭 프레임", "\(m.droppedFramesDelta)", icon: "exclamationmark.triangle", alert: m.droppedFramesDelta > 0)
             metricCard("지연 시간", String(format: "%.1f초", m.measuredLatency), icon: "timer")
         }
@@ -204,12 +214,15 @@ struct MLNetworkTab: View {
             .tint(healthColor(m.healthScore))
 
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignTokens.Spacing.xs) {
+            metricCard("대역폭", formatBytesPerSecD(session.displayBandwidthBytesPerSec), icon: "arrow.down.circle",
+                       sparkline: bandwidthSpark())
             metricCard("비트레이트", String(format: "%.0f kbps", m.bitrateKbps), icon: "speedometer")
-            metricCard("버퍼 건강도", String(format: "%.0f%%", m.bufferHealth * 100), icon: "heart.fill")
-            metricCard("FPS", String(format: "%.1f", m.fps), icon: "film")
+            metricCard("버퍼 건강도", String(format: "%.0f%%", m.bufferHealth * 100), icon: "heart.fill",
+                       alert: m.bufferHealth < 0.3,
+                       sparkline: bufferSpark())
+            metricCard("FPS", String(format: "%.1f", m.fps), icon: "film", sparkline: fpsSpark())
             metricCard("지연 시간", String(format: "%.1f초", m.latency), icon: "timer")
             metricCard("드롭 프레임", "\(m.droppedFramesDelta)", icon: "exclamationmark.triangle", alert: m.droppedFramesDelta > 0)
-            metricCard("버퍼 길이", String(format: "%.1f초", m.bufferLength), icon: "clock")
         }
 
         HStack {
@@ -438,6 +451,12 @@ struct MLNetworkTab: View {
 
     @ViewBuilder
     private func metricCard(_ label: String, _ value: String, icon: String, alert: Bool = false) -> some View {
+        metricCard(label, value, icon: icon, alert: alert, sparkline: AnyView?.none)
+    }
+
+    @ViewBuilder
+    private func metricCard(_ label: String, _ value: String, icon: String, alert: Bool = false,
+                            sparkline: AnyView?) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 10))
@@ -449,6 +468,9 @@ struct MLNetworkTab: View {
                 Text(value)
                     .font(DesignTokens.Typography.custom(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(alert ? DesignTokens.Colors.warning : DesignTokens.Colors.textPrimary)
+                if let sparkline {
+                    sparkline.frame(height: 12)
+                }
             }
             Spacer()
         }
@@ -457,6 +479,28 @@ struct MLNetworkTab: View {
             RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
                 .fill(alert ? DesignTokens.Colors.warning.opacity(0.06) : DesignTokens.Colors.surfaceElevated.opacity(0.5))
         )
+    }
+
+    // MARK: - Sparkline helpers
+
+    private var historySamples: [NetworkMonitorHistory.Sample] { session.networkHistory.samples }
+
+    private func bandwidthSpark() -> AnyView? {
+        let values = historySamples.map(\.bandwidthBytesPerSec)
+        guard values.count >= 2 else { return nil }
+        return AnyView(NetworkSparkline(values: values, tint: DesignTokens.Colors.chzzkGreen))
+    }
+
+    private func fpsSpark() -> AnyView? {
+        let values = historySamples.map(\.fps)
+        guard values.count >= 2, (values.max() ?? 0) > 0 else { return nil }
+        return AnyView(NetworkSparkline(values: values, tint: DesignTokens.Colors.accentBlue, displayMax: 60))
+    }
+
+    private func bufferSpark() -> AnyView? {
+        let values = historySamples.map(\.bufferHealth)
+        guard values.count >= 2 else { return nil }
+        return AnyView(NetworkSparkline(values: values, tint: .orange, displayMax: 1.0))
     }
 
     @ViewBuilder
@@ -484,6 +528,53 @@ struct MLNetworkTab: View {
         if mbps >= 1.0 { return String(format: "%.1f Mbps", mbps) }
         let kbps = Double(bytes) * 8.0 / 1_000.0
         return String(format: "%.0f kbps", kbps)
+    }
+
+    private func formatBytesPerSecD(_ bytes: Double) -> String {
+        let mbps = bytes * 8.0 / 1_000_000.0
+        if mbps >= 1.0 { return String(format: "%.1f Mbps", mbps) }
+        let kbps = bytes * 8.0 / 1_000.0
+        return String(format: "%.0f kbps", kbps)
+    }
+
+    // MARK: - [정밀화] 표시 Helper — 0/미측정/fallback 구분
+
+    /// 대역폭 표시 — 0 이면 "측정 중…", 그 외는 Mbps/kbps 자동 스케일.
+    private func formatBandwidth(_ bytes: Double) -> String {
+        guard bytes > 0 else { return "—" }
+        return formatBytesPerSecD(bytes)
+    }
+
+    /// FPS — 0 이면 최근 유효 값 fallback (괄호 표기), 아예 관측 없으면 "—".
+    private func fpsText(_ fps: Double) -> String {
+        if fps > 0 { return String(format: "%.1f", fps) }
+        if session.lastNonZeroFps > 0 {
+            return String(format: "~%.1f", session.lastNonZeroFps)
+        }
+        return "—"
+    }
+
+    /// 버퍼 건강도 — 0 이면 최근 유효 값, 없으면 "—".
+    private func bufferText(_ buffer: Double) -> String {
+        if buffer > 0 { return String(format: "%.0f%%", buffer * 100) }
+        if session.lastNonZeroBufferHealth > 0 {
+            return String(format: "~%.0f%%", session.lastNonZeroBufferHealth * 100)
+        }
+        return "—"
+    }
+
+    private func bufferAlert(_ buffer: Double) -> Bool {
+        let value = buffer > 0 ? buffer : session.lastNonZeroBufferHealth
+        return value > 0 && value < 0.3
+    }
+
+    /// 입력 비트레이트 — VLC 수치가 0이면 프록시 관찰 대역폭을 kbps 로 환산해 표시.
+    private func inputBitrateText(_ m: VLCLiveMetrics) -> String {
+        if m.inputBitrateKbps > 0 { return String(format: "%.0f kbps", m.inputBitrateKbps) }
+        if m.demuxBitrateKbps > 0 { return String(format: "%.0f kbps", m.demuxBitrateKbps) }
+        let bw = session.proxyBandwidthBytesPerSec
+        if bw > 0 { return String(format: "~%.0f kbps", bw * 8.0 / 1_000.0) }
+        return "—"
     }
 
     private func formatBytes(_ bytes: Int64) -> String {

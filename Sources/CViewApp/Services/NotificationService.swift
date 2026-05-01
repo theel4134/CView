@@ -45,8 +45,10 @@ final class NotificationService: NSObject {
             return
         }
 
-        // LaunchServices 재등록 — 알림 아이콘 캐시 강제 갱신
-        refreshLaunchServicesRegistration()
+        // LaunchServices 재등록 — 빌드/경로가 바뀌었을 때 한 번만 (TCC 프롬프트 유발 회피)
+        // [Fix 2026-04-30] macOS 15 Sequoia 에서 매 시작마다 lsregister 호출 시
+        // "다른 앱의 데이터에 접근" TCC 다이얼로그를 트리거할 수 있어 1회 등록으로 제한.
+        refreshLaunchServicesRegistrationIfNeeded()
 
         do {
             center.delegate = self
@@ -58,18 +60,37 @@ final class NotificationService: NSObject {
         }
     }
 
-    /// LaunchServices에 앱 번들을 강제 재등록하여 알림 아이콘 캐시 갱신
-    private func refreshLaunchServicesRegistration() {
+    /// LaunchServices에 앱 번들을 강제 재등록하여 알림 아이콘 캐시 갱신.
+    /// 빌드 번호 + 번들 경로 조합이 바뀐 첫 실행에만 수행하여 매 실행마다 TCC 프롬프트가
+    /// 떠오르지 않도록 한다.
+    private func refreshLaunchServicesRegistrationIfNeeded() {
         let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
         guard FileManager.default.fileExists(atPath: lsregister) else { return }
         let bundlePath = Bundle.main.bundlePath
+        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+        let signature = "\(version)|\(build)|\(bundlePath)"
+
+        let key = "NotificationService.lsregister.lastSignature"
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: key) == signature {
+            return  // 이미 등록됨 — 스킵
+        }
+
         // @MainActor 블로킹 방지: 비동기로 프로세스 실행
         Task.detached(priority: .utility) {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: lsregister)
             process.arguments = ["-f", bundlePath]
-            try? process.run()
-            process.waitUntilExit()
+            do {
+                try process.run()
+                process.waitUntilExit()
+                await MainActor.run {
+                    UserDefaults.standard.set(signature, forKey: key)
+                }
+            } catch {
+                // 실패 시 다음 실행에 재시도
+            }
         }
     }
 

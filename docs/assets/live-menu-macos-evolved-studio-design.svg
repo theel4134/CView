@@ -1,0 +1,230 @@
+<svg width="1600" height="1040" viewBox="0 0 1600 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .title { font: 800 38px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f5f8fa; }
+    .subtitle { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #91a4b2; }
+    .h1 { font: 800 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f4f8fa; }
+    .h2 { font: 750 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e8f0f4; }
+    .label { font: 700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #dfe9ee; }
+    .small { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #91a4b2; }
+    .tiny { font: 600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #738793; }
+    .muted { fill: #7e919e; }
+    .panel { fill: #101820; stroke: #263846; stroke-width: 1; }
+    .panel2 { fill: #121d27; stroke: #2e4353; stroke-width: 1; }
+    .stage { fill: #080d12; stroke: #314859; stroke-width: 1; }
+    .green { fill: #22c55e; }
+    .orange { fill: #f59e0b; }
+    .blue { fill: #60a5fa; }
+    .purple { fill: #a855f7; }
+    .red { fill: #ef4444; }
+  </style>
+
+  <rect width="1600" height="1040" fill="#070b10"/>
+  <rect x="34" y="28" width="1532" height="984" rx="30" fill="#0b1117" stroke="#22313f"/>
+
+  <text x="72" y="84" class="title">CView Live Studio Pro</text>
+  <text x="72" y="116" class="subtitle">Native Inspector Studio를 발전시킨 macOS 전용 멀티라이브 작업 공간</text>
+
+  <!-- Main mock window -->
+  <g transform="translate(72 150)">
+    <rect width="1180" height="718" rx="24" fill="#0d151d" stroke="#2a3e4e"/>
+
+    <!-- titlebar / toolbar -->
+    <rect x="0" y="0" width="1180" height="70" rx="24" fill="#151f29"/>
+    <rect x="0" y="46" width="1180" height="24" fill="#151f29"/>
+    <circle cx="28" cy="31" r="6" fill="#ff5f57"/>
+    <circle cx="50" cy="31" r="6" fill="#febc2e"/>
+    <circle cx="72" cy="31" r="6" fill="#28c840"/>
+    <text x="102" y="36" class="h2">Live Studio Pro</text>
+    <text x="222" y="36" class="small">Native Inspector · 멀티</text>
+
+    <g transform="translate(428 18)">
+      <rect width="210" height="34" rx="17" fill="#0f1820" stroke="#334959"/>
+      <rect x="76" y="4" width="62" height="26" rx="13" fill="#22c55e"/>
+      <text x="24" y="22" class="small">탐색</text>
+      <text x="93" y="22" class="small" fill="#06100a">시청</text>
+      <text x="158" y="22" class="small">멀티</text>
+    </g>
+
+    <g transform="translate(666 18)">
+      <rect width="82" height="34" rx="17" fill="#101b24" stroke="#344c5d"/>
+      <text x="18" y="22" class="small">기본</text>
+      <rect x="94" width="110" height="34" rx="17" fill="#101b24" stroke="#344c5d"/>
+      <text x="112" y="22" class="small">세션 3/4</text>
+      <rect x="216" width="126" height="34" rx="17" fill="#101b24" stroke="#f59e0b" stroke-opacity=".55"/>
+      <text x="236" y="22" class="small">Inspector 채팅</text>
+      <rect x="354" width="96" height="34" rx="17" fill="#101b24" stroke="#60a5fa" stroke-opacity=".55"/>
+      <text x="378" y="22" class="small">Command</text>
+    </g>
+
+    <!-- content columns -->
+    <rect x="0" y="70" width="250" height="584" fill="#101922"/>
+    <rect x="250" y="70" width="1" height="584" fill="#2a3d4b"/>
+    <rect x="251" y="70" width="642" height="584" fill="#080d12"/>
+    <rect x="893" y="70" width="1" height="584" fill="#2a3d4b"/>
+    <rect x="894" y="70" width="286" height="584" fill="#101922"/>
+
+    <!-- Channel shelf -->
+    <g transform="translate(18 94)">
+      <text x="0" y="0" class="h2">Channel Shelf</text>
+      <rect x="0" y="18" width="214" height="34" rx="10" fill="#182532" stroke="#31495b"/>
+      <text x="16" y="40" class="small">검색: 채널, 카테고리, 제목</text>
+
+      <g transform="translate(0 72)">
+        <text x="0" y="0" class="label">Live Now</text>
+        <rect x="0" y="14" width="214" height="62" rx="12" fill="#172432" stroke="#22c55e" stroke-opacity=".45"/>
+        <circle cx="24" cy="45" r="14" fill="#22c55e"/>
+        <text x="48" y="39" class="label">Channel A</text>
+        <text x="48" y="56" class="tiny">FPS 안정 · +멀티</text>
+        <rect x="166" y="31" width="32" height="24" rx="8" fill="#22c55e" opacity=".18" stroke="#22c55e"/>
+        <text x="177" y="47" class="tiny">+</text>
+      </g>
+
+      <g transform="translate(0 154)">
+        <rect x="0" y="0" width="214" height="62" rx="12" fill="#172432" stroke="#31495b"/>
+        <circle cx="24" cy="31" r="14" fill="#60a5fa"/>
+        <text x="48" y="25" class="label">Channel B</text>
+        <text x="48" y="42" class="tiny">추천 조합 · preview</text>
+        <rect x="166" y="17" width="32" height="24" rx="8" fill="#1d2b37" stroke="#4b6475"/>
+        <text x="177" y="33" class="tiny">▶</text>
+      </g>
+
+      <g transform="translate(0 226)">
+        <rect x="0" y="0" width="214" height="62" rx="12" fill="#172432" stroke="#31495b"/>
+        <circle cx="24" cy="31" r="14" fill="#f59e0b"/>
+        <text x="48" y="25" class="label">Channel C</text>
+        <text x="48" y="42" class="tiny">최근 시청 · 채팅 열기</text>
+      </g>
+
+      <g transform="translate(0 326)">
+        <text x="0" y="0" class="label">Recommended Set</text>
+        <rect x="0" y="16" width="214" height="72" rx="12" fill="#121d27" stroke="#31495b"/>
+        <text x="16" y="42" class="small">게임 + 토크 4채널</text>
+        <text x="16" y="62" class="tiny">한 번에 멀티 구성</text>
+        <rect x="146" y="34" width="52" height="24" rx="8" fill="#22c55e" opacity=".16" stroke="#22c55e"/>
+        <text x="157" y="50" class="tiny">추가</text>
+      </g>
+    </g>
+
+    <!-- Program stage -->
+    <g transform="translate(277 96)">
+      <text x="0" y="0" class="h2">Program Stage</text>
+      <text x="116" y="0" class="small">Grid · Focus · Single Stage</text>
+
+      <rect x="0" y="24" width="590" height="418" rx="18" fill="#0a1016" stroke="#354d60"/>
+      <rect x="24" y="48" width="260" height="154" rx="14" fill="#1a2a38" stroke="#22c55e" stroke-width="2"/>
+      <rect x="306" y="48" width="260" height="154" rx="14" fill="#1a2a38" stroke="#405b6d"/>
+      <rect x="24" y="224" width="260" height="154" rx="14" fill="#1a2a38" stroke="#405b6d"/>
+      <rect x="306" y="224" width="260" height="154" rx="14" fill="#101820" stroke="#5a6f7c" stroke-dasharray="8 8"/>
+
+      <text x="44" y="84" class="label">Channel A</text>
+      <rect x="44" y="104" width="74" height="22" rx="11" fill="#22c55e" opacity=".18" stroke="#22c55e"/>
+      <text x="58" y="119" class="tiny">ACTIVE</text>
+      <rect x="130" y="104" width="62" height="22" rx="11" fill="#1d2c38" stroke="#60a5fa"/>
+      <text x="144" y="119" class="tiny">AUDIO</text>
+
+      <text x="326" y="84" class="label">Channel B</text>
+      <rect x="326" y="104" width="58" height="22" rx="11" fill="#1d2c38" stroke="#405b6d"/>
+      <text x="341" y="119" class="tiny">LIVE</text>
+
+      <text x="44" y="260" class="label">Channel C</text>
+      <rect x="44" y="280" width="74" height="22" rx="11" fill="#2b211b" stroke="#f59e0b"/>
+      <text x="56" y="295" class="tiny">BUFFER</text>
+
+      <text x="374" y="292" class="label">Empty Slot</text>
+      <text x="354" y="314" class="small">채널을 끌어오거나 +멀티</text>
+
+      <!-- floating palette -->
+      <rect x="158" y="386" width="274" height="42" rx="21" fill="#16222c" fill-opacity=".94" stroke="#64748b"/>
+      <text x="178" y="412" class="small">Floating Palette</text>
+      <rect x="284" y="396" width="36" height="22" rx="11" fill="#22c55e" opacity=".18" stroke="#22c55e"/>
+      <text x="296" y="411" class="tiny">목록</text>
+      <rect x="330" y="396" width="36" height="22" rx="11" fill="#1d2c38" stroke="#60a5fa"/>
+      <text x="342" y="411" class="tiny">채팅</text>
+      <rect x="376" y="396" width="36" height="22" rx="11" fill="#1d2c38" stroke="#f59e0b"/>
+      <text x="388" y="411" class="tiny">도구</text>
+    </g>
+
+    <!-- Inspector -->
+    <g transform="translate(918 94)">
+      <text x="0" y="0" class="h2">Inspector</text>
+      <g transform="translate(0 18)">
+        <rect width="238" height="34" rx="10" fill="#182532" stroke="#31495b"/>
+        <rect x="8" y="6" width="62" height="22" rx="11" fill="#f59e0b" opacity=".20" stroke="#f59e0b"/>
+        <text x="23" y="21" class="tiny">Chat</text>
+        <text x="91" y="21" class="tiny">Quality</text>
+        <text x="166" y="21" class="tiny">Tools</text>
+      </g>
+
+      <rect x="0" y="72" width="238" height="150" rx="14" fill="#121d27" stroke="#31495b"/>
+      <text x="18" y="100" class="label">Unified Chat</text>
+      <rect x="18" y="116" width="160" height="18" rx="6" fill="#1d2b37"/>
+      <rect x="18" y="144" width="190" height="18" rx="6" fill="#1d2b37"/>
+      <rect x="18" y="172" width="132" height="18" rx="6" fill="#1d2b37"/>
+
+      <rect x="0" y="240" width="238" height="116" rx="14" fill="#121d27" stroke="#31495b"/>
+      <text x="18" y="268" class="label">Selected Session</text>
+      <text x="18" y="292" class="small">Engine VLC · 1080p · 59 FPS</text>
+      <text x="18" y="316" class="small">Latency 2.4s · Buffer warning</text>
+      <rect x="18" y="330" width="76" height="20" rx="10" fill="#2b211b" stroke="#f59e0b"/>
+      <text x="34" y="344" class="tiny">Recheck</text>
+
+      <rect x="0" y="374" width="238" height="114" rx="14" fill="#121d27" stroke="#31495b"/>
+      <text x="18" y="402" class="label">Control Room</text>
+      <text x="18" y="426" class="small">채팅 집중 · 모니터링 집중</text>
+      <rect x="18" y="444" width="90" height="24" rx="9" fill="#1d2c38" stroke="#60a5fa"/>
+      <text x="34" y="460" class="tiny">Network</text>
+      <rect x="122" y="444" width="80" height="24" rx="9" fill="#1d2c38" stroke="#a855f7"/>
+      <text x="144" y="460" class="tiny">Metrics</text>
+    </g>
+
+    <!-- session rail -->
+    <rect x="0" y="654" width="1180" height="64" rx="0" fill="#121b24"/>
+    <rect x="0" y="654" width="1180" height="1" fill="#2a3d4b"/>
+    <text x="24" y="692" class="label">Session Rail</text>
+    <g transform="translate(136 671)">
+      <rect width="138" height="30" rx="15" fill="#172532" stroke="#22c55e"/>
+      <circle cx="18" cy="15" r="5" fill="#22c55e"/>
+      <text x="32" y="19" class="small">Channel A · Audio</text>
+      <rect x="150" width="122" height="30" rx="15" fill="#172532" stroke="#3f5868"/>
+      <circle cx="168" cy="15" r="5" fill="#22c55e"/>
+      <text x="182" y="19" class="small">Channel B</text>
+      <rect x="284" width="130" height="30" rx="15" fill="#172532" stroke="#f59e0b"/>
+      <circle cx="302" cy="15" r="5" fill="#f59e0b"/>
+      <text x="316" y="19" class="small">Channel C · Buffer</text>
+      <rect x="438" width="94" height="30" rx="15" fill="#172532" stroke="#60a5fa"/>
+      <text x="462" y="19" class="small">PiP</text>
+      <rect x="546" width="118" height="30" rx="15" fill="#172532" stroke="#a855f7"/>
+      <text x="572" y="19" class="small">Command</text>
+    </g>
+  </g>
+
+  <!-- right detail cards -->
+  <g transform="translate(1288 166)">
+    <rect width="220" height="198" rx="18" fill="#101820" stroke="#304656"/>
+    <text x="22" y="38" class="h2">Native Mode</text>
+    <text x="22" y="66" class="small">기본 작업 화면</text>
+    <rect x="22" y="92" width="176" height="56" rx="12" fill="#172532" stroke="#22c55e"/>
+    <text x="42" y="125" class="small">Shelf + Stage + Inspector</text>
+    <text x="22" y="174" class="tiny">일반 사용자 기본값</text>
+  </g>
+
+  <g transform="translate(1288 386)">
+    <rect width="220" height="198" rx="18" fill="#101820" stroke="#304656"/>
+    <text x="22" y="38" class="h2">Palette Mode</text>
+    <text x="22" y="66" class="small">몰입형 stage</text>
+    <rect x="22" y="92" width="176" height="56" rx="12" fill="#172532" stroke="#60a5fa"/>
+    <text x="48" y="125" class="small">Auto-hide Palette</text>
+    <text x="22" y="174" class="tiny">작은 창 / 시청 집중</text>
+  </g>
+
+  <g transform="translate(1288 606)">
+    <rect width="220" height="198" rx="18" fill="#101820" stroke="#304656"/>
+    <text x="22" y="38" class="h2">Control Room</text>
+    <text x="22" y="66" class="small">보조 창 워크스페이스</text>
+    <rect x="22" y="92" width="176" height="56" rx="12" fill="#172532" stroke="#a855f7"/>
+    <text x="46" y="125" class="small">Chat · Network · Metrics</text>
+    <text x="22" y="174" class="tiny">멀티모니터 / 파워유저</text>
+  </g>
+
+  <text x="72" y="938" class="subtitle">핵심: 화면을 더 복잡하게 만드는 것이 아니라, CView의 macOS 자산을 하나의 studio language로 묶는다.</text>
+</svg>
