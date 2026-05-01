@@ -13,73 +13,29 @@ extension FollowingView {
     // Quality/Tools/Inspector 등은 Command Palette 또는 stage popover로 격리.
 
     var liveHubTopBar: some View {
-        HStack(spacing: DesignTokens.Spacing.md) {
-            // 좌측 브랜드
-            HStack(spacing: 6) {
-                Image(systemName: "bolt.horizontal.circle.fill")
-                    .font(DesignTokens.Typography.custom(size: 14, weight: .bold))
-                    .foregroundStyle(DesignTokens.Colors.chzzkGreen)
-                Text("Live")
-                    .font(DesignTokens.Typography.custom(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+        GeometryReader { proxy in
+            // [Fix 2026-05-01 v2] 본문 카드(`overviewStage`)와 동일한 좌·우 24pt 인셋을 적용해
+            // 상단 컨트롤이 카드 가장자리와 한 컬럼 그리드처럼 정렬되도록 한다.
+            //   - 좌측: 모드 토글 (탐색/시청/멀티) → 카드 좌측 가장자리
+            //   - 우측: 액션 rail (LIVE n / Command / 더보기 등) → 카드 우측 가장자리
+            // 배경/경계선은 GeometryReader 바깥의 .background / .overlay 가 스테이지 폭 전체로 그려준다.
+            let stageWidth = proxy.size.width
+            let inset: CGFloat = DesignTokens.Spacing.xl  // 24pt (overviewStage 와 동일)
+            let controlWidth = max(stageWidth - inset * 2, 0)
+            let metrics = liveTopBarMetrics(for: controlWidth)
+
+            HStack(spacing: DesignTokens.Spacing.md) {
+                hubModeSegment(style: metrics.modeStyle)
+                    .layoutPriority(10)
+
+                Spacer(minLength: 0)
+
+                actionRail(tier: metrics.actionTier)
+                    .layoutPriority(1)
             }
-            .frame(width: 70, alignment: .leading)
-
-            // 중앙 모드 세그먼트 (탐색 / 시청 / 멀티)
-            hubModeSegment
-
-            Spacer(minLength: 0)
-
-            // 우측: 라이브 카운트 + 명령 + 새로고침
-            HStack(spacing: 8) {
-                if viewModel.followingLiveCount > 0 {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(DesignTokens.Colors.live)
-                            .frame(width: 6, height: 6)
-                        Text("LIVE \(viewModel.followingLiveCount)")
-                            .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    }
-                    .padding(.horizontal, 9)
-                    .frame(height: 24)
-                    .background(Capsule().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
-                    .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
-                }
-
-                Button {
-                    appState.showCommandPalette = true
-                } label: {
-                    topBarToken(text: "Command", icon: "command")
-                }
-                .buttonStyle(.plain)
-                .help("Command Palette (⌘K)")
-
-                // [2026-04-28] 테마 토글 — Light/Dark/System 순환 (디자인 사료 §2 Theme Mode)
-                themeCycleButton
-
-                Button {
-                    guard !viewModel.isLoadingFollowing else { return }
-                    Task { await viewModel.loadFollowingChannels(invalidateThumbnails: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(Circle().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
-                        .overlay(Circle().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
-                        .rotationEffect(.degrees(viewModel.isLoadingFollowing ? refreshRotation : 0))
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoadingFollowing)
-                .help("새로고침")
-            }
+            .padding(.horizontal, inset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // [Fix] hiddenTitleBar 창의 트래픽 라이트(빨/노/초)가 좌측 약 72pt
-        // 영역을 차지하므로, 좌측 inset을 그만큼 확보해 브랜드/세그먼트와의
-        // 시각적 겹침을 제거한다. 우측은 기본 lg 유지.
-        .padding(.leading, 78)
-        .padding(.trailing, DesignTokens.Spacing.lg)
         .frame(height: 48)
         .background(
             ZStack {
@@ -101,18 +57,248 @@ extension FollowingView {
         }
     }
 
-    private func topBarToken(text: String, icon: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
-            Text(text)
-                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+    // MARK: - Top Bar V2 Metrics
+
+    private enum LiveTopBarActionTier: Int, CaseIterable {
+        case tier0Full
+        case tier1CommandCompact
+        case tier2MoreCompact
+        case tier3MoreOnly
+    }
+
+    private enum LiveTopBarModeStyle {
+        case wide
+        case regular
+        case compact
+    }
+
+    private struct LiveTopBarMetrics {
+        let actionTier: LiveTopBarActionTier
+        let modeStyle: LiveTopBarModeStyle
+    }
+
+    /// `availableWidth` = 좌·우 인셋(24pt × 2)을 제외한 실제 컨트롤 영역 폭.
+    /// 이 안에 모드 토글 + Spacer + 액션 rail 이 들어가야 하므로,
+    /// 모드 dock 너비와 액션 rail 너비의 합 + 안전 여백이 들어갈 수 있는 가장 풍부한 tier 를 선택한다.
+    private func liveTopBarMetrics(for availableWidth: CGFloat) -> LiveTopBarMetrics {
+        let modeStyle: LiveTopBarModeStyle = availableWidth < 720 ? .compact : (availableWidth < 1080 ? .regular : .wide)
+        let modeDockWidth = modeDockWidth(for: modeStyle)
+
+        // Tier 우선값 — 폭이 넓을수록 풍부한 정보 노출
+        let preferredTier: LiveTopBarActionTier
+        switch availableWidth {
+        case ..<720: preferredTier = .tier3MoreOnly
+        case ..<880: preferredTier = .tier2MoreCompact
+        case ..<1080: preferredTier = .tier1CommandCompact
+        default: preferredTier = .tier0Full
         }
-        .foregroundStyle(DesignTokens.Colors.textSecondary)
-        .padding(.horizontal, 9)
-        .frame(height: 24)
-        .background(Capsule().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
-        .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+
+        // 보호 계산: 모드 dock + 액션 rail 이 컨트롤 영역에 못 들어가면 tier 강등
+        let candidates = LiveTopBarActionTier.allCases
+            .filter { $0.rawValue >= preferredTier.rawValue }
+            .sorted { $0.rawValue < $1.rawValue }
+
+        let selectedTier = candidates.first { tier in
+            let actionWidth = actionRailWidth(for: tier)
+            // 24pt = 모드/액션 사이 최소 간격(가독성), DesignTokens.Spacing.md == 12pt 두 개 분
+            let required = modeDockWidth + actionWidth + 24
+            return required <= availableWidth
+        } ?? .tier3MoreOnly
+
+        return LiveTopBarMetrics(
+            actionTier: selectedTier,
+            modeStyle: modeStyle
+        )
+    }
+
+    /// 모드 dock(탐색/시청/멀티 캡슐)의 추정 너비 — 보호 계산용.
+    /// 실제 너비는 `hubModeSegment` 내부 콘텐츠가 결정하지만,
+    /// tier 강등 판정에는 충분히 안전한 상한값이 필요해 모드 스타일별로 산정한다.
+    private func modeDockWidth(for style: LiveTopBarModeStyle) -> CGFloat {
+        switch style {
+        case .wide: return 332
+        case .regular: return 286
+        case .compact: return 168  // 아이콘만 노출되는 compact 모드
+        }
+    }
+
+    private func actionRailWidth(for tier: LiveTopBarActionTier) -> CGFloat {
+        let hasLive = viewModel.followingLiveCount > 0
+        switch tier {
+        case .tier0Full:
+            return hasLive ? 268 : 206
+        case .tier1CommandCompact:
+            return hasLive ? 230 : 168
+        case .tier2MoreCompact:
+            return hasLive ? 168 : 100
+        case .tier3MoreOnly:
+            return 40
+        }
+    }
+
+    // MARK: - Top Bar Rails
+
+    // [Removed 2026-05-01 v2] identityRail — 좌측 브랜드 아이콘은 사이드바 "라이브" 항목과 중복되고
+    // 본문 카드 좌측 경계와의 정렬을 깨뜨려 시각적 단절을 만들어 제거.
+
+    @ViewBuilder
+    private func actionRail(tier: LiveTopBarActionTier) -> some View {
+        HStack(spacing: 8) {
+            switch tier {
+            case .tier0Full:
+                liveChip(style: .full)
+                commandButton(textVisible: true)
+                themeCycleButton
+                refreshIconButton
+            case .tier1CommandCompact:
+                liveChip(style: .wordOnly)
+                commandButton(textVisible: false)
+                themeCycleButton
+                refreshIconButton
+            case .tier2MoreCompact:
+                liveChip(style: .dotCount)
+                commandButton(textVisible: false)
+                moreMenu
+            case .tier3MoreOnly:
+                moreMenu
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private enum LiveChipStyle {
+        case full
+        case wordOnly
+        case dotCount
+    }
+
+    @ViewBuilder
+    private func liveChip(style: LiveChipStyle) -> some View {
+        if viewModel.followingLiveCount > 0 {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(DesignTokens.Colors.live)
+                    .frame(width: 6, height: 6)
+                switch style {
+                case .full:
+                    Text("LIVE \(min(viewModel.followingLiveCount, 999))\(viewModel.followingLiveCount > 999 ? "+" : "")")
+                case .wordOnly:
+                    Text("LIVE")
+                case .dotCount:
+                    Text("\(min(viewModel.followingLiveCount, 999))\(viewModel.followingLiveCount > 999 ? "+" : "")")
+                        .monospacedDigit()
+                }
+            }
+            .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+            .lineLimit(1)
+            .foregroundStyle(DesignTokens.Colors.textSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(Capsule().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+            .overlay(Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+        }
+    }
+
+    private func commandButton(textVisible: Bool) -> some View {
+        Button {
+            appState.showCommandPalette = true
+        } label: {
+            HStack(spacing: textVisible ? 4 : 0) {
+                Image(systemName: "command")
+                    .font(DesignTokens.Typography.custom(size: 10, weight: .semibold))
+                if textVisible {
+                    Text("Command")
+                        .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(DesignTokens.Colors.textSecondary)
+            .padding(.horizontal, textVisible ? 9 : 0)
+            .frame(width: textVisible ? nil : 28, height: 28)
+            .background {
+                if textVisible {
+                    Capsule().fill(DesignTokens.Colors.surfaceBase.opacity(0.85))
+                } else {
+                    Circle().fill(DesignTokens.Colors.surfaceBase.opacity(0.85))
+                }
+            }
+            .overlay {
+                if textVisible {
+                    Capsule().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6)
+                } else {
+                    Circle().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Command Palette (⌘K)")
+    }
+
+    private var refreshIconButton: some View {
+        Button {
+            guard !viewModel.isLoadingFollowing else { return }
+            Task { await viewModel.loadFollowingChannels(invalidateThumbnails: true) }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+                .overlay(Circle().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+                .rotationEffect(.degrees(viewModel.isLoadingFollowing ? refreshRotation : 0))
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isLoadingFollowing)
+        .help("새로고침")
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button("Command Palette") {
+                appState.showCommandPalette = true
+            }
+
+            Menu("테마") {
+                Button("System") {
+                    appState.settingsStore.appearance.theme = .system
+                    Task { await appState.settingsStore.save() }
+                }
+                Button("Light") {
+                    appState.settingsStore.appearance.theme = .light
+                    Task { await appState.settingsStore.save() }
+                }
+                Button("Dark") {
+                    appState.settingsStore.appearance.theme = .dark
+                    Task { await appState.settingsStore.save() }
+                }
+            }
+
+            Button("새로고침") {
+                guard !viewModel.isLoadingFollowing else { return }
+                Task { await viewModel.loadFollowingChannels(invalidateThumbnails: true) }
+            }
+            .disabled(viewModel.isLoadingFollowing)
+
+            Divider()
+
+            Button("네트워크 모니터") { openWindow(id: "ml-network-window") }
+            Button("메트릭 전송") { openWindow(id: "ml-metrics-window") }
+
+            if viewModel.followingLiveCount > 0 {
+                Divider()
+                Text("현재 라이브 \(viewModel.followingLiveCount)개")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(DesignTokens.Typography.custom(size: 12, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(DesignTokens.Colors.surfaceBase.opacity(0.85)))
+                .overlay(Circle().strokeBorder(DesignTokens.Glass.borderColorLight.opacity(0.5), lineWidth: 0.6))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("더보기")
     }
 
     // MARK: - Theme Cycle Button (2026-04-28)
@@ -143,20 +329,30 @@ extension FollowingView {
         .help("테마: \(theme.displayName) (클릭하여 전환)")
     }
 
-    private var hubModeSegment: some View {
-        HStack(spacing: 3) {
+    private func hubModeSegment(style: LiveTopBarModeStyle) -> some View {
+        let horizontalPadding: CGFloat = switch style {
+        case .wide: 14
+        case .regular: 12
+        case .compact: 9
+        }
+        let titleVisible = style != .compact
+
+        return HStack(spacing: 3) {
             ForEach(FollowingHubMode.allCases, id: \.self) { mode in
                 Button {
                     applyHubModePreset(mode)
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: titleVisible ? 5 : 0) {
                         Image(systemName: mode.icon)
                             .font(DesignTokens.Typography.custom(size: 11, weight: .semibold))
-                        Text(mode.rawValue)
-                            .font(DesignTokens.Typography.custom(size: 12, weight: hubMode == mode ? .bold : .medium))
+                        if titleVisible {
+                            Text(mode.rawValue)
+                                .font(DesignTokens.Typography.custom(size: 12, weight: hubMode == mode ? .bold : .medium))
+                                .lineLimit(1)
+                        }
                     }
                     .foregroundStyle(hubMode == mode ? .white : DesignTokens.Colors.textSecondary)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, horizontalPadding)
                     .frame(height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -166,6 +362,7 @@ extension FollowingView {
                     )
                 }
                 .buttonStyle(PressScaleButtonStyle(scale: 0.96))
+                .accessibilityLabel("모드: \(mode.rawValue)")
             }
         }
         .padding(3)

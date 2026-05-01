@@ -426,7 +426,21 @@ struct FollowingView: View {
             }
             .padding(.top, 48)
             .overlay(alignment: .top) {
-                liveHubTopBar
+                // [Fix 2026-05-01] 상단 바 배경/경계선은 스테이지 폭 전체로 이어지게 두고,
+                // 컨트롤만 내부에서 중앙 폭으로 클램프(`liveHubTopBar` 내부)한다.
+                // 멀티채팅 도크가 열려 있으면 그 폭은 제외해 채팅 도크와 시각적으로도 분리한다.
+                GeometryReader { geo in
+                    let totalWidth = geo.size.width
+                    let rightDockWidth = showMultiChat ? chatDockWidth(for: totalWidth) : 0
+                    let stageWidth = max(totalWidth - rightDockWidth, 0)
+
+                    HStack(spacing: 0) {
+                        liveHubTopBar
+                            .frame(width: stageWidth, alignment: .leading)
+                        Spacer(minLength: 0)
+                    }
+                }
+                .frame(height: 48)
             }
     }
 

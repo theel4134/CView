@@ -254,9 +254,7 @@ private struct MCTabBar: View {
     private var tabScrollArea: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
-                if manager.sessions.isEmpty {
-                    emptyTabHint
-                } else {
+                if !manager.sessions.isEmpty {
                     ForEach(manager.sessions) { session in
                         MCTabChip(
                             session: session,
@@ -288,19 +286,6 @@ private struct MCTabBar: View {
             .padding(.horizontal, DesignTokens.Spacing.sm)
             .padding(.vertical, DesignTokens.Spacing.xs)
         }
-    }
-
-    private var emptyTabHint: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(DesignTokens.Typography.custom(size: 11, weight: .medium))
-                .foregroundStyle(DesignTokens.Colors.chzzkGreen.opacity(0.7))
-            Text("멀티채팅")
-                .font(DesignTokens.Typography.custom(size: 11.5, weight: .semibold))
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
     }
 
     private func moveSession(_ channelId: String, delta: Int) {

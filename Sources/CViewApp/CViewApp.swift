@@ -275,6 +275,12 @@ struct CViewApplication: App {
 
     @CommandsBuilder
     private var appCommands: some Commands {
+        // [Fix 2026-05-01] 사이드바 숨김 기능 제거 — 시스템이 기본 삽입하는
+        // "View > Show/Hide Sidebar" 항목과 ⌃⌘S 단축키를 빈 그룹으로 대체해 비노출.
+        // (NavigationSplitView 의 columnVisibility 가 .constant(.all) 로 고정돼 있으나
+        // 메뉴/단축키 자체가 비활성으로 보이는 게 UX 상 더 명확함.)
+        CommandGroup(replacing: .sidebar) { }
+
         // ── 파일 메뉴 ──
         CommandGroup(replacing: .newItem) {
             Button("새 플레이어 창") {

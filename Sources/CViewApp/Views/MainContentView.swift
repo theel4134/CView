@@ -80,9 +80,13 @@ struct MainContentView: View {
     private func mainContent(router: AppRouter) -> some View {
         @Bindable var router = router
 
-        NavigationSplitView {
+        // [Fix 2026-05-01] 사이드바 숨김 기능 완전 제거 — `.constant(.all)` 로
+        // 컬럼 가시성을 고정하면 토글 버튼/단축키/메뉴 어떤 경로로도 사이드바를
+        // 숨길 수 없다. 명시적 라우팅 UI(탐색/시청/멀티 등)가 내비게이션을 전담.
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 300)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             NavigationStack(path: $router.path) {
                 detailView
@@ -97,6 +101,9 @@ struct MainContentView: View {
             }
             .clipped()
             .ignoresSafeArea(.container, edges: .top)
+            // [Fix 2026-05-01] NavigationSplitView가 자동 삽입하는 사이드바 토글
+            // 버튼을 detail 툴바에서도 제거 (사이드바 측과 중복 제거).
+            .toolbar(removing: .sidebarToggle)
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(item: $router.presentedSheet) { sheet in
