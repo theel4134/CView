@@ -180,14 +180,14 @@ struct MenuBarChannelRow: View {
                     .fill(DesignTokens.Colors.live)
                     .frame(width: 7, height: 7)
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(channel.channelName)
-                        .font(DesignTokens.Typography.captionSemibold)
+                        .font(DesignTokens.Typography.footnoteMedium)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
 
                     Text(channel.liveTitle)
-                        .font(DesignTokens.Typography.caption)
+                        .font(DesignTokens.Typography.micro)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .lineLimit(1)
                 }
@@ -208,7 +208,7 @@ struct MenuBarChannelRow: View {
                 .clipShape(Capsule())
             }
             .padding(.horizontal, DesignTokens.Spacing.xs)
-            .padding(.vertical, DesignTokens.Spacing.xs)
+            .padding(.vertical, DesignTokens.Spacing.xxs)
             .background {
                 if isHovered {
                     RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)

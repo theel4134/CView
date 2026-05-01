@@ -16,9 +16,9 @@ public enum MSTokens {
 
     // MARK: Chrome Heights
     /// 상단 탭바 표준 높이.
-    /// - 풍성한 2줄 칩(아바타 26pt + 채널명 + 라이브 제목, 높이 ~44pt)
-    ///   + 상단 드래그 여유(10pt) + 하단 4pt = 58pt.
-    public static let tabBarHeight: CGFloat = 58
+    /// - 컴팩트 2줄 칩(아바타 22pt + 채널명 + 라이브 제목, 높이 ~34pt)
+    ///   + 상단 드래그 여유(6pt) + 하단 4pt = 44pt.
+    public static let tabBarHeight: CGFloat = 44
     /// 채팅/설정 패널 헤더 높이
     public static let paneHeaderHeight: CGFloat = 36
     /// 페인 내부 컨트롤 오버레이 바 높이 (hover 시 노출)
@@ -44,9 +44,9 @@ public enum MSTokens {
 
     // MARK: Chip / Tab
     /// 탭 칩 최소 너비
-    public static let tabChipMinWidth: CGFloat = 132
+    public static let tabChipMinWidth: CGFloat = 112
     /// 탭 칩 최대 너비 (채널명 절단)
-    public static let tabChipMaxWidth: CGFloat = 220
+    public static let tabChipMaxWidth: CGFloat = 200
     /// 오버레이용 원형 아이콘 버튼 지름
     public static let overlayIconSize: CGFloat = 32
     /// 인라인 pill 높이

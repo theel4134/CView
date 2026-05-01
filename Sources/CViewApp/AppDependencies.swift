@@ -37,7 +37,13 @@ extension AppState {
         playerViewModel = PlayerViewModel(engineType: settingsStore.player.preferredEngine)
 
         // 멀티라이브 매니저 API 클라이언트 + 사용자 정보 주입
-        multiLiveManager.configure(apiClient: apiClient, settingsStore: settingsStore, userUid: userChannelId, userNickname: userNickname, metricsForwarder: nil, processLauncher: multiLiveLauncher, chatSessionManager: followingViewState.chatSessionManager)
+        //
+        // [Bug-fix 2026-05-01] 자식(`--multilive-child`) 인스턴스에는 `processLauncher` 를 주입하지 않는다.
+        // 자식이 어떤 경로로든 `multiLiveManager.addSession(channelId:)` 를 launcher 분기로 태우면
+        // 손자 프로세스를 spawn 해 분할 인스턴스가 무한 증식하는 회귀가 발생한다.
+        // 자식에서는 launcher 가 nil → 항상 임베디드(in-process) 분기로만 흐르므로 안전.
+        let injectedLauncher: MultiLiveProcessLauncher? = isChildInstance ? nil : multiLiveLauncher
+        multiLiveManager.configure(apiClient: apiClient, settingsStore: settingsStore, userUid: userChannelId, userNickname: userNickname, metricsForwarder: nil, processLauncher: injectedLauncher, chatSessionManager: followingViewState.chatSessionManager)
 
         // 재생 상태 변경 시 App Nap 방지 관리 콜백 연결
         playerViewModel?.onPlaybackStateChanged = { [weak self] in

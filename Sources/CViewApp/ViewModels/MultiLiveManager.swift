@@ -1209,8 +1209,19 @@ public final class MultiLiveManager {
         // Phase 1: 모든 세션을 추가 (스트림 시작 없이)
         // 각 추가 시 SwiftUI가 그리드 레이아웃을 변경하지만, VLC가 아직 재생 전이므로
         // drawable 바인딩 문제가 발생하지 않는다.
+        //
+        // [Bug-fix 2026-05-01] `MultiLivePersistedState.channelIds` 는 임베디드 세션
+        // (`MultiLivePersistedState.init(from:)` 가 `manager.sessions.map { $0.channelId }`)
+        // 에서만 저장되므로 복원 시에도 `.embedded` 로 강제한다. override 가 없으면
+        // 사용자의 `useSeparateProcesses=true` 설정에 따라 launcher 분기를 타고
+        // 자식 프로세스를 새로 띄워 분할 인스턴스가 자동 재생되는 회귀가 발생한다.
         for channelId in state.channelIds {
-            await addSession(channelId: channelId, preferredEngine: engine, startImmediately: false)
+            await addSession(
+                channelId: channelId,
+                preferredEngine: engine,
+                startImmediately: false,
+                presentationOverride: .embedded
+            )
             restoredCount += 1
         }
 
